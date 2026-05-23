@@ -1,13 +1,9 @@
 @echo off
 title Cap nhat Catlike Coding Tutorials
 color 0A
+cd /d "%~dp0"
 
-echo ======================================================
-echo   DANG KIEM TRA VA CAP NHAT DU LIEU OFFLINE
-echo ======================================================
-echo.
-
-wget.exe --mirror --convert-links --adjust-extension --page-requisites --no-parent https://catlikecoding.com/
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0update.ps1"
 
 echo.
 echo ======================================================
