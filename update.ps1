@@ -154,7 +154,7 @@ function Get-MissingFiles {
 
 # Check wget is on PATH
 if (-not (Get-Command wget.exe -ErrorAction SilentlyContinue)) {
-    Write-Host 'LOI: Khong tim thay wget.exe trong PATH.' -ForegroundColor Red
+    Write-Host 'ERROR: wget.exe not found in PATH.' -ForegroundColor Red
     exit 1
 }
 
@@ -193,7 +193,7 @@ foreach ($f in $gitFiles) {
         $gitCount++
     }
 }
-Write-Host ("      {0} URLs tu git ({1} unique total)" -f $gitCount, $allUrls.Count)
+Write-Host ("      {0} URLs from git ({1} unique total)" -f $gitCount, $allUrls.Count)
 
 # (b) Sitemap.xml entries (just the 2 index pages on catlikecoding)
 Write-Host '  (b) sitemap.xml...'
@@ -210,7 +210,7 @@ try {
 }
 
 # (c) Crawl index pages to discover tutorials added since last commit
-Write-Host '  (c) crawl 2 index pages de phat hien tutorial moi...'
+Write-Host '  (c) crawl 2 index pages to discover new tutorials...'
 foreach ($indexUrl in $crawlIndexes) {
     try {
         $resp = Invoke-WebRequest -Uri $indexUrl -UseBasicParsing -TimeoutSec 30
@@ -246,20 +246,20 @@ foreach ($indexUrl in $crawlIndexes) {
         Write-Host "      WARN crawl $indexUrl - $($_.Exception.Message)" -ForegroundColor Yellow
     }
 }
-Write-Host ("      OK ({0} unique URLs sau khi crawl)" -f $allUrls.Count)
+Write-Host ("      OK ({0} unique URLs after crawling)" -f $allUrls.Count)
 
 if ($allUrls.Count -eq 0) {
-    Write-Host '  LOI: Khong co URL nao.' -ForegroundColor Red
+    Write-Host '  ERROR: No URLs found.' -ForegroundColor Red
     exit 1
 }
 
 @($allUrls) | Sort-Object | Set-Content -LiteralPath $urlListFile -Encoding utf8
-Write-Host ("  Tong: {0} URLs (luu tai urls.txt)" -f $allUrls.Count) -ForegroundColor Green
+Write-Host ("  Total: {0} URLs (saved to urls.txt)" -f $allUrls.Count) -ForegroundColor Green
 
 # ------------------------------------------------------------
 # Phase 2 - Chunked download (no --mirror, --no-clobber)
 # ------------------------------------------------------------
-Write-Phase 'Phase 2/5: Tai chunked (no-clobber: chi tai file thieu)'
+Write-Phase 'Phase 2/5: Chunked download (no-clobber: only missing files)'
 
 $urlArray    = @($allUrls) | Sort-Object
 $totalChunks = [int][Math]::Ceiling($urlArray.Count / [double]$chunkSize)
@@ -291,23 +291,23 @@ $previousSignature = $null
 
 for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
     Write-Host ''
-    Write-Host "  Scan #$attempt - kiem tra file thieu..." -ForegroundColor White
+    Write-Host "  Scan #$attempt - checking missing files..." -ForegroundColor White
 
     $missing = @(Get-MissingFiles)
 
     if ($missing.Count -eq 0) {
-        Write-Host '  Tat ca reference da co local.' -ForegroundColor Green
+        Write-Host '  All references are present locally.' -ForegroundColor Green
         break
     }
 
     $signature = ($missing -join '|')
     if ($signature -eq $previousSignature) {
-        Write-Host "  $($missing.Count) file van thieu - khong tien trien, dung retry." -ForegroundColor Yellow
+        Write-Host "  $($missing.Count) files still missing - no progress, stopping retry." -ForegroundColor Yellow
         break
     }
     $previousSignature = $signature
 
-    Write-Host "  $($missing.Count) file thieu - tai lai chunked..." -ForegroundColor Yellow
+    Write-Host "  $($missing.Count) files missing - retrying chunked..." -ForegroundColor Yellow
 
     $missArray  = @($missing)
     $missChunks = [int][Math]::Ceiling($missArray.Count / [double]$chunkSize)
@@ -337,7 +337,7 @@ Write-Phase 'Phase 4/5: Convert URLs to relative paths'
 if (Test-Path -LiteralPath $fixScript -PathType Leaf) {
     & $fixScript
 } else {
-    Write-Host "fix-absolute-links.ps1 khong tim thay - bo qua." -ForegroundColor Yellow
+    Write-Host "fix-absolute-links.ps1 not found - skipping." -ForegroundColor Yellow
 }
 
 # ------------------------------------------------------------
@@ -362,21 +362,21 @@ if (Test-Path -LiteralPath $mirrorRoot) {
     Write-Host ("  JS:          {0}" -f $jsCount)   -ForegroundColor Cyan
     Write-Host ("  Total size:  {0}" -f $sizeMb)    -ForegroundColor Cyan
 } else {
-    Write-Host '  Khong co mirror folder.' -ForegroundColor Yellow
+    Write-Host '  No mirror folder found.' -ForegroundColor Yellow
     return
 }
 
 $finalMissing = @(Get-MissingFiles)
 if ($finalMissing.Count -eq 0) {
     Write-Host ''
-    Write-Host '  Tat ca reference da resolve. Mirror complete.' -ForegroundColor Green
+    Write-Host '  All references resolved. Mirror complete.' -ForegroundColor Green
 } else {
     Write-Host ''
-    Write-Host ("  Con {0} URL khong co file local (external hoac 404):" -f $finalMissing.Count) -ForegroundColor Yellow
+    Write-Host ("  {0} URLs have no local file (external or 404):" -f $finalMissing.Count) -ForegroundColor Yellow
     $finalMissing | Select-Object -First 15 | ForEach-Object {
         Write-Host "    $_" -ForegroundColor DarkGray
     }
     if ($finalMissing.Count -gt 15) {
-        Write-Host ("    ... va {0} URL khac." -f ($finalMissing.Count - 15)) -ForegroundColor DarkGray
+        Write-Host ("    ... and {0} other URLs." -f ($finalMissing.Count - 15)) -ForegroundColor DarkGray
     }
 }
