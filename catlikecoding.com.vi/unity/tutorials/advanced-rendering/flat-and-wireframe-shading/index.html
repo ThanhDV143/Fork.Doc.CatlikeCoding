@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/advanced-rendering/flat-and-wireframe-shading/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/advanced-rendering/flat-and-wireframe-shading/tutorial-image.jpg">
+		<meta property="og:title" content="Flat and Wireframe Shading">
+		<meta property="og:description" content="A Unity Advanced Rendering tutorial about flat and wireframe shading, using derivative instructions and a geometry shader.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Flat and Wireframe Shading</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/advanced-rendering/flat-and-wireframe-shading/#article",
+				"headline": "Flat and Wireframe Shading",
+				"alternativeHeadline": "Derivatives and Geometry",
+				"datePublished": "2017-10-25",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Advanced Rendering tutorial about flat and wireframe shading, using derivative instructions and a geometry shader.",
+				"image": "https://catlikecoding.com/unity/tutorials/advanced-rendering/flat-and-wireframe-shading/tutorial-image.jpg",
+				"dependencies": "Unity 2017.1.0",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/advanced-rendering/", "name": "Advanced Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				MyLightingShaderGUI: 1,
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Advanced Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Flat and Wireframe Shading</h1>
+					<p>Derivatives and Geometry</p>
+					<ul>
+						<li>Use screen-space derivatives to find triangle normals.</li>
+						<li>Do the same via a geometry shader.</li>
+						<li>Use generated barycentric coordinates to create a wireframe.</li>
+						<li>Make the wires fixed-width and configurable.</li>
+					</ul>
+				</header>
+
+				<p>This tutorial covers how to add support for flat shading and showing the wireframe of a mesh. It uses advanced rendering techniques and assumes you're familiar with the material covered in the <a href="../../rendering/part-1.1.html">Rendering</a> series.</p>
+				
+				<p>This tutorial is made with Unity 2017.1.0.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Exposing the triangles.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Flat Shading</h2>
+					
+					<p>Meshes consist of triangles, which are flat by definition. We use surface normal vectors to add the illusion of curvature. This makes it possible to create meshes that represent seemingly smooth surfaces. However, sometimes you actually want to display flat triangles, either for style or to better see the mesh's topology.</p>
+					
+					<p>To make the triangles appear as flat as they really are, we have to use the surface normals of the actual triangles. It will give meshes a faceted appearance, known as flat shading. This can be done by making the normal vectors of a triangle's three vertices equal to the triangle's normal vector. This makes it impossible to share vertices between triangles, because then they would share normals as well. So we end up with more mesh data. It would be convenient if we could keep sharing vertices. Also, it would be nice if we could use a flat-shading material with any mesh, overriding its original normals, if any.</p>
+					
+					<p>Besides flat shading, it can also be useful or stylish to show a mesh's wireframe. This makes the topology of the mesh even more obvious. Ideally, we can do both flat shading and wireframe rendering with a custom material, in a single pass, for any mesh. To create such a material, we need a new shader. We'll use the final shader from <a href="../../rendering/part-20/index.html">part 20 of the Rendering series</a> as our base. Duplicate <em translate="no">My First Lighting Shader</em> and change its name to <em translate="no">Flat Wireframe</em>.</p>
+					
+					<a href="../../rendering/part-20/raymarching/raymarching.unitypackage.html" download rel="nofollow">Rendering 20 unitypackage</a>
+					
+					<pre translate="no" class="shader">Shader <ins>"Custom/Flat Wireframe"</ins> { &hellip; }</pre>
+					
+					<aside>
+						<h3>Can't we already see the wireframe in the editor?</h3>
+						<div>
+							<p>We can indeed see the wireframe in the scene view, but not in the game view, and not in builds. So if you want to see the wireframe outside the scene view, you have to use a custom solution. Also, the scene view only displays the wireframe of the original mesh, regardless whether the shader renders something else. So it doesn't work with vertex displacement of tessellation.</p>
+						</div>
+					</aside>
+					
+					<section>
+						<h3>Derivative Instructions</h3>
+						
+						<p>Because triangles are flat, their surface normal is the same at every point on their surface. Hence, each fragment rendered for a triangle should use the same normal vector. But we current do not know what this vector is. In the vertex program, we only have access to the vertex data stored in the mesh, processed in isolation. The normal vector stored here is of no use to us, unless it's designed to represent the triangle's normal. And in the fragment program, we only have access to the interpolated vertex normals.</p>
+						
+						<p>To determine the surface normal, we need to know the orientation of the triangle in world space. This can be determined via the positions of the triangle's vertices. Assuming that the triangle is not degenerate, its normal vector is equal to the normalized cross product of two of the triangle's edges. If it is degenerate, then it won't be rendered anyway. So gives a triangle's vertices `a`, `b`, and `c` in counter-clockwise order, its normal vector is `n=(c-a)xx(b-a)`. Normalizing that gives us the final unit normal vector, `hatn=n/|n|`.</p>
+						
+						<figure>
+							<img src="flat-shading/cross-product.png" width="175" height="175">
+							<figcaption>Deriving a triangle's normal.</figcaption>
+						</figure>
+						
+						<p>We don't actually need to use the triangle's vertices. Any three points that lie in the triangle's plane will do, as long as those points form a triangle too. Specifically, we only need two vectors that lie in the triangle's plane, as long as they're not parallel and are larger than zero.</p>
+						
+						<p>One possibility is to use points corresponding to the world positions of rendered fragments. For example, the world position of the fragment we're currently rendering, the position of the fragment to the right of it, and the position of the fragment above it, in screen space.</p>
+						
+						<figure>
+							<img src="flat-shading/fragment-positions.png" width="225" height="225">
+							<figcaption>Using world positions of fragments.</figcaption>
+						</figure>
+						
+						<p>If we could access the world positions of adjacent fragments, then this could work. There is no way to directly access the data of adjacent fragments, but we can access the screen-space derivatives of this data. This is done via special instructions, which tell us the rate of change between fragments, for any piece of data, in either the screen-space X or Y dimension.</p>
+						
+						<p>For example, our current fragment's world position is `p_0`. The position of the next fragment in the screen-space X dimension is `p_x`. The rate of change of the world position in the X dimension between these two fragments is thus `(delp)/(delx)=p_x-p_0`. This is the partial derivative of the world position, in the screen-space X dimension. We can retrieve this data in the fragment program via the <code class="shader">ddx</code> function, by supplying it with the world position. Let's do this at the start of the <code>InitializeFragmentNormal</code> function in <em translate="no">My Lighting.cginc</em>.</p>
+						
+						<pre translate="no" class="shader">void InitializeFragmentNormal(inout Interpolators i) {
+	<ins>float3 dpdx = ddx(i.worldPos);</ins>
+	
+	&hellip;
+}</pre>
+						
+						<p>We can do the same for the screen-space Y dimension, finding `(delp)/(dely)=p_y-p_0` by invoking the <code class="shader">ddy</code> function with the world position.</p>
+						
+						<pre translate="no" class="shader">	float3 dpdx = ddx(i.worldPos);
+	<ins>float3 dpdy = ddy(i.worldPos);</ins></pre>
+						
+						<p>Because these values represent the differences between the fragment world positions, they define two edges of a triangle. We don't actually know the exact shape of that triangle, but it's guaranteed to lie in the original triangle's plane, and that's all that matters. So the final normal vector is the normalized cross product of those vectors. Override the original normal with this vector.</p>
+						
+						<pre translate="no" class="shader">	float3 dpdx = ddx(i.worldPos);
+	float3 dpdy = ddy(i.worldPos);
+	<ins>i.normal = normalize(cross(dpdy, dpdx));</ins></pre>
+						
+						<aside>
+							<h3>How do <code class="shader">ddx</code> and <code class="shader">ddy</code> work?</h3>
+							<div>
+								<p>The GPU needs to know the screen-space derivatives of texture coordinates to determine which mipmap level to use, when sampling textures. It figures this out by comparing the coordinates of adjacent fragments. The screen-space derivative instructions are an extension of that, making this functionality available for all fragment programs, for any data they use.</p>
+								
+								<p>To be able to compare fragments, the GPU processes them in blocks of 2&times;2. Per block, it determines two derivatives in the X dimension, for the two 2&times;1 fragment pairs, and two derivatives in the Y dimension, for the two 1&times;2 fragment pairs. The two fragments of a pair use the same derivative data. This means that the derivatives only change per block, once every two pixels, instead of every pixel. As a result, these derivatives are an approximation and will appear blocky when used for data that changes nonlinearly per fragment. Because triangles are flat, this approximation doesn't affect our derived normal vector.</p>
+								
+								<figure>
+									<img src="flat-shading/derivative-blocks.png" width="225" height="225">
+									<figcaption>Blocks of derivative pairs.</figcaption>
+								</figure>
+								
+								<p>The GPU always processes fragments in 2&times;2 blocks, so along the triangle's edge fragments will get processed that end up outside the triangle. These invalid fragments are discarded, but still need to be processed to determine the derivatives. Outside the triangle, the fragment's interpolation data is extrapolated beyond the range defined by the vertices.</p>
+							</div>
+						</aside>
+						
+						<p>Create a new material that uses our <em translate="no">Flat Wireframe</em> shader. Any mesh that uses this material should be rendered using flat shading. They will appear faceted, though this might be hard to see when you're also using normal maps. I use a standard capsule mesh in the screenshots for this tutorial, with a gray material.</p>
+						
+						<figure>
+							<img alt="smooth" src="flat-shading/smooth.png" width="220" height="170">
+							<img alt="flat" src="flat-shading/flat.png" width="220" height="170">
+							<figcaption>Smooth and flat shading.</figcaption>
+						</figure>
+						
+						<p>From a distance, it might look like the capsule's made out of quads, but those quads are made of two triangles each.</p>
+						
+						<figure>
+							<img src="flat-shading/quads.png" width="190" height="190">
+							<figcaption>Quads made of triangles.</figcaption>
+						</figure>
+						
+						<p>While this works, we've actually changed the behavior of all shaders that rely on the <em translate="no">My Lighting</em> include file. So remove the code that we just added.</p>
+						
+						<pre translate="no" class="shader"><del>//	float3 dpdx = ddx(i.worldPos);</del>
+<del>//	float3 dpdy = ddy(i.worldPos);</del>
+<del>//	i.normal = normalize(cross(dpdy, dpdx));</del></pre>
+					</section>
+					
+					<section>
+						<h3>Geometry Shaders</h3>
+						
+						<p>There is another way that we can determine the triangle's normal. Instead of using derivative instructions, we could use the actual triangle vertices to compute the normal vector. This requires use to do work per triangle, not per individual vertex or fragment. That's where geometry shaders come in.</p>
+						
+						<p>The geometry shader stage sits in between the vertex and the fragment stage. It is fed the output of the vertex program, grouped per primitive. A geometry program can modify this data, before it gets interpolated and used to render fragments.</p>
+						
+						<figure>
+							<img src="flat-shading/shader-programs.png" width="460" height="290">
+							<figcaption>Processing vertices per triangle.</figcaption>
+						</figure>
+						
+						<p>The added value of the geometry shader is that the vertices are fed to it per primitive, so three for each triangle in our case. Whether mesh triangles share vertices doesn't matter, because the geometry program outputs new vertex data. This allows us to derive the triangle's normal vector and use it as the normal for all three vertices.</p>
+						
+						<p>Let's put the code for our geometry shader in its own include file, <em translate="no">MyFlatWireframe.cginc</em>. Have this file include <em translate="no">My Lighting.cginc</em> and define a <code class="shader">MyGeometryProgram</code> function. Start with an empty void function.</p>
+						
+						<pre translate="no" class="shader"><ins>#if !defined(FLAT_WIREFRAME_INCLUDED)</ins>
+<ins>#define FLAT_WIREFRAME_INCLUDED</ins>
+
+<ins>#include "My Lighting.cginc"</ins>
+
+<ins>void MyGeometryProgram () {}</ins>
+
+<ins>#endif</ins></pre>
+						
+						<p>Geometry shaders are only supported when targeting shader model 4.0 or higher. Unity will automatically increase the target to this level if it was defined lower, but let's be explicit about it. To actually use a geometry shader, we have to add the <code class="shader">#pragma geometry</code> directive, just like for the vertex and fragment functions. Finally, <em translate="no">MyFlatWireframe</em> has to be included instead of <em translate="no">My Lighting</em>. Apply these changes to the base, additive, and deferred passes of our <em translate="no">Flat Wireframe</em> shader.</p>
+						
+						<pre translate="no" class="shader">			#pragma target <ins>4.0</ins>
+
+			&hellip;
+
+			#pragma vertex MyVertexProgram
+			#pragma fragment MyFragmentProgram
+			<ins>#pragma geometry MyGeometryProgram</ins>
+
+			&hellip;
+			
+<del>//			#include "My Lighting.cginc"</del>
+			<ins>#include "MyFlatWireframe.cginc"</ins></pre>
+						
+						<p>This will result in shader compiler errors, because we haven't defined our geometry function correctly yet. We have to declare how many vertices it will output. This number can vary, so we must provide a maximum. Because we're working with triangles, we'll always output three vertices per invocation. This is specified by adding the <code class="shader">maxvertexcount</code> attribute to our function, with 3 as an argument.</p>
+						
+						<pre translate="no" class="shader"><ins>[maxvertexcount(3)]</ins>
+void GeometryProgram () {}</pre>
+						
+						<p>The next step is to define the input. As we're working with the output of the vertex program before interpolation, the data type is <code class="shader">InterpolatorsVertex</code>. So the type name isn't technically correct in this case, but we didn't took the geometry shader into consideration when we named it.</p>
+						
+						<pre translate="no" class="shader">[maxvertexcount(3)]
+void MyGeometryProgram (<ins>InterpolatorsVertex i</ins>) {}</pre>
+						
+						<p>We also have to declare which type of primitive we're working on, which is <code class="shader">triangle</code> in our case. This has to be specified before the input type. Also, as triangles have three vertices each, we're working on an array of three structures. We have to define this explicitly.</p>
+						
+						<pre translate="no" class="shader">[maxvertexcount(3)]
+void MyGeometryProgram (<ins>triangle</ins> InterpolatorsVertex i<ins>[3]</ins>) {}</pre>
+						
+						<p>Because the amount of vertices that a geometry shader can output varies, we don't have a singular return type. Instead, the geometry shader writes to a stream of primitives. In our case, it's a <code class="shader">TriangleStream</code>, which has to be specified as an <code class="shader">inout</code> parameter.</p>
+						
+						<pre translate="no" class="shader">[maxvertexcount(3)]
+void MyGeometryProgram (
+	triangle InterpolatorsVertex i[3]<ins>,</ins>
+	<ins>inout TriangleStream stream</ins>
+) {}</pre>
+						
+						<p><code class="shader">TriangleStream</code> works like a generic type in C#. It needs to know the type of the vertex data that we're going to give it, which is still <code class="shader">InterpolatorsVertex</code>.</p>
+						
+						<pre translate="no" class="shader">[maxvertexcount(3)]
+void MyGeometryProgram (
+	triangle InterpolatorsVertex i[3],
+	inout TriangleStream<ins>&lt;InterpolatorsVertex></ins> stream
+) {}</pre>
+						
+						<p>Now that the function signature is correct, we have to put the vertex data into the stream. This is done by invoking the stream's <code class="shader">Append</code> function once per vertex, in the order that we received them.</p>
+						
+						<pre translate="no" class="shader">[maxvertexcount(3)]
+void MyGeometryProgram (
+	triangle InterpolatorsVertex i[3],
+	inout TriangleStream&lt;InterpolatorsVertex> stream
+) {
+	<ins>stream.Append(i[0]);</ins>
+	<ins>stream.Append(i[1]);</ins>
+	<ins>stream.Append(i[2]);</ins>
+}</pre>
+						
+						<p>At this point our shader works again. We've added a custom geometry stage, which simply passes through the output from the vertex program, unmodified.</p>
+						
+						<aside>
+							<h3>Why does the geometry program look so different?</h3>
+							<div>
+								<p>Unity's shader syntax is a mix of CG and HLSL code. Mostly it looks like CG, but in this case it resembles HLSL.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Modifying Vertex Normals Per Triangle</h3>
+						
+						<p>To find the triangle's normal vector, begin by extracting the world positions of its three vertices.</p>
+						
+						<pre translate="no" class="shader">	<ins>float3 p0 = i[0].worldPos.xyz;</ins>
+	<ins>float3 p1 = i[1].worldPos.xyz;</ins>
+	<ins>float3 p2 = i[2].worldPos.xyz;</ins>
+	
+	stream.Append(i[0]);
+	stream.Append(i[1]);
+	stream.Append(i[2]);</pre>
+						
+						<p>Now we can perform the normalized cross product, once per triangle.</p>
+						
+						<pre translate="no" class="shader">	float3 p0 = i[0].worldPos.xyz;
+	float3 p1 = i[1].worldPos.xyz;
+	float3 p2 = i[2].worldPos.xyz;
+
+	<ins>float3 triangleNormal = normalize(cross(p1 - p0, p2 - p0));</ins></pre>
+						
+						<p>Replace the vertex normals with this triangle normal.</p>
+						
+						<pre translate="no" class="shader">	float3 triangleNormal = normalize(cross(p1 - p0, p2 - p0));
+	<ins>i[0].normal = triangleNormal;</ins>
+	<ins>i[1].normal = triangleNormal;</ins>
+	<ins>i[2].normal = triangleNormal;</ins></pre>
+						
+						<figure>
+							<img src="flat-shading/flat-geometry.png" width="220" height="170">
+							<figcaption>Flat shading, again.</figcaption>
+						</figure>
+						
+						<p>We end up with the same results as before, but now using a geometry shader stage instead of relying on screen-space derivative instructions.</p>
+						
+						<aside>
+							<h3>Which approach is best?</h3>
+							<div>
+								<p>If flat shading is all you need, screen-space derivatives are the cheapest way to achieve that effect. Then you can also strip normals from the mesh data&mdash;which Unity can do automatically&mdash;and can also remove the normal interpolator data. In general, if you can get away with not using a custom geometry stage, do so. We'll keep using the geometry approach though, because we'll need it for wireframe rendering as well.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="flat-shading/flat-shading.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Rendering the Wireframe</h2>
+					
+					<p>After taking care of the flat shading, we move on to rendering the mesh's wireframe. We're not going to create new geometry, nor will we use an extra pass to draw lines. We'll create the wireframe visuals by adding a line effect on the inside of triangles, along their edges. This can create a convincing wireframe, although the lines defining a shape's silhouette will appear half as thick as the lines on the inside. This usually isn't very noticeable, so we'll accept this inconsistency.</p>
+					
+					<figure>
+						<img src="rendering-the-wireframe/wire-effect.png" width="404" height="140">
+						<figcaption>Wire effect with thinner silhouette lines.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Barycentric Coordinates</h3>
+						
+						<p>To add line effects to the triangle edges, we need to know a fragment's distance to the nearest edge. This means that topological information about the triangle needs to be available in the fragment program. This can be done by adding the barycentric coordinates of the triangle to the interpolated data.</p>
+						
+						<aside>
+							<h3>What are barycentric coordinates?</h3>
+							<div>
+								<p>In the case of triangles, it are coordinates with three components. Each component is 0 along one edge and 1 at the vertex opposite that edge, linearly transitioning in between. These coordinates are also used to interpolate vertex data.</p>
+								
+								<figure>
+									<img src="rendering-the-wireframe/barycentric-coordinates.png" width="345" height="240">
+									<figcaption>Barycentric coordinates inside a triangle.</figcaption>
+								</figure>
+							</div>
+						</aside>
+						
+						<p>One way to add barycentric coordinates to triangles is to use the mesh's vertex colors to store them. The first vertex of each triangle becomes red, the second becomes green, and the third becomes blue. However, this would require meshes with vertex colors assigned this way, and makes it impossible to share vertices. We want a solution that works with any mesh. Fortunately, we can use our geometry program to add the required coordinates.</p>
+						
+						<p>Because the barycentric coordinates are not provided by the mesh, the vertex program doesn't know about them. So they're not part of the <code class="shader">InterpolatorsVertex</code> structure. To have the geometry program output them, we have to define a new structure. Begin by defining <code class="shader">InterpolatorsGeometry</code> above <code class="shader">MyGeometryProgram</code>. It should contain the same data as <code class="shader">InterpolatorsVertex</code>, so use that as its contents.</p>
+						
+						<pre translate="no" class="shader"><ins>struct InterpolatorsGeometry {</ins>
+	<ins>InterpolatorsVertex data;</ins>
+<ins>};</ins></pre>
+						
+						<p>Adjust the stream data type of <code>MyGeometryProgram</code> so it uses the new structure. Define variables of this type inside the function, assign the input data to them, and append them to the stream, instead of directly passing the input through.</p>
+						
+						<pre translate="no" class="shader">void MyGeometryProgram (
+	triangle InterpolatorsVertex i[3],
+	inout TriangleStream&lt;<ins>InterpolatorsGeometry</ins>> stream
+) {
+	&hellip;
+
+	<ins>InterpolatorsGeometry g0, g1, g2;</ins>
+	<ins>g0.data = i[0];</ins>
+	<ins>g1.data = i[1];</ins>
+	<ins>g2.data = i[2];</ins>
+
+	stream.Append(<ins>g0</ins>);
+	stream.Append(<ins>g1</ins>);
+	stream.Append(<ins>g2</ins>);
+}</pre>
+						
+						<p>Now we can add additional data to <code class="shader">InterpolatorsGeometry</code>. Give it a <code class="shader">float3 barycentricCoordinators</code> vector, using the tenth interpolator semantic.</p>
+						
+						<pre translate="no" class="shader">struct InterpolatorsGeometry {
+	InterpolatorsVertex data;
+	<ins>float3 barycentricCoordinates : TEXCOORD9;</ins>
+};</pre>
+						
+						<p>Give each vertex a barycentric coordinate. It doesn't matter which vertex gets what coordinate, as long as they are valid.</p>
+						
+						<pre translate="no" class="shader">	<ins>g0.barycentricCoordinates = float3(1, 0, 0);</ins>
+	<ins>g1.barycentricCoordinates = float3(0, 1, 0);</ins>
+	<ins>g2.barycentricCoordinates = float3(0, 0, 1);</ins>
+
+	stream.Append(g0);
+	stream.Append(g1);
+	stream.Append(g2);</pre>
+						
+						<p>Note that the barycentric coordinates always add up to 1. So we could suffice with only passing on two, deriving the third coordinate by subtracting the other two from 1. That means we have to interpolate one less number, so let's make that change.</p>
+						
+						<pre translate="no" class="shader">struct InterpolatorsGeometry {
+	InterpolatorsVertex data;
+	<ins>float2</ins> barycentricCoordinates : TEXCOORD9;
+};
+	
+	[maxvertexcount(3)]
+void MyGeometryProgram (
+	triangle InterpolatorsVertex i[3],
+	inout TriangleStream&lt;InterpolatorsGeometry> stream
+) {
+	&hellip;
+
+	g0.barycentricCoordinates = <ins>float2(1, 0)</ins>;
+	g1.barycentricCoordinates = <ins>float2(0, 1)</ins>;
+	g2.barycentricCoordinates = <ins>float2(0, 0)</ins>;
+
+	&hellip;
+}</pre>
+						
+						<aside>
+							<h3>Are our barycentric coordinates now interpolated, with barycentric coordinates?</h3>
+							<div>
+								<p>Yes. Unfortunately we cannot directly use the barycentric coordinates that are used to interpolate the vertex data. The GPU can decide to split triangles into smaller triangles before we end up at the vertex program, for various reasons. So the coordinates used by the GPU for the final interpolation can be different than expected.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Defining Extra Interpolators</h3>
+						
+						<p>At this point we're passing the barycentric coordinates to the fragment program, but it doesn't know about them yet. We have to add them to the definition of <code class="shader">Interpolators</code> in <em translate="no">My Lighting</em>. But we can't simply assume that this data is available. That's only the case for our <em translate="no">Flat Wireframe</em> shader. So let's make it possible for anyone using <em translate="no">My Lighting</em> to define their own interpolator data made available via a geometry shader, by defining it via a <code class="shader">CUSTOM_GEOMETRY_INTERPOLATORS</code> macro. To support this, insert the macro into <code class="shader">Interpolators</code> if it has been defined at that point.</p>
+						
+						<pre translate="no" class="shader">struct Interpolators {
+	&hellip;
+
+	<ins>#if defined (CUSTOM_GEOMETRY_INTERPOLATORS)</ins>
+		<ins>CUSTOM_GEOMETRY_INTERPOLATORS</ins>
+	<ins>#endif</ins>
+};</pre>
+						
+						<p>Now we can define this macro in <em translate="no">MyFlatWireframe</em>. We have to do this before including <em translate="no">My Lighting</em>. We can also use it in <code class="shader">InterpolatorsGeometry</code>, so we only have to write the code once.</p>
+						
+						<pre translate="no" class="shader"><ins>#define CUSTOM_GEOMETRY_INTERPOLATORS \</ins>
+	<ins>float2 barycentricCoordinates : TEXCOORD9;</ins>
+
+#include "My Lighting.cginc"
+
+struct InterpolatorsGeometry {
+	InterpolatorsVertex data;
+<del>//	float2 barycentricCoordinates : TEXCOORD9;</del>
+	<ins>CUSTOM_GEOMETRY_INTERPOLATORS</ins>
+};</pre>
+						
+						<aside>
+							<h3>Why am I getting a conversion compile error?</h3>
+							<div>
+								<p>If you're using the package from Rendering 20, then that's because of a tutorial bug. The <code class="shader">ComputeVertexLightColor</code> function in <em translate="no">My Lighting</em> should use <code class="shader">InterpolatorsVertex</code> for its parameter type, but incorrectly uses <code class="shader">Interpolators</code>. Fix this bug and the error is gone. If you're using your own code, you might have a similar bug where you're using the wrong interpolator structure type somewhere.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Splitting My Lighting</h3>
+						
+						<p>How are we going to use the barycentric coordinates to visualize the wireframe? However we do it, <em translate="no">My Lighting</em> should not be involved. Instead, we can make it possible to rewire its functionality via another file, by inserting our own function in its code.</p>
+						
+						<p>To overwrite functionality of <em translate="no">My Lighting</em>, we have to define the new code before including the file. But to do so we need access to the interpolators, which are defined in <em translate="no">My Lighting</em>, so we have to include it first. To solve this problem, we have to split <em translate="no">My Lighting</em> in two files. Copy the code at the start of <em translate="no">My Lighting</em>, taking the include statements, interpolator structures, and all <em translate="no">Get</em> functions. Put this code in a new <em translate="no">My Lighting Input.cginc</em> file. Give the file its own include guard define, <code class="shader">MY_LIGHTING_INPUT_INCLUDED</code>.</p>
+						
+						<pre translate="no" class="shader"><ins>#if !defined(MY_LIGHTING_INPUT_INCLUDED)</ins>
+<ins>#define MY_LIGHTING_INPUT_INCLUDED</ins>
+
+#include "UnityPBSLighting.cginc"
+#include "AutoLight.cginc"
+
+#if defined(FOG_LINEAR) || defined(FOG_EXP) || defined(FOG_EXP2)
+	#if !defined(FOG_DISTANCE)
+		#define FOG_DEPTH 1
+	#endif
+	#define FOG_ON 1
+#endif
+
+&hellip;
+
+float3 GetEmission (Interpolators i) {
+	#if defined(FORWARD_BASE_PASS) || defined(DEFERRED_PASS)
+		#if defined(_EMISSION_MAP)
+			return tex2D(_EmissionMap, i.uv.xy) * _Emission;
+		#else
+			return _Emission;
+		#endif
+	#else
+		return 0;
+	#endif
+}
+
+<ins>#endif</ins></pre>
+						
+						<p>Delete the same code from <em translate="no">My Lighting</em>. To keep existing shaders working, include <em translate="no">My Lighting Input</em> instead.</p>
+						
+						<pre translate="no" class="shader">#if !defined(MY_LIGHTING_INCLUDED)
+#define MY_LIGHTING_INCLUDED
+
+<del>//#include "UnityPBSLighting.cginc"</del>
+<del>// &hellip;</del>
+<del>//</del>
+<del>//float3 GetEmission (Interpolators i) {</del>
+<del>//	&hellip;</del>
+<del>//}</del>
+
+<ins>#include "My Lighting Input.cginc"</ins>
+
+void ComputeVertexLightColor (inout InterpolatorsVertex i) {
+	#if defined(VERTEXLIGHT_ON)
+		i.vertexLightColor = Shade4PointLights(
+			unity_4LightPosX0, unity_4LightPosY0, unity_4LightPosZ0,
+			unity_LightColor[0].rgb, unity_LightColor[1].rgb,
+			unity_LightColor[2].rgb, unity_LightColor[3].rgb,
+			unity_4LightAtten0, i.worldPos.xyz, i.normal
+		);
+	#endif
+}</pre>
+						
+						<p>Now it is possible to include <em translate="no">My Lighting Input</em> before including <em translate="no">My Lighting</em>. Its include guard will make sure that duplicate inclusion will be prevented. Do so in <em translate="no">MyFlatWireframe</em>.</p>
+						
+						<pre translate="no" class="shader"><ins>#include "My Lighting Input.cginc"</ins>
+
+#include "My Lighting.cginc"</pre>
+						
+
+					</section>
+					
+					<section>
+						<h3>Rewiring Albedo</h3>
+						
+						<p>Let's add the wireframe effect by adjusting the material's albedo. This requires us to replace the default albedo function of <em translate="no">My Lighting</em>. Like for custom geometry interpolators, we'll do this via a macro, <code class="shader">ALBEDO_FUNCTION</code>. In <em translate="no">My Lighting</em>, after we're sure that the input has been included, check whether this macro has been defined. If not, define it as the <code class="shader">GetAlbedo</code> function, making that the default.</p>
+						
+						<pre translate="no" class="shader">#include "My Lighting Input.cginc"
+
+<ins>#if !defined(ALBEDO_FUNCTION)</ins>
+	<ins>#define ALBEDO_FUNCTION GetAlbedo</ins>
+<ins>#endif</ins></pre>
+						
+						<p>In the <code class="shader">MyFragmentProgram</code> function, replace the invocation of <code class="shader">GetAlbedo</code> with the macro.</p>
+						
+						<pre translate="no" class="shader">	float3 albedo = DiffuseAndSpecularFromMetallic(
+		<ins>ALBEDO_FUNCTION</ins>(i), GetMetallic(i), specularTint, oneMinusReflectivity
+	);</pre>
+						
+						<p>Now we can create our own albedo function in <em translate="no">MyFlatWireframe</em>, after including <em translate="no">My Lighting Input</em>. It needs to have the same form as the original <code class="shader">GetAlbedo</code> function. Begin by simply passing through the result of the original function. After that, define the <code class="shader">ALBEDO_FUNCTION</code> macro with our own function's name, then include <code class="shader">My Lighting</code>.</p>
+						
+						<pre translate="no" class="shader">#include "My Lighting Input.cginc"
+
+<ins>float3 GetAlbedoWithWireframe (Interpolators i) {</ins>
+	<ins>float3 albedo = GetAlbedo(i);</ins>
+	<ins>return albedo;</ins>
+<ins>}</ins>
+
+<ins>#define ALBEDO_FUNCTION GetAlbedoWithWireframe</ins>
+
+#include "My Lighting.cginc"</pre>
+						
+						<p>To verify that we have indeed control over the fragment's albedo, use the barycentric coordinates directly as the albedo.</p>
+						
+						<pre translate="no" class="shader">float3 GetAlbedoWithWireframe (Interpolators i) {
+	float3 albedo = GetAlbedo(i);
+	<ins>float3 barys;</ins>
+	<ins>barys.xy = i.barycentricCoordinates;</ins>
+	<ins>barys.z = 1 - barys.x - barys.y;</ins>
+	<ins>albedo = barys;</ins>
+	return albedo;
+}</pre>
+						
+						<figure>
+							<img src="rendering-the-wireframe/barycentric-albedo.png" width="220" height="170">
+							<figcaption>Barycentric coordinates as albedo.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Creating Wires</h3>
+						
+						<p>To create the wireframe effect, we need to know how close the fragment is to the nearest triangle edge. We can find this by taking the minimum of the barycentric coordinates. This gives us the minimum distance to the edge, in the barycentric domain. Let's use that directly as the albedo.</p>
+						
+						<pre translate="no" class="shader">	float3 albedo = GetAlbedo(i);
+	float3 barys;
+	barys.xy = i.barycentricCoordinates;
+	barys.z = 1 - barys.x - barys.y;
+<del>//	albedo = barys;</del>
+	<ins>float minBary = min(barys.x, min(barys.y, barys.z));</ins>
+	return albedo <ins>* minBary</ins>;</pre>
+						
+						<figure>
+							<img src="rendering-the-wireframe/minimum-coordinate.png" width="220" height="170">
+							<figcaption>Minimum barycentric coordinate.</figcaption>
+						</figure>
+						
+						<p>This looks somewhat like a black wireframe on top of a white mesh, but it is too fuzzy. That's because the distance to the nearest edge goes from zero at the edges to &frac13; at the center of the triangle. To make it look more like thin lines we have to fade to white quicker, for example by transitioning from black to white between 0 and 0.1. To make the transition smooth, let's use the <code class="shader">smoothstep</code> function for this.</p>
+						
+						<aside>
+							<h3>What's the <code class="shader">smoothstep</code> function?</h3>
+							<div>
+								<p>It is a standard function that produces a smooth curving transition between two values, instead of a linear interpolation. It's defined as `3t^2-2t^3` where `t` goes from 0 to 1.</p>
+								
+								<figure>
+									<img src="rendering-the-wireframe/smoothstep.png" width="200" height="200">
+									<figcaption>Smoothstep vs. linear transition.</figcaption>
+								</figure>
+								
+								<p>The <code class="shader">smoothstep</code> function has three parameters, `a`, `b`, and `c`. The first two parameters, `a` and `b`, define the range that the transition should cover, while `c` is the value to smooth. This leads to `t=(c-a)/(b-a)`, which is clamped to 0&ndash;1 before use.</p>
+							</div>
+						</aside>
+						
+						<pre translate="no" class="shader">	float minBary = min(barys.x, min(barys.y, barys.z));
+	<ins>minBary = smoothstep(0, 0.1, minBary);</ins>
+	return albedo * minBary;</pre>
+						
+						<figure>
+							<img src="rendering-the-wireframe/adjusted-transition.png" width="220" height="170">
+							<figcaption>Adjusted transition.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Fixed Wire Width</h3>
+						
+						<p>The wireframe effect is starting to look good, but only for triangles with edges that have roughly the same length. Also, the lines are affected by view distance, because they're part of the triangles. Ideally, the wires have a fixed visual thickness.</p>
+						
+						<p>To keep the wire thickness constant in screen space, we have to adjust the range that we use for the <code class="shader">smoothstep</code> function. The range depends on how quickly the measured distance to the edge changes, visually. We can use screen-space derivative instructions to figure this out.</p>
+						
+						<p>The rate of change can be different for both screen-space dimensions. Which should we use? We can use both, simply adding them. Also, because the changes could be positive or negative, we should use their absolute values. By using the result directly as the range, we end up with lines that cover roughly two fragments.</p>
+						
+						<pre translate="no" class="shader">	float minBary = min(barys.x, min(barys.y, barys.z));
+	<ins>float delta = abs(ddx(minBary)) + abs(ddy(minBary));</ins>
+	minBary = smoothstep(0, <ins>delta</ins>, minBary);</pre>
+						
+						<p>This formula is also available as the convenient <code class="shader">fwidth</code> function, so let's use that.</p>
+						
+						<pre translate="no" class="shader">	float delta = <ins>fwidth(minBary)</ins>;</pre>
+						
+						<figure>
+							<img src="rendering-the-wireframe/fixed-width.png" width="220" height="170">
+							<figcaption>Fixed-width wires.</figcaption>
+						</figure>
+						
+						<p>The resulting wires might appear a bit too thin. We can fix that by shifting the transition a little away from the edge, for example by the same value we use for the blend range.</p>
+						
+						<pre translate="no" class="shader">	minBary = smoothstep(<ins>delta</ins>, <ins>2 * delta</ins>, minBary);</pre>
+						
+						<figure>
+							<img src="rendering-the-wireframe/thicker-width-artifacts.png" width="220" height="170">
+							<figcaption>Thicker width, but with artifacts.</figcaption>
+						</figure>
+						
+						<p>This produces clearer lines, but also reveals aliasing artifacts in the lines near triangle corners. The artifacts appear because the nearest edge suddenly changes in those regions, which leads to discontinuous derivatives. To fix this, we have to use the derivatives of the individual barycentric coordinates, blend them separately, and grab the minimum after that.</p>
+						
+						<pre translate="no" class="shader">	barys.z = 1 - barys.x - barys.y;
+	<ins>float3 deltas = fwidth(barys);</ins>
+	<ins>barys = smoothstep(deltas, 2 * deltas, barys);</ins>
+	float minBary = min(barys.x, min(barys.y, barys.z));
+<del>//	float delta = fwidth(minBary);</del>
+<del>//	minBary = smoothstep(delta, 2 * delta, minBary);</del>
+	return albedo * minBary;</pre>
+						
+						<figure>
+							<img src="rendering-the-wireframe/thicker-width.png" width="220" height="170">
+							<figcaption>Wireframe without artifacts.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Configurable Wires</h3>
+						
+						<p>We have a functional wireframe effect, but you might want to use a different line thickness, blend region, or color. Maybe you'd like to use different settings per material. So let's make it configurable. To do so, add three properties to the <em translate="no">Flat Wireframe</em> shader. First is the wireframe color, with black as default. Second is the wireframe smoothing, which controls the transition range. A range from zero to ten should be sufficient, with a default of one, representing multiples of the <code class="shader">fwidth</code> measurement. Third is the wireframe thickness, with the same settings as smoothing.</p>
+						
+						<pre translate="no" class="shader">		<ins>_WireframeColor ("Wireframe Color", Color) = (0, 0, 0)</ins>
+		<ins>_WireframeSmoothing ("Wireframe Smoothing", Range(0, 10)) = 1</ins>
+		<ins>_WireframeThickness ("Wireframe Thickness", Range(0, 10)) = 1</ins></pre>
+						
+						<p>Add the corresponding variables to <em translate="no">MyFlatWireframe</em> and use them in <code class="shader">GetAlbedoWithWireframe</code>. Determine the final albedo by interpolating between the wireframe color and the original albedo, based on the smoothed minimum value.</p>
+						
+						<pre translate="no" class="shader"><ins>float3 _WireframeColor;</ins>
+<ins>float _WireframeSmoothing;</ins>
+<ins>float _WireframeThickness;</ins>
+
+float3 GetAlbedoWithWireframe (Interpolators i) {
+	float3 albedo = GetAlbedo(i);
+	float3 barys;
+	barys.xy = i.barycentricCoordinates;
+	barys.z = 1 - barys.x - barys.y;
+	float3 deltas = fwidth(barys);
+	<ins>float3 smoothing = deltas * _WireframeSmoothing;</ins>
+	<ins>float3 thickness = deltas * _WireframeThickness;</ins>
+	barys = smoothstep(<ins>thickness</ins>, <ins>thickness + smoothing</ins>, barys);
+	float minBary = min(barys.x, min(barys.y, barys.z));
+<del>//	return albedo * minBary;</del>
+	<ins>return lerp(_WireframeColor, albedo, minBary);</ins>
+}</pre>
+						
+						<p>While the shader is now configurable, the properties don't appear in our custom shader GUI yet. We could create a new GUI for <em translate="no">Flat Wireframe</em>, but let's use a shortcut and add the properties directly to <code>MyLightingShaderGUI</code>. Give it a new <code>DoWireframe</code> method to create a small section for the wireframe.</p>
+						
+						<pre translate="no">	<ins>void DoWireframe () {</ins>
+		<ins>GUILayout.Label("Wireframe", EditorStyles.boldLabel);</ins>
+		<ins>EditorGUI.indentLevel += 2;</ins>
+		<ins>editor.ShaderProperty(</ins>
+			<ins>FindProperty("_WireframeColor"),</ins>
+			<ins>MakeLabel("Color")</ins>
+		<ins>);</ins>
+		<ins>editor.ShaderProperty(</ins>
+			<ins>FindProperty("_WireframeSmoothing"),</ins>
+			<ins>MakeLabel("Smoothing", "In screen space.")</ins>
+		<ins>);</ins>
+		<ins>editor.ShaderProperty(</ins>
+			<ins>FindProperty("_WireframeThickness"),</ins>
+			<ins>MakeLabel("Thickness", "In screen space.")</ins>
+		<ins>);</ins>
+		<ins>EditorGUI.indentLevel -= 2;</ins>
+	<ins>}</ins></pre>
+						
+						<p>To have <code>MyLightingShaderGUI</code> support both shaders with and without a wireframe, only invoke <code>DoWireframe</code> in its <code>OnGUI</code> method if the shader has the <em translate="no">_WireframeColor</em> property. We simply assume that if that property is available, it has all three.</p>
+						
+						<pre translate="no">	public override void OnGUI (
+		MaterialEditor editor, MaterialProperty[] properties
+	) {
+		this.target = editor.target as Material;
+		this.editor = editor;
+		this.properties = properties;
+		DoRenderingMode();
+		<ins>if (target.HasProperty("_WireframeColor")) {</ins>
+			<ins>DoWireframe();</ins>
+		<ins>}</ins>
+		DoMain();
+		DoSecondary();
+		DoAdvanced();
+	}</pre>
+						
+						<figure>
+							<img alt="inspector" src="rendering-the-wireframe/inspector.png" width="320" height="142"><br>
+							<video width="320" height="186" controls loop muted>
+								<source src="rendering-the-wireframe/configurable-wireframe.mp4" type="video/mp4">
+							</video>
+							<figcaption>Configurable wireframe.</figcaption>
+						</figure>
+						
+						<p>You're now able to render meshes with flat shading and a configurable wireframe. It will come in handy for the next advanced rendering tutorial, <a href="../tessellation/index.html">Tessellation</a>.</p>
+					</section>
+					
+					<a href="rendering-the-wireframe/rendering-the-wireframe.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Flat-and-Wireframe-Shading.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

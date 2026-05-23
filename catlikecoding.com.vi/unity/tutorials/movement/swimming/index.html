@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/movement/swimming/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/movement/swimming/tutorial-image.jpg">
+		<meta property="og:title" content="Swimming">
+		<meta property="og:description" content="A Unity Movement tutorial about buoyancy and swimming.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Swimming</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/movement/climbing/#article",
+				"headline": "Swimming",
+				"alternativeHeadline": "Moving through and Floating in Water",
+				"datePublished": "2020-06-23",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Movement tutorial about buoyancy and swimming.",
+				"image": "https://catlikecoding.com/unity/tutorials/movement/climbing/tutorial-image.jpg",
+				"dependencies": "Unity 2019.4.1f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/movement/", "name": "Movement" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				CustomGravity: 1,
+				CustomGravityRigidbody: 1,
+				GravityBox: 1,
+				GravityPlane: 1,
+				GravitySource: 1,
+				GravitySphere: 1,
+				MovingSphere: 1,
+				OrbitCamera: 1,
+				StableFloatingRigidbody: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Movement</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Swimming</h1>
+					<p>Moving through and Floating in Water</p>
+					<ul>
+						<li>Detect water volumes.</li>
+						<li>Apply water drag and buoyancy.</li>
+						<li>Swim through water, including up and down.</li>
+						<li>Make objects float.</li>
+					</ul>
+				</header>
+				
+				<p>This is the ninth installment of a tutorial series about controlling the <a href="../index.html">movement</a> of a character. It makes it possible to float in and move through water.</p>
+				
+				<p>This tutorial is made with Unity 2019.4.1f. It also uses the ProBuilder package.</p>
+				
+				<aside>
+					<h3>Unity Upgrade</h3>
+					<div>
+						<p>I've upgraded to Unity 2019.4 LTS and ProBuilder version 4.2.3, so some of the visuals have changed.</p>
+					</div>
+				</aside>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Having fun in the pool.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Water</h2>
+					
+					<p>Lots of games contain water and it's often swimmable. However, there is no out-of-the-box solution for interactive water. PhysX doesn't support it directly, so we have to create an approximation of water ourselves.</p>
+					
+					<section>
+						<h3>Water Scene</h3>
+						
+						<p>To demonstrate water I've created a scene that contains a swimming pool. It has various shore configurations, two surface levels, two water tunnels, a water bridge, and places where you can walk underneath the water. Our water will also work with arbitrary gravity, but this scene uses simple uniform  gravity.</p>
+						
+						<figure>
+							<img src="water/swimming-pool.png" width="410" height="270">
+							<figcaption>Swimming pool.</figcaption>
+						</figure>
+						
+						<p>The water surface is made with single-sided flat meshes that have a semitransparent blue material. They're visible from above but not from below.</p>
+						
+						<figure>
+							<img src="water/surfaces.png" width="320" height="180">
+							<figcaption>Water surface.</figcaption>
+						</figure>
+						
+						<p>The water's volume has to be described with colliders set to be triggers. I've used box colliders without a mesh for most of the volume, scaled slightly larger than needed so there won't be any gaps in the water. A few places required more complex ProBuilder meshes to fit the volume. Those have to be set to triggers as well, which can be done via the <em translate="no">Set Trigger</em> option in the ProBuilder window. Note that mesh colliders that are triggers have to be convex. A concave mesh automatically generates a convex version that wraps it, but that can lead to places where it pokes out of the desired water volume. An example of this is the curving water bridge, for which I made a simplified convex collider.</p>
+						
+						<figure>
+							<img src="water/colliders.png" width="340" height="200">
+							<figcaption>Water colliders.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Ignoring Trigger Colliders</h3>
+						
+						<p>All the water volume objects are on the <em translate="no">Water</em> layer, which should be excluded from all layer masks of both the moving sphere and the orbit camera. Even then, in general the two physics queries that we currently have are meant for regular colliders only, not triggers. Whether triggers are detected can be configured via the <em translate="no">Physics / Queries Hit Triggers</em> project setting. But we never want to detect triggers with the code what we have right now, so let's make that explicit, regardless of the project setting.</p>
+						
+						<p>The first query is in <code>MovingSphere.SnapToGround</code>. Add <code>QueryTriggerInteraction.Ignore</code> as a final argument to the ray cast.</p>
+						
+						<pre translate="no">		if (!Physics.Raycast(
+			body.position, -upAxis, out RaycastHit hit,
+			probeDistance, probeMask<ins>, QueryTriggerInteraction.Ignore</ins>
+		)) {
+			return false;
+		}</pre>
+						
+						<p>Second, do the same for the box cast in <code>OrbitCamera.LateUpdate</code>.</p>
+						
+						<pre translate="no">		if (Physics.BoxCast(
+			castFrom, CameraHalfExtends, castDirection, out RaycastHit hit,
+			lookRotation, castDistance, obstructionMask<ins>,</ins>
+			<ins>QueryTriggerInteraction.Ignore</ins>
+		)) {
+			rectPosition = castFrom + castDirection * hit.distance;
+			lookPosition = rectPosition - rectOffset;
+		}</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Detecting Water</h3>
+						
+						<p>We can now move though the water as if it doesn't exist. But to support swimming we must detect it. We'll do that by checking whether we're inside a trigger zone that's on the <em translate="no">Water</em> layer. Begin by adding a water mask to <code>MovingSphere</code>, along with a swimming material that we'll use to show that it's in the water.</p>
+						
+						<pre translate="no">	[SerializeField]
+	LayerMask probeMask = -1, stairsMask = -1, climbMask = -1<ins>, waterMask = 0</ins>;
+
+	[SerializeField]
+	Material
+		normalMaterial = default,
+		climbingMaterial = default<ins>,</ins>
+		<ins>swimmingMaterial = default</ins>;</pre>
+						
+						<figure>
+							<img src="water/water-mask-swimming-material.png" width="320" height="102">
+							<figcaption>Water mask and swimming material settings.</figcaption>
+						</figure>
+						
+						<p>Then add an <code>InWater</code> property that indicates whether the sphere is in the water. We'll initially make this a simple get/set property that we reset to <code>false</code> in <code>ClearState</code>.</p>
+						
+						<pre translate="no">	<ins>bool InWater { get; set; }</ins>
+	
+	&hellip;
+	
+	void ClearState () {
+		&hellip;
+		<ins>InWater = false;</ins>
+	}</pre>
+						
+						<p>Use the property to select the swimming material in <code>Update</code>, if we aren't climbing.</p>
+						
+						<pre translate="no">	void Update () {
+		&hellip;
+
+		meshRenderer.material =
+			Climbing ? climbingMaterial :
+			<ins>InWater ? swimmingMaterial :</ins> normalMaterial;
+	}</pre>
+						
+						<p>Finally, detecting the water is done by adding <code>OnTriggerEnter</code> and <code>OnTriggerStay</code> methods. They work like <code>OnCollisionEnter</code> and <code>OnCollisionStay</code> except that they're for colliders and have a <code>Collider</code> parameter instead of a <code>Collision</code>. Both methods should check whether the collider is on the water layer and if so set <code>IsSwimming</code> to <code>true</code>.</p>
+						
+						<pre translate="no">	<ins>void OnTriggerEnter (Collider other) {</ins>
+		<ins>if ((waterMask &amp; (1 &lt;&lt; other.gameObject.layer)) != 0) {</ins>
+			<ins>InWater = true;</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	<ins>void OnTriggerStay (Collider other) {</ins>
+		<ins>if ((waterMask &amp; (1 &lt;&lt; other.gameObject.layer)) != 0) {</ins>
+			<ins>InWater = true;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="water/sphere-in-water.png" width="200" height="150">
+							<figcaption>Sphere is blue while in water.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>When are the trigger methods invoked?</h3>
+							<div>
+								<p>All on-trigger methods are invoked just before all on-collision methods.</p>
+							</div>
+						</aside>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Submergence</h2>
+					
+					<p>Knowing whether our sphere intersects a water volume isn't enough to make it swim or float properly. We need to know how much of it is submerged, then we can use that to calculate drag and buoyancy.</p>
+					
+					<section>
+						<h3>Degree of Submergence</h3>
+						
+						<p>Let's add a submergence float field to keep track of the sphere's submergence state. A value of zero represents no water is touched while a value of 1 means it is completely underwater. Then change <code>InWater</code> so it simply returns whether the submergence is positive. Set it back to zero in <code>ClearState</code>.</p>
+						
+						<pre translate="no">	bool InWater <ins>=> submergence > 0f</ins>;
+
+	<ins>float submergence;</ins>
+	
+	&hellip;
+	
+	void ClearState () {
+		&hellip;
+		<del>//InWater = false;</del>
+		<ins>submergence = 0f;</ins>
+	}</pre>
+						
+						<p>Change the trigger methods so they invoke a new <code>EvaluateSubmergence</code> method, which simply sets submergence to 1 for now.</p>
+						
+						<pre translate="no">	void OnTriggerEnter (Collider other) {
+		if ((waterMask &amp; (1 &lt;&lt; other.gameObject.layer)) != 0) {
+			<ins>EvaluateSubmergence();</ins>
+		}
+	}
+
+	void OnTriggerStay (Collider other) {
+		if ((waterMask &amp; (1 &lt;&lt; other.gameObject.layer)) != 0) {
+			<ins>EvaluateSubmergence();</ins>
+		}
+	}
+
+	<ins>void EvaluateSubmergence () {</ins>
+		<ins>submergence = 1f;</ins>
+	<ins>}</ins></pre>
+						
+					</section>
+					
+					<section>
+						<h3>Submergence Range</h3>
+						
+						<p>We'll make the submergence range configurable. That way we can precisely control when our sphere counts as being in water and when it's fully submerged. We measure this from a point offset above the sphere's center, straight down to the maximum range. This would make it possible to count as fully submerged before the entire sphere is inside the zone, or to ignore low water elevations like puddles entirely, even though we're touching the water.</p>
+						
+						<figure>
+							<img src="submergence/submergence-offset-range-diagram.png" width="160" height="120">
+							<figcaption>Offset and range.</figcaption>
+						</figure>
+						
+						<p>Make the offset and range configurable. Use 0.5 and 1 for the defaults, matching the shape of our radius 0.5 sphere. The range should be positive.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>float submergenceOffset = 0.5f;</ins>
+
+	<ins>[SerializeField, Min(0.1f)]</ins>
+	<ins>float submergenceRange = 1f;</ins></pre>
+						
+						<figure>
+							<img src="submergence/submergence-offset-range.png" width="320" height="62">
+							<figcaption>Submergence offset and range.</figcaption>
+						</figure>
+						
+						<p>We now have to perform a ray cast in <code>EvaluateSubmergence</code>, from the offset point straight down up to the submergence range, using the water mask. In this case we do want to hit the water, so use <code>QueryTriggerInteraction.Collide</code>. The submergence is then equal to 1 minus the hit distance divided by the range.</p>
+						
+						<pre translate="no">	void EvaluateSubmergence () {
+		<ins>if (Physics.Raycast(</ins>
+			<ins>body.position + upAxis * submergenceOffset,</ins>
+			<ins>-upAxis, out RaycastHit hit, submergenceRange,</ins>
+			<ins>waterMask, QueryTriggerInteraction.Collide</ins>
+		<ins>)) {</ins>
+			submergence = 1f <ins>- hit.distance / submergenceRange</ins>;
+		<ins>}</ins>
+	}</pre>
+						
+						<p>To test the submergence value use it to temporarily color the sphere.</p>
+						
+						<pre translate="no">	void Update () {
+		&hellip;
+
+		meshRenderer.material =
+			Climbing ? climbingMaterial :
+			InWater ? swimmingMaterial : normalMaterial;
+		<ins>meshRenderer.material.color = Color.white * submergence;</ins>
+	}</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="submergence/submergence-incorrect.mp4" type="video/mp4">
+							</video>
+							<figcaption>Submergence, incorrect.</figcaption>
+						</figure>
+						
+						<p>This works up to the moment that our sphere becomes completely submerged, because from then on we're casting from a point that's already inside the water collider, so the ray cast fails to hit it. But that means we're fully submerged, so we can just set submergence to 1 when we don't hit anything.</p>
+						
+						<pre translate="no">	void EvaluateSubmergence () {
+		if (Physics.Raycast(
+			body.position + upAxis * submergenceOffset,
+			-upAxis, out RaycastHit hit, submergenceRange,
+			waterMask, QueryTriggerInteraction.Collide
+		)) {
+			submergence = 1f - hit.distance / submergenceRange;
+		}
+		<ins>else {</ins>
+			<ins>submergence = 1f;</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>However, that might cause an invalid submergence of 1 when moving out of the water, due the delay with which the collision and also the trigger methods get invoked, as the body position is different from when the trigger was detected by PhysX. We can guard against that by increasing the length of the ray by one unit. That's not perfect but takes care of nearly all cases except when moving extremely fast. This will cause the submergence to become negative when exiting the water, which is fine because that isn't counted as being in water.</p>
+						
+						<pre translate="no">	void EvaluateSubmergence () {
+		if (Physics.Raycast(
+			body.position + upAxis * submergenceOffset,
+			-upAxis, out RaycastHit hit, submergenceRange <ins>+ 1f</ins>,
+			waterMask, QueryTriggerInteraction.Collide
+		)) {
+			submergence = 1f - hit.distance / submergenceRange;
+		}
+		else {
+			submergence = 1f;
+		}
+	}</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="submergence/submergence-correct.mp4" type="video/mp4">
+							</video>
+							<figcaption>Submergence, correct.</figcaption>
+						</figure>
+						
+						<p>Now we can get rid of the submergence visualization.</p>
+						
+						<pre translate="no">		<del>//meshRenderer.material.color = Color.white * submergence;</del></pre>
+						
+						<p>Note that this approach assumes that there's water directly below the sphere's center. This might not be the case when the sphere touches a water volume's side or bottom, for example when touching an unrealistic wall made of water. In such cases we immediately go to full submersion.</p>
+						
+					</section>
+					
+					<section>
+						<h3>Water Drag</h3>
+						
+						<p>Movement in water is more sluggish than on land, because the water causes much greater drag than air. So acceleration is noticeably slower while deceleration is faster. Let's add support for this and make it configurable by adding a water drag option, set to 1 by default. A range from zero to 10 is fine, as 10 will cause massive drag.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Range(0f, 10f)]</ins>
+	<ins>float waterDrag = 1f;</ins></pre>
+						
+						<figure>
+							<img src="submergence/water-drag.png" width="320" height="42">
+							<figcaption>Water drag.</figcaption>
+						</figure>
+						
+						<p>We'll use simple linear damping, similar to what PhysX does. We scale the velocity by 1 minus the drag multiplied with the time delta. Do this in <code>FixedUpdate</code> before invoking <code>AdjustVelocity</code>. We apply drag first so some acceleration is always possible.</p>
+						
+						<pre translate="no">	void FixedUpdate () {
+		Vector3 gravity = CustomGravity.GetGravity(body.position, out upAxis);
+		UpdateState();
+
+		<ins>if (InWater) {</ins>
+			<ins>velocity *= 1f - waterDrag * Time.deltaTime;</ins>
+		<ins>}</ins>
+
+		AdjustVelocity();
+
+		&hellip;
+	}</pre>
+						
+						<p>Note that this means that if the water drag is equal to one divided by the fixed time step that velocity drops to zero in a single physics step. Velocity would reverse if it were greater instead. As we set the maximum to 10 this won't be an issue. To be safe, you could make sure that the velocity is scaled by at least zero.</p>
+						
+						<p>If we're not completely submerged then we shouldn't experience maximum drag. So factor submergence into the damping.</p>
+						
+						<pre translate="no">			velocity *= 1f - waterDrag * <ins>submergence *</ins> Time.deltaTime;</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="submergence/water-drag-10.mp4" type="video/mp4">
+							</video>
+							<figcaption>Water drag 10.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Buoyancy</h3>
+						
+						<p>Another important property of water is that things tend to float it in. So add a configurable buoyancy value to our sphere, with a minimum of zero and a default of 1. The idea is that something with zero buoyancy sinks like a rock, only being slowed down by water drag. An object with a buoyancy of 1 is in equilibrium, negating gravity entirely. And something with a buoyancy greater than 1 floats to the surface. A buoyancy of 2 would mean that it rises as fast as it would normally fall.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Min(0f)]</ins>
+	<ins>float buoyancy = 1f;</ins></pre>
+						
+						<figure>
+							<img src="submergence/buoyancy.png" width="320" height="42">
+							<figcaption>Buoyancy.</figcaption>
+						</figure>
+						
+						<p>We implement this in <code>FixedUpdate</code> by checking whether we're not climbing but are in water. If so, apply gravity scaled by 1 minus buoyancy, again factoring in submergence. This overrides all other applications of gravity.</p>
+						
+						<pre translate="no">		if (Climbing) {
+			velocity -=
+				contactNormal * (maxClimbAcceleration * 0.9f * Time.deltaTime);
+		}
+		<ins>else if (InWater) {</ins>
+			<ins>velocity +=</ins>
+				<ins>gravity * ((1f - buoyancy * submergence) * Time.deltaTime);</ins>
+		<ins>}</ins>
+		else if (OnGround &amp;&amp; velocity.sqrMagnitude &lt; 0.01f) { &hellip; }</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="submergence/buoyancy-15.mp4" type="video/mp4">
+							</video>
+							<figcaption>Buoyancy 1.5.</figcaption>
+						</figure>
+						
+						<p>Note that in reality the upward force increases with depth, while in our case it remains constant once maximum submergence is reached. This is sufficient to create believable buoyancy except when extremely deep water is in play.</p>
+						
+						<p>The only case where buoyancy appears to fail is if the sphere ends up too close to the bottom. In this case ground snapping activates, counteracting buoyancy. We can avoid that by aborting <code>SnapToGround</code> if we're in water.</p>
+						
+						<pre translate="no">	bool SnapToGround () {
+		if (stepsSinceLastGrounded > 1 || stepsSinceLastJump &lt;= 2 <ins>|| InWater</ins>) {
+			return false;
+		}
+		&hellip;
+	}</pre>
+						
+					</section>
+					
+				</section>
+				
+				<section>
+					<h2>Swimming</h2>
+					
+					<p>Now that we're able to float in water the next step is to support swimming, which should include diving and surfacing.</p>
+					
+					<section>
+						<h3>Swim Threshold</h3>
+						
+						<p>We can only swim if we're deep enough in water, but we don't need to be fully submerged. So let's add a configurable swim threshold that defines the minimum submergence required for swimming. It has to be greater than zero, so use 0.01&ndash;1 for its range, with 0.5 as the default. That allows our sphere to swim if at least its bottom half is underwater. Also add a <code>Swimming</code> property that indicates whether the swim threshold is reached.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Range(0.01f, 1f)]</ins>
+	<ins>float swimThreshold = 0.5f;</ins>
+
+	&hellip;
+
+	<ins>bool Swimming => submergence >= swimThreshold;</ins></pre>
+						
+						<figure>
+							<img src="swimming/swim-threshold.png" width="308" height="42">
+							<figcaption>Swim Threshold.</figcaption>
+						</figure>
+						
+						<p>Adjust <code>Update</code> so we use the swim material only when swimming.</p>
+						
+						<pre translate="no">	void Update () {
+		&hellip;
+
+		meshRenderer.material =
+			Climbing ? climbingMaterial :
+			<ins>Swimming</ins> ? swimmingMaterial : normalMaterial;
+	}</pre>
+						
+						<p>Next, create a <code>CheckSwimming</code> method that returns whether we're swimming and if so sets the ground contact count to zero and makes the contact normal equal to the up axis.</p>
+						
+						<pre translate="no">	<ins>bool CheckSwimming () {</ins>
+		<ins>if (Swimming) {</ins>
+			<ins>groundContactCount = 0;</ins>
+			<ins>contactNormal = upAxis;</ins>
+			<ins>return true;</ins>
+		<ins>}</ins>
+		<ins>return false;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Invoke that method in <code>UpdateState</code> when checking if we're grounded, directly after <code>CheckClimbing</code>. That way swimming overrules everything except climbing.</p>
+						
+						<pre translate="no">		if (
+			CheckClimbing() || <ins>CheckSwimming() ||</ins>
+			OnGround || SnapToGround() || CheckSteepContacts()
+		) { &hellip; }</pre>
+						
+						<p>Then remove the check for being in water from <code>SnapToGround</code>. This makes snapping work again when we're in water but not when swimming.</p>
+						
+						<pre translate="no"><del>		//if (stepsSinceLastGrounded > 1 || stepsSinceLastJump &lt;= 2 || InWater) {</del>
+		<ins>if (stepsSinceLastGrounded > 1 || stepsSinceLastJump &lt;= 2) {</ins>
+			return false;
+		}</pre>
+					</section>
+					
+					<section>
+						<h3>Swim Speed</h3>
+						
+						<p>Add a configurable max speed and acceleration for swimming, both set to 5 by default.</p>
+						
+						<pre translate="no">	[SerializeField, Range(0f, 100f)]
+	float maxSpeed = 10f, maxClimbSpeed = 4f<ins>, maxSwimSpeed = 5f</ins>;
+
+	[SerializeField, Range(0f, 100f)]
+	float
+		maxAcceleration = 10f,
+		maxAirAcceleration = 1f,
+		maxClimbAcceleration = 40f<ins>,</ins>
+		<ins>maxSwimAcceleration = 5f</ins>;</pre>
+						
+						<figure>
+							<img src="swimming/swim-speed-acceleration.png" width="308" height="141">
+							<figcaption>Max swim speed and acceleration.</figcaption>
+						</figure>
+						
+						<p>In <code>AdjustVelocity</code>, check whether we're in water after checking for climbing. If so, use the swim acceleration and speed, with the same axes as the general case.</p>
+						
+						<pre translate="no">		if (Climbing) {
+			acceleration = maxClimbAcceleration;
+			speed = maxClimbSpeed;
+			xAxis = Vector3.Cross(contactNormal, upAxis);
+			zAxis = upAxis;
+		}
+		<ins>else if (InWater) {</ins>
+			<ins>acceleration = maxSwimAcceleration;</ins>
+			<ins>speed = maxSwimSpeed;</ins>
+			<ins>xAxis = rightAxis;</ins>
+			<ins>zAxis = forwardAxis;</ins>
+		<ins>}</ins>
+		else {
+			acceleration = OnGround ? maxAcceleration : maxAirAcceleration;
+			speed = OnGround && desiresClimbing ? maxClimbSpeed : maxSpeed;
+			xAxis = rightAxis;
+			zAxis = forwardAxis;
+		}</pre>
+						
+						<p>The deeper we are in the water the more we should depend on the swim acceleration and speed instead of the regular ones. So we'll interpolate between regular and swim values based on a swim factor, which is the submergence divided by the swim threshold, constrained to a maximum of 1.</p>
+						
+						<pre translate="no">		else if (InWater) {
+			<ins>float swimFactor = Mathf.Min(1f, submergence / swimThreshold);</ins>
+			acceleration = <ins>Mathf.LerpUnclamped(</ins>
+				<ins>maxAcceleration,</ins> maxSwimAcceleration<ins>, swimFactor</ins>
+			<ins>)</ins>;
+			speed = <ins>Mathf.LerpUnclamped(maxSpeed,</ins> maxSwimSpeed<ins>, swimFactor)</ins>;
+			xAxis = rightAxis;
+			zAxis = forwardAxis;
+		}</pre>
+						
+						<p>Whether the other acceleration is the normal or air acceleration depends on whether we're on the ground.</p>
+						
+						<pre translate="no">			acceleration = Mathf.LerpUnclamped(
+				<ins>OnGround ?</ins> maxAcceleration <ins>: maxAirAcceleration</ins>,
+				maxSwimAcceleration, swimFactor
+			);</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="swimming/swimming.mp4" type="video/mp4">
+							</video>
+							<figcaption>Swimming; buoyancy 1.1.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Diving and Surfacing</h3>
+						
+						<p>We can now move while swimming exactly like when on the ground or in the air, so controlled movement is constrained to the ground plane. Vertical movement is currently only due to gravity and buoyancy. To grant control over vertical motion we need a third input axis. Let's support this by adding an <em translate="no">UpDown</em> axis to our input settings, by duplicating either <em translate="no">Horizontal</em> or <em translate="no">Vertical</em>. I used space&mdash;the same key used for jumping&mdash;for the positive button and X for the negative button. Then change the <code>playerInput</code> field to a <code>Vector3</code> and set its Z component to the <em translate="no">UpDown</em> axis in <code>Update</code> when swimming and to zero otherwise. We have to use the <code>ClampMagnitude</code> version of <code>Vector3</code> from now on.</p>
+						
+						<pre translate="no">	<ins>Vector3</ins> playerInput;
+	
+	&hellip;
+						
+	void Update () {
+		playerInput.x = Input.GetAxis("Horizontal");
+		playerInput.y = Input.GetAxis("Vertical");
+		<ins>playerInput.z = Swimming ? Input.GetAxis("UpDown") : 0f;</ins>
+		playerInput = <ins>Vector3</ins>.ClampMagnitude(playerInput, 1f);
+
+
+		&hellip;
+	}</pre>
+						
+						<p>Find the current and new Y velocity components and use them to adjust the velocity at the end of <code>AdjustVelocity</code>. This works the same as for X and Z, but is done only when swimming.</p>
+						
+						<pre translate="no">	void AdjustVelocity () {
+		&hellip;
+
+		velocity += xAxis * (newX - currentX) + zAxis * (newZ - currentZ);
+
+		<ins>if (Swimming) {</ins>
+			<ins>float currentY = Vector3.Dot(relativeVelocity, upAxis);</ins>
+			<ins>float newY = Mathf.MoveTowards(</ins>
+				<ins>currentY, playerInput.z * speed, maxSpeedChange</ins>
+			<ins>);</ins>
+			<ins>velocity += upAxis * (newY - currentY);</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="swimming/swimming-up-down.mp4" type="video/mp4">
+							</video>
+							<figcaption>Swimming up and down; buoyancy 1.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Climbing and Jumping</h3>
+						
+						<p>It should be hard to climb or jump while submerged. We can disallow both by ignoring the player's input in <code>Update</code> while swimming. The desire for climbing has to be explicitly deactivated. Jumping resets itself. It's still possible for climbing to be active while swimming if multiple physics steps take place before the next update, but that's fine as that takes place during a transition to swimming so exact timing doesn't matter. To climb out of water the player just has to swim up while pressing the climb button and climbing will activate at some point.</p> 
+						
+						<pre translate="no">		<ins>if (Swimming) {</ins>
+			<ins>desiresClimbing = false;</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			desiredJump |= Input.GetButtonDown("Jump");
+			desiresClimbing = Input.GetButton("Climb");
+		<ins>}</ins></pre>
+						
+						<p>While it's possible to jump when standing in shallow water, it makes it a lot harder. We'll simulate this by scaling down the jump speed by 1 minus the submergence divided by the swim threshold, to a minimum of zero.</p>
+						
+						<pre translate="no">		float jumpSpeed = Mathf.Sqrt(2f * gravity.magnitude * jumpHeight);
+		<ins>if (InWater) {</ins>
+			<ins>jumpSpeed *= Mathf.Max(0f, 1f - submergence / swimThreshold);</ins>
+		<ins>}</ins></pre>
+						
+					</section>
+					
+					<section>
+						<h3>Swimming in Moving Water</h3>
+						
+						<p>We won't consider water currents in this tutorial, but we should deal with water volumes that move in their entirety because they're animated, as that's just like regular moving geometry that we're stand or climbing on. To make that possible pass the collider to <code>EvaluateSubmergence</code> and use its attached rigid body for the connected body if we end up swimming. If we're in shallow water we ignore it.</p>
+						
+						<pre translate="no">	void OnTriggerEnter (Collider other) {
+		if ((waterMask & (1 &lt;&lt; other.gameObject.layer)) != 0) {
+			EvaluateSubmergence(<ins>other</ins>);
+		}
+	}
+
+	void OnTriggerStay (Collider other) {
+		if ((waterMask & (1 &lt;&lt; other.gameObject.layer)) != 0) {
+			EvaluateSubmergence(<ins>other</ins>);
+		}
+	}
+
+	void EvaluateSubmergence (<ins>Collider collider</ins>) {
+		&hellip;
+		<ins>if (Swimming) {</ins>
+			<ins>connectedBody = collider.attachedRigidbody;</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>If we're connected to a water body then we shouldn't replace it with another body in <code>EvaluateCollision</code>. In fact, we don't need any connection information at all, so we can skip all the work in <code>EvaluateCollision</code> while swimming.</p>
+						
+						<pre translate="no">	void EvaluateCollision (Collision collision) {
+		<ins>if (Swimming) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="swimming/inside-animated-water-cube.mp4" type="video/mp4">
+							</video>
+							<figcaption>Inside animated water cube; swim acceleration 10.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Floating Objects</h2>
+					
+					<p>Now that our sphere can swim it would be nice if it had some floating objects to interact with. Once again we have to program this ourselves, which we'll do by adding support for it to our existing component that already supports custom gravity.</p>
+					
+					<section>
+						<h3>Submergence</h3>
+						
+						<p>Add a configurable submergence offset, submergence range, buoyancy, water drag, and water mask to <code>CustomGravityRigidbody</code>, just like <code>MovingSphere</code>, except that we don't need a swim acceleration, speed, nor threshold.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>float submergenceOffset = 0.5f;</ins>
+
+	<ins>[SerializeField, Min(0.1f)]</ins>
+	<ins>float submergenceRange = 1f;</ins>
+
+	<ins>[SerializeField, Min(0f)]</ins>
+	<ins>float buoyancy = 1f;</ins>
+
+	<ins>[SerializeField, Range(0f, 10f)]</ins>
+	<ins>float waterDrag = 1f;</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>LayerMask waterMask = 0;</ins></pre>
+						
+						<figure>
+							<img src="floating-objects/submergence-settings.png" width="320" height="120">
+							<figcaption>Submergence settings for cube with scale 0.25.</figcaption>
+						</figure>
+						
+						<p>Next, we need a submergence field. Reset it to zero at the end of <code>FixedUpdate</code> if needed, before applying gravity. We also need to know the gravity when determining submergence, so keep track of it in a field as well.
+						
+						<pre translate="no">	<ins>float submergence;</ins>
+
+	<ins>Vector3 gravity;</ins>
+	
+	&hellip;
+	
+	void FixedUpdate () {
+		&hellip;
+		
+		<ins>gravity = CustomGravity.GetGravity(body.position);</ins>
+		<ins>if (submergence > 0f) {</ins>
+			<ins>submergence = 0f;</ins>
+		<ins>}</ins>
+		body.AddForce(<ins>gravity</ins>, ForceMode.Acceleration);
+	}</pre>
+						
+						<p>Then add the required trigger methods along with an <code>EvaluateSubmergence</code> method, which works the same as before except that we calculate the up axis only when needed and don't support connected bodies.</p>
+						
+						<pre translate="no">	<ins>void OnTriggerEnter (Collider other) {</ins>
+		<ins>if ((waterMask & (1 &lt;&lt; other.gameObject.layer)) != 0) {</ins>
+			<ins>EvaluateSubmergence();</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	<ins>void OnTriggerStay (Collider other) {</ins>
+		<ins>if ((waterMask & (1 &lt;&lt; other.gameObject.layer)) != 0) {</ins>
+			<ins>EvaluateSubmergence();</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+	
+	<ins>void EvaluateSubmergence () {</ins>
+		<ins>Vector3 upAxis = -gravity.normalized;</ins>
+		<ins>if (Physics.Raycast(</ins>
+			<ins>body.position + upAxis * submergenceOffset,</ins>
+			<ins>-upAxis, out RaycastHit hit, submergenceRange + 1f,</ins>
+			<ins>waterMask, QueryTriggerInteraction.Collide</ins>
+		<ins>)) {</ins>
+			<ins>submergence = 1f - hit.distance / submergenceRange;</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>submergence = 1f;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Even when floating the objects can still go to sleep. If this is the case then we can skip evaluating submergence. So don't invoke <code>EvaluateSubmergence</code> in <code>OnTriggerStay</code> if the body is sleeping. We still do it in <code>OnTriggerEnter</code> because that guarantees a change.</p>
+						
+						<pre translate="no">	void OnTriggerStay (Collider other) {
+		if (
+			<ins>!body.IsSleeping() &amp;&amp;</ins>
+			(waterMask & (1 &lt;&lt; other.gameObject.layer)) != 0
+		) {
+			EvaluateSubmergence();
+		}
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Floating</h3>
+						
+						<p>In <code>FixedUpdate</code> apply water drag and buoyancy if needed. In this case we apply buoyancy via a separate <code>AddForce</code> invocation instead of combining it with the normal gravity.</p>
+						
+						<pre translate="no">		if (submergence > 0f) {
+			<ins>float drag =</ins>
+				<ins>Mathf.Max(0f, 1f - waterDrag * submergence * Time.deltaTime);</ins>
+			<ins>body.velocity *= drag;</ins>
+			<ins>body.AddForce(</ins>
+				<ins>gravity * -(buoyancy * submergence),</ins>
+				<ins>ForceMode.Acceleration</ins>
+			<ins>);</ins>
+			submergence = 0f;
+		}</pre>
+						
+						<p>We'll also apply the drag to the angular velocity, so objects won't keep spinning while floating.</p>
+						
+						<pre translate="no">			body.velocity *= drag;
+			<ins>body.angularVelocity *= drag;</ins></pre>
+						
+						<figure>
+							<img src="floating-objects/floating.png" width="280" height="120">
+							<figcaption>Floating cubes.</figcaption>
+						</figure>
+						
+						<p>Floating objects can now end up with arbitrary rotations while floating. Often objects will float with their lightest side facing up. We can simulate this by adding a configurable buoyancy offset vector, set to zero by default.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>Vector3 buoyancyOffset = Vector3.zero;</ins></pre>
+						
+						<p>We then apply the buoyancy at this point instead of the object's origin, by invoking <code>AddForceAtPosition</code> instead of <code>AddForce</code>, with the offset transformed to word space as a new second argument.</p>
+						
+						<pre translate="no">			body.<ins>AddForceAtPosition</ins>(
+				gravity * -(buoyancy * submergence),
+				<ins>transform.TransformPoint(buoyancyOffset),</ins>
+				ForceMode.Acceleration
+			);</pre>
+						
+						<p>Because gravity and buoyancy now act at different points they create angular momentum that pushes the offset point to the top. A larger offset creates a stronger effect, which can cause rapid oscillation, so the offset should be kept small.</p>
+						
+						<figure>
+							<img src="floating-objects/buoyancy-offset-inspector.png" width="320" height="62" alt="inspector"><br>
+							<img src="floating-objects/buoyancy-offset-scene.png" width="280" height="120" alt="scene">
+							<figcaption>Slight buoyancy offset.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Interacting with Floating Objects</h3>
+						
+						<p>While swimming through water with floating objects in them the orbit camera will jerk back and forth because it tries to stay in front of the objects. This can be avoided by adding a see-through layer that works like a regular layer, except that the orbit camera is set to ignore it.</p>
+						
+						<figure>
+							<img src="floating-objects/see-through-layer.png" width="250" height="250">
+							<figcaption>See-through layer.</figcaption>
+						</figure>
+						
+						<p>This layer should only be used for objects that are small enough to ignore, or are interacted with a lot.</p>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="floating-objects/interacting-with-floating-objects.mp4" type="video/mp4">
+							</video>
+							<figcaption>Pushing floating stuff around.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Can we make see-through objects invisible when they obstruct the view?</h3>
+							<div>
+								<p>Yes, it can be detected when this is the case, which can be used to change the object's visualization. However, that's not part of this tutorial.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Stable Floating</h3>
+						
+						<p>Our current approach works fine for small objects, but it doesn't look as good for larger and nonuniform objects. For example, large floating blocks should remain more stable when the sphere interacts with them. To increase stability we have to spread the buoyancy effect over a larger area. This requires a more complex approach, so duplicate <code>CustomGravityRigidbody</code> and rename it to <code>StableFloatingRigidbody</code>. Replace its buoyancy offset with an array of offset vectors. Turn submergence into an array as well and create it in <code>Awake</code> with the same length as the offset array.</p>
+						
+						<pre translate="no">public class <ins>StableFloatingRigidbody</ins> : MonoBehaviour {
+
+	&hellip;
+
+	[SerializeField]
+	<del>//Vector3 buoyancyOffset = Vector3.zero;</del>
+	<ins>Vector3[] buoyancyOffsets = default;</ins>
+	
+	&hellip;
+	
+	float<ins>[]</ins> submergence;
+
+	Vector3 gravity;
+
+	void Awake () {
+		body = GetComponent&lt;Rigidbody>();
+		body.useGravity = false;
+		<ins>submergence = new float[buoyancyOffsets.Length];</ins>
+	}
+	
+	&hellip;
+}</pre>
+						
+						<p>Adjust <code>EvaluateSubmergence</code> so it evaluates submergence for all buoyancy offsets separately.</p>
+						
+						<pre translate="no">	void EvaluateSubmergence () {
+		<ins>Vector3 down = gravity.normalized;</ins>
+		<ins>Vector3 offset = down * -submergenceOffset;</ins>
+		<ins>for (int i = 0; i &lt; buoyancyOffsets.Length; i++) {</ins>
+			<ins>Vector3 p = offset + transform.TransformPoint(buoyancyOffsets[i]);</ins>
+			if (Physics.Raycast(
+				<ins>p</ins>, <ins>down</ins>, out RaycastHit hit, submergenceRange + 1f,
+				waterMask, QueryTriggerInteraction.Collide
+			)) {
+				submergence[i] = 1f - hit.distance / submergenceRange;
+			}
+			else {
+				submergence[i] = 1f;
+			}
+		<ins>}</ins>
+	}</pre>
+						
+						<p>Then have <code>FixedUpdate</code> apply drag and buoyancy per offset as well. Both drag and buoyancy have to be divided by the amount of offsets so the maximum effect remains the same. The actual effect experienced by the object depends on the submergence total.</p>
+						
+						<pre translate="no">	void FixedUpdate () {
+		&hellip;
+		
+		gravity = CustomGravity.GetGravity(body.position);
+		<ins>float dragFactor = waterDrag * Time.deltaTime / buoyancyOffsets.Length;</ins>
+		<ins>float buoyancyFactor = -buoyancy / buoyancyOffsets.Length;</ins>
+		<ins>for (int i = 0; i &lt; buoyancyOffsets.Length; i++) {</ins>
+			if (submergence<ins>[i]</ins> > 0f) {
+				float drag =
+					Mathf.Max(0f, 1f - <ins>dragFactor * submergence[i]</ins>);
+				body.velocity *= drag;
+				body.angularVelocity *= drag;
+				body.AddForceAtPosition(
+					gravity * <ins>(buoyancyFactor * submergence[i])</ins>,
+					transform.TransformPoint(<ins>buoyancyOffsets[i]</ins>),
+					ForceMode.Acceleration
+				);
+				submergence<ins>[i]</ins> = 0f;
+			}
+		<ins>}</ins>
+		body.AddForce(gravity, ForceMode.Acceleration);
+	}</pre>
+						
+						<p>Four points are usually enough for any box shape, unless they are very large or often end up partially out of the water. Note that offsets are scaled with the object. Also, increasing the object's mass makes it more stable.</p>
+						
+						<figure>
+							<img src="floating-objects/stable-floating-rigidbody.png" width="320" height="366" alt="inspector"><br>
+							<video width="250" height="216" controls loop muted>
+								<source src="floating-objects/stable-floating-objects.mp4" type="video/mp4">
+							</video>
+							<figcaption>Stabilized with four buoyancy offsets.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Accidental Levitation</h3>
+						
+						<p>If a point ends up sufficiently high above the surface then its ray cast will fail, which makes it incorrectly count as fully submerged. This is a potential problem for large objects with multiple buoyancy points, because some could end up high above the water while another part of the object is still submerged. The result would be that the high point ends up levitating. You can achieve this by pushing a large light object partially out of the water.</p>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="floating-objects/levitating-floating-object.mp4" type="video/mp4">
+							</video>
+							<figcaption>Levitation after being pushed.</figcaption>
+						</figure>
+						
+						<p>The problem persists because part of the object still touches the water. To solve this we have to perform an extra query when the ray cast fails to check whether the point itself is inside a water volume. This can be done by invoking <code>Physics.CheckSphere</code> with the position and a small radius like 0.01 as arguments, followed by the mask and interaction mode. Only if that query returns <code>true</code> should we set submergence to 1. However, this could result in a lot of extra queries, so let's make it optional by adding configurable safe-floating toggle. It's only needed for large objects that could be pushes out of the water sufficiently.</p>
+											
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>bool safeFloating = false;</ins>
+	
+	&hellip;
+	
+	void EvaluateSubmergence () {
+		Vector3 down = gravity.normalized;
+		Vector3 offset = down * -submergenceOffset;
+		for (int i = 0; i &lt; buoyancyOffsets.Length; i++) {
+			Vector3 p = offset + transform.TransformPoint(buoyancyOffsets[i]);
+			if (Physics.Raycast(
+				p, down, out RaycastHit hit, submergenceRange + 1f,
+				waterMask, QueryTriggerInteraction.Collide
+			)) {
+				submergence[i] = 1f - hit.distance / submergenceRange;
+			}
+			else <ins>if (</ins>
+				<ins>!safeFloating || Physics.CheckSphere(</ins>
+					<ins>p, 0.01f, waterMask, QueryTriggerInteraction.Collide</ins>
+				<ins>)</ins>
+			<ins>)</ins> {
+				submergence[i] = 1f;
+			}
+		}
+	}</pre>
+						
+						<figure>
+							<img src="floating-objects/safe-floating.png" width="320" height="38" alt="inspector"><br>
+							<video width="250" height="216" controls loop muted>
+								<source src="floating-objects/safe-floating.mp4" type="video/mp4">
+							</video>
+							<figcaption>Safe floating.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../reactive-environment/index.html">Reactive Environment</a>.</p>
+						
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/movement-09-swimming/" class="repository">repository</a>
+					<a href="Swimming.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

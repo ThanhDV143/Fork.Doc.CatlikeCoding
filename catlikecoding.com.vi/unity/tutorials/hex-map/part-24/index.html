@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/hex-map/part-24/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/hex-map/part-24/tutorial-image.jpg">
+		<meta property="og:title" content="Hex Map 24">
+		<meta property="og:description" content="A Unity Hex Map tutorial about generating separate map regions and applying erosion. Part 24 of 27.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hex Map 24</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/hex-map/part-24/#article",
+				"headline": "Hex Map 24",
+				"alternativeHeadline": "Regions and Erosion",
+				"datePublished": "2017-12-14",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Hex Map tutorial about generating separate map regions and applying erosion. Part 24 of 27.",
+				"image": "https://catlikecoding.com/unity/tutorials/hex-map/part-24/tutorial-image.jpg",
+				"dependencies": "Unity 2017.1.0",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/hex-map/", "name": "Hex Map" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				Bezier: 1,
+				EdgeVertices: 1,
+				HexCell: 1,
+				HexCellPriorityQueue: 1,
+				HexCellShaderData: 1,
+				HexEdgeType: 1,
+				HexCoordinates: 1,
+				HexCoordinatesDrawer: 1,
+				HexDirection: 1,
+				HexDirectionExtensions: 1,
+				HexFeatureCollection: 1,
+				HexFeatureManager: 1,
+				HexGameUI: 1,
+				HexGrid: 1,
+				HexGridChunk: 1,
+				HexHash: 1,
+				HexMapCamera: 1,
+				HexMapEditor: 1,
+				HexMapGenerator: 1,
+				HexMesh: 1,
+				HexMetrics: 1,
+				HexUnit: 1,
+				ListPool: 1,
+				MapRegion: 1,
+				NewMapMenu: 1,
+				OptionalToggle: 1,
+				SaveLoadItem: 1,
+				SaveLoadMenu: 1,
+				TextureArrayWizard: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Hex Map</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hex Map 24</h1>
+					<p>Regions and Erosion</p>
+					<ul>
+						<li>Add a border of water around the map.</li>
+						<li>Split the map into multiple regions.</li>
+						<li>Apply erosion to grind away cliffs.</li>
+						<li>Move land around to smoothen the terrain.</li>
+					</ul>
+				</header>
+
+				<p>This is part 24 of a tutorial series about <a href="../index.html">hexagon maps</a>. We laid the foundation for procedural map generation in the <a href="../part-23/index.html">previous part</a>. This time we'll constrain where land may appear and have it affected by erosion.</p>
+				
+				<p>This tutorial is made with Unity 2017.1.0.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Splitting the land and smoothing it out.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Map Border</h2>
+					
+					<p>Because we're pushing up chunks of land at random, it is possible that land ends up touching the edge of the map. This might not be desirable. A map bordered with water contains a natural barrier to keep players away from the edge. So it would be nice if we could prevent land from rising above the water level close to the edge.</p>
+					
+					<section>
+						<h3>Border Size</h3>
+						
+						<p>How close should the land be allowed to get to the edge of the map? There isn't a universal answer to this, so let's make it configurable. We'll do this by adding two sliders to our <code>HexMapGenerator</code> component, one for the borders along the X edges and one for the borders along the Z edges. That makes it possible to use a wider border in one dimension, or only have a border for a single dimension. Let's use a range from 0 to 10 cells, with 5 as the default for both.</p>
+
+						<pre translate="no">	<ins>[Range(0, 10)]</ins>
+	<ins>public int mapBorderX = 5;</ins>
+
+	<ins>[Range(0, 10)]</ins>
+	<ins>public int mapBorderZ = 5;</ins></pre>
+
+						<figure>
+							<img src="map-border/map-border-sliders.png" width="320" height="92">
+							<figcaption>Map border sliders.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Constraining Chunk Centers</h3>
+						
+						<p>Without a border, all cells are valid. When a border is in effect, the minimum valid offset coordinates are increased, while the maximum valid coordinates are decreased. As we'll need to know the valid range when generating chunks, let's keep track of this range with four integer fields.</p>
+						
+						<pre translate="no">	<ins>int xMin, xMax, zMin, zMax;</ins></pre>
+						
+						<p>Initialize the constraints before creating the land, in <code>GenerateMap</code>. We'll use these values as parameters for <code>Random.Range</code> invocations, so the maximums are actually exclusive. Without a border, they're equal to the dimension's cell count, so not minus 1.</p>
+						
+						<pre translate="no">	public void GenerateMap (int x, int z) {
+		&hellip;
+		for (int i = 0; i &lt; cellCount; i++) {
+			grid.GetCell(i).WaterLevel = waterLevel;
+		}
+		<ins>xMin = mapBorderX;</ins>
+		<ins>xMax = x - mapBorderX;</ins>
+		<ins>zMin = mapBorderZ;</ins>
+		<ins>zMax = z - mapBorderZ;</ins>
+		CreateLand();
+		&hellip;
+	}</pre>
+						
+						<p>We're not going to strictly enforce that land won't appear beyond the border's edge, because that would just create hard cut-off edges. Instead, we'll only constrain the cells used to start generating chunks. So the rough centers of chunks are constrained, but parts of the chunks can extend into the border region. This is done by adjusting <code>GetRandomCell</code> so it picks a cell in the allow offset range.</p>
+						
+						<pre translate="no">	HexCell GetRandomCell () {
+<del>//		return grid.GetCell(Random.Range(0, cellCount));</del>
+		<ins>return grid.GetCell(Random.Range(xMin, xMax), Random.Range(zMin, zMax));</ins>
+	}</pre>
+						
+						<figure>
+							<img alt="0x0" src="map-border/map-border-0.jpg" width="350" height="200">
+							<img alt="5x5" src="map-border/map-border-5.jpg" width="350" height="200">
+							<img alt="10x10" src="map-border/map-border-10.jpg" width="350" height="200">
+							<img alt="0x10" src="map-border/map-border-0-10.jpg" width="350" height="200">
+							<figcaption>Map borders 0&times;0, 5&times;5, 10&times;10, and 0&times;10.</figcaption>
+						</figure>
+						
+						<p>With all map settings at their default values, a border of 5 will reliably prevent land from touching the map's edge. However, it is not guaranteed. Land can get close to the edge and sometimes touch it in multiple places.</p>
+						
+						<p>How likely it is for land to cross the entire border region depends on both the border size and the maximum chunk size. Without jitter, chunks are hexagons. A full hexagon with radius `r` contains `3r^2+3r+1` cells. If there are hexagons with a radius equal to the border size, then they'll be able to cross it. A full hexagon with a radius of 5 contains 91 cells. As the default maximum is 100 cells per chunk, this means that it is possible for land to bridge a gap of 5 cells, especially when there's jitter. To guarantee this doesn't happen, either decrease the maximum chunk size or increase the border size.</p>
+						
+						<aside>
+							<h3>How do you derive how many cells a hexagonal area has?</h3>
+							<div>
+								<p>At radius 0, we're dealing with a single cell. That's where the 1 comes from. At radius 1, there are six additional cells around the center, so `6+1`. You can think of these six cells are the tips of six triangles that touch the center. At radius 2, a second row is added to these triangles, so two more cells per triangle, for a total of `6(1+2)+1`. At radius 3, a third row gets added, so three more cells per triangle, for a total of `6(1+2+3)+1`, and so on. So in general the formula is `6(sum_(i=1)^r i)+1 = 6((r(r+1))/2)+1 = 3r(r+1)+1=3r^2+3r+1`.</p>
+							</div>
+						</aside>
+						
+						<p>To see this clearly, you can fix the chunk size at 200. As a full hexagon with radius 8 contains 217 cells, land touching the map edge will be likely. At least, when using the default border size of 5. Increasing the border to 10 will make this much less likely.</p>
+						
+						<figure>
+							<img alt="5" src="map-border/chunk-size-200-5.jpg" width="350" height="200">
+							<img alt="10" src="map-border/chunk-size-200-10.jpg" width="350" height="200">
+							<figcaption>Chunk size fixed at 200, map borders 5 and 10.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Pangea</h3>
+						
+						<p>Note that when you increase the map border while keeping the land percentage the same, you force the land to form in a smaller area. As a result, the default large map will likely produce a single large landmass&mdash;a supercontinent or Pangea&mdash;with maybe a few small islands. Increasing the border size will make this even more likely, until you're almost guaranteed to get a supercontinent. However, when the land percentage is too high, most of the available region gets filled and you end up with a landmass that looks quite rectangular. To prevent that from happening, you can lower the land percentage.</p>
+						
+						<figure>
+							<img src="map-border/pangea.jpg" width="350" height="200">
+							<figcaption>40% land with map border 10.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Where does the name Pangea come from?</h3>
+							<div>
+								<p>It is the name of the last known supercontinent that existed on earth, long ago. The name is also written an Pangaea. It's derived from the Greek words pan and Gaia. It means something like the entire mother earth, or the whole land.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Guarding Against Impossible Maps</h3>
+						
+						<p>We generate the desired amount of land by simply continuing to raise chunks until we've achieved the desired landmass. This works because eventually we could end up raising every single cell above the water level. However, when using a map border it can become impossible to reach every cell. When too high a land percentage is desired, this will lead to the generator trying&mdash;and failing&mdash;to raise more land forever, stuck in an infinite loop. This will freeze our app, which should never happen.</p>
+						
+						<p>We cannot reliably detect impossible configurations ahead of time, but we can guard against infinite loops. Simply keep track of how many times we've looped in <code>CreateLand</code>. If we've iterated a ridiculously large amount of times, we're likely stuck and should stop.</p>
+						
+						<p>Up to a thousand iterations for a large maps seems acceptable, but 10,000 really is absurd. So let's use that a a cutoff point.</p>
+						
+						<pre translate="no">	void CreateLand () {
+		int landBudget = Mathf.RoundToInt(cellCount * landPercentage * 0.01f);
+<del>//		while (landBudget > 0) {</del>
+		<ins>for (int guard = 0; landBudget > 0 &amp;&amp; guard &lt; 10000; guard++) {</ins>
+			int chunkSize = Random.Range(chunkSizeMin, chunkSizeMax - 1);
+			&hellip;
+		}
+	}</pre>
+						
+						<p>If we end up with a degenerate map, it won't take that much time to go through 10,000 iterations, because most cells will have achieved maximum elevation quickly, preventing new chunks from growing.</p>
+						
+						<p>Even after aborting the loop, we still have a valid map. It just won't have the desired amount of land and won't look very interesting. Let's log a warning about this, reporting how much land budget we failed to use up.</p>
+						
+						<pre translate="no">	void CreateLand () {
+		&hellip;
+		<ins>if (landBudget > 0) {</ins>
+			<ins>Debug.LogWarning("Failed to use up " + landBudget + " land budget.");</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<img src="map-border/failed-to-use-land-budget.jpg" width="350" height="200">
+							<figcaption>95% land with map border 10, failed to use up the budget.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why does a failed map still have variety?</h3>
+							<div>
+								<p>The coastline has variety because once elevations inside the spawn region become too high, new chunks are prevent from growing outward. The same concept prevents chunks from growing into small pockets of land that aren't at maximum elevation yet, and just happened to be missed. Also, variety keeps getting added by sinking chunks.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="map-border/map-border.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Partitioning the Map</h2>
+					
+					<p>Now that we have a map border, we've effectively split the map in two different regions. The border region, and the chunk spawn region. As the spawn region is what really matters, we can consider this a single-region scenario. The region just doesn't cover the entire map. But if that's possible, there's nothing stopping us from cutting the map into multiple disconnected spawn regions. That would make it possible to force multiple landmasses to form independently, representing different continents.</p>
+					
+					<section>
+						<h3>Map Region</h3>
+						
+						<p>Let's begin by representing a single map region with a struct. That makes it easier to work with multiple regions. Create a <code>MapRegion</code> struct for this, which simply contains the boundary fields. As we won't be using this struct outside of <code>HexMapGenerator</code>, we can defined it inside this class as a private inner struct. The four integer fields can then be replaced with a single <code>MapRegion</code> field.</p>
+						
+						<pre translate="no"><del>//	int xMin, xMax, zMin, zMax;</del>
+	<ins>struct MapRegion {</ins>
+		<ins>public int xMin, xMax, zMin, zMax;</ins>
+	<ins>}</ins>
+
+	<ins>MapRegion region;</ins></pre>
+						
+						<p>To keep things working, we now have to prefix our min-max fields with <code>region.</code> in <code>GenerateMap</code>.</p>
+						
+						<pre translate="no">		<ins>region.</ins>xMin = mapBorderX;
+		<ins>region.</ins>xMax = x - mapBorderX;
+		<ins>region.</ins>zMin = mapBorderZ;
+		<ins>region.</ins>zMax = z - mapBorderZ;</pre>
+						
+						<p>And also in <code>GetRandomCell</code>.</p>
+						
+						<pre translate="no">	HexCell GetRandomCell () {
+		return grid.GetCell(
+			Random.Range(<ins>region.</ins>xMin, <ins>region.</ins>xMax),
+			Random.Range(<ins>region.</ins>zMin, <ins>region.</ins>zMax)
+		);
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Multiple Regions</h3>
+						
+						<p>To support multiple regions, replace the single <code>MapRegion</code> field with a list of regions.</p>
+						
+						<pre translate="no"><del>//	MapRegion region;</del>
+	<ins>List&lt;MapRegion> regions;</ins></pre>
+						
+						<p>At this point it is a good idea to add a dedicated method for the creation of regions. It should create the required list, or clear it if there already is one. After that, define the single region like we did earlier and add it to the list.</p>
+						
+						<pre translate="no">	<ins>void CreateRegions () {</ins>
+		<ins>if (regions == null) {</ins>
+			<ins>regions = new List&lt;MapRegion>();</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>regions.Clear();</ins>
+		<ins>}</ins>
+
+		<ins>MapRegion region;</ins>
+		<ins>region.xMin = mapBorderX;</ins>
+		<ins>region.xMax = grid.cellCountX - mapBorderX;</ins>
+		<ins>region.zMin = mapBorderZ;</ins>
+		<ins>region.zMax = grid.cellCountZ - mapBorderZ;</ins>
+		<ins>regions.Add(region);</ins>
+	}</pre>
+						
+						<p>Invoke this method in <code>GenerateMap</code> instead of directly creating a region.</p>
+						
+						<pre translate="no"><del>//		region.xMin = mapBorderX;</del>
+<del>//		region.xMax = x - mapBorderX;</del>
+<del>//		region.zMin = mapBorderZ;</del>
+<del>//		region.zMax = z - mapBorderZ;</del>
+		<ins>CreateRegions();</ins>
+		CreateLand();</pre>
+						
+						<p>To make <code>GetRandomCell</code> work with an arbitrary region, give it a <code>MapRegion</code> parameter.</p>
+						
+						<pre translate="no">	HexCell GetRandomCell (<ins>MapRegion region</ins>) {
+		return grid.GetCell(
+			Random.Range(region.xMin, region.xMax),
+			Random.Range(region.zMin, region.zMax)
+		);
+	}</pre>
+						
+						<p>The <code>RaiseTerraion</code> and <code>SinkTerrain</code> methods must now pass the correct region to <code>GetRandomCell</code>. To do this, they also need a region parameter each.</p>
+						
+						<pre translate="no">	int RaiseTerrain (int chunkSize, int budget<ins>, MapRegion region</ins>) {
+		searchFrontierPhase += 1;
+		HexCell firstCell = GetRandomCell(<ins>region</ins>);
+		&hellip;
+	}
+
+	int SinkTerrain (int chunkSize, int budget<ins>, MapRegion region</ins>) {
+		searchFrontierPhase += 1;
+		HexCell firstCell = GetRandomCell(<ins>region</ins>);
+		&hellip;
+	}</pre>
+						
+						<p>The <code>CreateLand</code> method has to determine which region to raise or sink chunks for. To balance the land between regions, simply loop through the region list repeatedly.</p>
+						
+						<pre translate="no">	void CreateLand () {
+		int landBudget = Mathf.RoundToInt(cellCount * landPercentage * 0.01f);
+		for (int guard = 0; landBudget > 0 &amp;&amp; guard &lt; 10000; guard++) {
+			<ins>for (int i = 0; i &lt; regions.Count; i++) {</ins>
+				<ins>MapRegion region = regions[i];</ins>
+				int chunkSize = Random.Range(chunkSizeMin, chunkSizeMax - 1);
+				if (Random.value &lt; sinkProbability) {
+					landBudget = SinkTerrain(chunkSize, landBudget<ins>, region</ins>);
+				}
+				else {
+					landBudget = RaiseTerrain(chunkSize, landBudget<ins>, region</ins>);
+				}
+			<ins>}</ins>
+		}
+		if (landBudget > 0) {
+			Debug.LogWarning("Failed to use up " + landBudget + " land budget.");
+		}
+	}</pre>
+						
+						<p>However, we should take care to distribute the sinking of chunks evenly as well. This can be done by determining whether we sink or not for all regions at once.</p>
+						
+						<pre translate="no">		for (int guard = 0; landBudget > 0 &amp;&amp; guard &lt; 10000; guard++) {
+			<ins>bool sink = Random.value &lt; sinkProbability;</ins>
+			for (int i = 0; i &lt; regions.Count; i++) {
+				MapRegion region = regions[i];
+				int chunkSize = Random.Range(chunkSizeMin, chunkSizeMax - 1);
+<del>//				if (Random.value &lt; sinkProbability) {</del>
+				if (<ins>sink</ins>) {
+					landBudget = SinkTerrain(chunkSize, landBudget, region);
+				}
+				else {
+					landBudget = RaiseTerrain(chunkSize, landBudget, region);
+				}
+			}
+		}</pre>
+						
+						<p>Finally, to ensure we exactly use up our land budget, we have to stop the process as soon as the budget reaches zero. This can happen at any point in the region loop. So move the check for zero budget to the inner loop. Actually, we can limit this check to only after land has been raised, as sinking a chunk will never use up budget. When we're done, we can directly exit the <code>CreateLand</code> method.</p>
+						
+						<pre translate="no"><del>//		for (int guard = 0; landBudget > 0 &amp;&amp; guard &lt; 10000; guard++) {</del>
+		<ins>for (int guard = 0; guard &lt; 10000; guard++) {</ins>
+			bool sink = Random.value &lt; sinkProbability;
+			for (int i = 0; i &lt; regions.Count; i++) {
+				MapRegion region = regions[i];
+				int chunkSize = Random.Range(chunkSizeMin, chunkSizeMax - 1);
+					if (sink) {
+					landBudget = SinkTerrain(chunkSize, landBudget, region);
+				}
+				else {
+					landBudget = RaiseTerrain(chunkSize, landBudget, region);
+					<ins>if (landBudget == 0) {</ins>
+						<ins>return;</ins>
+					<ins>}</ins>
+				}
+			}
+		}</pre>
+					</section>
+					
+					<section>
+						<h3>Two Regions</h3>
+						
+						<p>Although we support multiple regions now, we still only define a single one. Let's change that by adjusting <code>CreateRegions</code>, so it vertically splits the map in two. To do so, halve the <code>xMax</code> value of the region that we add. Then use that same value for <code>xMin</code> and use the original value again for <code>xMax</code>, using that as a second region.</p>
+						
+						<pre translate="no">		MapRegion region;
+		region.xMin = mapBorderX;
+		region.xMax = grid.cellCountX <ins>/ 2</ins>;
+		region.zMin = mapBorderZ;
+		region.zMax = grid.cellCountZ - mapBorderZ;
+		regions.Add(region);
+		<ins>region.xMin = grid.cellCountX / 2;</ins>
+		<ins>region.xMax = grid.cellCountX - mapBorderX;</ins>
+		<ins>regions.Add(region);</ins></pre>
+						
+						<p>Generating maps at this point doesn't make any difference. Even though we've defined two regions, they cover the same area as the old single region. To pull them apart, we have to leave empty space in between them. We'll do this by adding a slider for a region border, using the same range and default as for the map borders.</p>
+						
+						<pre translate="no">	<ins>[Range(0, 10)]</ins>
+	<ins>public int regionBorder = 5;</ins></pre>
+						
+						<figure>
+							<img src="partitioning-the-map/region-border.png" width="320" height="57">
+							<figcaption>Region border slider.</figcaption>
+						</figure>
+						
+						<p>As land could form on either side of the space between regions, it will be much more likely that a land bridge forms then on the edges of the map. To counter this, we'll use the region border to define a spawn-free zone between the dividing line and the area in which chunks are allowed to start. This means that the distance between adjacent regions is double the region border size.</p>
+						
+						<p>To apply the region border, subtract it from <code>xMax</code> of the first region and add it to <code>xMin</code> of the second region.</p>
+						
+						<pre translate="no">		MapRegion region;
+		region.xMin = mapBorderX;
+		region.xMax = grid.cellCountX / 2 <ins>- regionBorder</ins>;
+		region.zMin = mapBorderZ;
+		region.zMax = grid.cellCountZ - mapBorderZ;
+		regions.Add(region);
+		region.xMin = grid.cellCountX / 2 <ins>+ regionBorder</ins>;
+		region.xMax = grid.cellCountX - mapBorderX;
+		regions.Add(region);</pre>
+						
+						<figure>
+							<img src="partitioning-the-map/two-regions-vertical.jpg" width="350" height="200">
+							<figcaption>Map vertically split in two regions.</figcaption>
+						</figure>
+						
+						<p>Using default settings, this will produce maps with two clearly separate regions, though just as with a single region and a large map border, we're not guaranteed to get exactly two landmasses. Most of the time, it will be two large continents, maybe with a few islands each. Occasionally, a region will end up containing two or more large islands instead. And sometimes the two continents will be connected by a land bridge.</p>
+						
+						<p>Of course it is also possible to split the map horizontally, swapping the approach for the X and Z dimensions. Let's randomly pick one of the two possible orientations.</p>
+						
+						<pre translate="no">		MapRegion region;
+		<ins>if (Random.value &lt; 0.5f) {</ins>
+			region.xMin = mapBorderX;
+			region.xMax = grid.cellCountX / 2 - regionBorder;
+			region.zMin = mapBorderZ;
+			region.zMax = grid.cellCountZ - mapBorderZ;
+			regions.Add(region);
+			region.xMin = grid.cellCountX / 2 + regionBorder;
+			region.xMax = grid.cellCountX - mapBorderX;
+			regions.Add(region);
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>region.xMin = mapBorderX;</ins>
+			<ins>region.xMax = grid.cellCountX - mapBorderX;</ins>
+			<ins>region.zMin = mapBorderZ;</ins>
+			<ins>region.zMax = grid.cellCountZ / 2 - regionBorder;</ins>
+			<ins>regions.Add(region);</ins>
+			<ins>region.zMin = grid.cellCountZ / 2 + regionBorder;</ins>
+			<ins>region.zMax = grid.cellCountZ - mapBorderZ;</ins>
+			<ins>regions.Add(region);</ins>
+		<ins>}</ins></pre>
+						
+						<figure>
+							<img src="partitioning-the-map/two-regions-horizontal.jpg" width="350" height="200">
+							<figcaption>Map horizontally split in two regions.</figcaption>
+						</figure>
+						
+						<p>Because we're using a wide map, a horizontal split will produce wider and thinner regions. This makes it more likely that regions will end up with multiple disconnected landmasses.</p>
+					</section>
+					
+					<section>
+						<h3>Up to Four Regions</h3>
+						
+						<p>Let's make the amount of regions configurable, supporting between 1 and 4 four of them.</p>
+						
+						<pre translate="no">	<ins>[Range(1, 4)]</ins>
+	<ins>public int regionCount = 1;</ins></pre>
+						
+						<figure>
+							<img src="partitioning-the-map/region-count.png" width="320" height="39">
+							<figcaption>Slider for the amount of regions.</figcaption>
+						</figure>
+						
+						<p>We can use a <code>switch</code> statement to select the correct region code to execute. Begin by reintroducing the code for a single region, using it as the default, while keeping the code for two regions for case 2.</p>
+						
+						<pre translate="no">		MapRegion region;
+		<ins>switch (regionCount) {</ins>
+		<ins>default:</ins>
+			<ins>region.xMin = mapBorderX;</ins>
+			<ins>region.xMax = grid.cellCountX - mapBorderX;</ins>
+			<ins>region.zMin = mapBorderZ;</ins>
+			<ins>region.zMax = grid.cellCountZ - mapBorderZ;</ins>
+			<ins>regions.Add(region);</ins>
+			<ins>break;</ins>
+		<ins>case 2:</ins>
+			if (Random.value &lt; 0.5f) {
+				region.xMin = mapBorderX;
+				region.xMax = grid.cellCountX / 2 - regionBorder;
+				region.zMin = mapBorderZ;
+				region.zMax = grid.cellCountZ - mapBorderZ;
+				regions.Add(region);
+				region.xMin = grid.cellCountX / 2 + regionBorder;
+				region.xMax = grid.cellCountX - mapBorderX;
+				regions.Add(region);
+			}
+			else {
+				region.xMin = mapBorderX;
+				region.xMax = grid.cellCountX - mapBorderX;
+				region.zMin = mapBorderZ;
+				region.zMax = grid.cellCountZ / 2 - regionBorder;
+				regions.Add(region);
+				region.zMin = grid.cellCountZ / 2 + regionBorder;
+				region.zMax = grid.cellCountZ - mapBorderZ;
+				regions.Add(region);
+			}
+			<ins>break;</ins>
+		<ins>}</ins></pre>
+						
+						<aside>
+							<h3>What's a <code>switch</code> statement?</h3>
+							<div>
+								<p>It is an alternative to writing a sequence if-else-if-else statements. The switch is applied to a variable and labels are used to indicate which code to execute. There is also a <code>default</code> label, which functions like a final <code>else</code> block. Each case has to be terminated by either a <code>break</code> statement or a <code>return</code> statement.</p>
+								
+								<p>To keep a <code>switch</code> block legible, it is generally a good idea to keep the cases short, ideally a single statement or method invocation. I didn't bother doing that for the example region code, but if you're going to make more interesting regions I suggest you use separate methods. For example:</p>
+								
+								<pre translate="no">		switch (regionCount) {
+			default: CreateOneRegion(); break;
+			case 2: CreateTwoRegions(); break;
+			case 3: CreateThreeRegions(); break;
+			case 4: CreateFourRegions(); break;
+		}</pre>
+							</div>
+						</aside>
+						
+						<p>Three regions work similar as two, except we're using thirds instead of halves. In this case, a horizontal split would produce regions that are too narrow, so we'll only support a vertical split. Note also that we end up with twice as much region border space, so there's less space to spawn chunks than for two regions.</p>
+						
+						<pre translate="no">		switch (regionCount) {
+		default:
+			&hellip;
+			break;
+		case 2:
+			&hellip;
+			break;
+		<ins>case 3:</ins>
+			<ins>region.xMin = mapBorderX;</ins>
+			<ins>region.xMax = grid.cellCountX / 3 - regionBorder;</ins>
+			<ins>region.zMin = mapBorderZ;</ins>
+			<ins>region.zMax = grid.cellCountZ - mapBorderZ;</ins>
+			<ins>regions.Add(region);</ins>
+			<ins>region.xMin = grid.cellCountX / 3 + regionBorder;</ins>
+			<ins>region.xMax = grid.cellCountX * 2 / 3 - regionBorder;</ins>
+			<ins>regions.Add(region);</ins>
+			<ins>region.xMin = grid.cellCountX * 2 / 3 + regionBorder;</ins>
+			<ins>region.xMax = grid.cellCountX - mapBorderX;</ins>
+			<ins>regions.Add(region);</ins>
+			<ins>break;</ins>
+		}</pre>
+						
+						<figure>
+							<img src="partitioning-the-map/three-regions.jpg" width="350" height="200">
+							<figcaption>Three regions.</figcaption>
+						</figure>
+						
+						<p>Four regions can be done by combining a horizontal and vertical split, creating one region in each corner of the map.</p>
+						
+						<pre translate="no">		switch (regionCount) {
+		&hellip;
+		<ins>case 4:</ins>
+			<ins>region.xMin = mapBorderX;</ins>
+			<ins>region.xMax = grid.cellCountX / 2 - regionBorder;</ins>
+			<ins>region.zMin = mapBorderZ;</ins>
+			<ins>region.zMax = grid.cellCountZ / 2 - regionBorder;</ins>
+			<ins>regions.Add(region);</ins>
+			<ins>region.xMin = grid.cellCountX / 2 + regionBorder;</ins>
+			<ins>region.xMax = grid.cellCountX - mapBorderX;</ins>
+			<ins>regions.Add(region);</ins>
+			<ins>region.zMin = grid.cellCountZ / 2 + regionBorder;</ins>
+			<ins>region.zMax = grid.cellCountZ - mapBorderZ;</ins>
+			<ins>regions.Add(region);</ins>
+			<ins>region.xMin = mapBorderX;</ins>
+			<ins>region.xMax = grid.cellCountX / 2 - regionBorder;</ins>
+			<ins>regions.Add(region);</ins>
+			<ins>break;</ins>
+		}
+	}</pre>
+						
+						<figure>
+							<img src="partitioning-the-map/four-regions.jpg" width="350" height="200">
+							<figcaption>Four regions.</figcaption>
+						</figure>
+						
+						<p>The approach that we used here is the most straightforward way to partition the map. It generates regions that are roughly equal in landmass and their variety can be controlled via the other map generation settings. However, it will always be at least fairly obvious that the map has been split along straight lines. The more control you want, the less organic the result will look. So it's fine if you need multiple fairly equal regions for gameplay reasons. But if you want the most varied and unconstrained land, you have to make do with a single region.</p>
+						
+						<p>Having said that, there are other ways to partition the map. You're not limited to straight lines. You're also not limited to using regions of the same size, nor do you need to cover the entire map with regions. You can leave holes too. You could also have regions overlap, or change the land distribution between regions. It's even possible to define different generator settings per region&mdash;though that's more complex&mdash;for example ensuring that a map gets both a large continent and an archipelago.</p>
+					</section>
+					
+					<a href="partitioning-the-map/partitioning-the-map.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Erosion</h2>
+					
+					<p>All the maps that we have generated so far appear rather rough and jagged. Real terrain can look like this, but over time it becomes more smooth and polished, its sharp features fading away due to erosion. To improve our maps, we should apply this erosion process as well. We'll do this after creating the rough land, in a separate method.</p>
+					
+					<pre translate="no">	public void GenerateMap (int x, int z) {
+		&hellip;
+		CreateRegions();
+		CreateLand();
+		<ins>ErodeLand();</ins>
+		SetTerrainType();
+		&hellip;
+	}
+	
+	&hellip;
+	
+	<ins>void ErodeLand () {}</ins></pre>
+					
+					<section>
+						<h3>Erosion Percentage</h3>
+						
+						<p>The more time has passed, the more erosion has taken place. So how much erosion we want isn't fixed, it has to be configurable. At minimum, there is zero erosion, which is the case for the maps that we have so far generated. At maximum, there is total erosion, meaning that further application of eroding forces will no longer change the terrain. So the erosion setting should be a percentage from 0 to 100, and we'll use 50 as the default.</p>
+						
+						<pre translate="no">	<ins>[Range(0, 100)]</ins>
+	<ins>public int erosionPercentage = 50;</ins></pre>
+						
+						<figure>
+							<img src="erosion/erosion-slider.png" width="320" height="57">
+							<figcaption>Erosion slider.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Finding Erodible Cells</h3>
+						
+						<p>Erosion makes the terrain more smooth. In our case, the only real sharp terrain features that we have are cliffs. So these are the targets of our erosion process. If a cliff exists, erosion should shrink it, until it has ultimately been reduced to a slope. We won't flatten slopes further, because that would produce uninteresting terrain. To do this, we have to figure out which cells sit at the top of cliffs, and lower their elevation. These are our erodible cells.</p>
+						
+						<p>Let's create a method to determine whether a cell is erodible. It does this by looking through the cell's neighbors until it finds a sufficiently large elevation difference. As cliffs require at least an elevation difference of two, a cell is erodible if one or more of its neighbors is at least two steps below it. If there is no such neighbor, then the cell isn't erodible.</p>
+						
+						<pre translate="no">	<ins>bool IsErodible (HexCell cell) {</ins>
+		<ins>int erodibleElevation = cell.Elevation - 2;</ins>
+		<ins>for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++) {</ins>
+			<ins>HexCell neighbor = cell.GetNeighbor(d);</ins>
+			<ins>if (neighbor &amp;&amp; neighbor.Elevation &lt;= erodibleElevation) {</ins>
+				<ins>return true;</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>return false;</ins>
+	<ins>}</ins></pre>
+						
+						<p>We can use this method in <code>ErodeLand</code> to loop through all cells and keep track of all erodible ones in a temporary list.</p>
+						
+						<pre translate="no">	void ErodeLand () {
+		<ins>List&lt;HexCell> erodibleCells = ListPool&lt;HexCell>.Get();</ins>
+		<ins>for (int i = 0; i &lt; cellCount; i++) {</ins>
+			<ins>HexCell cell = grid.GetCell(i);</ins>
+			<ins>if (IsErodible(cell)) {</ins>
+				<ins>erodibleCells.Add(cell);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+
+		<ins>ListPool&lt;HexCell>.Add(erodibleCells);</ins>
+	}</pre>
+						
+						<p>Once we know the total amount of erodible cells, we can use the erosion percentage to determine how many erodible cells should remain. For example, if the percentage is 50, then we should erode cells until we end up with half the original amount. If the percentage is 100 instead, we won't stop until all erodible cells are gone.</p>
+						
+						<pre translate="no">	void ErodeLand () {
+		List&lt;HexCell> erodibleCells = ListPool&lt;HexCell>.Get();
+		for (int i = 0; i &lt; cellCount; i++) {
+			&hellip;
+		}
+
+		<ins>int targetErodibleCount =</ins>
+			<ins>(int)(erodibleCells.Count * (100 - erosionPercentage) * 0.01f);</ins>
+
+		ListPool&lt;HexCell>.Add(erodibleCells);
+	}</pre>
+						
+						<aside>
+							<h3>Shouldn't we only count erodible land cells?</h3>
+							<div>
+								<p>Erosion also happens underwater. There are different types of erosion, but we don't have to worry about those details and can make do with a single generic approach.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Lowering Cells</h3>
+						
+						<p>Let's start by being naive and assume that simply decrementing an erodible cell's elevation will make it no longer erodible. If that were true, we simply have to keep picking random cells from the list, decrement their elevation, then remove them from the list. We repeat this until we reach the desired amount of erodible cells.</p>
+						
+						<pre translate="no">		int targetErodibleCount =
+			(int)(erodibleCells.Count * (100 - erosionPercentage) * 0.01f);
+		
+		<ins>while (erodibleCells.Count > targetErodibleCount) {</ins>
+			<ins>int index = Random.Range(0, erodibleCells.Count);</ins>
+			<ins>HexCell cell = erodibleCells[index];</ins>
+
+			<ins>cell.Elevation -= 1;</ins>
+
+			<ins>erodibleCells.Remove(cell);</ins>
+		<ins>}</ins>
+
+		ListPool&lt;HexCell>.Add(erodibleCells);</pre>
+						
+						<p>To prevent the searching required by <code>erodibleCells.Remove</code>, just override the current cell with the last one in the list, then remove the last element. We don't care about their order anyway.</p>
+						
+						<pre translate="no"><del>//			erodibleCells.Remove(cell);</del>
+			<ins>erodibleCells[index] = erodibleCells[erodibleCells.Count - 1];</ins>
+			<ins>erodibleCells.RemoveAt(erodibleCells.Count - 1);</ins></pre>
+						
+						<figure>
+							<img alt="0" src="erosion/lowering-0.jpg" width="350" height="200">
+							<img alt="100" src="erosion/lowering-100.jpg" width="350" height="200">
+							<figcaption>Naive lowering 0% and 100% erodible cells, map seed 1957632474.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Erodible Bookkeeping</h3>
+						
+						<p>Our naive approach does apply some erosion, but not nearly enough. That's because a cell might still be erodible after its elevation has been decremented once. So only remove the cell if it's no longer erodible.</p>
+						
+						<pre translate="no">			<ins>if (!IsErodible(cell)) {</ins>
+				erodibleCells[index] = erodibleCells[erodibleCells.Count - 1];
+				erodibleCells.RemoveAt(erodibleCells.Count - 1);
+			<ins>}</ins></pre>
+						
+						<figure>
+							<img src="erosion/keeping-erodibles.jpg" width="350" height="200">
+							<figcaption>100% erosion, while keeping erodible cells in the list.</figcaption>
+						</figure>
+						
+						<p>This produces much stronger erosion, but it still doesn't eliminate all cliffs when used at 100%. That's because when a cell's elevation is lowered, one of its neighbors might become erodible. So it's possible that we end up with more erodible cells than we started with.</p>
+						
+						<p>After lowering the cell, we have to check all its neighbors. If they're now erodible but not yet in the list, we have to add them to it.</p>
+						
+						<pre translate="no">			if (!IsErodible(cell)) {
+				erodibleCells[index] = erodibleCells[erodibleCells.Count - 1];
+				erodibleCells.RemoveAt(erodibleCells.Count - 1);
+			}
+			
+			<ins>for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++) {</ins>
+				<ins>HexCell neighbor = cell.GetNeighbor(d);</ins>
+				<ins>if (</ins>
+					<ins>neighbor &amp;&amp; IsErodible(neighbor) &amp;&amp;</ins>
+					<ins>!erodibleCells.Contains(neighbor)</ins>
+				<ins>) {</ins>
+					<ins>erodibleCells.Add(neighbor);</ins>
+				<ins>}</ins>
+			<ins>}</ins></pre>
+						
+						<figure>
+							<img src="erosion/fully-lowered.jpg" width="350" height="200">
+							<figcaption>All erodible cells lowered.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Conserving Landmass</h3>
+						
+						<p>Our erosion process can now continue until all cliffs have been eliminated. The effect on the land is dramatic. A lot of the landmass is gone and we end up with a significantly lower land percentage than desired. This happens because we remove land from the map.</p>
+						
+						<p>Actual erosion does not destroy matter. It takes it away from one place and deposits it somewhere else. We can do the same thing. Whenever we lower one cell, we should raise one of its neighbors. The single level of elevation effectively migrates to a lower cell. This conserves the total elevation of the map, it just smoothes it out.</p>
+						
+						<p>To make this happen, we have to decide where to move the eroded material to. This is our erosion target. Let's create a method to determine the target, given a cell that we're about to erode. As that cell must have a cliff, it makes sense to pick the cell at the bottom of that cliff as the target. But the erodible cell could have multiple cliffs. So let's check all the neighbors and put all candidates in a temporary list, then pick one of them at random.</p>
+						
+						<pre translate="no">	<ins>HexCell GetErosionTarget (HexCell cell) {</ins>
+		<ins>List&lt;HexCell> candidates = ListPool&lt;HexCell>.Get();</ins>
+		<ins>int erodibleElevation = cell.Elevation - 2;</ins>
+		<ins>for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++) {</ins>
+			<ins>HexCell neighbor = cell.GetNeighbor(d);</ins>
+			<ins>if (neighbor &amp;&amp; neighbor.Elevation &lt;= erodibleElevation) {</ins>
+				<ins>candidates.Add(neighbor);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>HexCell target = candidates[Random.Range(0, candidates.Count)];</ins>
+		<ins>ListPool&lt;HexCell>.Add(candidates);</ins>
+		<ins>return target;</ins>
+	<ins>}</ins></pre>
+						
+						<p>In <code>ErodeLand</code>, determine the target cell directly after picking the erodible cell. Then decrement and increment the cell elevations directly after each other. This might make the target cell itself erodible, but that's covered when we check the neighbors of the cell we just eroded.</p>
+						
+						<pre translate="no">			HexCell cell = erodibleCells[index];
+			<ins>HexCell targetCell = GetErosionTarget(cell);</ins>
+
+			cell.Elevation -= 1;
+			<ins>targetCell.Elevation += 1;</ins>
+
+			if (!IsErodible(cell)) {
+				erodibleCells[index] = erodibleCells[erodibleCells.Count - 1];
+				erodibleCells.RemoveAt(erodibleCells.Count - 1);
+			}</pre>
+						
+						<p>Because we've raised the target cell, some of that cell's neighbors might now no longer be erodible. We have to go though them and check whether they're erodible. If they're not but they are in the list, then we have to remove them from it.</p>
+						
+						<pre translate="no">			for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++) {
+				HexCell neighbor = cell.GetNeighbor(d);
+				&hellip;
+			}
+
+			<ins>for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++) {</ins>
+				<ins>HexCell neighbor = targetCell.GetNeighbor(d);</ins>
+				<ins>if (</ins>
+					<ins>neighbor &amp;&amp; !IsErodible(neighbor) &amp;&amp;</ins>
+					<ins>erodibleCells.Contains(neighbor)</ins>
+				<ins>) {</ins>
+					<ins>erodibleCells.Remove(neighbor);</ins>
+				<ins>}</ins>
+			<ins>}</ins></pre>
+						
+						<figure>
+							<img src="erosion/conserving-landmass.jpg" width="350" height="200">
+							<figcaption>100% erosion with conserved landmass.</figcaption>
+						</figure>
+						
+						<p>Erosion will now smooth the terrain much better, lowering some areas while raising others. As a result, the landmass can both increase and shrink. This can adjust the land percentage by a few percent in either direction, but large deviations are rare. So the more erosion you apply, the less control you have over the final land percentage.</p>
+					</section>
+					
+					<section>
+						<h3>Faster Erosion</h3>
+						
+						<p>While we don't need to worry too much about the efficiency of our erosion algorithm, some quick gains can be made. First, note that we explicitly check whether the cell we eroded is still erodible. If not, we efficiently remove it from the list. So we can skip checking this cell when going through the target cell's neighbors.</p>
+						
+						<pre translate="no">			for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++) {
+				HexCell neighbor = targetCell.GetNeighbor(d);
+				if (
+					neighbor <ins>&amp;&amp; neighbor != cell</ins> &amp;&amp; !IsErodible(neighbor) &amp;&amp;
+					erodibleCells.Contains(neighbor)
+				) {
+					erodibleCells.Remove(neighbor);
+				}
+			}</pre>
+						
+						<p>Second, we only have to bother checking the target cell's neighbors if there used to be a cliff between them, but not anymore. This is only the case if the neighbor is now one step higher than the target cell. If so, then the neighbor was guaranteed to be in the list, so we don't have to verify this, which means that we can skip a needless search.</p>
+						
+						<pre translate="no">				HexCell neighbor = targetCell.GetNeighbor(d);
+				if (
+					neighbor &amp;&amp; neighbor != cell &amp;&amp;
+					<ins>neighbor.Elevation == targetCell.Elevation + 1 &amp;&amp;</ins>
+					!IsErodible(neighbor)
+<del>//					&amp;&amp; erodibleCells.Contains(neighbor)</del>
+				) {
+					erodibleCells.Remove(neighbor);
+				}</pre>
+						
+						<p>Third, we can use a similar trick when checking the neighbors of the erodible cell. If there's now a cliff between them, then the neighbor is erodible. We don't need to invoke <code>IsErodible</code> to find this out.</p>
+						
+						<pre translate="no">				HexCell neighbor = cell.GetNeighbor(d);
+				if (
+					neighbor &amp;&amp; <ins>neighbor.Elevation == cell.Elevation + 2 &amp;&amp;</ins>
+<del>//					IsErodible(neighbor) &amp;&amp;</del>
+					!erodibleCells.Contains(neighbor)
+				) {
+					erodibleCells.Add(neighbor);
+				}</pre>
+						
+						<p>However, we do still have to check whether the target cell is erodible, but the above loop now no longer takes care of that. So do this explicitly for the target cell.</p>
+						
+						<pre translate="no">			if (!IsErodible(cell)) {
+				erodibleCells[index] = erodibleCells[erodibleCells.Count - 1];
+				erodibleCells.RemoveAt(erodibleCells.Count - 1);
+			}
+
+			for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++) {
+				&hellip;
+			}
+
+			<ins>if (IsErodible(targetCell) &amp;&amp; !erodibleCells.Contains(targetCell)) {</ins>
+				<ins>erodibleCells.Add(targetCell);</ins>
+			<ins>}</ins>
+
+			for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++) {
+				&hellip;
+			}</pre>
+						
+						<p>We can now apply erosion fairly quickly, up to the percentage that we want, relative to the initial amount of cliffs that were generated. Note that because we slightly changed the point at which the target cell gets added to the erodible list, the final result will have changed a bit compared to before our optimizations.</p>
+						
+						<figure>
+							<img alt="25" src="erosion/erosion-25.jpg" width="350" height="200">
+							<img alt="50" src="erosion/erosion-50.jpg" width="350" height="200">
+							<img alt="75" src="erosion/erosion-75.jpg" width="350" height="200">
+							<img alt="100" src="erosion/erosion-100.jpg" width="350" height="200">
+							<figcaption>25%, 50%, 75%, and 100% erosion.</figcaption>
+						</figure>
+						
+						<p>Also note that although the coastlines change shape, the topology doesn't get fundamentally altered. Landmasses tend to remain either connected or separated. Only tiny islands could sink entirely. The details are smoothed out, but the overall shapes remain the same. A narrow connection might disappear, but it could also grow a bit. A narrow gaps might fill up, or it might widen a little. So erosion won't dramatically glue distant regions together.</p>
+						
+						<figure>
+							<img src="erosion/four-regions-eroded.jpg" width="350" height="200">
+							<figcaption>Four fully-eroded regions, still separate.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../part-25/index.html">Water Cycle</a>.</p>
+					</section>
+					
+					<a href="erosion/erosion.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Hex-Map-24.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

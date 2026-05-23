@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/rendering/part-13/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/rendering/part-13/tutorial-image.jpg">
+		<meta property="og:title" content="Rendering 13">
+		<meta property="og:description" content="A Unity Rendering tutorial about adding support for deferred shading. Part 13 of 20.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Rendering 13</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/rendering/part-13/#article",
+				"headline": "Rendering 13",
+				"alternativeHeadline": "Deferred Shading",
+				"datePublished": "2017-02-27",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Rendering tutorial about adding support for deferred shading. Part 13 of 20.",
+				"image": "https://catlikecoding.com/unity/tutorials/rendering/part-13/tutorial-image.jpg",
+				"dependencies": "Unity 5.5.0f3",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/rendering/", "name": "Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				MyLightingShaderGUI: 1,
+				RenderingMode: 1,
+				RenderingSettings: 1,
+				SmoothnessSource: 1,
+				TangentSpaceVisualizer: 1
+			};
+			
+			var hasAnimations = true;
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Rendering 13</h1>
+					<p>Deferred Shading</p>
+					<ul>
+						<li>Explore deferred shading.</li>
+						<li>Fill Geometry Buffers.</li>
+						<li>Support both HDR and LDR.</li>
+						<li>Work with Deferred Reflections.</li>
+					</ul>
+				</header>
+
+				<p>This is part 13 of a tutorial series about rendering. The <a href="../part-12.1.html">previous installment</a> covered semitransparent shadows. Now we'll look at deferred shading.</p>
+				
+				<p>This tutorial was made with Unity 5.5.0f3.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>The anatomy of geometry.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Another Rendering Path</h2>
+					
+					<p>Up to this point we've always used Unity's forward rendering path. But that's not the only rendering method that Unity supports. There's also the deferred path. And there are also the legacy vertex lit and the legacy deferred paths, but we won't cover those.</p>
+					
+					<p>So there is a deferred rendering path, but why would we bother with it? After all, we can render everything we want using the forward path. To answer that question, let's investigate their differences.</p>
+						
+					<section>
+						<h3>Switching Paths</h3>
+						
+						<p>Which rendering path is used is defined by the project-wide graphics settings. You can get there via <em translate="no">Edit / Project Settings / Graphics</em>. The rendering path and a few other settings are configured in three tiers. These tiers correspond to different categories of GPUs. The better the GPU, the higher a tier Unity uses. You can select which tier the editor uses via the <em translate="no">Editor / Graphics Emulation</em> submenu.</p>
+						
+						<figure>
+							<img src="another-rendering-path/graphics-settings.png" width="294" height="374">
+							<figcaption>Graphics settings, per tier.</figcaption>
+						</figure>
+						
+						<p>To change the rendering path, disable <em translate="no">Use Defaults</em> for the desired tier, then select either <em translate="no">Forward</em> or <em translate="no">Deferred</em> as the <em translate="no">Rendering Path</em>.</p>
+					</section>
+					
+					<section>
+						<h3>Comparing Draw Calls</h3>
+						
+						<p>I'll use the <em translate="no">Shadows Scene</em> from the <a href="../part-7.1.html">Rendering 7, Shadows</a> tutorial to compare both approaches. This scene has its <em translate="no">Ambient Intensity</em> set to zero, to make the shadows more visible. Because our own shader doesn't support deferred yet, change the used material so it relies on the standard shader.</p>
+						
+						<p>The scene has quite a few objects and two directional lights. Let's look at it both without and with shadows enabled for both lights.</p>
+						
+						<figure>
+							<img alt="without" src="another-rendering-path/scene-without-shadows.png" width="380" height="220">
+							<img alt="with" src="another-rendering-path/scene-with-shadows.png" width="380" height="220">
+							<figcaption>Shadows scene, without and with shadows.</figcaption>
+						</figure>
+						
+						<p>While using the forward rendering path, use the frame debugger to examine how the scene gets rendered.</p>
+						
+						<p>There are 66 geometry objects in the scene, all visible. If dynamic batching was possible, these could've been drawn with less than 66 batches. However, that only works with a single directional light. As there is an additional light, dynamic batching is not used. And because there are two directional lights, all geometry gets drawn twice. So that's 132 draw calls, 133 with the skybox.</p>
+						
+						<figure>
+							<img src="another-rendering-path/forward-without-shadows.png" width="298" height="116">
+							<figcaption>Forward rendering, without shadows.</figcaption>
+						</figure>
+						<p>When shadows are enabled, we need more draw calls to generate the cascading shadow maps. Recall how directional shadow maps are created. First, the depth buffer is filled, which requires only 48 draw calls, thanks to some dynamic batching. Then, the cascading shadow maps are created. The first light's shadow map ends up requiring 111 draw calls, while the second one needs 121. These shadow maps are rendered to screen-space buffers, which perform filtering. Then the geometry is drawn, once per light. Doing all this requires 418 draw calls.</p>
+						
+						<figure>
+							<img src="another-rendering-path/forward-with-shadows.png" width="298" height="226">
+							<figcaption>Forward rendering, with shadows.</figcaption>
+						</figure>
+						
+						<p>Now disable the shadows again and switch to the deferred rendering path. The scene still looks the same, except that MSAA has been turned off. How does it get drawn this time?</p>
+						
+						<aside>
+							<h3>Why doesn't MSAA work in deferred mode?</h3>
+							<div>
+								<p>Deferred shading relies on data being stored per fragment, which is done via textures. This is not compatible with MSAA, because that anti-aliasing technique relies on sub-pixel data. While the triangle edges could still benefit from MSAA, the deferred data remains aliased. You'll have to rely one a post-processing filter for anti-aliasing.</p>
+							</div>
+						</aside>
+						
+						<figure>
+							<img src="another-rendering-path/deferred-without-shadows.png" width="298" height="226">
+							<figcaption>Deferred rendering, without shadows.</figcaption>
+						</figure>
+						
+						<p>Apparently, a <em translate="no">GBuffer</em> gets rendered, which requires 45 draw calls. That's one per object, with some dynamic batching. Then the depth texture gets copied, followed by thee draw calls that do something with reflections. After that, we get to lighting, which requires two draw calls, one per light. Then there's a final pass and the skybox, for a total of 55 draw calls.</p>
+						
+						<p>55 is quite a bit less than 133. It looks like deferred only draws each object once in total, not once per light. Besides that and some other work, each light gets its own draw call. What about when shadows are enabled?</p>
+						
+						<figure>
+							<img src="another-rendering-path/deferred-with-shadows.png" width="298" height="306">
+							<figcaption>Deferred rendering, with shadows.</figcaption>
+						</figure>
+						
+						<p>We see that both shadow maps get rendered and then filtered in screen space, right before their lights are drawn. Just like in forward mode, this adds 236 draw calls, for a total of 291. As deferred already created a depth texture, we got that for free. Again, 291 is quite a bit less than 418.</p>
+					</section>
+					
+					<section>
+						<h3>Splitting the Work</h3>
+						
+						<p>Deferred shading appears to be more efficient when rendering more than one light, compared to forward shading. While forward requires one additional additive pass per object per light, deferred doesn't need this. Of course both still have to render the shadow maps, but deferred doesn't have to pay extra for the depth texture that directional shadows need. How does the deferred path get away with this?</p>
+						
+						<p>To render something, the shader has to grab the mesh data, convert it to the correct space, interpolate it, retrieve and derive surface properties, and calculate lighting. Forward shaders have to repeat all of this for every pixel light that illuminates an object. Additive passes are cheaper than the base pass, because the depth buffer has already been primed, and they don't bother with indirect light. But they still have to repeat most of the work that the base pass has already done.</p>
+						
+						<figure>
+							<img src="another-rendering-path/duplicate-work.png" width="400" height="178">
+							<figcaption>Duplicate work.</figcaption>
+						</figure>
+						
+						<p>As the geometry's properties are the same every time, why don't we cache them? Have the base pass store them in a buffer. Then additive passes can reuse that data, eliminating duplicate work. We have to store this data per fragment, so we need a buffer that fits the display, just like the depth and the frame buffer.</p>
+						
+						<figure>
+							<img src="another-rendering-path/caching.png" width="400" height="178">
+							<figcaption>Caching surface properties.</figcaption>
+						</figure>
+						
+						<p>Now we have all the geometry data that we require for lighting available in a buffer. The only thing that's missing is the light itself. But that means we no longer need to render the geometry at all. We can suffice with rendering the light. Furthermore, the base pass only has to fill the buffer. All direct lighting calculations can be deferred until the lights are rendered individually. Hence, deferred shading.</p>
+						
+						<figure>
+							<img src="another-rendering-path/deferred.png" width="400" height="178">
+							<figcaption>Deferred shading.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Many Lights</h3>
+						
+						<p>If you're only using a single light, then deferred by itself doesn't provide any benefit. But when using many lights, it shines. Each additional light only adds a little extra work, as long as they don't cast shadows.</p>
+						
+						<p>Also, when geometry and lights are rendered separately, there is no limit to how many lights can affect an object. All lights are pixel lights and illuminate everything in their range. The <em translate="no">Pixel Light Count</em> quality setting does not apply.</p>
+						
+						<figure>
+							<img alt="deferred" src="another-rendering-path/deferred-spotlights.png" width="380" height="220">
+							<img alt="forward" src="another-rendering-path/forward-spotlights.png" width="380" height="220">
+							<figcaption>Ten spotlights, deferred succeeds while forward fails.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Rendering Lights</h3>
+						
+						<p>So how are lights themselves rendered? As directional lights affect everything, they are rendered with a single quad that covers the entire view.</p>
+						
+						<figure>
+							<img src="another-rendering-path/directional-quad.png" width="348" height="146">
+							<figcaption>Directional lights use a quad.</figcaption>
+						</figure>
+						
+						<p>This quad is rendered with the <em translate="no">Internal-DeferredShading</em> shader. Its fragment program fetches the geometry data from the buffer and relies on the <em translate="no">UnityDeferredLibrary</em> include file to configure the light. Then it computes the lighting, just like a forward shader does.</p>
+						
+						<p>Spotlights work the same way, except that they don't have to cover the entire view. Instead, a pyramid is rendered that fits the volume that the spotlight illuminates. So only the visible potion of this volume will be rendered. If it ends up completely hidden behind other geometry, no shading is performed for this light.</p>
+						
+						<figure>
+							<img src="another-rendering-path/spotlight-pyramid.png" width="340" height="190">
+							<figcaption>Spotlights use a pyramid.</figcaption>
+						</figure>
+						
+						<p>If a fragment of this pyramid is rendered, it will perform lighting calculations. But this only makes sense if there actually is geometry inside the light's volume. Geometry behind the volume need not be rendered, because the light doesn't reach there. To prevent rendering these unnecessary fragments, the pyramid is first rendered with the <em translate="no">Internal-StencilWrite</em> shader. This pass writes to the stencil buffer, which can be used to mask which fragments get rendered later. The only case when this technique can't be used is when the light volume intersects the camera's near plane.</p>
+						
+						<p>Point lights use the same approach, except with an icosphere instead of a pyramid.</p>
+						
+						<figure>
+							<img src="another-rendering-path/point-light-icosphere.png" width="340" height="190">
+							<figcaption>Point lights use an icosphere.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Light Range</h3>
+						
+						<p>If you've been stepping through the frame debugger, you might have noticed that the colors look weird during the deferred lighting phase. It's as if they're inverted, like a photo negative. The final deferred pass converts this intermediate state to the final correct colors.</p>
+						
+						<figure>
+							<img src="another-rendering-path/inverted-colors.png" width="380" height="210">
+							<figcaption>Inverted colors.</figcaption>
+						</figure>
+						
+						<p>Unity does this when the scene is rendered with low dynamic range &ndash; LDR &ndash; colors, which is the default. In this case, the colors are written to an ARGB32 texture. Unity logarithmically encodes the colors to achieve a greater dynamic range than usual for this format. The final deferred pass converts to normal colors.</p>
+						
+						<p>When the scene is rendered in high dynamic range &ndash; HDR &ndash; Unity uses the ARGBHalf format. In this case, the special encoding is not needed and there is no final deferred pass. Whether HDR is enabled is a property of the camera. Switch it on, so we see normal colors when using the frame debugger.</p>
+						
+						<figure>
+							<img src="another-rendering-path/hdr-inspector.png" width="320" height="228">
+							<figcaption>HDR enabled.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Geometry Buffers</h3>
+						
+						<p>The downside of caching data is that it has to be stored somewhere. The deferred rendering path uses multiple render textures for this purpose. These textures are known as geometry buffers, or G-buffers for short.</p>
+						
+						<p>Deferred shading requires four G-buffers. Their combined size is 160 bits per pixel for LDR and 192 bits per pixel for HDR. That's quite a bit more than a single 32-bit frame buffer. Modern desktop GPUs can deal with that, but mobile and even laptop GPUs can have trouble with higher resolutions.</p>
+						
+						<p>You can inspect some of the data in the G-buffer via the scene window. Use the button at the top left of the window to select a different display mode. It's set to <em translate="no">Shaded</em> by default. When using the deferred rendering path, you can choose one of the four <em translate="no">Deferred</em> options. For example, <em translate="no">Normal</em> shows the RGB channels of the buffer that contains the surface normals.</p>
+						
+						<figure>
+							<img alt="scene" src="another-rendering-path/standard-spheres.png" width="370" height="140">
+							<img alt="normals" src="another-rendering-path/standard-spheres-normals.png" width="370" height="140">
+							<figcaption>Standard spheres and their deferred normals.</figcaption>
+						</figure>
+						
+						<p>You can also inspects the multiple render targets of a draw call via the frame debugger. There is a dropdown menu to select the render target at the top left of the menu on the right side of the window. The default is the first target, which is <em translate="no">RT 0</em>.</p>
+						
+						<figure>
+							<img src="another-rendering-path/frame-debugger-render-target.png" width="192" height="42">
+							<figcaption>Selecting a render target.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Mixing Rendering Modes</h3>
+						
+						<p>Our own shader doesn't support the deferred rendering path yet. So what would happen if some of the objects in the scene were rendered with our shader, while in deferred mode?</p>
+						
+						<figure>
+							<img alt="scene" src="another-rendering-path/mixed-spheres.png" width="370" height="140">
+							<img alt="normals" src="another-rendering-path/mixed-spheres-normals.png" width="370" height="140">
+							<figcaption>Mixed spheres, with their deferred normals.</figcaption>
+						</figure>
+						
+						<p>Our objects appear to render fine. It turns out that deferred rendering is done first, followed by an additional forward rendering phase. During the deferred rendering phase, the forward objects do not exist. The only exception is when there are directional shadows. In that case, a depth pass is needed for the forward objects. This is done directly after the G-buffers are filled. As a side effect, the forward objects end up as solid black in the albedo buffer.</p>
+						
+						<figure>
+							<img alt="frame debugger" src="another-rendering-path/both-deferred-forward.png" width="298" height="212">
+							<img alt="albedo" src="another-rendering-path/mixed-spheres-albedo.png" width="370" height="140">
+							<figcaption>Both deferred and forward rendering.</figcaption>
+						</figure>
+						
+						<p>This is true for transparent objects as well. They require a separate forward rendering phase, as usual.</p>
+						
+						<figure>
+							<img alt="frame debugger" src="another-rendering-path/with-transparent.png" width="298" height="114">
+							<img alt="scene" src="another-rendering-path/spheres-with-transparent.png" width="370" height="140">
+							<img alt="albedo" src="another-rendering-path/spheres-with-transparent-albedo.png" width="370" height="140">
+							<figcaption>Deferred an forward opaque, plus transparent.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="another-rendering-path/another-rendering-path.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Filling the G-Buffers</h2>
+					
+					<p>Now that we have an idea of how deferred shading works, let's add support for it to <em translate="no">My First Lighting Shader</em>. This is done by adding a pass with its <em translate="no">LightMode</em> tag set to <em translate="no">Deferred</em>. The order of the passes doesn't matter. I put it in between the additive and the shadow passes.</p>
+					
+					<pre translate="no" class="shader">		<ins>Pass {</ins>
+			<ins>Tags {</ins>
+				<ins>"LightMode" = "Deferred"</ins>
+			<ins>}</ins>
+		<ins>}</ins></pre>
+					
+					<figure>
+						<img src="filling-the-g-buffers/white-normals.png" width="370" height="140">
+						<figcaption>White normals.</figcaption>
+					</figure>
+					
+					<p>Unity detects that our shader has a deferred pass, so it includes the opaque and cutout objects that use our shader in the deferred phase. Transparent objects will still be rendered in the transparent phase, of course.</p>
+					
+					<p>Because our pass is empty, everything gets rendered as solid white. We have to add shader features and programs. The deferred pass is mostly the same as the base pass, so copy the contents of that pass, then make a few changes. First, we'll define <em translate="no">DEFERRED_PASS</em> instead of <em translate="no">FORWARD_BASE_PASS</em>. Second, the deferred pass doesn't need variants for the <em translate="no">_RENDERING_FADE</em> and <em translate="no">_RENDERING_TRANSPARENT</em> keywords. Third, deferred shading is only possible when the GPU supports writing to multiple render targets. So we'll add a directive to exclude it when those are not supported. I marked these differences.</p>
+					
+					<pre translate="no" class="shader">		Pass {
+			Tags {
+				"LightMode" = "Deferred"
+			}
+
+			CGPROGRAM
+
+			#pragma target 3.0
+			<ins>#pragma exclude_renderers nomrt</ins>
+
+			#pragma shader_feature _ <ins>_RENDERING_CUTOUT</ins>
+			#pragma shader_feature _METALLIC_MAP
+			#pragma shader_feature _ _SMOOTHNESS_ALBEDO _SMOOTHNESS_METALLIC
+			#pragma shader_feature _NORMAL_MAP
+			#pragma shader_feature _OCCLUSION_MAP
+			#pragma shader_feature _EMISSION_MAP
+			#pragma shader_feature _DETAIL_MASK
+			#pragma shader_feature _DETAIL_ALBEDO_MAP
+			#pragma shader_feature _DETAIL_NORMAL_MAP
+
+			#pragma vertex MyVertexProgram
+			#pragma fragment MyFragmentProgram
+
+			<ins>#define DEFERRED_PASS</ins>
+
+			#include "My Lighting.cginc"
+
+			ENDCG
+		}</pre>
+					
+					<figure>
+						<img src="filling-the-g-buffers/shaded-normals.png" width="370" height="140">
+						<figcaption>Shaded normals.</figcaption>
+					</figure>
+					
+					<p>Now the deferred pass functions roughly like the base pass. So it ends up writing shaded results to the G-buffers, instead of geometry data. This is not correct. We have to output the geometry data and not compute direct lighting.</p>
+					
+					<section>
+						<h3>Four Outputs</h3>
+						
+						<p>In <em translate="no">My Lighting</em>, we have to support two kinds of output for <code class="shader">MyFragmentProgram</code>. In the case of the deferred pass, there are four buffers that we need to fill. We do that by outputting to four targets. In all other cases, we can suffice with a single target. Let's define an output structure for this, directly above <code class="shader">MyFragmentProgram</code>.</p>
+						
+						<pre translate="no" class="shader"><ins>struct FragmentOutput {</ins>
+	<ins>#if defined(DEFERRED_PASS)</ins>
+		<ins>float4 gBuffer0 : SV_Target0;</ins>
+		<ins>float4 gBuffer1 : SV_Target1;</ins>
+		<ins>float4 gBuffer2 : SV_Target2;</ins>
+		<ins>float4 gBuffer3 : SV_Target3;</ins>
+	<ins>#else</ins>
+		<ins>float4 color : SV_Target;</ins>
+	<ins>#endif</ins>
+<ins>};</ins></pre>
+						
+						<aside>
+							<h3>Shouldn't it be <code class="shader">SV_TARGET</code>?</h3>
+							<div>
+								<p>You can mix uppercase and lowercase for the target semantics, Unity understands them all. Here I'm using the same format that Unity's most recent shaders use.</p>
+								
+								<p>Note that this isn't true for all semantics. For example, vertex data semantics must all be uppercase.</p>
+							</div>
+						</aside>
+						
+						<p>Adjust <code class="shader">MyFragmentProgram</code> so it returns this structure. For the deferred pass, we'll have to assign values to all four outputs, which we'll do shortly. The other passes simply copy the final shaded color.</p>
+						
+						<pre translate="no" class="shader">
+<ins>FragmentOutput MyFragmentProgram (Interpolators i) {</ins>
+	&hellip;
+
+	<ins>FragmentOutput output;</ins>
+	<ins>#if defined(DEFERRED_PASS)</ins>
+	<ins>#else</ins>
+		<ins>output.color = color;</ins>
+	<ins>#endif</ins>
+	return <ins>output</ins>;
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Buffer 0</h3>
+						
+						<p>The first G-buffer is used to store the diffuse albedo and the surface occlusion. It's an ARGB32 texture, like a regular frame buffer. Albedo is stored in the RGB channels and the occlusion is stored in the A channel. We know the albedo color at this point, and we can use <code class="shader">GetOcclusion</code> to access the occlusion value.</p>
+						
+						<pre translate="no" class="shader">	#if defined(DEFERRED_PASS)
+		<ins>output.gBuffer0.rgb = albedo;</ins>
+		<ins>output.gBuffer0.a = GetOcclusion(i);</ins>
+	#else</pre>
+						
+						<figure>
+							<img alt="albedo" src="filling-the-g-buffers/albedo.png" width="370" height="140">
+							<img alt="occlusion" src="filling-the-g-buffers/occlusion.png" width="370" height="140">
+							<figcaption>Albedo and occlusion.</figcaption>
+						</figure>
+						
+						<p>You can use the scene view or the frame debugger to inspect the contents of the first G-buffer, to verify that we fill it correctly. This will show you its RGB channels. However, the A channel isn't shown. To inspect the occlusion data, you can temporarily assign it to the RGB channels.</p>
+					</section>
+					
+					<section>
+						<h3>Buffer 1</h3>
+						
+						<p>The second G-buffer is used to store the specular color in the RGB channels, and the smoothness value in the A channel. It is also an ARGB32 texture. We know what the specular tint is, and can use <code class="shader">GetSmoothness</code> to retrieve the smoothness value.</p>
+						
+						<pre translate="no" class="shader">		output.gBuffer0.rgb = albedo;
+		output.gBuffer0.a = GetOcclusion(i);
+		<ins>output.gBuffer1.rgb = specularTint;</ins>
+		<ins>output.gBuffer1.a = GetSmoothness(i);</ins></pre>
+						
+						<figure>
+							<img alt="specular" src="filling-the-g-buffers/specular.png" width="370" height="140">
+							<img alt="smoothness" src="filling-the-g-buffers/smoothness.png" width="370" height="140">
+							<figcaption>Specular color and smoothness.</figcaption>
+						</figure>
+						
+						<p>The scene view allows us to directly see the smoothness values, so we don't have to use a trick to verify them.</p>
+					</section>
+					
+					<section>
+						<h3>Buffer 2</h3>
+						
+						<p>The third G-buffer contains the world-space normal vectors. They're stored in the RGB channels of an ARGB2101010 texture. This means that each coordinate is stored using ten bits, instead of the usual eight, which makes them more precise. The A channel only has two bits &ndash; so the total is again 32 bits &ndash; but it isn't used, so we'll just set it to 1. The normal is encoded like a regular normal map.</p>
+						
+						<pre translate="no" class="shader">		output.gBuffer1.rgb = specularTint;
+		output.gBuffer1.a = GetSmoothness(i);
+		<ins>output.gBuffer2 = float4(i.normal * 0.5 + 0.5, 1);</ins></pre>
+						
+						<figure>
+							<img src="filling-the-g-buffers/normals.png" width="370" height="140">
+							<figcaption>Normals.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Buffer 3</h3>
+						
+						<p>The final G-buffer is used to accumulate the lighting of the scene. Its format depends on whether the camera is set to LDR or HDR. In the case of LDR, it's an ARGB2101010 texture, just like the buffer for normals. When HDR is enabled, the format is ARGBHalf, which stores a 16-bit floating-point value per channel, for a total of 64 bits. So the HDR version is twice as large as the other buffers. Only the RGB channels are used, so the A channel can be set to 1 again.</p>
+						
+						<aside>
+							<h3>Can't we use RGBHalf instead of ARGBHalf?</h3>
+							<div>
+								<p>If we're not using the A channel, then that means 16 bits per pixel are left unused. Isn't there an RGBHalf format? That would only require 48 bits per pixel, instead of 64.</p>
+								
+								<p>The reason that we're using ARGBHalf is that most GPUs work with blocks of four bytes. Most textures are 32 bits per pixel, which corresponds with one block. 64 bits require two blocks, so that works too. But 48 bits correspond with 1.5 blocks. This causes a misalignment, which is prevented by using two blocks for the 48 bits. That results in 16 bits of padding per pixel, which is the same as ARGBHalf.</p>
+								
+								<p>ARGB2101010 is used for the same reason. The two unused bits are padding. And RGB24 textures are usually stored as ARGB32 in GPU memory.</p>
+							</div>
+						</aside>
+						
+						<p>The first light that is added to this buffer is the emissive light. There is no separate light for this, so we have to do it in this pass. Let's begin by using the color that we've already computed.</p>
+						
+						<pre translate="no" class="shader">		output.gBuffer2 = float4(i.normal * 0.5 + 0.5, 1);
+		<ins>output.gBuffer3 = color;</ins></pre>
+						
+						<p>To preview this buffer, either use the frame debugger, or temporarily assign this color to the first G-buffer.</p>
+						
+						<figure>
+							<img src="filling-the-g-buffers/emission-wrong.png" width="370" height="140">
+							<figcaption>Emission, but wrong.</figcaption>
+						</figure>
+						
+						<p>The color that we're using right now is fully shaded as if there was a directional light, which is incorrect. We can eliminate all the direct light calculations by using a dummy light set to black for the deferred pass.</p>
+						
+						<pre translate="no" class="shader">UnityLight CreateLight (Interpolators i) {
+	UnityLight light;
+
+	<ins>#if defined(DEFERRED_PASS)</ins>
+		<ins>light.dir = float3(0, 1, 0);</ins>
+		<ins>light.color = 0;</ins>
+	<ins>#else</ins>
+		#if defined(POINT) || defined(POINT_COOKIE) || defined(SPOT)
+			light.dir = normalize(_WorldSpaceLightPos0.xyz - i.worldPos);
+		#else
+			light.dir = _WorldSpaceLightPos0.xyz;
+		#endif
+
+		UNITY_LIGHT_ATTENUATION(attenuation, i, i.worldPos);
+		
+		light.color = _LightColor0.rgb * attenuation;
+	<ins>#endif</ins>
+	light.ndotl = DotClamped(i.normal, light.dir);
+	return light;
+}</pre>
+						
+						<p>While we're adjusting <code class="shader">CreateLight</code>, let's also get rid of the <code class="shader">light.ndotl</code> calculation. Both that structure field and the <code class="shader">DotClamped</code> function have been deprecated by Unity.</p>
+						
+						<pre translate="no" class="shader"><del>//	light.ndotl = DotClamped(i.normal, light.dir);</del></pre>
+						
+						<p>We've shut off the direct light, but we still need to include the emissive light. Currently, it's only retrieved for the forward base pass. Make sure it's included in the deferred pass as well.</p>
+						
+						<pre translate="no" class="shader">float3 GetEmission (Interpolators i) {
+	#if defined(FORWARD_BASE_PASS) <ins>|| defined(DEFERRED_PASS)</ins>
+		&hellip;
+	#else
+		return 0;
+	#endif
+}</pre>
+						
+						<figure>
+							<img src="filling-the-g-buffers/emission.png" width="370" height="140">
+							<figcaption>Emission.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Ambient Light</h3>
+						
+						<p>The result looks good, but it's not complete yet. We're missing the ambient environmental light.</p>
+						
+						<figure>
+							<img src="filling-the-g-buffers/no-ambient.png" width="370" height="140">
+							<figcaption>Without ambient.</figcaption>
+						</figure>
+						
+						<p>There is no separate pass for the ambient light. Like emissive light, it has to be added when the G-buffers are filled. So let's enable the indirect light for the deferred pass as well.</p>
+						
+						<pre translate="no" class="shader">UnityIndirect CreateIndirectLight (Interpolators i, float3 viewDir) {
+	&hellip;
+
+	#if defined(FORWARD_BASE_PASS) <ins>|| defined(DEFERRED_PASS)</ins>
+		&hellip;
+	#endif
+
+	return indirectLight;
+}</pre>
+						
+						<figure>
+							<img src="filling-the-g-buffers/ambient.png" width="370" height="140">
+							<figcaption>With ambient.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>HDR and LDR</h3>
+						
+						<p>Our shader now produces the same results in both forward and deferred mode. At least, when using an HDR camera. It looks quite wrong in LDR mode.</p>
+
+						<figure>
+							<img src="filling-the-g-buffers/ldr-wrong.png" width="370" height="140">
+							<figcaption>Incorrect in LDR mode.</figcaption>
+						</figure>
+						
+						<p>This happens because Unity expects LDR data to be logarithmically encoded, as described earlier. So we have to use this encoding as well, for the emissive and ambient contribution.</p>
+						
+						<p>First, we have to know which color range we're using. This is done by adding a multi-compile directive to our pass, based on the <code class="shader">UNITY_HDR_ON</code> keyword.</p>
+						
+						<pre translate="no" class="shader">			#pragma shader_feature _DETAIL_NORMAL_MAP
+
+			<ins>#pragma multi_compile _ UNITY_HDR_ON</ins></pre>
+						
+						<p>Now we can convert our color data when this keyword has been defined. The logarithmic encoding is done with the formula 2<sup>-C</sup>, where C is the original color. We can use the <code class="shader">exp2</code> function for that.</p>
+						
+						<figure>
+							<img src="filling-the-g-buffers/ldr-encoding.png" width="200" height="200">
+							<figcaption>The functions x and 2<sup>-x</sup> from 0 to 1.</figcaption>
+						</figure>
+						
+						<pre translate="no" class="shader">	#if defined(DEFERRED_PASS)
+		<ins>#if !defined(UNITY_HDR_ON)</ins>
+			<ins>color.rgb = exp2(-color.rgb);</ins>
+		<ins>#endif</ins>
+		&hellip;
+	#else
+		output.color = color;
+	#endif
+</pre>
+						
+						<figure>
+							<img alt="ldr" src="filling-the-g-buffers/ldr-light.png" width="370" height="140">
+							<img alt="hdr" src="filling-the-g-buffers/hdr-light.png" width="370" height="140">
+							<figcaption>Accumulating light in LDR and HRD mode.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="filling-the-g-buffers/filling-the-g-buffers.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Deferred Reflections</h2>
+					
+					<p>The <a href="../part-8.1.html">Rendering 8, Reflections</a> tutorial covered how Unity uses reflection probes to add specular reflections to surfaces. However, the approach described there applies to the forward rendering path. When using the deferred path, a different approach is used by default. I'll use the <em translate="no">Reflections Scene</em> to compare both approaches. This scene also has its <em translate="no">Ambient Intensity</em> set to zero. After opening the scene, make sure that the material used for the mirrored sphere and floor has its <em translate="no">Metallic</em> and <em translate="no">Smoothness</em> set to 1. Also, it has to use our shader.</p>
+					
+					<figure>
+						<img alt="scene" src="deferred-reflections/reflection-scene.png" width="300" height="200">
+						<img alt="probes" src="deferred-reflections/reflection-probes.png" width="300" height="200">
+						<figcaption>Scene and reflection probes.</figcaption>
+					</figure>
+					
+					<p>The scene has three reflection probes. One covers the area inside the structure. Another covers a small region outside the structure. These probes do not overlap. The third probe sits in between them and partially overlaps both. It was placed there to create a better blend transition between inside and outside the structure. Take a good look at this region, both in forward and in deferred mode.</p>
+					
+					<figure>
+						<img alt="forward" src="deferred-reflections/forward-reflections.png" width="430" height="280">
+						<img alt="deferred" src="deferred-reflections/deferred-reflections.png" width="430" height="280">
+						<figcaption>Forward and deferred reflections.</figcaption>
+					</figure>
+					
+					<p>It appears that the middle probe is much stronger in deferred mode. It dominates the middle region of the transition. Worse, it also affects the floor's reflection, which looks quite wrong.</p>
+					
+					<section>
+						<h3>Probes Per Pixel</h3>
+						
+						<p>What's different in deferred mode is that the probes aren't blended per object. Instead, they are blended per pixel. This is done by the <em translate="no">Internal-DeferredReflections</em> shader. To make this obvious, enlarge the floor mirror so it extends beyond the structure and look at it from a distance. Then compare forward and deferred.</p>
+						
+						<figure>
+							<img alt="scene" src="deferred-reflections/floor-forward.png" width="300" height="270">
+							<img alt="probes" src="deferred-reflections/floor-deferred.png" width="300" height="270">
+							<figcaption>Large floor mirror, forward and deferred.</figcaption>
+						</figure>
+						
+						<p>In forward mode, the floor is forced to use the probe inside the structure for its entire surface. As a result, the box projection becomes nonsensical on the outside. You can also see that it blends a little bit with one of the other probes.</p>
+						
+						<figure>
+							<img alt="scene" src="deferred-reflections/inspector-forward.png" width="320" height="236">
+							<img alt="probes" src="deferred-reflections/inspector-deferred.png" width="320" height="232">
+							<figcaption>Mesh renderer of floor, forward vs. deferred.</figcaption>
+						</figure>
+						
+						<p>In deferred mode, the reflection probes themselves get rendered. They're projected onto the geometry that intersects their volume. So the reflections of the probe that's inside the structure don't extend beyond their bounds. Actually, they extend a little bit, as they fade out. The same goes for the other two probes.</p>
+						
+						<figure>
+							<img alt="draw calls" src="deferred-reflections/draw-calls.png" width="298" height="194">
+							<img alt="mesh" src="deferred-reflections/reflection-mesh.png" width="340" height="190"><br>
+							<video width="320" height="275" controls loop muted>
+								<source src="deferred-reflections/drawing-deferred-reflections.mp4" type="video/mp4">
+							</video>
+							<figcaption>Drawing deferred reflections.</figcaption>
+						</figure>
+						
+						<p>The skybox is rendered first, covering the entire view. Then each probe is rendered, just like lights, except they use cubes.</p>
+						
+						<p>Each probe ends up completely covering the surfaces inside its volume. Any reflections that were rendered earlier are overwritten. Unity decides the order in which the probes are rendered. It turns out that larger volumes are drawn first and smaller volumes are drawn later. That way, local small probes can overrule probes for larger areas. You can use the <em translate="no">Importance</em> value of probes to adjust this order, via their inspector.</p>
+						
+						<figure>
+							<img src="deferred-reflections/probe-inspector.png" width="320" height="92">
+							<figcaption>Some reflection Probe settings.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Blend Distance</h3>
+						
+						<p>In deferred mode, a probe's reflections are at full strength inside its volume. But they also extend beyond the volume. They fade out and blend with the other reflections that were already rendered. How far they extend is controlled by the probe's <em translate="no">Fade Distance</em>, which is set to one unit by default. This setting is only enabled when the deferred rendering path is used.</p>
+						
+						<figure>
+							<video width="320" height="225" controls loop muted>
+								<source src="deferred-reflections/varying-blend-distance.mp4" type="video/mp4">
+							</video>
+							<figcaption>Varying blend distance.</figcaption>
+						</figure>
+						
+						<p>The blend distance effectively increases the volume of the reflection probe. The bounds used to calculate the box projection are expanded by the same amount. As a result, box projections that are correct in forward mode can be wrong in deferred mode, and vice versa. In our case, the reflections inside the structure can be fixed by reducing the probe's <em translate="no">Blend Distance</em> to zero.</p>
+						
+						<p>The volume increase due to blend distance is also the reason why the middle probe affects the floor mirror. The probe's expanded volume intersects it. We cannot set this probe's blend distance to zero, because that would eliminate blending. Instead, we have to decrease the vertical size of the probe's volume, so it no longer intersects the floor.</p>
+						
+						<figure>
+							<img alt="probes" src="deferred-reflections/adjusted-probe.png" width="280" height="180">
+							<img alt="reflections" src="deferred-reflections/adjusted-probe-reflections.png" width="410" height="260">
+							<figcaption>Adjusted probes.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Reflections in the Deferred Pass</h3>
+						
+						<p>While deferred reflections are efficient and can blend more than two probes per object, there is a downside. It isn't possible to use an <em translate="no">Anchor Override</em> to force an object to use a specific reflection probe. But sometimes that's the only way to make sure objects receive the correct reflections. For example, when there are reflection probes both inside and outside a structure that isn't an axis-aligned rectangle.</p>
+						
+						<p>Fortunately, you can disable deferred reflections, via the graphics settings. To do so, switch the <em translate="no">Deferred Reflections</em> graphics setting from <em translate="no">Built-in Shader</em> to <em translate="no">No Support</em>.</p>
+						
+						<figure>
+							<img src="deferred-reflections/deferred-reflections-disabled.png" width="294" height="114">
+							<figcaption>Deferred reflections disabled.</figcaption>
+						</figure>
+						
+						<p>When deferred reflections are disabled, the deferred pass has to blend between reflection probes, like the forward base pass. The result is added to the emissive color. You can see this by inspecting the fourth buffer &ndash; RT 3 &ndash; via the frame debugger, when the G-buffers are filled.</p>
+						
+						<figure>
+							<img alt="with" src="deferred-reflections/emissive-with-reflections.png" width="360" height="200">
+							<img alt="without" src="deferred-reflections/emissive-without-reflections.png" width="360" height="200">
+							<figcaption>Emissive with and without reflections.</figcaption>
+						</figure>
+						
+						<p>It turns out that our deferred pass already renders reflections when needed and leaves them black otherwise. In fact, we've been using reflection probes all the time. It's just that they're set to black when not used.</p>
+						
+						<p>Sampling black probes is a waste of time. Let's make sure that our deferred pass only does so when needed. We can use <code class="shader">UNITY_ENABLE_REFLECTION_BUFFERS</code> to check this. It's defined as 1 when deferred reflections are enabled.</p>
+						
+						<pre translate="no" class="shader">UnityIndirect CreateIndirectLight (Interpolators i, float3 viewDir) {
+	&hellip;
+
+	#if defined(FORWARD_BASE_PASS) || defined(DEFERRED_PASS)
+		&hellip;
+
+		float occlusion = GetOcclusion(i);
+		indirectLight.diffuse *= occlusion;
+		indirectLight.specular *= occlusion;
+
+		<ins>#if defined(DEFERRED_PASS) &amp;&amp; UNITY_ENABLE_REFLECTION_BUFFERS</ins>
+			<ins>indirectLight.specular = 0;</ins>
+		<ins>#endif</ins>
+	#endif
+
+	return indirectLight;
+}</pre>
+						
+						<p>The next tutorial is <a href="../part-14.1.html">Fog</a>.</p>
+					</section>
+					
+					<a href="deferred-reflections/deferred-reflections.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Rendering-13.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

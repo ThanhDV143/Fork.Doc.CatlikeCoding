@@ -1,0 +1,1807 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/basics/jobs/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/basics/jobs/tutorial-image.jpg">
+		<meta property="og:title" content="Jobs">
+		<meta property="og:description" content="A Unity C# Basics tutorial about using jobs to draw an animating fractal.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Jobs</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/basics/jobs/#article",
+				"headline": "Jobs",
+				"alternativeHeadline": "Animating a Fractal",
+				"datePublished": "2020-12-15",
+				"dateModified": "2021-05-18",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity C# Basics tutorial about using jobs to draw an animating fractal.",
+				"image": "https://catlikecoding.com/unity/tutorials/basics/jobs/tutorial-image.jpg",
+				"dependencies": "Unity 2020.3.6f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/basics/", "name": "Basics" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				DisplayMode: 1,
+				Fractal: 1,
+				FractalPart: 1,
+				FrameRateCounter: 1,
+				'Function': 1,
+				FunctionLibrary: 1,
+				FunctionName: 1,
+				GPUGraph: 1,
+				Graph: 1,
+				GraphFunction: 1,
+				GraphFunctionName: 1,
+				TransitionMode: 1,
+				UpdateFractalLevelJob: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Basics</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Jobs</h1>
+					<p>Animating a Fractal</p>
+					<ul>
+						<li>Build a fractal with an object hierarchy.</li>
+						<li>Flatten the hierarchy.</li>
+						<li>Get rid of game objects and draw procedurally.</li>
+						<li>Use jobs to update the fractal.</li>
+						<li>Update parts of the fractal in parallel.</li>
+					</ul>
+				</header>
+				
+				<p>This is the sixth tutorial in a series about learning the <a href="../index.html">basics</a> of working with Unity. This time we'll create an animating fractal. We begin with a regular game object hierarchy and then slowly transition to the jobs system, measuring performance along the way.</p>
+				
+				<p>This tutorial is made with Unity 2020.3.6f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A fractal made from 97,656 spheres.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Fractal</h2>
+					
+					<p>In general a fractal is something that has self-similarity, which in simple terms means that smaller parts of it look similar to larger parts. Examples are coastlines and lots of plants. For example a tree's branches can look like the tree's trunk, only smaller. Likewise its twigs can look like smaller versions of its branches. There are also mathematical and geometrical fractals. Some examples are the Mandelbrot and Julia sets, the Koch snowflake, the Menger sponge, and the Sierpiński triangle.</p>
+					
+					<p>A geometric fractal can be constructed by starting with an initial shape and then attaching smaller duplicates of it to itself, which then also spawn smaller versions of themselves, and so on. This could theoretically go on forever, creating an infinite amount of shapes that nonetheless occupy a finite space. We can create something like this in Unity, but only up to a few levels deep before performance degrades too much.</p>
+					
+					<p>We'll create the fractal in the same project as the <a href="../compute-shaders/index.html">last tutorial</a>, just without the graph.</p>
+					
+					<section>
+						<h3>Creating a Fractal</h3>
+						
+						<p>Begin by creating a <code>Fractal</code> component type to represent our fractal. Give it a configurable depth integer to control the maximum depth of the fractal. The minimum depth is one, which would only consist of the initial shape. We'll use eight for the maximum, which is quite high but shouldn't be so much that it would accidentally make your machine unresponsive. A depth of four is a reasonable default.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class Fractal : MonoBehaviour {</ins>
+
+	<ins>[SerializeField, Range(1, 8)]</ins>
+	<ins>int depth = 4;</ins>
+<ins>}</ins></pre>
+						
+						<p>We'll use a sphere for the initial shape, which can be created via <em translate="no">GameObject / 3D Object / Sphere</em>. Position it at the world origin, attach our fractal component to it, and give it a simple material. I made it yellow, initially using URP. Remove the <code>SphereCollider</code> component from it, to keep the game object as simple as possible.</p>
+						
+						<figure>
+							<img src="fractal/fractal-inspector.png" width="320" height="320">
+							<figcaption>Fractal inspector.</figcaption>
+						</figure>
+						
+						<p>To turn the sphere into a fractal we'll have to spawn clones of it. This can be done by invoking the <code>Instantiate</code> method with itself as an argument. To pass a reference to the <code>Fractal</code> instance itself we can use the <code>this</code> keyword, so we will be invoking <code>Instantiate(this)</code>, which we'll do to generate the fractal after entering play mode.</p>
+						
+						<p>We could clone the fractal in an <code>Awake</code> method, but then the clone's <code>Awake</code> method will immediately get invoked as well, which immediately creates another instance, and so on. This would keep going until Unity crashes because it's invoking too many methods recursively, which will happen very quickly.</p>
+						
+						<p>To avoid immediate recursion we can instead add a <code>Start</code> method and invoke <code>Instantiate</code> in there. <code>Start</code> is another Unity event method, which like <code>Awake</code> also gets invoked once after a component is created. The difference is that <code>Start</code> doesn't get invoked immediately, but right before the first time an <code>Update</code> method would get invoked on the component, whether it has one or not. New components that get created at that point get their first update in the next frame. This means that instantiations will happen only once per frame.</p>
+						
+						<pre translate="no">	<ins>void Start () {</ins>
+		<ins>Instantiate(this);</ins>
+	<ins>}</ins></pre>
+						
+						<p>If you enter play mode now you'll see that a new clone gets created every frame. First a clone of the original fractal, then a clone of the first clone, then a clone of the second clone, and so on. This process will only stop when your machine will run out of memory, so you should exit play mode before that happens.</p>
+						
+						<figure>
+							<img src="fractal/infinite-clones.png" width="230" height="122">
+							<figcaption>Creating infinite clones.</figcaption>
+						</figure>
+						
+						<p>To enforce the maximum depth we'll have to abort the instantiation once the maximum is reached. The most straightforward way to do this is to decrement the configured depth for the generated child fractal.</p>
+						
+						<pre translate="no">	void Start () {
+		<ins>Fractal child =</ins> Instantiate(this);
+		<ins>child.depth = depth - 1;</ins>
+	}</pre>
+						
+						<p>Then we can check at the beginning of <code>Start</code> whether the depth is 1 or less. If so, we shouldn't go any deeper and abort the method. We can do this by returning from it, using the <code>return</code> statement in isolation because this is a <code>void</code> method, which return nothing.</p>
+						
+						<pre translate="no">	void Start () {
+		<ins>if (depth &lt;= 1) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+
+		Fractal child = Instantiate(this);
+		child.depth = depth - 1;
+	}</pre>
+						
+						<p>To make it easy to see that the configured depth indeed decreases for every new child fractal let's set their <code>name</code> property to <em translate="no">Fractal</em> followed by a space and the depth. An integer can be appended to a text string via the addition operator. This generates a text representation of the number and then a new concatenated string.</p>
+						
+						<pre translate="no">	void Start () {
+		<ins>name = "Fractal " + depth;</ins>
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="fractal/four-levels.png" width="230" height="64">
+							<figcaption>Four fractal levels with decreasing depth.</figcaption>
+						</figure>
+						
+						<p>The depth indeed decreases per level and the process stops once we have created the correct amount of clones. To make the new fractals true children of their direct parent fractal we have to set their parent to the one that generated them.</p>
+						
+						<pre translate="no">		Fractal child = Instantiate(this);
+		child.depth = depth - 1;
+		<ins>child.transform.SetParent(transform, false);</ins></pre>
+						
+						<figure>
+							<img src="fractal/fractal-hierarchy.png" width="230" height="64">
+							<figcaption>Fractal hierarchy.</figcaption>
+						</figure>
+						
+						<p>This gives us a simple game object hierarchy, but it still looks like a single sphere because they all overlap. To change this set the local position of the child's transformation to <code>Vector3.right</code>. This positions it one unit to the right of its parent, so all our spheres end up touching in a row along the X axis.</p>
+						
+						<pre translate="no">		child.transform.SetParent(transform, false);
+		<ins>child.transform.localPosition = Vector3.right;</ins></pre>
+						
+						<figure>
+							<img src="fractal/spheres-in-a-row.png" width="360" height="100">
+							<figcaption>Spheres in a row.</figcaption>
+						</figure>
+						
+						<p>The idea of self-similarity is that smaller portions look like larger portions, so each child should be smaller than its parent. We'll simply halve its size, by setting its local scale to uniform 0.5. As scale also applies to children this means that each step down the hierarchy the size halves.</p>
+						
+						<pre translate="no">		child.transform.localPosition = Vector3.right;
+		<ins>child.transform.localScale = 0.5f * Vector3.one;</ins></pre>
+						
+						<figure>
+							<img src="fractal/spheres-decreasing-size.png" width="210" height="100">
+							<figcaption>Spheres with decreasing size.</figcaption>
+						</figure>
+						
+						<p>To make the spheres touch again we have to decrease their offset. The local radius of both parent and child used to be 0.5, so an offset of 1 made them touch. As the child's size has been halved its local radius is now 0.25, so the offset should be reduced to 0.75.</p>
+						
+						<pre translate="no">		child.transform.localPosition = <ins>0.75f *</ins> Vector3.right;
+		child.transform.localScale = 0.5f * Vector3.one;</pre>
+						
+						<figure>
+							<img src="fractal/spheres-touching.png" width="174" height="100">
+							<figcaption>Touching spheres.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Multiple Children</h3>
+						
+						<p>Spawning only a single child per level produces a line of spheres with decreasing size, which isn't an interesting fractal. So let's add a second child per step, by duplicating the child-creating code, reusing the <code>child</code> variable. The only difference is that we'll use <code>Vector3.up</code> for the extra child, which positions it child above the parent, instead of to the right.</p>
+						
+						<pre translate="no">		Fractal child = Instantiate(this);
+		child.depth = depth - 1;
+		child.transform.SetParent(transform, false);
+		child.transform.localPosition = 0.75f * Vector3.right;
+		child.transform.localScale = 0.5f * Vector3.one;
+
+		<ins>child = Instantiate(this);</ins>
+		<ins>child.depth = depth - 1;</ins>
+		<ins>child.transform.SetParent(transform, false);</ins>
+		<ins>child.transform.localPosition = 0.75f * Vector3.up;</ins>
+		<ins>child.transform.localScale = 0.5f* Vector3.one;</ins></pre>
+						
+						<p>The expectation is that every fractal part will now have two children, up to four levels deep.</p>
+						
+						<figure>
+							<img src="fractal/spheres-multiple-children-incorrect.png" width="174" height="174">
+							<figcaption>Spheres with multiple children, incorrect</figcaption>
+						</figure>
+						
+						<p>This doesn't appear to be the case. We end up with far too many levels at the top of the fractal. This happens because by the time we clone a fractal to create its second child we've already given it a first child. This child now gets cloned as well, because <code>Instantiate</code> duplicates the entire game object hierarchy that was passed to it.</p>
+						
+						<p>The solution is to establish the parent-child relationship only after both children have been created. To make this easier let's move the child-creation code to a separate <code>CreateChild</code> method that returns the child fractal. It does everything the same, except that it doesn't set the parent and the offset direction becomes a parameter.</p>
+						
+						<pre translate="no">	<ins>Fractal CreateChild (Vector3 direction) {</ins>
+		<ins>Fractal child = Instantiate(this);</ins>
+		<ins>child.depth = depth - 1;</ins>
+		<ins>child.transform.localPosition = 0.75f * direction;</ins>
+		<ins>child.transform.localScale = 0.5f * Vector3.one;</ins>
+		<ins>return child;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Remove the child-creation code from <code>Start</code> and instead invoke <code>CreateChild</code> twice, with the up and right vectors as arguments. Keep track of the children via variables and use those to set their parent afterwards.</p>
+						
+						<pre translate="no">	void Start () {
+		name = "Fractal " + depth;
+
+		if (depth &lt;= 1) {
+			return;
+		}
+
+		<ins>Fractal childA = CreateChild(Vector3.up);</ins>
+		<ins>Fractal childB = CreateChild(Vector3.right);</ins>
+		
+		<ins>childA.transform.SetParent(transform, false);</ins>
+		<ins>childB.transform.SetParent(transform, false);</ins>
+	}</pre>
+						
+						<figure>
+							<img src="fractal/spheres-multiple-children-correct.png" width="174" height="174">
+							<figcaption>Spheres with multiple children, correct</figcaption>
+						</figure>
+						
+					</section>
+					
+					<section>
+						<h3>Reorientation</h3>
+						
+						<p>We now get a fractal with exactly two children per part, except for the smallest parts at maximum depth that don't have any children. These children are always positioned the same way: one on top and one to the right. However, fractal children are attached to their parent and can be considered to grow out of it. It makes sense that their orientation is thus also relative to their parent. To a child its parent is the ground, which makes the direction of its offset equal to its local up axis.</p>
+						
+						<p>We can support a different orientation per part by adding a <code>Quaternion</code>, which we assign to the child's local rotation so it's relative to its parent's orientation.</p>
+						
+						<pre translate="no">	Fractal CreateChild (Vector3 direction<ins>, Quaternion rotation</ins>) {
+		Fractal child = Instantiate(this);
+		child.depth = depth - 1;
+		child.transform.localPosition = 0.75f * direction;
+		<ins>child.transform.localRotation = rotation;</ins>
+		child.transform.localScale = 0.5f * Vector3.one;
+		return child;
+	}</pre>
+						
+						<p>In <code>Start</code> the first child is positioned above its parent, so its orientation doesn't change. We can represent this with <code>Quaternion.identity</code>, which is the identity quaternion that represents no rotation. The second child is to the right, so we have to rotate it 90&deg; clockwise around the Z axis. We can do this via the static <code>Quaternion.Euler</code> method, which creates a rotation given Euler angles along the X, Y, and Z axes. Pass it zero for the first two axes and &minus;90&deg; for Z.</p>
+						
+						<pre translate="no">		Fractal childA = CreateChild(Vector3.up<ins>, Quaternion.identity</ins>);
+		Fractal childB = CreateChild(Vector3.right, <ins>Quaternion.Euler(0f, 0f, -90f)</ins>);</pre>
+						
+						<figure>
+							<img src="fractal/spheres-reoriented.png" width="174" height="184">
+							<figcaption>Reoriented fractal children.</figcaption>
+						</figure>
+						
+					</section>
+					
+					<section>
+						<h3>Completing the Fractal</h3>
+						
+						<p>Let's continue to grow the fractal by adding a third child, this time offset to the left, rotated 90&deg; around the Z axis. This completes our fractal in the XY plane.</p>
+						
+						<pre translate="no">		Fractal childA = CreateChild(Vector3.up, Quaternion.identity);
+		Fractal childB = CreateChild(Vector3.right, Quaternion.Euler(0f, 0f, -90f));
+		<ins>Fractal childC = CreateChild(Vector3.left, Quaternion.Euler(0f, 0f, 90f));</ins>
+
+		childA.transform.SetParent(transform, false);
+		childB.transform.SetParent(transform, false);
+		<ins>childC.transform.SetParent(transform, false);</ins></pre>
+						
+						<figure>
+							<img src="fractal/fractal-2d.png" width="250" height="184">
+							<figcaption>2D fractal.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Can we also add a child with a downward offset?</h3>
+							<div>
+								<p>Yes, but this would only make sense for the root fractal part, because in all other cases the child would end up hidden inside its parent's parent. To keep things simple I don't exclusively give the root an extra child.</p>
+							</div>
+						</aside>
+						
+						<p>And we bring our fractal into the third dimension by adding two more children, with forward and back offsets, along with 90&deg; and &minus;90&deg; rotations around the X axis.</p>
+						
+						<pre translate="no">		Fractal childA = CreateChild(Vector3.up, Quaternion.identity);
+		Fractal childB = CreateChild(Vector3.right, Quaternion.Euler(0f, 0f, -90f));
+		Fractal childC = CreateChild(Vector3.left, Quaternion.Euler(0f, 0f, 90f));
+		<ins>Fractal childD = CreateChild(Vector3.forward, Quaternion.Euler(90f, 0f, 0f));</ins>
+		<ins>Fractal childE = CreateChild(Vector3.back, Quaternion.Euler(-90f, 0f, 0f));</ins>
+
+		childA.transform.SetParent(transform, false);
+		childB.transform.SetParent(transform, false);
+		childC.transform.SetParent(transform, false);
+		<ins>childD.transform.SetParent(transform, false);</ins>
+		<ins>childE.transform.SetParent(transform, false);</ins></pre>
+						
+						<figure>
+							<img src="fractal/fractal-3d.png" width="310" height="280">
+							<figcaption>3D fractal.</figcaption>
+						</figure>
+						
+						<p>Once you're sure that the fractal is correct you can try it with a greater depth configured, for example six.</p>
+						
+						<figure>
+							<img src="fractal/fractal-depth-6.png" width="330" height="300">
+							<figcaption>Depth 6 fractal.</figcaption>
+						</figure>
+						
+						<p>At this depth you can notice that the sides of the pyramid described by the fractal display the pattern of a Sierpiński triangle. This is easiest to see when using an othrographic projection.</p>
+						
+						<figure>
+							<img src="fractal/sierpinski-triangle-pattern.png" width="340" height="250">
+							<figcaption>Sierpiński triangle pattern.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Animation</h3>
+						
+						<p>We can bring our fractal to life by animating it. The easiest way to create endless motion is to rotate every part along its local up axis, in a new <code>Update</code> method. This can be done by invoking <code>Rotate</code> on the fractal's <code>Transform</code> component. This applies a cumulative rotation over time, which will make it spin. If we use <code>Time.deltaTime</code> for the second argument and zero for the other two then we end up with a rotation speed of a single degree per second. Let's scale that up to 22.5&deg; per second so a complete 360&deg; rotation is achieved in 16 seconds. Because of the fractal's four-sided symmetry this animation will appear to loop every four seconds.</p>
+						
+						<pre translate="no">	<ins>void Update () {</ins>
+		<ins>transform.Rotate(0f, 22.5f * Time.deltaTime, 0f);</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="fractal/animating-fractal.mp4" type="video/mp4">
+							</video>
+							<figcaption>Animating fractal.</figcaption>
+						</figure>
+						
+						<p>Every part of the fractal spins the exact same way, but because of the recursive nature of the entire fractal this produces motion that gets more complex the deeper the fractal goes.</p>
+						
+					</section>
+					
+					<section>
+						<h3>Performance</h3>
+						
+						<p>Our animating fractal might be a nice idea, but it should also run fast enough. Fractals with a depth less than six should be no problem, but higher than that can become problematic. So I profiled some builds.</p>
+						
+						<figure>
+							<img src="fractal/profiler-build-urp-depth-6.png" width="480" height="194">
+							<figcaption>Profiling a build with URP and fractal depth 6.</figcaption>
+						</figure>
+						
+						<p>I profiled separate builds for fractals with depths 6, 7, and 8. I got a rough estimate of the average time in milliseconds spent invoking <code>Update</code> methods per frame, along with average frames per second for URP and <abbr title="Built-in Render Pipeline">BRP</abbr>. I turned off VSync to get the best sense of how fast it could possibly run on my machine. I also used <em>IL2CPP</em> instead of <em>Mono</em> for the <em>Scripting Backend</em>, found under <em>Other Settings / Configuration</em> of the player project settings.</p>
+						
+						<aside>
+							<h3>What's the difference between <em>Mono</em> and <em>IL2CPP</em>?</h3>
+							<div>
+								<p>The latter usually generates more optimized native code than what the Mono runtime environment can provide.</p>
+							</div>
+						</aside>
+						
+						<table>
+							<thead><tr><th>Depth</th><th>MS</th><th>URP</th><th><abbr title="Built-in Render Pipeline">BRP</abbr></th></tr></thead>
+							<tbody>
+								<tr><td>6</td><td>2</td><td>125</td><td>80</td></tr>
+								<tr><td>7</td><td>8</td><td>24</td><td>15</td></tr>
+								<tr><td>8</td><td>40</td><td>4</td><td>3</td></tr>
+							</tbody>
+						</table>
+						
+						<p>It turns out that depth 6 is no problem, but my machine struggles with depth 7 while depth 8 is a disaster. Far too much time is spent invoking <code>Update</code> methods. That alone would limit the frame rate to at most 25FPS, but it ends up far worse at 4 for URP and 3 for <abbr title="Built-in Render Pipeline">BRP</abbr>.</p>
+						
+						<p>Unity's default sphere has a lot of vertices, so it makes sense to try the same experiment but with the fractal's mesh replaced with a cube, which is much cheaper to render. After doing that it turns out that I get the same results, which indicates that the CPU is the bottleneck, not the GPU.</p>
+						
+						<figure>
+							<img src="fractal/fractal-depth-6-cubes.png" width="330" height="310">
+							<figcaption>Depth 6 fractal with cubes instead of spheres.</figcaption>
+						</figure>
+						
+						<p>Note that when using cubes the fractal self-intersects, because the cubes stick out much farther than spheres. Some parts at depth 4 end up touching the level 1 root. The upward children of those parts thus end up penetrating the root, while some of the others at that level touch the level 2 parts, and so on.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Flat Hierarchy</h2>
+					
+					<p>The recursive hierarchy of our fractal with all of its independently-moving parts is something that Unity struggles with. It has to update the parts in isolation, calculate their object-to-world conversion matrices, then cull them, and finally render them either with GPU instancing or with the SRP batcher. As we know exactly how our fractal works we could use a more efficient strategy than Unity's general-purpose approach. We might be able to improve performance by simplifying the hierarchy, getting rid of its recursive nature.</p>
+					
+					<section>
+						<h3>Cleaning Up</h3>
+						
+						<p>The first step of restructuring out fractal's hierarchy is removing the current approach. Delete the <code>Start</code>, <code>CreateChild</code>, and <code>Update</code> methods.</p>
+						
+						<pre translate="no">	<del>//void Start () { &hellip; }</del>
+
+	<del>//Fractal CreateChild (Vector3 direction, Quaternion rotation) { &hellip; }</del>
+
+	<del>//void Update () { &hellip; }</del></pre>
+						
+						<p>Instead of duplicating the root game object we'll use it as the root container for all fractal parts. So remove the <code>MeshFilter</code> and <code>MeshRenderer</code> components from our fractal game object. Then add configuration fields for a mesh and a material to <code>Fractal</code>. Set them to the sphere and material we used earlier, via the inspector.
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>Mesh mesh;</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>Material material;</ins></pre>
+						
+						<figure>
+							<img src="flat-hierarchy/adjusted-fractal.png" width="320" height="262">
+							<figcaption>Adjusted fractal game object.</figcaption>
+						</figure>
+						
+						<p>We're going to use the same directions and rotations for our fractal parts. This time we'll store these in static arrays, for easy access later.</p>
+						
+						<pre translate="no">	<ins>static Vector3[] directions = {</ins>
+		<ins>Vector3.up, Vector3.right, Vector3.left, Vector3.forward, Vector3.back</ins>
+	<ins>};</ins>
+
+	<ins>static Quaternion[] rotations = {</ins>
+		<ins>Quaternion.identity,</ins>
+		<ins>Quaternion.Euler(0f, 0f, -90f), Quaternion.Euler(0f, 0f, 90f),</ins>
+		<ins>Quaternion.Euler(90f, 0f, 0f), Quaternion.Euler(-90f, 0f, 0f)</ins>
+	<ins>};</ins></pre>
+						
+					</section>
+					
+					<section>
+						<h3>Creating Parts</h3>
+						
+						<p>Now we're going to revisit how we create a part. Add a new <code>CreatePart</code> method for this, initially a void method without parameters.</p>
+						
+						<pre translate="no">	<ins>void CreatePart () {}</ins></pre>
+						
+						<p>Invoke it in an <code>Awake</code> method. We won't need to guard against infinite recursions this time, so don't need to wait until <code>Start</code>.</p>
+						
+						<pre translate="no">	<ins>void Awake () {</ins>
+		<ins>CreatePart();</ins>
+	<ins>}</ins></pre>
+						
+						<p>We'll manually construct a new game object in <code>CreatePart</code>. This is done by invoking the <code>GameObject</code> constructor method. Give it the <em translate="no">Fractal Part</em> name by providing that string as an argument. Keep track of it with a variable, then make the fractal root its parent.</p>
+						
+						<pre translate="no">	void CreatePart () {
+		<ins>var go = new GameObject("Fractal Part");</ins>
+		<ins>go.transform.SetParent(transform, false);</ins>
+	}</pre>
+						
+						<figure>
+							<img src="flat-hierarchy/first-fractal-part.png" width="226" height="32">
+							<figcaption>Fractal with first part.</figcaption>
+						</figure>
+						
+						<p>This gives us a game object that only has a <code>Transform</code> component and nothing else. To make it visible we have to add more components to this, by invoking <code>AddComponent</code> on the game object. Do this once.</p>
+						
+						<pre translate="no">		var go = new GameObject("Fractal Part");
+		go.transform.SetParent(transform, false);
+		<ins>go.AddComponent();</ins></pre>
+						
+						<p><code>AddComponent</code> is a generic method, which can add any kind of component. It's like a template for methods, with a specific version for each needed component type. We specify which type we want by appending it to the method's name, within angle brackets. Do this for <code>MeshFilter</code>.</p>
+						
+						<pre translate="no">		go.AddComponent<ins>&lt;MeshFilter></ins>();</pre>
+						
+						<p>This adds a <code>MeshFilter</code> to the game object, which is also returned. We need to assign our mesh to its <code>mesh</code> property, which we can do directly on the result of the method invocation.</p>
+						
+						<pre translate="no">		go.AddComponent&lt;MeshFilter>()<ins>.mesh = mesh</ins>;</pre>
+						
+						<p>Do the same for a <code>MeshRenderer</code> component, settings its material.</p>
+						
+						<pre translate="no">		go.AddComponent&lt;MeshFilter>().mesh = mesh;
+		<ins>go.AddComponent&lt;MeshRenderer>().material = material;</ins></pre>
+						
+						<p>Our fractal part now gets rendered, so a single sphere appears after entering play mode.</p>
+					</section>
+					
+					<section>
+						<h3>Storing Information</h3>
+						
+						<p>Rather than have each part update itself we'll instead control the entire fractal from the single root object that has the <code>Fractal</code> component. This is much easier for Unity because it only has to manage a single updating game object instead of potentially thousands. But to do this we'll need to keep track of the data for all parts in a single <code>Fractal</code> component.</p>
+						
+						<p>At minimum we need to know the direction and rotation of a part. We could keep track of those by storing them in arrays. But instead of using separate arrays for vectors and quaternions we'll group them together, by creating a new <code>FractalPart</code> struct type. This is done like defining a class, but with the <code>struct</code> keyword instead of <code>class</code>. As we'll only need this type inside <code>Fractal</code> define it inside that class, along with its fields. Don't make it public, for the same reason.</p>
+						
+						<pre translate="no">public class Fractal : MonoBehaviour {
+	
+	<ins>struct FractalPart {</ins>
+		<ins>Vector3 direction;</ins>
+		<ins>Quaternion rotation;</ins>
+	<ins>}</ins>
+	
+	&hellip;
+}</pre>
+						
+						<p>This type will function as a simple container for data that's bundled together and treated like a single value, not an object. To make it possible for other code in <code>Fractal</code> to access fields inside this nested type they need to be made public. Note that this only exposes the fields inside <code>Fractal</code>, because the struct itself is private inside <code>Fractal</code>.</p>
+						
+						<pre translate="no">	struct FractalPart {
+		<ins>public</ins> Vector3 direction;
+		<ins>public</ins> Quaternion rotation;
+	}</pre>
+						
+						<p>In order to correctly position, rotate, and scale a fractal part we'll need to access its <code>Transform</code> component, so add a field for a reference to it to the struct as well.</p>
+						
+						<pre translate="no">	struct FractalPart {
+		public Vector3 direction;
+		public Quaternion rotation;
+		<ins>public Transform transform;</ins>
+	}</pre>
+						
+						<p>Now we can define a field for an array of fractal parts inside <code>Fractal</code>.</p>
+						
+						<pre translate="no">	<ins>FractalPart[] parts;</ins></pre>
+						
+						<p>Although it's possible to put all parts in a single large array let's instead give all parts of the same level their own array. This makes it easier work with the hierarchy later. We keep track of all those arrays by turning our <code>parts</code> field into an array of arrays. The element type of such an array is <code>FractalPart[]</code>, so its own type is defined as that followed by an empty pair of square brackets, like any other array.</p>
+						
+						<pre translate="no">	FractalPart[]<ins>[]</ins> parts;</pre>
+						
+						<p>Create this new top-level array at the beginning of <code>Awake</code>, with its size equal to the fractal depth. In this case the size is declared inside the first pair of square brackets, the second pair should be left empty.</p>
+						
+						<pre translate="no">	void Awake () {
+		<ins>parts = new FractalPart[depth][];</ins>
+
+		CreatePart();
+	}</pre>
+						
+						<p>Each level gets its own array, also the root level of the fractal that has only a single part. So begin by creating a new <code>FractalPart</code> array for a single element and assign it to the first level.</p>
+						
+						<pre translate="no">		parts = new FractalPart[depth][];
+		<ins>parts[0] = new FractalPart[1];</ins></pre>
+						
+						<p>After that we have to create an array for the other levels. Each level is five times as large as the previous level, because we give parts five children. Turn the level array creation into a loop, keep track of the array length, and multiply it by five at the end of each iteration.</p>
+						
+						<pre translate="no">		parts = new FractalPart[depth][];
+		<ins>int length = 1;</ins>
+		<ins>for (int i = 0; i &lt; parts.Length; i++) {</ins>
+			parts[<ins>i</ins>] = new FractalPart[<ins>length</ins>];
+			<ins>length *= 5;</ins>
+		<ins>}</ins></pre>
+						
+						<p>Because the length is an integer and we only use it inside the loop, we can merge it into the <code>for</code> statement, turning the initializer and adjustment parts into comma-separated lists.</p>
+						
+						<pre translate="no">		parts = new FractalPart[depth][];
+		<del>//int length = 1;</del>
+		for (int i = 0<ins>, length = 1</ins>; i &lt; parts.Length; i++<ins>, length *= 5</ins>) {
+			parts[i] = new FractalPart[length];
+			<del>//length *= 5;</del>
+		}</pre>
+						
+						<table>
+							<thead><tr><th>Level</th><th>Parts</th><th>Cumulative</th></tr></thead>
+							<tbody>
+								<tr><td>1</td><td>1</td><td>1</td></tr>
+								<tr><td>2</td><td>5</td><td>6</td></tr>
+								<tr><td>3</td><td>25</td><td>31</td></tr>
+								<tr><td>4</td><td>125</td><td>156</td></tr>
+								<tr><td>5</td><td>625</td><td>781</td></tr>
+								<tr><td>6</td><td>3,125</td><td>3,906</td></tr>
+								<tr><td>7</td><td>15,625</td><td>19,531</td></tr>
+								<tr><td>8</td><td>78,125</td><td>97,656</td></tr>
+							</tbody>
+						</table>
+					</section>
+					
+					<section>
+						<h3>Creating All Parts</h3>
+						
+						<p>To check whether we create parts correctly, add a parameter for the level index to <code>CreatePart</code> and append it to the part's name. Note that the level index starts at zero and increases, while we decreased the configured depth of children in the previous approach.</p>
+						
+						<pre translate="no">	void CreatePart (<ins>int levelIndex</ins>) {
+		var go = new GameObject(<ins>"Fractal Part " + levelIndex</ins>);
+		&hellip;
+	}</pre>
+						
+						<p>Pass zero for the level index of the first part. Then follow that with a loop over all levels, starting at index 1 because we explicitly did the single part of the top level first. We're going to nest loops, so use a more specific name for the level iterator variable, like <code>li</code>.</p>
+						
+						<pre translate="no">	void Awake () {
+		&hellip;
+
+		CreatePart(<ins>0</ins>);
+		<ins>for (int li = 1; li &lt; parts.Length; li++) {}</ins>
+	}</pre>
+						
+						<p>Each level iteration, begin by storing a reference to the parts array for that level. Then loop over all parts of that level and create them, this time using a name like <code>fpi</code> for the fractal part iterator variable.</p>
+						
+						<pre translate="no">		for (int li = 1; li &lt; parts.Length; li++) {
+			<ins>FractalPart[] levelParts = parts[li];</ins>
+			<ins>for (int fpi = 0; fpi &lt; levelParts.Length; fpi++) {</ins>
+				<ins>CreatePart(li);</ins>
+			<ins>}</ins>
+		}</pre>
+						
+						<figure>
+							<img src="flat-hierarchy/all-fractal-parts.png" width="226" height="154">
+							<figcaption>All fractal parts, created per level.</figcaption>
+						</figure>
+						
+						<p>As children have varying directions and rotations we need to distinguish them. We do this by adding a child index to <code>CreatePart</code>, which we can also add to the game object's name.</p>
+						
+						<pre translate="no">	void CreatePart (int levelIndex<ins>, int childIndex</ins>) {
+		var go = new GameObject(<ins>"Fractal Part L" + levelIndex + " C" + childIndex</ins>);
+		&hellip;
+	}</pre>
+						
+						<p>The root part isn't a child of another part, so we use index zero as it can be considered an upward child of the ground.</p>
+						
+						<pre translate="no">		CreatePart(0<ins>, 0</ins>);</pre>
+						
+						<p>Inside the loop per level we have to cycle through the five child indices. We could do this by incrementing a child index every iteration and resetting it to zero when appropriate. Alternatively, we can explicitly create five children in another nested loop. This requires that we increase the fractal part index by five every iteration, instead of only incrementing it.</p>
+						
+						<pre translate="no">		for (int li = 1; li &lt; parts.Length; li++) {
+			FractalPart[] levelParts = parts[li];
+			for (int fpi = 0; fpi &lt; levelParts.Length; fpi <ins>+= 5</ins>) {
+				<ins>for (int ci = 0; ci &lt; 5; ci++) {</ins>
+					CreatePart(li<ins>, ci</ins>);
+				<ins>}</ins>
+			}
+		}</pre>
+						
+						<figure>
+							<img src="flat-hierarchy/parts-level-child-index.png" width="226" height="154">
+							<figcaption>Both level and child index shown.</figcaption>
+						</figure>
+						
+						<p>We also have to make sure that the parts have the correct size. All parts of the same level have the same scale, which doesn't change. So we only need to set it once when creating each part. Add a parameter for it to <code>CreatePart</code> and use it o set the uniform scale.</p>
+						
+						<pre translate="no">	void CreatePart (int levelIndex, int childIndex<ins>, float scale</ins>) {
+		var go = new GameObject("Fractal Part L" + levelIndex + " C" + childIndex);
+		<ins>go.transform.localScale = scale * Vector3.one;</ins>
+		&hellip;
+	}</pre>
+						
+						<p>The scale of the root part is 1. After that the scale halves each level.</p>
+						
+						<pre translate="no">		<ins>float scale = 1f;</ins>
+		CreatePart(0, 0<ins>, scale</ins>);
+		for (int li = 1; li &lt; parts.Length; li++) {
+			<ins>scale *= 0.5f;</ins>
+			FractalPart[] levelParts = parts[li];
+			for (int fpi = 0; fpi &lt; levelParts.Length; fpi += 5) {
+				for (int ci = 0; ci &lt; 5; ci++) {
+					CreatePart(li, ci<ins>, scale</ins>);
+				}
+			}
+		}</pre>
+					</section>
+					
+					<section>
+						<h3>Rebuilding the Fractal</h3>
+						
+						<p>To rebuild the structure of the fractal we have to position all parts directly, this time in world space. As we're not using a transformation hierarchy the positions will change as the fractal animates, so we'll continually set them in <code>Update</code> instead of in <code>Awake</code>. But first we need to store the data of the parts.</p>
+						
+						<p>Begin by changing <code>CreatePart</code> so it returns a new <code>FractalPart</code> struct value.</p>
+						
+						<pre translate="no">	<ins>FractalPart</ins> CreatePart (int levelIndex, int childIndex, float scale) {
+		&hellip;
+
+		<ins>return new FractalPart();</ins>
+	}</pre>
+						
+						<p>Then set the part's direction and rotation using its child index and the static arrays, along with a reference to its game object's <code>Transform</code> component. We could do this by storing the new part in a variable, settings its fields, and then returning it. An alternative way of doing the same is by using an object or struct initializer. This is a list within curly brackets that follows the parameter list of the constructor invocation.</p>
+						
+						<pre translate="no">		return new FractalPart() <ins>{}</ins>;</pre>
+						
+						<p>We can put assignments to the fields or properties of whatever is created in there, as a comma-separated list.</p>
+						
+						<pre translate="no">		return new FractalPart() {
+			<ins>direction = directions[childIndex],</ins>
+			<ins>rotation = rotations[childIndex],</ins>
+			<ins>transform = go.transform</ins>
+		};</pre>
+						
+						<p>And if the constructor method invocation has no arguments we're allowed to skip the empty parameter list if we include an initializer.</p>
+						
+						<pre translate="no">		<del>//return new FractalPart() {</del>
+		<ins>return new FractalPart {</ins>
+			&hellip;
+		};</pre>
+						
+						<p>Copy the returned parts to the correct array elements in <code>Awake</code>. That's the first element of the first array for the root part. For other parts it's the element of the current level array with the index equal to the fractal part index. As we increase that index in steps of five the child index has to be added to it as well.</p>
+						
+						<pre translate="no">		<ins>parts[0][0] =</ins> CreatePart(0, 0, scale);
+		for (int li = 1; li &lt; parts.Length; li++) {
+			scale *= 0.5f;
+			FractalPart[] levelParts = parts[li];
+			for (int fpi = 0; fpi &lt; levelParts.Length; fpi += 5) {
+				for (int ci = 0; ci &lt; 5; ci++) {
+					<ins>levelParts[fpi + ci] =</ins> CreatePart(li, ci, scale);
+				}
+			}
+		}</pre>
+						
+						<p>Follow this by creating a new <code>Update</code> method that iterates over all levels and all their parts, storing the relevant fractal part data in a variable. We again start the loop at the second level, because the root part doesn't move and always sits at the origin.</p>
+						
+						<pre translate="no">	<ins>void Update () {</ins>
+		<ins>for (int li = 1; li &lt; parts.Length; li++) {</ins>
+			<ins>FractalPart[] levelParts = parts[li];</ins>
+			<ins>for (int fpi = 0; fpi &lt; levelParts.Length; fpi++) {</ins>
+				<ins>FractalPart part = levelParts[fpi];</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>To position a part relative to its parent we also need to access the parent's <code>Transform</code> component. To do this keep track of the parent parts array as well. The parent is the element from that array with an index equal to the current part's index divided by five. This works because we perform an integer division, so there is no remainder. Thus parts with indices 0&ndash;4 get parent index 0, parts with indices 5&ndash;9 get parent index 1, and so on.</p>
+						
+						<pre translate="no">		for (int li = 1; li &lt; parts.Length; li++) {
+			<ins>FractalPart[] parentParts = parts[li - 1];</ins>
+			FractalPart[] levelParts = parts[li];
+			for (int fpi = 0; fpi &lt; levelParts.Length; fpi++) {
+				<ins>Transform parentTransform = parentParts[fpi / 5].transform;</ins>
+				FractalPart part = levelParts[fpi];
+			}
+		}</pre>
+						
+						<p>Now we can set the part's position relative to its designated parent. Begin by making its local position equal to its parent's, plus the part's direction multiplied by its local scale. As the scale is uniform we can suffice with the scale's X component.</p>
+						
+						<pre translate="no">				Transform parentTransform = parentParts[fpi / 5].transform;
+				FractalPart part = levelParts[fpi];
+				<ins>part.transform.localPosition =</ins>
+					<ins>parentTransform.localPosition +</ins>
+					<ins>part.transform.localScale.x * part.direction;</ins></pre>
+						
+						<figure>
+							<img src="flat-hierarchy/parts-distance-incorrect.png" width="200" height="160">
+							<figcaption>Parts too close to each other.</figcaption>
+						</figure>
+						
+						<p>This puts the parts too close to their parent, as we're scaling the distance by the part's own scale. As the scale is halved each level we have to increase the final offset to 150%.</p>
+						
+						<pre translate="no">				part.transform.localPosition =
+					parentTransform.localPosition +
+					<ins>1.5f *</ins> part.transform.localScale.x * part.direction;</pre>
+						
+						<figure>
+							<img src="flat-hierarchy/parts-distance-correct.png" width="300" height="200">
+							<figcaption>Parts at correct distance.</figcaption>
+						</figure>
+						
+						<p>We also have to apply the part's rotation. This is done by assigning it to its object's local rotation. Let's do this before setting its position.</p>
+						
+						<pre translate="no">				<ins>part.transform.localRotation = part.rotation;</ins>		
+				part.transform.localPosition =
+					parentTransform.localPosition +
+					1.5f * part.transform.localScale.x * part.direction;</pre>
+						
+						<p>But we also have to propagate the rotation of the parent. Rotations can be stacked via multiplication of quaternions. Unlike regular multiplication of numbers order matters in this case. The resulting quaternion represents a rotation obtained by performing the rotation of the second quaternion, followed by applying the rotation of the first quaternion. Thus in a transformation hierarchy the child's rotation is performed first, followed by the parent's rotation. So the correct quaternion multiplication order is parent-child.</p>
+						
+						<pre translate="no">				part.transform.localRotation =
+					<ins>parentTransform.localRotation *</ins> part.rotation;</pre>
+						
+						<p>Finally, the parent's rotation should also affect the direction of its offset. We can apply a quaternion rotation to a vector by performing a quaternion&ndash;vector multiplication.</p>
+						
+						<pre translate="no">				part.transform.localPosition =
+					parentTransform.localPosition +
+					<ins>parentTransform.localRotation *</ins>
+						<ins>(</ins>1.5f * part.transform.localScale.x * part.direction<ins>)</ins>;</pre>
+						
+						<figure>
+							<img src="flat-hierarchy/fractal-restored.png" width="290" height="160">
+							<figcaption>Restored fractal.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Animating Again</h3>
+						
+						<p>To make the fractal animate again we have to reintroduce another rotation. This time we'll create a quaternion to represent the rotation for the current delta time, with the same angular velocity as before. Do this at the beginning of <code>Update</code>.</p>
+						
+						<pre translate="no">	void Update () {
+		<ins>Quaternion deltaRotation = Quaternion.Euler(0f, 22.5f * Time.deltaTime, 0f);</ins>
+		
+		&hellip;
+	}</pre>
+						
+						<p>Let's begin with the root part. Retrieve it before the loop and multiply its rotation with the delta rotation.</p>
+						
+						<pre translate="no">		Quaternion deltaRotation = Quaternion.Euler(0f, 22.5f * Time.deltaTime, 0f);
+		
+		<ins>FractalPart rootPart = parts[0][0];</ins>
+		<ins>rootPart.rotation *= deltaRotation;</ins></pre>
+						
+						<p><code>FractalPart</code> is a struct, which is a value type, so changing a local variable of it doesn't change anything else. We have to copy it back to its array element&mdash;replacing the old data&mdash;in order to remember that its rotation has changed.</p>
+						
+						<pre translate="no">		FractalPart rootPart = parts[0][0];
+		rootPart.rotation *= deltaRotation;
+		<ins>parts[0][0] = rootPart;</ins></pre>
+						
+						<p>And we also have to adjust the rotation of the root's <code>Transform</code> component. This will make the fractal spin again, but only around its root.</p>
+						
+						<pre translate="no">		FractalPart rootPart = parts[0][0];
+		rootPart.rotation *= deltaRotation;
+		<ins>rootPart.transform.localRotation = rootPart.rotation;</ins>
+		parts[0][0] = rootPart;</pre>
+						
+						<p>To spin all other parts we have to factor the same delta rotation into their rotation as well. As everything spins around its local up axis the delta rotation is the rightmost operand. Do this before applying the final rotation of the part's game object. Also copy the adjusted part data back to the array at the end.</p>
+						
+						<pre translate="no">			for (int fpi = 0; fpi &lt; levelParts.Length; fpi++) {
+				Transform parentTransform = parentParts[fpi / 5].transform;
+				FractalPart part = levelParts[fpi];
+				<ins>part.rotation *= deltaRotation;</ins>
+				part.transform.localRotation =
+					parentTransform.localRotation * part.rotation;
+				part.transform.localPosition =
+					parentTransform.localPosition +
+					parentTransform.localRotation *
+						(1.5f * part.transform.localScale.x * part.direction);
+				<ins>levelParts[fpi] = part;</ins>
+			}</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Performance Again</h3>
+						
+						<p>At this point our fractal appears and animates exactly as before, but with a new flat object hierarchy and a single component that is responsible for updating the entire thing. Let's profile again to see if this new approach performs better, using the same build settings.</p>
+						
+						<figure>
+							<img src="flat-hierarchy/profiler-build-urp-depth-6.png" width="440" height="190">
+							<figcaption>Profiling a build with URP and fractal depth 6.</figcaption>
+						</figure>
+						
+						<table>
+							<thead><tr><th>Depth</th><th>MS</th><th>URP</th><th><abbr title="Built-in Render Pipeline">BRP</abbr></th></tr></thead>
+							<tbody>
+								<tr><td>6</td><td>2</td><td>150</td><td>95</td></tr>
+								<tr><td>7</td><td>8</td><td>32</td><td>17</td></tr>
+								<tr><td>8</td><td>43</td><td>5</td><td>3</td></tr>
+							</tbody>
+						</table>
+						
+						<p>Compared to the recursive approach, the average frame rate has increased everywhere. Depth 7 with URP now reaches 30FPS for me. Time spent during <code>Update</code> hasn't decreased noticeably and even appeared to increase a bit at depth 8, but this is compensated for during rendering by the simpler hierarchy. Using cubes results in roughly the same performance.</p>
+						
+						<p>We can conclude that our new approach is definitely an improvement, but on its own is still not sufficient to support fractals with depths 7 or 8.</p>
+						
+					</section>
+				</section>
+				
+				<section>
+					<h2>Procedural Drawing</h2>
+					
+					<p>Because our fractal currently has a flat object hierarchy it has the same structural design as the graphs of our previous tutorials: a single object with lots of almost identical children. By rendering the graph's points procedurally instead of using a separate game object per point we managed to dramatically increase its performance. This suggests that we can apply the same approach to our fractal.</p>
+					
+					<p>Even though the object hierarchy is flat the fractal parts do still have a recursive hierarchical relationship. This makes it fundamentally different than the graph, which has independent points. This hierarchical dependency makes it unsuitable for migration to a compute shader. But it's still possible to draw all parts of the same level via a single procedural command, avoiding the overhead of thousands of game objects.</p>
+					
+					<aside>
+						<h3>Would it be possible to update the fractal with a compute shader?</h3>
+						<div>
+							<p>Yes, but it is inconvenient because parent parts have to be updated before their children. This dependency requires that the work is split into multiple successive phases, like we're iterating over the levels one a a time. As most levels don't have many parts&mdash;from a GPU's point of view&mdash;its parallel processing power cannot be efficiently utilized.</p>
+							
+							<p>It is possible to apply a hybrid approach: use the CPU for all levels except the last, then use the GPU for the last one. But this tutorial focuses on the CPU, and at the end we'll find that the GPU will be the bottleneck, not the CPU.</p>
+						</div>
+					</aside>
+					
+					<section>
+						<h3>Removing Game Objects</h3>
+						
+						<p>We begin by removing the game objects. This also means that we no longer have <code>Transform</code> components to store world positions and rotations in. Instead we'll store these in additional fields of <code>FractalPart</code>.</p>
+						
+						<pre translate="no">	struct FractalPart { 
+		public Vector3 direction<ins>, worldPosition</ins>;
+		public Quaternion rotation<ins>, worldRotation</ins>;
+		<del>//public Transform transform;</del>
+	}</pre>
+						
+						<p>Remove all the game object code from <code>CreatePart</code>. We only need to keep its child index parameter, as the other parameters were only used when creating the game object.</p>
+						
+						<pre translate="no">	FractalPart CreatePart (<ins>int childIndex</ins>) {
+		<del>//var go = new GameObject("Fractal Part L" + levelIndex + " C" + childIndex);</del>
+		<del>//go.transform.localScale = scale * Vector3.one;</del>
+		<del>//go.transform.SetParent(transform, false);</del>
+		<del>//go.AddComponent&lt;MeshFilter>().mesh = mesh;</del>
+		<del>//go.AddComponent&lt;MeshRenderer>().material = material;</del>
+
+		return new FractalPart {
+			direction = directions[childIndex],
+			rotation = rotations[childIndex] <del>//,</del>
+			<del>//transform = go.transform</del>
+		};
+	}</pre>
+						
+						<p>We can now also reduce the method to a single expression.</p>
+						
+						<pre translate="no">	FractalPart CreatePart (int childIndex) <ins>=></ins> new FractalPart {
+		direction = directions[childIndex],
+		rotation = rotations[childIndex]
+	<ins>};</ins></pre>
+						
+						<p>Adjust the code in <code>Awake</code> accordingly. We no longer deal with the scale here from now on.</p>
+						
+						<pre translate="no">		<del>//float scale = 1f;</del>
+		parts[0][0] = CreatePart(<ins>0</ins>);
+		for (int li = 1; li &lt; parts.Length; li++) {
+			<del>//scale *= 0.5f;</del>
+			FractalPart[] levelParts = parts[li];
+			for (int fpi = 0; fpi &lt; levelParts.Length; fpi += 5) {
+				for (int ci = 0; ci &lt; 5; ci++) {
+					levelParts[fpi + ci] = CreatePart(<ins>ci</ins>);
+				}
+			}
+		}</pre>
+						
+						<p>In <code>Update</code> we now have to assign the root's rotation to its world rotation field instead of to a <code>Transform</code> component rotation.</p>
+						
+						<pre translate="no">		FractalPart rootPart = parts[0][0];
+		rootPart.rotation *= deltaRotation;
+		rootPart.<ins>worldRotation</ins> = rootPart.rotation;
+		parts[0][0] = rootPart;</pre>
+						
+						<p>The same adjustments need to be made for all other parts, both for their rotation and their position. We also reintroduce the decreasing scale here.</p>
+						
+						<pre translate="no">		<ins>float scale = 1f;</ins>
+		for (int li = 1; li &lt; parts.Length; li++) {
+			<ins>scale *= 0.5f;</ins>
+			FractalPart[] parentParts = parts[li - 1];
+			FractalPart[] levelParts = parts[li];
+			for (int fpi = 0; fpi &lt; levelParts.Length; fpi++) {
+				<del>//Transform parentTransform = parentParts[fpi / 5].transform;</del>
+				<ins>FractalPart parent = parentParts[fpi / 5];</ins>
+				FractalPart part = levelParts[fpi];
+				part.rotation *= deltaRotation;
+				part.<ins>worldRotation</ins> = <ins>parent.worldRotation</ins> * part.rotation;
+				part.<ins>worldPosition</ins> =
+					<ins>parent.worldPosition</ins> +
+					<ins>parent.worldRotation</ins> * (1.5f * <ins>scale</ins> * part.direction);
+				levelParts[fpi] = part;
+			}
+		}</pre>
+					</section>
+					
+					<section>
+						<h3>Transformation Matrices</h3>
+						
+						<p>The <code>Transform</code> components provide transformation matrices that are used for rendering. As our parts  no longer have these components we need to create the matrices ourselves. We'll store them in an array per level, just like we store the parts. Add a <code>Matrix4x4[][]</code> field for this and create all its arrays in <code>Awake</code> along with the other ones.</p>
+						
+						<pre translate="no">	FractalPart[][] parts;
+
+	<ins>Matrix4x4[][] matrices;</ins>
+
+	void Awake () {
+		parts = new FractalPart[depth][];
+		<ins>matrices = new Matrix4x4[depth][];</ins>
+		for (int i = 0, length = 1; i &lt; parts.Length; i++, length *= 5) {
+			parts[i] = new FractalPart[length];
+			<ins>matrices[i] = new Matrix4x4[length];</ins>
+		}
+
+		&hellip;
+	}</pre>
+						
+						<p>The simplest way to create a transformation matrix is to invoke the static <code>Matrix4x4.TRS</code> method with a position, rotation, and scale as arguments. It returns a <code>Matrix4x4</code> struct that we can copy into our arrays. The first is the root matrix in <code>Update</code>, created from its world position, world rotation, and a scale of one.</p>
+						
+						<pre translate="no">		parts[0][0] = rootPart;
+		<ins>matrices[0][0] = Matrix4x4.TRS(</ins>
+			<ins>rootPart.worldPosition, rootPart.worldRotation, Vector3.one</ins>
+		<ins>);</ins></pre>
+						
+						<aside>
+							<h3>What does TRS mean?</h3>
+							<div>
+								<p>It stands for translation-rotation-scale. Translation in this context means to reposition or offset.</p>
+							</div>
+						</aside>
+						
+						<p>Create all other matrices the same way in the loop, this time using the variable scale.</p>
+						
+						<pre translate="no">			scale *= 0.5f;
+			FractalPart[] parentParts = parts[li - 1];
+			FractalPart[] levelParts = parts[li];
+			<ins>Matrix4x4[] levelMatrices = matrices[li];</ins>
+			for (int fpi = 0; fpi &lt; levelParts.Length; fpi++) {
+				&hellip;
+				
+				<ins>levelMatrices[fpi] = Matrix4x4.TRS(</ins>
+					<ins>part.worldPosition, part.worldRotation, scale * Vector3.one</ins>
+				<ins>);</ins>
+			}</pre>
+						
+						<p>Entering play mode at this time doesn't show us a fractal, because we don't yet visualize the parts. But we do calculate their transformation matrices. If we let play mode run for a while with a fractal of depth 6 or greater, at some point Unity will begin logging errors. The errors tell use that quaternion-to-matrix conversions failed, because the input quaternion is invalid.</p>
+						
+						<p>The conversion fails because of floating point precision limitations. Successive tiny inaccuracies compound as we keep multiplying quaternions with each other, until the result is no longer recognized as a valid rotation. It is caused by the many very small rotations that we accumulate each update.</p>
+						
+						<p>The solution is to start with fresh quaternions each update. We can do this by storing the spin angle as a separate float field in <code>FractalPart</code>, instead of adjusting its local rotation.</p>
+						
+						<pre translate="no">	struct FractalPart { 
+		public Vector3 direction, worldPosition;
+		public Quaternion rotation, worldRotation;
+		<ins>public float spinAngle;</ins>
+	}</pre>
+						
+						<p>In <code>Update</code> we revert to the older approach of using a spin delta angle, which we then add to the root's spin angle. The root's world rotation becomes equal to its configured rotation applied on top of a new rotation around the Y axis equal to its current spin angle.</p>
+						
+						<pre translate="no">		<del>//Quaternion deltaRotation = Quaternion.Euler(0f, 22.5f * Time.deltaTime, 0f);</del>
+		<ins>float spinAngleDelta = 22.5f * Time.deltaTime;</ins>
+		FractalPart rootPart = parts[0][0];
+		<del>//rootPart.rotation *= deltaRotation;</del>
+		<ins>rootPart.spinAngle += spinAngleDelta;</ins>
+		rootPart.worldRotation =
+			rootPart.rotation <ins>* Quaternion.Euler(0f, rootPart.spinAngle, 0f)</ins>;
+		parts[0][0] = rootPart;</pre>
+						
+						<p>The same goes for all other parts, with their parent's world rotation applied on top.</p>
+						
+						<pre translate="no">				<del>//part.rotation *= deltaRotation;</del>
+				<ins>part.spinAngle += spinAngleDelta;</ins>
+				part.worldRotation =
+					parent.worldRotation *
+					<ins>(part.rotation * Quaternion.Euler(0f, part.spinAngle, 0f))</ins>;</pre>
+					</section>
+					
+					<section>
+						<h3>Compute Buffers</h3>
+						
+						<p>To render the parts we need to send their matrices to the GPU. We'll use compute buffers for this, like we did for the graph. The difference is that the CPU will fill the buffer this time, instead of the GPU and we use a separate buffer per level. Add a field for an array of buffers and create them in <code>Awake</code>. A 4&times;4 matrix has sixteen float values, so the stride of the buffers is sixteen times four bytes.</p>
+						
+						<pre translate="no">	<ins>ComputeBuffer[] matricesBuffers;</ins>
+
+	void Awake () {
+		parts = new FractalPart[depth][];
+		matrices = new Matrix4x4[depth][];
+		<ins>matricesBuffers = new ComputeBuffer[depth];</ins>
+		<ins>int stride = 16 * 4;</ins>
+		for (int i = 0, length = 1; i &lt; parts.Length; i++, length *= 5) {
+			parts[i] = new FractalPart[length];
+			matrices[i] = new Matrix4x4[length];
+			<ins>matricesBuffers[i] = new ComputeBuffer(length, stride);</ins>
+		}
+
+		&hellip;
+	}</pre>
+						
+						<p>We also have to release the buffer in a new <code>OnDisable</code> method. To make this work with hot reloads change <code>Awake</code> into <code>OnEnable</code> as well.</p>
+						
+						<pre translate="no">	void <ins>OnEnable</ins> () {
+		parts = new FractalPart[depth][];
+		matrices = new Matrix4x4[depth][];
+		matricesBuffers = new ComputeBuffer[depth];
+		&hellip;
+	}
+
+	<ins>void OnDisable () {</ins>
+		<ins>for (int i = 0; i &lt; matricesBuffers.Length; i++) {</ins>
+			<ins>matricesBuffers[i].Release();</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>To keep things tidy also get rid of all array references at the end of <code>OnDisable</code>. We create new ones in <code>OnEnable</code> anyway.</p>
+						
+						<pre translate="no">	void OnDisable () {
+		for (int i = 0; i &lt; matricesBuffers.Length; i++) {
+			matricesBuffers[i].Release();
+		}
+		<ins>parts = null;</ins>
+		<ins>matrices = null;</ins>
+		<ins>matricesBuffers = null;</ins>
+	}</pre>
+						
+						<p>This also makes it possible to easily support changing the fractal depth via the inspector while in play mode, by adding an <code>OnValidate</code> method that simply invokes <code>OnDisable</code> and <code>OnEnable</code> after each other, resetting the fractal. The <code>OnValidate</code> method gets invoked after a change has been made to the component via the inspector or an undo/redo action.</p>
+						
+						<pre translate="no">	<ins>void OnValidate () {</ins>
+		<ins>OnDisable();</ins>
+		<ins>OnEnable();</ins>
+	<ins>}</ins></pre>
+						
+						<p>However, this can only work when we're in play mode and the fractal is currently active. We can verify this by checking whether one of the arrays isn't <code>null</code>, via the <code>!=</code> not-equal operator.</p>
+						
+						<pre translate="no">	void OnValidate () {
+		<ins>if (parts != null) {</ins>
+			OnDisable();
+			OnEnable();
+		<ins>}</ins>
+	}</pre>
+						
+						<p>Besides that <code>OnValidate</code> also gets invoked if we disable the component via the inspector. This would trigger a reset of the fractal followed by it getting disabled again. We can avoid that by also checking whether the <code>Fractal</code> component is enabled, via its <code>enabled</code> property. Only if both conditions are true we reset the fractal. We combine the checks to form a single conditional expression with the boolean <code>&amp;&amp;</code> AND operator.</p>
+						
+						<pre translate="no">		if (parts != null <ins>&amp;&amp; enabled</ins>) {
+			OnDisable();
+			OnEnable();
+		}</pre>
+						
+						<p>Finally, to upload the matrices to the GPU invoke <code>SetData</code> on all buffers at the end of <code>Update</code>, with the corresponding matrices array as an argument.</p>
+						
+						<pre translate="no">	void Update () {
+		&hellip;
+
+		<ins>for (int i = 0; i &lt; matricesBuffers.Length; i++) {</ins>
+			<ins>matricesBuffers[i].SetData(matrices[i]);</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<aside>
+							<h3>Shouldn't we avoid sending data to the GPU?</h3>
+							<div>
+								<p>As much as possible, yes. But we have no choice in this case, we have to send the matrices to the GPU somehow and this is the most efficient way to do it.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Shaders</h3>
+						
+						<p>We now have to again create a shader that supports procedural drawing. To set the object-to-world matrix we can take the code from <em translate="no">PointGPU.hlsl</em> of the graph, copy it to a new <em translate="no">FractalGPU.hlsl</em> file and adapt it to our fractal. This means that instead of a <code class="shader">float3</code> positions buffer it uses a <code class="shader">float4x4</code> matrices buffer. And we can directly copy the matrix, instead of having to construct it in the shader.</p>
+						
+						<pre class="shader" translate="no">#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)
+	StructuredBuffer&lt;<ins>float4x4</ins>> <ins>_Matrices</ins>;
+#endif
+
+<del>//float _Step;</del>
+
+void ConfigureProcedural () {
+	#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)
+		<ins>unity_ObjectToWorld = _Matrices[unity_InstanceID];</ins>
+	#endif
+}
+
+void ShaderGraphFunction_float (float3 In, out float3 Out) {
+	Out = In;
+}
+
+void ShaderGraphFunction_half (half3 In, out half3 Out) {
+	Out = In;
+}</pre>
+						
+						<p>The URP shader graph for our fractal is also a simplified copy of the <em translate="no">Point URP GPU</em> shader graph. The vertex position nodes are exactly the same, except that we now have to rely on the <em translate="no">FractalGPU</em> HLSL file. And instead of coloring based on the world position a single <em>Base Color</em> color property suffices.</p>
+						
+						<figure>
+							<img src="procedural-drawing/shader-graph.png" width="650" height="310">
+							<figcaption>Fractal shader graph.</figcaption>
+						</figure>
+						
+						<p>The <abbr title="Built-in Render Pipeline">BRP</abbr> surface shader is also simpler than its graph equivalent. It needs a different name, include the correct file, and a <em>BaseColor</em> color property for its albedo. The color property works like smoothness, except with <code class="shader">Color</code> instead of a range and a four-component default value. I kept the world position in the <code class="shader">Input</code> struct even through it's no longer needed, because an empty struct doesn't compile.</p>
+						
+						<pre class="shader" translate="no">Shader <ins>"Fractal/Fractal Surface GPU"</ins> {
+
+	Properties {
+		<ins>_BaseColor ("Base Color", Color) = (1.0, 1.0, 1.0, 1.0)</ins>
+		_Smoothness ("Smoothness", Range(0,1)) = 0.5
+	}
+	
+	SubShader {
+		CGPROGRAM
+		#pragma surface ConfigureSurface Standard fullforwardshadows addshadow
+		#pragma instancing_options assumeuniformscaling procedural:ConfigureProcedural
+		#pragma editor_sync_compilation
+
+		#pragma target 4.5
+		
+		#include <ins>"FractalGPU.hlsl"</ins>
+
+		struct Input {
+			float3 worldPos;
+		};
+
+		<ins>float4 _BaseColor;</ins>
+		float _Smoothness;
+
+		void ConfigureSurface (Input input, inout SurfaceOutputStandard surface) {
+			<ins>surface.Albedo = _BaseColor.rgb;</ins>
+			<ins>surface.Smoothness = _Smoothness;</ins>
+		}
+		ENDCG
+	}
+
+	FallBack "Diffuse"
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Drawing</h3>
+						
+						<p>Finally, to draw the fractal again we have to keep track of the identifier for the matrices buffer in <code>Fractal</code>.</p>
+						
+						<pre translate="no">	<ins>static readonly int matricesId = Shader.PropertyToID("_Matrices");</ins></pre>
+						
+						<p>Then at the end of <code>Update</code> invoke <code>Graphics.DrawMeshInstancedProcedural</code>, once for each level, with the correct buffer. We'll simply use the same bounds for all levels: a cube with an edge length of three.</p>
+						
+						<pre translate="no">		<ins>var bounds = new Bounds(Vector3.zero, 3f * Vector3.one);</ins>
+		for (int i = 0; i &lt; matricesBuffers.Length; i++) {
+			<ins>ComputeBuffer buffer = matricesBuffers[i];</ins>
+			<ins>buffer</ins>.SetData(matrices[i]);
+			<ins>material.SetBuffer(matricesId, buffer);</ins>
+			<ins>Graphics.DrawMeshInstancedProcedural(mesh, 0, material, bounds, buffer.count);</ins>
+		}</pre>
+						
+						<aside>
+							<h3>Why use 3 for the bounds size?</h3>
+							<div>
+								<p>The diameter of the root level is 1. The diameter of next level is 0.5, which extend in all directions. So the maximum diameter of the first two levels is 1 + 0.5 + 0.5 = 2. The third level adds 0.25 on both sides, so the total diameter becomes 2.5, and so on. Thus the diameter of a fractal with some large depth is equal to `1+1+1/2+1/4+1/8+&hellip;=2+sum_(i=1)^n 1/2^i`.</p>
+								
+								<p>For a theoretical fractal with infinite depth the sum goes on forever, but it's a well-known convergent infinite sequence: `lim_(n->oo) sum_(i=1)^n 1/2^i = 1`. This makes intuitive sense, because every step you take from 0 towards 1 halves the distance you still need to go, so you'll get closer every step but will never reach 1 in a finite amount of steps. So our fractal is guaranteed to fit in a bounding box that is three units wide.</p>
+							</div>
+						</aside>
+						
+						<figure>
+							<img src="procedural-drawing/only-deepest-level.png" width="330" height="320">
+							<figcaption>Only deepest level.</figcaption>
+						</figure>
+						
+						<p>Our fractal appears again, but it looks like only the deepest levels get rendered. The frame debugger will show that all levels do get rendered, but they all incorrectly use the matrices from the last level. This happens because the draw commands get queued to be executed later. So whichever buffer we set last is the one that get used by all of them.</p>
+						
+						<p>The solution is to link each buffer to a specific draw command. We can do this via a <code>MaterialPropertyBlock</code> object. Add a static field for it and create a new instance of it in <code>OnEnable</code>, if one doesn't exist yet.</p>
+						
+						<pre translate="no">	<ins>static MaterialPropertyBlock propertyBlock;</ins>
+
+	&hellip;
+	
+	void OnEnable () {
+		&hellip;
+
+		<ins>if (propertyBlock == null) {</ins>
+			<ins>propertyBlock = new MaterialPropertyBlock();</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>Assigning something only when the current value is <code>null</code> can be simplified to a single expression by using the <code>??=</code> null-coalescing assignment.</p>
+						
+						<pre translate="no">		<del>//if (propertyBlock == null) {</del>
+		propertyBlock <ins>??=</ins> new MaterialPropertyBlock();
+		<del>//}</del></pre>
+						
+						<p>In <code>Update</code> set the buffer on the property block instead of directly on the material. Then pass the block as additional argument to <code>Graphics.DrawMeshInstancedProcedural</code>. This will make Unity copy the configuration that the block has at that time and use it for that specific draw command, overruling what was set for the material.</p>
+						
+						<pre translate="no">			ComputeBuffer buffer = matricesBuffers[i];
+			buffer.SetData(matrices[i]);
+			<ins>propertyBlock</ins>.SetBuffer(matricesId, buffer);
+			Graphics.DrawMeshInstancedProcedural(
+				mesh, 0, material, bounds, buffer.count<ins>, propertyBlock</ins>
+			);
+		}</pre>
+						
+						<aside>
+							<h3>Why does the fractal flicker in the scene window?</h3>
+							<div>
+								<p>This is an editor timing bug that might happen in scene windows, but not in game windows nor in builds. Turning on VSync for the game window can make it better or worse, depending on your editor layout.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Performance</h3>
+						
+						<p>Now that our fractal is complete again let's measure its performance once more, initially while rendering spheres.</p>
+						
+						<figure>
+							<img src="procedural-drawing/profiler-build-urp-depth-6.png" width="460" height="190">
+							<figcaption>Profiling a build with URP and fractal depth 6.</figcaption>
+						</figure>
+						
+						<table>
+							<thead>
+								<tr><th>Depth</th><th>MS</th><th>URP</th><th><abbr title="Built-in Render Pipeline">BRP</abbr></th></tr></thead>
+							<tbody>
+								<tr><td>6</td><td>0.7</td><td>160</td><td>96</td></tr>
+								<tr><td>7</td><td>3</td><td>54</td><td>35</td></tr>
+								<tr><td>8</td><td>13</td><td>11</td><td>7</td></tr>
+							</tbody>
+						</table>
+						
+						<p><code>Update</code> now takes a lot less time. In terms of FPS there's been a slight improvement for depths 6 and 8, while depth 7 renders almost twice as fast as before. URP is getting close to 60FPS. And when we try cubes we see a significant improvement.</p>
+						
+						<table>
+							<thead>
+								<tr><th>Depth</th><th>MS</th><th>URP</th><th><abbr title="Built-in Render Pipeline">BRP</abbr></th></tr></thead>
+							<tbody>
+								<tr><td>6</td><td>0.4</td><td>470</td><td>175</td></tr>
+								<tr><td>7</td><td>2</td><td>365</td><td>155</td></tr>
+								<tr><td>8</td><td>11</td><td>86</td><td>85</td></tr>
+							</tbody>
+						</table>
+						
+						<p>There is a massive frame rate increase, which makes it clear that the GPU is now the bottleneck. The <code>Update</code> time has also decreased a bit. This might be because setting the buffer data stalled more when rendering spheres, as the CPU is forced to wait until the GPU is finished reading from the buffers.</p>
+					</section>
+					
+					<section>
+						<h3>Moving with the Game Object</h3>
+						
+						<p>A side effect of creating our own transformation matrices is that our fractal now ignores the transformation of its game object. We can fix this by incorporating the game object's rotation and position into the root object matrix in <code>Update</code>.</p>
+						
+						<pre translate="no">		rootPart.worldRotation =
+			<ins>transform.rotation *</ins>
+			<ins>(</ins>rootPart.rotation * Quaternion.Euler(0f, rootPart.spinAngle, 0f)<ins>)</ins>;
+		<ins>rootPart.worldPosition = transform.position;</ins></pre>
+						
+						<p>We can also apply the game object's scale. However, if a game object is part of a complex hierarchy that includes nonuniform scales along with rotations it could be subject to a non-affine transformation that causes it to shear. In this case it doesn't have a well-defined scale. For this reason <code>Transform</code> components do not have a simple world-space scale property. They have a <code>lossyScale</code> property instead, to indicate that it might not be an exact affine scale. We'll simple use the X component of that scale, ignoring any nonuniform scales.</p>
+						
+						<pre translate="no">		<ins>float objectScale = transform.lossyScale.x;</ins>
+		matrices[0][0] = Matrix4x4.TRS(
+			rootPart.worldPosition, rootPart.worldRotation, <ins>objectScale *</ins> Vector3.one
+		);
+
+		float scale = <ins>objectScale</ins>;</pre>
+						
+						<p>Also apply the adjusted world position and scale to the bounds.</p>
+						
+						<pre translate="no">		var bounds = new Bounds(<ins>rootPart.worldPosition</ins>, 3f <ins>* objectScale</ins> * Vector3.one);</pre>
+						
+					</section>
+				</section>
+				
+				<section>
+					<h2>Job System</h2>
+					
+					<p>Our C# code is about as fast as it can be at this point, but we can switch to a different approach, taking advantage of Unity's job system. This should be able to reduce our <code>Update</code> time further, improving performance or making room for more code to run without slowing things down.</p>
+					
+					<p>The idea of the job system is to leverage the parallel processing power of the CPU as efficiently as possible, taking advantage of its multiple cores and special SIMD instructions, which stands for single-instruction-multiple-data. This is achieved by defining pieces of work as separate jobs. These jobs are written like regular C# code, but then get compiled with Unity's Burst compiler, which performs aggressive optimization and parallelization, made possible by enforcing a few structural constraints that regular C# doesn't have.</p>
+					
+					<section>
+						<h3>Burst Package</h3>
+						
+						<p>Burst exists as a separate package, so install the latest version for your Unity version via the package manager. In my case that's Burst version 1.4.8. It has a dependency on the Mathematics package version 1.2.1, so that package will be installed as well or upgraded to version 1.2.1.</p>
+						
+						<p>To create a job for <code>Fractal</code> we have to use code from the <code>Unity.Burst</code>, <code>Unity.Collections</code>, and <code>Unity.Jobs</code> namespaces.</p>
+						
+						<pre translate="no"><ins>using Unity.Burst;</ins>
+<ins>using Unity.Collections;</ins>
+<ins>using Unity.Jobs;</ins>
+using UnityEngine;</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Native Arrays</h3>
+						
+						<p>Jobs cannot work with objects, only simple values and struct types are allowed. It's still possible to use arrays, but we have to convert them to the generic <code>NativeArray</code> type. This is a struct that contains a pointer to native machine memory, which exists outside the regular managed memory heap used by our C# code. So it is sidestepping the default memory management overhead.</p>
+						
+						<p>To create a native array of fractal parts we need to use the <code>NativeArray&lt;FractalPart></code> type. As we use multiple such arrays what we really need is an array of that. The same goes for the multiple arrays of matrices.</p>
+						
+						<pre translate="no">	<ins>NativeArray&lt;FractalPart>[]</ins> parts;
+
+	<ins>NativeArray&lt;Matrix4x4>[]</ins> matrices;</pre>
+						
+						<p>We now have to create new arrays of native arrays at the beginning of <code>OnEnable</code>.</p>
+						
+						<pre translate="no">		parts = new <ins>NativeArray&lt;FractalPart>[depth]</ins>;
+		matrices = new <ins>NativeArray&lt;Matrix4x4>[depth]</ins>;</pre>
+						
+						<p>And create new native arrays for each level, using the constructor method of the appropriate <code>NativeArray</code> types, which require two arguments. The first argument is the size of the array. The second argument indicates how long the native array is expected to exist. As we keep using the same arrays every frame we'll have to use <code>Allocator.Persistent</code>.</p>
+						
+						<pre translate="no">		for (int i = 0, length = 1; i &lt; parts.Length; i++, length *= 5) {
+			parts[i] = new <ins>NativeArray&lt;FractalPart>(length, Allocator.Persistent)</ins>;
+			matrices[i] = new <ins>NativeArray&lt;Matrix4x4>(length, Allocator.Persistent)</ins>;
+			matricesBuffers[i] = new ComputeBuffer(length, stride);
+		}</pre>
+						
+						<p>We also have to change the variable type in the part creation loop to match.</p>
+						
+						<pre translate="no">		parts[0][0] = CreatePart(0);
+		for (int li = 1; li &lt; parts.Length; li++) {
+			<ins>NativeArray&lt;FractalPart></ins> levelParts = parts[li];
+			&hellip;
+		}</pre>
+						
+						<p>And in the loop inside <code>Update</code> as well.</p>
+						
+						<pre translate="no">			<ins>NativeArray&lt;FractalPart></ins> parentParts = parts[li - 1];
+			<ins>NativeArray&lt;FractalPart></ins> levelParts = parts[li];
+			<ins>NativeArray&lt;Matrix4x4></ins> levelMatrices = matrices[li];</pre>
+						
+						<p>Finally, just like for compute buffers we have to explicitly free their memory when we're done with them, in <code>OnDisable</code>. We do this by invoking <code>Dispose</code> on the native arrays.</p>
+						
+						<pre translate="no">		for (int i = 0; i &lt; matricesBuffers.Length; i++) {
+			matricesBuffers[i].Release();
+			<ins>parts[i].Dispose();</ins>
+			<ins>matrices[i].Dispose();</ins>
+		}</pre>
+						
+						<p>At this point the fractal still works the same. The only difference is that we're now using native arrays instead of managed C# arrays. This might perform worse, because accessing native arrays from managed C# code has a little extra overhead. This overhead won't exist once we use a Burst-compiled job.</p>
+					</section>
+					
+					<section>
+						<h3>Job Struct</h3>
+						
+						<p>To define a job we have to create a struct type that implements a job interface. Implementing an interface is like extending a class, except that instead of inheriting existing functionality the interface demands that you include specific functionality yourself. We'll create an <code>UpdateFractalLevelJob</code> struct inside <code>Fractal</code> that implements <code>IJobFor</code>, which is the most flexible job interface type.</p>
+						
+						<pre translate="no">public class Fractal : MonoBehaviour {
+	
+	<ins>struct UpdateFractalLevelJob : IJobFor {}</ins>
+	
+	&hellip;
+}</pre>
+						
+						<aside>
+							<h3>Why is the interface named <code>IJobFor</code>?</h3>
+							<div>
+								<p>The convention is to prefix all interface types with an <em translate="no">I</em> which stands for interface, so the interface is named <em translate="no">JobFor</em> with an <em translate="no">I</em> prefix. It's a job interface, specifically one that is used for functionality that runs inside <code>for</code> loops.</p>
+							</div>
+						</aside>
+						
+						<p>The <code>IJobFor</code> interface requires that we add an <code>Execute</code> method that has an integer parameter and returns nothing. The parameter represents the iterator variable of a <code>for</code> loop. Everything that an interface enforces must be public, so this method must be public.</p>
+						
+						<pre translate="no">	struct UpdateFractalLevelJob : IJobFor {
+
+		<ins>public void Execute (int i) {}</ins>
+	}</pre>
+						
+						<p>The idea is that the <code>Execute</code> method replaces the code of the innermost loop of our <code>Update</code> method. To make this work all variables that are required for that code must be added as fields to <code>UpdateFractalLevelJob</code>. Make them public so we can set them later.</p>
+						
+						<pre translate="no">	struct UpdateFractalLevelJob : IJobFor {
+
+		<ins>public float spinAngleDelta;</ins>
+		<ins>public float scale;</ins>
+
+		<ins>public NativeArray&lt;FractalPart> parents;</ins>
+		<ins>public NativeArray&lt;FractalPart> parts;</ins>
+
+		<ins>public NativeArray&lt;Matrix4x4> matrices;</ins>
+
+		public void Execute (int i) {}
+	}</pre>
+						
+						<p>We can go a step further and use the <code>ReadOnly</code> and <code>WriteOnly</code> attributes to indicate that we only need partial access to some of the native arrays. The innermost loop only reads from the parents array and only writes to the matrices array. It both reads from and writes to the parts array, which is the default assumption so doesn't have a corresponding attribute.</p>
+						
+						<pre translate="no">		<ins>[ReadOnly]</ins>
+		public NativeArray&lt;FractalPart> parents;
+
+		public NativeArray&lt;FractalPart> parts;
+
+		<ins>[WriteOnly]</ins>
+		public NativeArray&lt;Matrix4x4> matrices;</pre>
+						
+						<p>If multiple processes are modifying the same data in parallel then it becomes arbitrary which does what first. If two processes set the same array element the last one wins. If one process gets the same element that another sets, it either gets the old or the new value. The final result depends on the exact timing, over which we have no control, which can lead to inconsistent behavior that is very hard to detect and fix. These phenomena are known as race conditions. The <code>ReadOnly</code> attribute indicates that this data remains constant during the execution of the job, which means that processes can safely read from it in parallel because the result will always be the same.</p>
+						
+						<p>The compiler enforces that the job doesn't write to <code>ReadOnly</code> data and doesn't read from <code>WriteOnly</code> data. If we accidentally do so anyway the compiler will let us know that we made a semantic mistake.</p>					</section>
+					
+					<section>
+						<h3>Executing Jobs</h3>
+						
+						<p>The <code>Execute</code> method will replace the innermost loop of our <code>Update</code> method. Copy the relevant code into the method and adjust it where needed so it uses the job's fields and parameter.</p>
+						
+						<pre translate="no">		public void Execute (int i) {
+			FractalPart parent = <ins>parents</ins>[<ins>i</ins> / 5];
+			FractalPart part = <ins>parts</ins>[<ins>i</ins>];
+			part.spinAngle += spinAngleDelta;
+			part.worldRotation =
+				parent.worldRotation *
+				(part.rotation * Quaternion.Euler(0f, part.spinAngle, 0f));
+			part.worldPosition =
+				parent.worldPosition +
+				parent.worldRotation * (1.5f * scale * part.direction);
+			<ins>parts</ins>[<ins>i</ins>] = part;
+
+			<ins>matrices</ins>[<ins>i</ins>] = Matrix4x4.TRS(
+				part.worldPosition, part.worldRotation, scale * Vector3.one
+			);
+		}</pre>
+						
+						<p>Change <code>Update</code> so we create a new <code>UpdateFractalLevelJob</code> value and set all its fields in the level loop. Then change the innermost loop so it invokes the job's <code>Execute</code> method. This way we keep the exact same functionality, but with the code migrated to the job.</p>
+						
+						<pre translate="no">		for (int li = 1; li &lt; parts.Length; li++) {
+			scale *= 0.5f;
+			<ins>var job = new UpdateFractalLevelJob {</ins>
+				<ins>spinAngleDelta = spinAngleDelta,</ins>
+				<ins>scale = scale,</ins>
+				<ins>parents = parts[li - 1],</ins>
+				<ins>parts = parts[li],</ins>
+				<ins>matrices = matrices[li]</ins>
+			<ins>};</ins>
+			<del>//NativeArray&lt;FractalPart> parentParts = parts[li - 1];</del>
+			<del>//NativeArray&lt;FractalPart> levelParts = parts[li];</del>
+			<del>//NativeArray&lt;Matrix4x4> levelMatrices = matrices[li];</del>
+			for (int fpi = 0; fpi &lt; <ins>parts[li]</ins>.Length; fpi++) {
+				<ins>job.Execute(fpi);</ins>
+			}
+		}</pre>
+						
+						<p>But we don't have to explicitly invoke the <code>Execute</code> method for every iteration. The idea is that we schedule the job so it performs the loop on its own. This is done by invoking <code>Schedule</code> on it, with two arguments. The first is how many iterations we want, which is equal to the length of the parts array that we're processing. The second is a <code>JobHandle</code> struct value, which is used to enforce a sequential dependency between jobs. We'll initially use the default value for this struct&mdash;via the <code>default</code> keyword&mdash;which enforces no constraints.</p>
+						
+						<pre translate="no">			var job = new UpdateFractalLevelJob {
+				&hellip;
+			};
+			<ins>job.Schedule(parts[li].Length, default);</ins>
+			<del>//for (int fpi = 0; fpi &lt; parts[li].Length; fpi++) {</del>
+			<del>//	job.Execute(fpi);</del>
+			<del>//}</del></pre>
+						
+						<p><code>Schedule</code> doesn't immediately run the job, it only schedules it for later processing. It returns a <code>JobHandle</code> value that can be used to track the job's progress. We can delay further execution of our code until the job is finished by invoking <code>Complete</code> on the handle.</p>
+						
+						<pre translate="no">			job.Schedule(parts[li].Length, default)<ins>.Complete()</ins>;</pre>
+					</section>
+					
+					<section>
+						<h3>Scheduling</h3>
+						
+						<p>At this point we're scheduling and immediately waiting until the completion of a job per level. The result is that our fractal still gets updated like before, in a sequential manner, even though we've switched to using jobs. We can relax this somewhat by delaying completion until after we've scheduled all jobs. We do this by making jobs depend on one another, passing the last job handle along to the next when we schedule. Then we invoke <code>Complete</code> after we finish the loop, which triggers execution of the entire job sequence.</p>
+
+						<pre translate="no">		<ins>JobHandle jobHandle = default;</ins>
+		for (int li = 1; li &lt; parts.Length; li++) {
+			scale *= 0.5f;
+			var job = new UpdateFractalLevelJob {
+				&hellip;
+			};
+			<del>//job.Schedule(parts[li].Length, default).Complete();</del>
+			<ins>jobHandle = job.Schedule(parts[li].Length, jobHandle);</ins>
+		}
+		<ins>jobHandle.Complete();</ins></pre>
+						
+						<p>We no longer need to store individual jobs in a variable at this point, we only need to keep track of the last handle.</p>
+						
+						<pre translate="no">			<ins>jobHandle</ins> = new UpdateFractalLevelJob {
+				&hellip;
+			}<ins>.Schedule(parts[li].Length, jobHandle)</ins>;
+			<del>//jobHandle = job.Schedule(parts[li].Length, jobHandle);</del></pre>
+						
+						<p>The profiler will show us that the jobs can end up running on a worker thread instead of the main thread. But they might run on the main thread as well, because the main thread needs to wait for the jobs to finish anyway, so at this moment where the jobs run doesn't make a difference. Scheduled jobs can also end up running on different threads, though they still have a sequential dependency.</p>
+						
+						<figure>
+							<img src="job-system/scheduled-on-worker-thread.png" width="600" height="270">
+							<figcaption>Profiling a build with URP and fractal depth 8; main threads waits until worker thread completes.</figcaption>
+						</figure>
+						
+						<p>The benefit of bundling all jobs to run together and only waiting for the completion of the last one is that this makes it possible to delay waiting for completion. A common example is to schedule all jobs in <code>Update</code>, do some other stuff, and delay invoking <code>Complete</code> by doing so in a <code>LateUpdate</code> method, which gets invoking after all regular <code>Update</code> methods have finished. It's also possible to delay completion until the next frame, or even later. But we won't be doing that, as we need the jobs to complete every frame and have nothing else to do except upload the matrices to the GPU afterwards.</p>
+					</section>
+					
+					<section>
+						<h3>Burst Compilation</h3>
+						
+						<p>After all these changes we haven't seen any performance improvement yet. That's because we're currently not using the Burst compiler. We have to explicitly instruct Unity to compile our job struct with Burst, by attaching the <code>BurstCompile</code> attribute to it.</p>
+						
+						<pre translate="no">	<ins>[BurstCompile]</ins>
+	struct UpdateFractalLevelJob : IJobFor { &hellip; }</pre>
+						
+						<figure>
+							<img src="job-system/burst-compiled.png" width="600" height="270">
+							<figcaption>Compiled with Burst.</figcaption>
+						</figure>
+						
+						<p>The frame debugger now indicates that we're using the Burst-compiled versions of our jobs. They run a bit faster due to optimizations applied by Burst, but there isn't much gain yet at this point.</p>
+						
+						<p>You might notice that just after entering play mode in the editor performance is much worse. This happens because Burst compilation is on-demand in the editor, just like shader compilation is. When a job is first run it will be compiled by Burst while at the same time the regular C# compiled version is used to run the job. Once Burst compilation is finished the editor will switch to running the Burst version. We can enforce the editor to immediately compile the Burst version of a job when needed&mdash;stalling Unity until compilation is finished&mdash;by setting the <code>CompileSynchronously</code> property of the <code>BurstCompile</code> attribute to <code>true</code>. Properties of attributes can be set by including their assignment in their argument list.</p>
+						
+						<pre translate="no">	[BurstCompile<ins>(CompileSynchronously = true)</ins>]</pre>
+						
+						<p>Just like for shader compilation this doesn't influence builds because everything is compiled during the build process.</p>
+						
+					</section>
+					
+					<section>
+						<h3>Burst Inspector</h3>
+						
+						<p>You can inspect the assembly code generated by Burst via the <em translate="no">Burst Inspector</em> window, opened via <em translate="no">Jobs / Burst / Open Inspector...</em>. This shows you the low-level instructions generated by Burst for all jobs in the project. Our job will be included in the <em translate="no">Compile Targets</em> list as <em translate="no">Fractal.UpdateFractalLevelJob - (IForJob)</em>.</p>
+						
+						<p>I won't analyze the generated code in detail, the performance improvements have to speak for themselves. But it's useful to switch to the rightmost display mode, which is <em translate="no">.LVM IR Optimization Diagnostic</em> to get an idea of what Burst does. It currently contains these remarks for me:</p>
+						
+						<pre translate="no"><small>Remark: IJobFor.cs:43:0: loop not vectorized: loop control flow is€ not understood by vectorizer</small>
+<small>Remark: NativeArray.cs:162:0: Stores SLP vectorized with cost -3 and with tree size 2</small></pre>
+						
+						<p>The first remark means that Burst couldn't rewrite the code to merge multiple iterations by using SIMD instructions. The simplest example is a job that does something like <code>data[i] = 2f * data[i]</code>. Using SIMD instructions, Burst can change that so this operation could be performed for multiple indices at once, up to eight at the same time in the ideal case. Merging operations this way is known as vectorization, because instructions on single values are replaced with instructions on vectors.</p>
+						
+						<p>When Burst indicates that the control flow is not understood it means that there are complex conditional blocks. We don't have those, but by default Burst safety checks are enabled, which enforce read/write attributes and detect other dependency problems between jobs, like trying to run two in parallel that write to the same arrays. These checks are for development and are removed from builds. We can also deactivate them for the Burst inspector to see the final result by disabling the <em translate="no">Safety Checks</em> toggle. You can also disable them per job, or for the entire project via the <em translate="no">Jobs / Burst / Safety Checks</em> menu. You typically keep safety checks enabled in the editor and test performance in builds, unless you want to maximize editor performance.</p>
+						
+						<pre translate="no">Remark: IJobFor.cs:43:0: loop not vectorized: call instruction cannot be vectorized
+Remark: NativeArray.cs:148:0: Stores SLP vectorized with cost -3 and with tree size 2</pre>
+						
+						<p>Without safely checks Burst still cannot vectorise the loop, this time because a call instruction gets in the way. This means that there is a method invocation that Burst cannot optimize away, which can never be vectorized.</p>
+						
+						<p>The second remark indicates that Burst found a way to vectorize multiple independent operations into a single SIMD instruction. For example, multiple additions of independent values got merged into a single vector addition. The cost of &minus;3 indicates that this effectively eliminated three instructions.</p>
+						
+						<aside>
+							<h3>What does SLP mean?</h3>
+							<div>
+								<p>It's shorthand for superword-level parallelism.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Mathematics Library</h3>
+						
+						<p>The code that we're currently using isn't optimized for Burst. The call instructions that Burst couldn't optimize away correspond to static <code>Quaternion</code> methods that we invoke. Burst is specifically optimized to work with Unity's Mathematics library, which is designed with vectorization in mind.</p>
+						
+						<p>The Mathematics library code is contained in the <code>Unity.Mathematics</code> namespace.</p>
+						
+						<pre translate="no">using Unity.Jobs;
+<ins>using Unity.Mathematics;</ins>
+using UnityEngine;</pre>
+						
+						<p>The library is designed to resembles shader mathematics code. The idea is to statically use the <code>Unity.Mathematics.math</code> type, just like we statically used <code>UnityEngine.Mathf</code> in the function library for our graph.</p>
+						
+						<pre translate="no">using Unity.Mathematics;
+using UnityEngine;
+
+<ins>using static Unity.Mathematics.math;</ins></pre>
+						
+						<p>However, this will cause a conflict when trying to invoke some methods on the <code>float4x4</code> and <code>quaternion</code> types, as <code>math</code> has methods with the exact same name as those types. This will make the compiler complain that we're trying to invoke a method on a method, which is impossible. To avoid that add <code>using</code> statements to indicate that when we write those words they should be interpreted as the types by default. That's done by writing <code>using</code> followed by a label, an assignment, and a fully-qualified type. We simply use the type names for the labels, though it is possible to use different labels.</p>
+						
+						<pre translate="no">using static Unity.Mathematics.math;
+<ins>using float4x4 = Unity.Mathematics.float4x4;</ins>
+<ins>using quaternion = Unity.Mathematics.quaternion;</ins></pre>
+						
+						<p>Now replace all usage of <code>Vector3</code> with <code>float3</code>, except for the vector that we use to scale the bounds in <code>Update</code>. I won't list all these changes and we'll fix the errors in a moment. Then also replace all usage of <code>Quaternion</code> with <code>quaternion</code>. Note that the only difference is that the Mathematics type isn't capitalized. After that replace all usage of <code>Matrix4x4</code> with <code>float4x4</code>.</p>
+						
+						<p>After that's done replace the vector direction properties of the <code>directions</code> array with the corresponding methods from <code>math</code>.</p>
+						
+						<pre translate="no">	static float3[] directions = {
+		<ins>up()</ins>, <ins>right()</ins>, <ins>left()</ins>, <ins>forward()</ins>, <ins>back()</ins>
+	};</pre>
+						
+						<p>We also have to adjust the initialization of the <code>rotations</code> array. The Mathematics library works with radians instead of degrees, so change all instances of <code>90f</code> with <code>0.5f * PI</code>. Besides that <code>quaternion</code> has separate methods for creating rotations around either the X, Y, or Z axis, which are more efficient than the general-purpose <code>Euler</code> method.</p>
+						
+						<pre translate="no">	static quaternion[] rotations = {
+		quaternion.identity,
+		quaternion.<ins>RotateZ(-0.5f * PI)</ins>, quaternion.<ins>RotateZ(0.5f * PI)</ins>,
+		quaternion.<ins>RotateX(0.5f * PI)</ins>, quaternion.<ins>RotateX(-0.5f * PI)</ins>
+	};</pre>
+						
+						<p>We have to convert the spin angle delta in <code>Update</code> to radians as well.</p>
+						
+						<pre translate="no">		float spinAngleDelta = <ins>0.125f * PI</ins> * Time.deltaTime;</pre>
+						
+						<p>The next step is to adjust <code>UpdateFractalLevelJob.Execute</code>. First replace the <code>Euler</code> method invocation with the faster <code>RotateY</code> variant. Then replace all multiplications involving quaternions with invocations of the <code>mul</code> method. Finally, we can create a uniform scale vector by invoking the <code>math.float3€</code> method with the scale as a single argument.</p>
+						
+						<pre translate="no">			part.worldRotation = <ins>mul(</ins>parent.worldRotation<ins>,</ins>
+				<ins>mul(</ins>part.rotation<ins>,</ins> quaternion.<ins>RotateY(part.spinAngle))</ins>
+			<ins>)</ins>;
+			part.worldPosition =
+				parent.worldPosition +
+				<ins>mul(</ins>parent.worldRotation<ins>,</ins> 1.5f * scale * part.direction);
+			parts[i] = part;
+
+			matrices[i] = float4x4.TRS(
+				part.worldPosition, part.worldRotation, <ins>float3€(scale)</ins>
+			);</pre>
+						
+						<p>Adjust the update code for the root part in <code>Update</code> i in the same way.</p>
+						
+						<pre translate="no">		rootPart.worldRotation = <ins>mul(</ins>transform.rotation<ins>,</ins>
+			<ins>mul(</ins>rootPart.rotation<ins>,</ins> quaternion.<ins>RotateY(rootPart.spinAngle))</ins>
+		<ins>)</ins>;
+		rootPart.worldPosition = transform.position;
+		parts[0][0] = rootPart;
+		float objectScale = transform.lossyScale.x;
+		matrices[0][0] = float4x4.TRS(
+			rootPart.worldPosition, rootPart.worldRotation, <ins>float3€(objectScale)</ins>
+		);</pre>
+						
+						<aside>
+							<h3>Don't the <code>Transform</code> position and rotation have the wrong types?</h3>
+							<div>
+								<p>Indeed, but there are implicit conversions between the <code>Vector3</code> and <code>float3</code> types and between the <code>Quaternion</code> and <code>quaternion</code> types.</p>
+							</div>
+						</aside>
+						
+						<p>At this point the Burst inspector will no longer complain about the call instruction (note: it might still complain in more recent Unity versions, but this isn't a big issue). It still cannot vectorize the loop, because a return type cannot be vectorized. This is the case because our data is too large to vectorize multiple iterations of our loop. This is fine, Burst can still vectorize lots of operations of a single iteration because we use the Mathematics library, although the Burst inspector won't mention this.</p>
+						
+						<pre translate="no"><small>Remark: quaternion.cs:330:0: loop not vectorized: instruction return type cannot be vectorized</small>
+<small>Remark: NativeArray.cs:162:0: Stores SLP vectorized with cost -6 and with tree size 2</small></pre>
+						
+						<p>At this point <code>Update</code> only takes 5.5ms on average in a build, for a depth 8 fractal. So we've roughly doubled our update speed compared to the non-job approach. We can go even faster by enabling more Burst optimizations, by passing two arguments to the <code>BurstCompile</code> constructor method. These are regular constructor arguments and must be written before the property assignment.</p>
+						
+						<p>We'll use <code>FloatPrecision.Standard</code> for the first argument and <code>FloatMode.Fast</code> for the second argument. The fast mode allows Burst to reorder mathematical operations, for example rewriting <code>a + b * c</code> to <code>b * c + a</code>. This can improve performance because there are madd&mdash;multiply-add&mdash;instructions, which are faster to use than a separate add instruction followed by a multiplication. The shader compiler does this by default. Often reordering operations makes no logical difference, but because of floating-point limitations changing the order will produce slightly different results. You can assume that these differences don't matter, so always enable this optimization unless you have a good reason not to.</p>
+						
+						<pre translate="no">	[BurstCompile(<ins>FloatPrecision.Standard, FloatMode.Fast,</ins> CompileSynchronously = true)]</pre>
+						
+						<p>The result is a further decrease of the update duration, down to roughly 4.5ms on average.</p>
+						
+						<aside>
+							<h3>What about <code>FloatPrecision</code>?</h3>
+							<div>
+								<p>The <code>FloatPrecision</code> argument controls the precision of the <code>sin</code> and <code>cos</code> methods. We don't use those directly but they are used when creating quaternions. Lowering the trigonometric precision can speed things up, but in my case didn't make a noticeable difference.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Sending Less Data</h3>
+						
+						<p>The bottom row of our transformation matrices always contains the same vector: (0, 0, 0, 1). As it's always the same we can discard it, reducing the size of our matrices data by 25%. This means both less memory usage and less data transfer from CPU to GPU.</p>
+						
+						<p>Begin by replacing all usage of <code>float4x4</code> with <code>float3x4</code>, which represents a matrix with three rows and four columns. Then decrease the stride of the compute buffer from sixteen to twelve floats in <code>OnEnable</code>.</p>
+						
+						<pre translate="no">		int stride = <ins>12</ins> * 4;</pre>
+						
+						<p>There is no <code>TRS</code> method for <code>float3x4</code>, we have to assemble the matrix ourselves in <code>Execute</code>. This is done by first creating a 3&times;3 matrix for rotation and scale, by invoking <code>float3x3€</code> with the rotation, then factoring the scale into it. The final matrix is created by invoking <code>float3x4€</code> with four column vectors, which are the three columns of the 3&times;3 matrix&mdash;stored in its <code>c0</code>, <code>c1</code>, and <code>c2</code> fields&mdash;followed by the part's position.</p>
+						
+						<pre translate="no">			<ins>float3x3 r = float3x3€(part.worldRotation) * scale;</ins>
+			matrices[i] = <ins>float3x4€(r.c0, r.c1, r.c2, part.worldPosition)</ins>;</pre>
+						
+						<p>Do the same for the root part in <code>Update</code>.</p>
+						
+						<pre translate="no">		<ins>float3x3 r = float3x3€(rootPart.worldRotation) * objectScale;</ins>
+		matrices[0][0] = <ins>float3x4€(r.c0, r.c1, r.c2, rootPart.worldPosition)</ins>;</pre>
+						
+						<p>As we're not invoking a method on the <code>float3x4</code> type there is no conflict with the <code>math.float3x4€</code> method, so we don't need a <code>using</code> statement for it, nor for <code>float4x4</code>.</p>
+						
+						<pre translate="no"><del>//using float3x4 = Unity.Mathematics.float3x4;</del></pre>
+						
+						<p>Finally, adjust <code class="shader">ConfigureProcedural</code> so we copy the matrix row by row, adding the missing one.</p>
+						
+						<pre class="shader" translate="no">#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)
+	StructuredBuffer&lt;<ins>float3x4</ins>> _Matrices;
+#endif
+
+void ConfigureProcedural () {
+	#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)
+		<ins>float3x4 m</ins> = _Matrices[unity_InstanceID];
+		<ins>unity_ObjectToWorld._m00_m01_m02_m03 = m._m00_m01_m02_m03;</ins>
+		<ins>unity_ObjectToWorld._m10_m11_m12_m13 = m._m10_m11_m12_m13;</ins>
+		<ins>unity_ObjectToWorld._m20_m21_m22_m23 = m._m20_m21_m22_m23;</ins>
+		<ins>unity_ObjectToWorld._m30_m31_m32_m33 = float4(0.0, 0.0, 0.0, 1.0);</ins>
+	#endif
+}</pre>
+						
+						<p>After this change my average <code>Update</code> duration is down to 4ms. So I gained half a millisecond by only storing and transferring the minimum amount of data.</p>
+					</section>
+					
+					<section>
+						<h3>Using Multiple Cores</h3>
+						
+						<p>We've reached the endpoint of optimization for a single CPU core, but we can go further. When updating the graph all parent parts have to be updated before their child parts are updated, so we cannot get rid of the sequential dependency between our jobs. But all parts of the same level are independent and can be updated in any order, even in parallel. This means that we could spread the work of a single job over multiple CPU cores. That is done by invoking <code>ScheduleParallel</code> on a job instead of <code>Schedule</code>. This method requires a new second argument, which indicates the batch count. Let's initially set it to 1 and see what happens.</p>
+						
+						<pre translate="no">			jobHandle = new UpdateFractalLevelJob {
+				&hellip;
+			}.<ins>ScheduleParallel</ins>(parts[li].Length, <ins>1,</ins> jobHandle);</pre>
+						
+						<figure>
+							<img src="job-system/multiple-threads.png" width="550" height="296">
+							<figcaption>Running on multiple threads.</figcaption>
+						</figure>
+						
+						<p>Our jobs now get broken up and run on multiple CPU cores that update our fractal parts in parallel. In my case that reduces the total <code>Update</code> time to 1.9ms on average. How much of a reduction you get depends on how many CPU cores are available, which is limited by your hardware and how many other processes have claimed a thread.</p>
+						
+						<p>The batch count controls how the iterations get allocated to threads. Each thread loops through a batch, performs a little bookkeeping, and then loops through another batch, until the work is finished. The rule of thumb is that when <code>Execute</code> does little work you should try a large batch count and when <code>Execute</code> does a lot of work you should try a small batch count. In our case <code>Execute</code> does quite a bit of work, so a batch count of 1 is a reasonable default. But as we give each part five children let's try a batch count of 5.</p>
+						
+						<pre translate="no">			jobHandle = new UpdateFractalLevelJob {
+				&hellip;
+			}.ScheduleParallel(parts[li].Length, <ins>5</ins>, jobHandle);</pre>
+						
+						<p>This further reduced my average <code>Update</code> time to 1.7ms. Using a larger batch count didn't improve things further and even made it a little slower, so I left it at 5.</p>
+						
+					</section>
+					
+					<section>
+						<h3>Final Performance</h3>
+						
+						<p>If we evaluate the performance of our fully Burst-optimized fractal now we find that the update duration has become insignificant. The GPU is always the bottleneck. When rendering spheres we get no higher frame rates than before. But when rendering cubes we now exceed 100FPS with both RPs for depth 8 fractal.</p>
+						
+						<table>
+							<thead>
+								<tr><th>Depth</th><th>MS</th><th>URP</th><th><abbr title="Built-in Render Pipeline">BRP</abbr></th></tr></thead>
+							<tbody>
+								<tr><td>6</td><td>0.1</td><td>480</td><td>180</td></tr>
+								<tr><td>7</td><td>0.26</td><td>360</td><td>160</td></tr>
+								<tr><td>8</td><td>1.7</td><td>160</td><td>110</td></tr>
+							</tbody>
+						</table>
+						
+						<p>The next tutorial is <a href="../organic-variety/index.html">Organic Variety</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/basics-06-jobs/" class="repository">repository</a>
+					<a href="Jobs.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

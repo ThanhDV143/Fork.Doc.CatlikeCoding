@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html>
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/cube-sphere/">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/cube-sphere/tutorial-image.jpg">
+		<meta property="og:image:width" content="750">
+		<meta property="og:image:height" content="750">
+		<meta property="og:description" content="A Unity C# scripting tutorial in which we'll turn a cube into a sphere, then improve it with math.">
+		<meta name="description" content="A Unity C# scripting tutorial in which we'll turn a cube into a sphere, then improve it with math.">
+		<meta property="og:title" content="Cube Sphere, a Unity C# Tutorial">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Cube Sphere, a Unity C# Tutorial</title>
+		<link href="../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../site.webmanifest.html">
+
+		<script>
+			var customTypes = {
+				CircleGizmo: 1,
+				CubeSphere: 1,
+				RoundedCube: 1
+			};
+			
+			var hasAnimations = false;
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../products/utilities/frame-rate-counter/index.html"><img src="../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<p><a href="../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></p>
+			<p class="category"><a href="../index.html">Unity C# Tutorials</a></p>
+		</header>
+		
+		<main>
+			<article itemscope itemtype="http://schema.org/TechArticle">
+				<header>
+					<h1 itemprop="name headline">Cube Sphere</h1>
+					<p>Better Roundness</p>
+					<ul>
+						<li>Turn a cube into a sphere.</li>
+						<li>Visualize the mapping in Unity.</li>
+						<li>Critically examine the conversion.</li>
+						<li>Use math to come up with a better approach.</li>
+					</ul>
+				</header>
+
+				<p itemprop="about description">In this tutorial we'll create a sphere mesh based on a cube, then use mathematical reasoning to improve it.</p>
+
+				<p itemprop="dependencies">This tutorial follows <a href="../rounded-cube/index.html">Rounded Cube</a>. It has been made for Unity 5.0.1 and up.</p>
+
+				<figure>
+					<img src="tutorial-image.jpg" width="375" height="375" itemprop="image">
+					<figcaption>Projecting from one shape to another.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Adapting the Rounded Cube</h2>
+					
+					<p>You have probably noticed that you can create a perfect sphere with a rounded cube. Make sure that it is of equal size in all three dimensions and set its roundness to half its size.</p>
+					
+					<p>If all you want is a sphere, then the flexibility offered by the rounded cube only gets in the way. So let's create a separate component for it. Duplicate the <code>RoundedCube</code> script and rename it to <code>CubeSphere</code>. Then replace the three sizes with a single <code>gridSize</code> and remove the <code>roundness</code> field.</p>
+					
+					<pre translate="no">public class <ins>CubeSphere</ins> : MonoBehaviour {
+
+	public int <ins>gridSize</ins>;
+	<ins>// No more roundness.</ins>
+
+	private Mesh mesh;
+	private Vector3[] vertices;
+	private Vector3[] normals;
+	private Color32[] cubeUV;
+	
+	&hellip;
+
+	private void Generate () {
+		GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();
+		mesh.name = <ins>"Procedural Sphere"</ins>;
+		CreateVertices();
+		CreateTriangles();
+		CreateColliders();
+	}
+	
+	&hellip;
+}</pre>
+					
+					<aside>
+						<h3>How do you replace the three size fields with one?</h3>
+						<div>
+							<p>The most convenient way is to use your editor to refactor the variable names. This ensures that all references to them are renamed as well. First rename <code>xSize</code> to <code>gridSize</code>, then do the same for <code>ySize</code> and <code>zSize</code>. Alternatively, perform multiple search and replace actions.</p>
+							
+							<p>You will end up with some code fragment of the form <code>gridSize + gridSize</code>. You could consolidate these by rewriting the expressions, but there's no real need for it so I didn't bother.</p>
+						</div>
+					</aside>
+					
+					<p>The removal of the <code>roundness</code> field will result in errors, because it is still used in some places. Let's first look at the creation of colliders.</p>
+					
+					<p>We needed multiple box and capsule colliders to represent rounded cubes, but spheres only need a single sphere collider. This means that we can delete the <code>AddBoxCollider</code> and <code>AddCapsuleCollider</code> methods and reduce <code>CreateColliders</code> to a single line of code.</p>
+					
+					<pre translate="no">	private void CreateColliders () {
+		<ins>gameObject.AddComponent&lt;SphereCollider>();</ins>
+	}
+</pre>
+					
+					<p>Next is the placement of the vertices, which also used to depend on <code>roundness</code>.</p>
+					
+					<p>We formed the corners of the rounded cube by normalizing a vector that pointed from the inside of the corner to somewhere on the original cube. When turned into a sphere, this is all we need to do, as the other cases degenerate.</p>
+					
+					<p>It would also be convenient if our sphere was centered at its local origin. We haven't bothered to do this with our grid and rounded cube, but in this case it makes the sphere's creation simpler, so let's center it.</p>
+					
+					<p>To create a unit sphere &ndash; a sphere with a radius of 1 unit &ndash; we need to normalize the vertices of a cube that is centered at the origin. For that cube to exactly contain the sphere, it needs to have edge length 2.</p>
+					
+					<figure>
+						<img src="01-unit-circle.png" width="325" height="250">
+						<figcaption>Unit circle fits inside square with edge length 2.</figcaption>
+					</figure>
+					
+					<p>We can create the vertices of this cube inside <code>SetVertex</code> by dividing the raw coordinates by the grid size, doubling that, and then subtracting one.</p>
+					
+					<pre translate="no">	<ins>public float radius = 1;</ins>
+	
+	private void SetVertex (int i, int x, int y, int z) {
+		Vector3 <ins>v</ins> = new Vector3(x, y, z) <ins>* 2f / gridSize - Vector3.one</ins>;
+		<ins>normals[i] = v.normalized;</ins>
+		<ins>vertices[i] = normals[i];</ins>
+		cubeUV[i] = new Color32((byte)x, (byte)y, (byte)z, 0);
+	}</pre>
+					
+					<p>This produces a unit sphere, but you might want a different radius. So let's make that configurable.</p>
+					
+					<pre translate="no">	<ins>public float radius = 1f;</ins>
+	
+	private void SetVertex (int i, int x, int y, int z) {
+		Vector3 v = new Vector3(x, y, z) * 2f / gridSize - Vector3.one;
+		normals[i] = v.normalized;
+		vertices[i] = normals[i] <ins>* radius</ins>;
+		cubeUV[i] = new Color32((byte)x, (byte)y, (byte)z, 0);
+	}</pre>
+					
+					<p>By now all errors should be gone and we can put a cube sphere object in the scene, either from scratch or by replacing the component of a rounded cube object.</p>
+					
+					<figure>
+						<img alt="scene" src="01-cube-sphere.png" width="220" height="220">
+						<img alt="inspector" src="01-cube-sphere-inspector.png" width="320" height="360">
+						<figcaption>Configuring a cube sphere.</figcaption>
+					</figure>
+					
+					<a href="cs-01-adapting-the-rounded-cube.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Investigating the Mapping</h2>
+					
+					<p>We have a way to create sphere meshes, but how good are they? Let's look at a sphere from multiple viewpoints. How uniform is the grid?</p>
+					
+					<figure>
+						<img alt="perspective frontal" src="02-sphere-perspective-frontal.png" width="275" height="275">
+						<img alt="perspective" src="02-sphere-perspective.png" width="275" height="275">
+						<img alt="orthographic frontal" src="02-sphere-ortho-frontal.png" width="275" height="275">
+						<img alt="orthographic" src="02-sphere-ortho.png" width="275" height="275">
+						<figcaption>Different viewpoints, perspective and orthographic.</figcaption>
+					</figure>
+					
+					<p>The size of grid cells varies quite a bit. The largest cells come from the middle of the cube faces. They are roughly four times as large as the smallest cells, which come from the cube corners.</p>
+					
+					<p>To see why this is so, let's visualize the mapping from square to circle. We'll use a circle because that's easier to work with than a sphere. It's just a single slice of the problem.</p>
+					
+					<p>We can create a visualization in Unity, with gizmos. We'll use a custom component with an <code>OnDrawGizmosSelected</code> method. It works like <code>OnDrawGizmos</code>, except that the gizmos will only be drawn when the object is selected. That way we can add a visualization object to the scene which will remain invisible unless we select it.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class CircleGizmo : MonoBehaviour {</ins>
+
+	<ins>private void OnDrawGizmosSelected () {</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+					
+					<p>We start by showing the vertices on the square's edges with black spheres, at whatever resolution we like. Let's start with the top and bottom edges.</p>
+					
+					<pre translate="no">	<ins>public int resolution = 10;</ins>
+
+	private void OnDrawGizmosSelected () {
+		<ins>float step = 2f / resolution;</ins>
+		<ins>for (int i = 0; i &lt;= resolution; i++) {</ins>
+			<ins>ShowPoint(i * step - 1f, -1f);</ins>
+			<ins>ShowPoint(i * step - 1f, 1f);</ins>
+		<ins>}</ins>
+	}
+
+	<ins>private void ShowPoint (float x, float y) {</ins>
+		<ins>Vector2 square = new Vector2(x, y);</ins>
+
+		<ins>Gizmos.color = Color.black;</ins>
+		<ins>Gizmos.DrawSphere(square, 0.025f);</ins>
+	<ins>}</ins></pre>
+					
+					<figure>
+						<img alt="scene" src="02-gizmo-horizontal.png" width="250" height="250">
+						<img alt="inspector" src="02-gizmo-inspector.png" width="320" height="118">
+						<figcaption>A circle gizmo object.</figcaption>
+					</figure>
+					
+					<p>Complete the square by filling in the left and right edges. As the corners are already shown, we can skip them now.</p>
+					
+					<pre translate="no">	private void OnDrawGizmosSelected () {
+		float step = 2f / resolution;
+		for (int i = 0; i &lt;= resolution; i++) {
+			ShowPoint(i * step - 1f, -1f);
+			ShowPoint(i * step - 1f, 1f);
+		}
+		<ins>for (int i = 1; i &lt; resolution; i++) {</ins>
+			<ins>ShowPoint(-1f, i * step - 1f);</ins>
+			<ins>ShowPoint(1f, i * step - 1f);</ins>
+		<ins>}</ins>
+	}</pre>
+					
+					<figure>
+						<img src="02-gizmo-square.png" width="250" height="250">
+						<figcaption>Complete square.</figcaption>
+					</figure>
+					
+					<p>Next, for each point we will also show the corresponding circle vertex, using a white sphere. Then we show the relationship between these two vertices with a yellow line. And finally a gray line from the circle vertex to the center.</p>
+					
+					<pre translate="no">	private void ShowPoint (float x, float y) {
+		Vector2 square = new Vector2(x, y);
+		<ins>Vector2 circle = square.normalized;</ins>
+
+		Gizmos.color = Color.black;
+		Gizmos.DrawSphere(square, 0.025f);
+
+		<ins>Gizmos.color = Color.white;</ins>
+		<ins>Gizmos.DrawSphere(circle, 0.025f);</ins>
+
+		<ins>Gizmos.color = Color.yellow;</ins>
+		<ins>Gizmos.DrawLine(square, circle);</ins>
+
+		<ins>Gizmos.color = Color.gray;</ins>
+		<ins>Gizmos.DrawLine(circle, Vector2.zero);</ins>
+	}</pre>
+					
+					<figure>
+						<img src="02-gizmo-circle.png" width="250" height="250">
+						<figcaption>From square to circle.</figcaption>
+					</figure>
+					
+					<p>Now we can see how the mapping works. Normalization pulls the vertices straight to the center, until they reach the unit circle. Vertices that lie closer to the square's corners are pulled in more than vertices that lie closer to the main axes. Indeed, vertices that lie exactly on the main axes aren't moved at all, while vertices that lie exactly on the diagonals are moved by `sqrt(2)-1` units.</p>
+					
+					<p>As all points that move are pulled straight towards the same point, they end up closer together. That's why cells that touch the diagonals are the smallest.</p>
+					
+					<a href="cs-02-investigating-the-mapping.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Playing with Math</h2>
+					
+					<p>By now we know why cells end up with different sizes. Can we do something about it? Maybe there is a different mapping that produces more uniform cells. If so, how do we find such a mapping?</p>
+					
+					<p>This is really a mathematical problem, so let's start by describing our current mapping more formally. Once again we only concern ourselves with circles at the start, assuming that we can generalize to spheres later.</p>
+					
+					<p>So we're mapping points on a square to points on a circle. As points are described with vectors, we're really mapping one vector to another.</p>
+					
+					<p class="formula">`v_s -> v_c`</p>
+					
+					<p>Specifically, our circle is the unit circle, which inscribes a square of edge length 2. So our mapping is simply the normalized version of the vector `v_s`.</p>
+					
+					<p class="formula">`v_c = hat v_s`</p>
+
+					<p>Normalizing a vector is done by dividing it by its own length.</p>
+					
+					<p class="formula">`hat v_s = v_s / ||v_s||`</p>
+					
+					<p>How do you get the length of a 2D vector? It is composed of two coordinates.</p>
+					
+					<p class="formula">`v_s = [[x],[y]]`</p>
+					
+					<p>These coordinates define a right triangle, to which you can apply the Pythagorean theorem.</p>
+					
+					<p class="formula">`||v_s||^2 = x^2+y^2`</p>
+					
+					<figure>
+						<img src="03-triangle.png" width="175" height="125">
+						<figcaption>A 2D vector describes a right triangle.</figcaption>
+					</figure>
+					
+					<p>The vector's length is simply the square root of that.</p>
+					
+					<p class="formula">`||v_s|| = sqrt(||v_s||^2) = sqrt(x^2+y^2)`</p>
+					
+					<p>Now we can write the mapping in its most explicit form.</p>
+					
+					<p class="formula">`v_c = hat v_s = v_s / ||v_s|| =  1 / ||v_s|| [[x],[y]] = [[x/||v_s||],[y/||v_s||]] = [[x/sqrt(x^2+y^2)],[y/sqrt(x^2+y^2)]]`</p>
+					
+					<p>That's nice, but can we actually prove that `v_c` defines a point on the unit circle? For it to do so, its length must be 1. So we must demonstrate that the following equality is true.</p>
+					
+					<p class="formula">`||v_c|| = sqrt((x/sqrt(x^2+y^2))^2 + (y/sqrt(x^2+y^2))^2) = 1`</p>
+					
+					<p>This is hard to work with, so let's square everything.</p>
+					
+					<p class="formula">`||v_c||^2 = (x/sqrt(x^2+y^2))^2 + (y/sqrt(x^2+y^2))^2 = 1`</p>
+					
+					<p>It is possible to simplify this until it becomes trivial.</p>
+					
+					<p class="formula">`(x/sqrt(x^2+y^2))^2 + (y/sqrt(x^2+y^2))^2 = x^2/(x^2+y^2) + y^2/(x^2+y^2) = (x^2 + y^2)/(x^2+y^2)`</p>
+					
+					<p>As the numerator and denominator of the final expression are equal, the result must be 1. That is, unless `x^2+y^2` ends up being zero, in which case the result is undefined. But we're only using points on our square's edges as input, which guarantees that one or both coordinates are either 1 or &minus;1, which guarantees that `x^2+y^2>=1` so we won't get an undefined result.</p>
+					
+					<p>Was this proof useful? Well, it shows us that there is a formula which yields 1 for each point on our square. This formula corresponds to a mapping from the square to the unit circle.</p>
+					
+					<p>Can we find a different formula that does the same thing? If so, there must be a different mapping too! So let's reverse the process. Come up with a formula that yields 1 for every point on our square.</p>
+					
+					<p>What would such a function look like, if we try to keep it as simple as possible? We know that at least one of the coordinates is always either &minus;1 or 1. So if we square both coordinates, we get a least a single 1. Alternatively, we could turn them into potential zeros, by using `1-x^2` and `1-y^2`. As at least one of these is always zero, if we multiply them together we are guaranteed to get zero. This gives us our formula.</p>
+					
+					<p class="formula">`1-(1-x^2)(1-y^2)`</p>
+					
+					<aside>
+						<h3>Why subtract from 1 instead of add?</h3>
+						<div>
+							<p>We could have also used `1+(1-x^2)(1-y^2)`. Both are valid. Subtracting is more intuitive in this case, because that formula yields zero at the origin and yields larger results for points further away from the origin. It also allows us to eliminate the 1s when we rewrite it, which is convenient.</p>
+						</div>
+					</aside>
+					
+					<p>This formula can be rewritten to a simpler form.</p>
+					
+					<p class="formula">`1-(1-x^2)(1-y^2) = x^2 + y^2 - x^2y^2`</p>
+					
+					<aside>
+						<h3>How do you rewrite that?</h3>
+						<div>
+							<p>Here are two intermediary steps.</p>
+							
+							<p class="formula">`(1-x^2)(1-y^2) = (1-x^2)1-(1-x^2)y^2 = 1-x^2-y^2+x^2y^2`</p>
+							
+							<p>The final result is 1 minus that.</p>
+						</div>
+					</aside>
+					
+					<p>Now we have a new way of defining the square length of `v_c`.</p>
+					
+					<p class="formula">`||v_c||^2 = x^2 + y^2 - x^2y^2`</p>
+					
+					<p>Let's rearrange the right side of this equation so it is of the form `a + b`. The `x^2` and `y^2` parts are obvious, but what to do with the `x^2y^2` part? It makes sense to keep things as symmetrical as possible, so split it equally.</p>
+					
+					<p class="formula">`||v_c||^2 = (x^2 - (x^2y^2)/2) + (y^2 - (x^2y^2)/2)`</p>
+					
+					<p>We can now split this into two coordinates, `x_c^2 =  x^2 - (x^2y^2)/2` and `y_c^2 = y^2 - (x^2y^2)/2`. We could split it differently, but this way produces the best possible distribution of points on the circle. Now we're just a square root away from the final vector.</p>
+					
+					<p class="formula">`v_c = [[x sqrt(1 - y^2/2)],[y sqrt(1 - x^2/2)]]`</p>
+					
+					<aside>
+						<h3>How do you rewrite that?</h3>
+						<div>
+							<p>Here is the transition for `x_c`.</p>
+							
+							<p class="formula">`x_c = sqrt(x_c^2) = sqrt(x^2 - (x^2y^2)/2) = sqrt(x^2(1-y^2/2)) = x sqrt(1-y^2/2)`</p>
+						</div>
+					</aside>
+					
+					<p>The vector we just found gives us a new mapping from the square to the circle. Let's try it out in <code>ShowPoint</code>!</p>
+					
+					<pre translate="no">		Vector2 circle<ins>;</ins>
+		<ins>circle.x = square.x * Mathf.Sqrt(1f - square.y * square.y * 0.5f);</ins>
+		<ins>circle.y = square.y * Mathf.Sqrt(1f - square.x * square.x * 0.5f);</ins></pre>
+					
+					<figure>
+						<img src="03-gizmo-new-mapping.png" width="250" height="250">
+						<figcaption>Alternative mapping.</figcaption>
+					</figure>
+					
+					<p>It turns out that this mapping pushes points away from the diagonals and towards the axes. They are now closest together near the axes. Fortunately, the distance between adjacent points is more uniform than what we got with our first approach, so it is an improvement.</p>
+					
+					<a href="cs-03-playing-with-math.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Adjusting the Mapping</h2>
+					
+					<p>We have a new mapping from square to circle, but what about going from cube to sphere? Can we use the same approach? Yes, but we need to incorporate a third coordinate, just like the two we already have. That way we get the square length of vectors pointing to points on the unit sphere.</p>
+					
+					<p class="formula">`||v_o||^2 = 1-(1-x^2)(1-y^2)(1-z^2)`</p>
+					
+					<p>Indeed, this works for any amount of coordinates, so we could map from any hypercube to any hypersphere of the same dimension. The expanded formula just gets more complex.</p>
+					
+					<p class="formula">`||v_o||^2 = x^2 + y^2 + z^2 - x^2y^2 - x^2z^2 - y^2z^2 + x^2y^2z^2`</p>
+					
+					<aside>
+						<h3>How do you rewrite that?</h3>
+						<div>
+							<p>We already know how to deal with two coordinates.</p>
+							
+							<p class="formula">`a = (1-x^2)(1-y^2) = 1-x^2-y^2+x^2y^2`</p>
+							
+							<p>This leads to the following intermediate steps.</p>
+							
+							<p class="formula">`a(1-z^2) = a - z^2a =`</p>
+							
+							<p class="formula">`(1-x^2-y^2+x^2y^2) - (z^2-x^2z^2-y^2z^2+x^2y^2z^2)`</p>
+							
+							<p>The final result is 1 minus that.</p>
+						</div>
+					</aside>
+					
+					<p>This formula for three dimensions has a new `x^2y^2z^2` part that is linked to all three coordinates. Like before, we equally split it between the coordinates of the final vector. We end up with more complex formulas, but the concept remains the same. Here's `x_o^2`, the others are similar.</p>
+					
+					<p class="formula">`x_o^2 = x^2 - (x^2y^2)/2 - (x^2z^2)/2 + (x^2y^2z^2)/3`</p>
+					
+					<p>Once again the final mapping is only a square root away.</p>
+					
+					<p class="formula">`v_o = [[x sqrt(1 - y^2/2 - z^2/2 + (y^2z^2)/3)],[y sqrt(1 - x^2/2 - z^2/2 + (x^2z^2)/3)],[z sqrt(1 - x^2/2 - y^2/2 + (x^2y^2)/3)]]`</p>
+					
+					<p>Let's use that in <code>SetVertex</code> and see what it looks like!</p>
+					
+					<pre translate="no">	private void SetVertex (int i, int x, int y, int z) {
+		Vector3 <ins>v</ins> = new Vector3(x, y, z) * 2f / gridSize - Vector3.one;
+		<ins>float x2 = v.x * v.x;</ins>
+		<ins>float y2 = v.y * v.y;</ins>
+		<ins>float z2 = v.z * v.z;</ins>
+		<ins>Vector3 s;</ins>
+		<ins>s.x = v.x * Mathf.Sqrt(1f - y2 / 2f - z2 / 2f + y2 * z2 / 3f);</ins>
+		<ins>s.y = v.y * Mathf.Sqrt(1f - x2 / 2f - z2 / 2f + x2 * z2 / 3f);</ins>
+		<ins>s.z = v.z * Mathf.Sqrt(1f - x2 / 2f - y2 / 2f + x2 * y2 / 3f);</ins>
+		normals[i] = <ins>s</ins>;
+		vertices[i] = normals[i] * radius;
+		cubeUV[i] = new Color32((byte)x, (byte)y, (byte)z, 0);
+	}</pre>
+					
+					<figure>
+						<img alt="perspective frontal" src="04-sphere-perspective-frontal.png" width="275" height="275">
+						<img alt="perspective" src="04-sphere-perspective.png" width="275" height="275">
+						<img alt="orthographic frontal" src="04-sphere-ortho-frontal.png" width="275" height="275">
+						<img alt="orthographic" src="04-sphere-ortho.png" width="275" height="275">
+						<figcaption>A more uniform mapping.</figcaption>
+					</figure>
+					
+					<p>Grid cells still get more distorted the closer they get to the diagonals, there's no way around that. But this new mapping produces cells with much more uniform size than the normalization approach. Cells at the axes and cube corners appear to have roughly the same size now. That's much better than what we started with! The largest cells are now those along the cube's edges. Those used to get squashed, but now they are stretched.</p>
+					
+					<aside>
+						<h3>How do you come up with such math?</h3>
+						<div>
+							<p>While it is presented here in a logical order, figuring this stuff out on your own typically takes a much more erratic path. Following a clear logical path is great when the opportunity presents itself, but intuition often only comes after experimenting. And before that, investigate what others have already figured out.</p>
+							
+							<p>The Internet holds much knowledge, take advantage of it! In this case, the cube to sphere mapping has been described by Philip Nowell on his <a href="http://mathproofs.blogspot.nl/2005/07/mapping-cube-to-sphere.html">blog</a>. The intuition behind the mapping comes from the answer to a  <a href="http://math.stackexchange.com/questions/118760/can-someone-please-explain-the-cube-to-sphere-mapping-formula-to-me">Mathematics Stack Exchange question</a>.</p>
+							
+							<p>Also, if you're interested in the reverse mapping, see <a href="https://stackoverflow.com/questions/2656899/mapping-a-sphere-to-a-cube">this Stack Overflow question</a>.</p>
+						</div>
+					</aside>
+					
+					<p>If you now feel like giving this nice sphere a good squeeze, then you can move on to the <a href="../mesh-deformation.1.html">Mesh Deformation</a> tutorial.</p>
+					
+					<a href="cs-04-adjusting-the-mapping.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Cube-Sphere.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../tutorials.js"></script>
+	</body>
+</html>

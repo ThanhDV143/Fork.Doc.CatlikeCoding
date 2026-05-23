@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/hex-map/3-2-0/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/hex-map/3-2-0/tutorial-image.jpg">
+		<meta property="og:title" content="Hex Map 3.2.0">
+		<meta property="og:description" content="Unity Hex Map 3.2.0 tutorial, separating search data.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hex Map 3.2.0</title>
+		<meta name="description" content="Unity Hex Map 3.2.0 tutorial, separating search data.">
+		<link href="../../tutorials/tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../apple-touch-icon.png">
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/hex-map/3-2-0/#article",
+				"headline": "Hex Map 3.2.0",
+				"alternativeHeadline": "Separating Search Data",
+				"datePublished": "2024-02-29",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"image": "https://catlikecoding.com/unity/tutorials/hex-map/3-2-0/tutorial-image.jpg",
+				"dependencies": "Unity 2022.3.20f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/hex-map/", "name": "Hex Map" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				Bezier: 1,
+				Biome: 1,
+				ClimateData: 1,
+				EdgeVertices: 1,
+				HemisphereMode: 1,
+				HexCell: 1,
+				HexCellPriorityQueue: 1,
+				HexCellSearchData: 1,
+				HexCellShaderData: 1,
+				HexCoordinates: 1,
+				HexDirection: 1,
+				HexDirectionExtensions: 1,
+				HexEdgeType: 1,
+				HexFeatureCollection: 1,
+				HexFeatureManager: 1,
+				HexFlags: 1,
+				HexGameUI: 1,
+				HexGrid: 1,
+				HexGridChunk: 1,
+				HexGridData: 1,
+				HexHash: 1,
+				HexMapCamera: 1,
+				HexMapEditor: 1,
+				HexMapGenerator: 1,
+				HexMesh: 1,
+				HexMetrics: 1,
+				HexUnit: 1,
+				HexValues: 1,
+				ListPool: 1,
+				MapRegion: 1,
+				NewMapMenu: 1,
+				OptionalToggle: 1,
+				SaveLoadItem: 1,
+				SaveLoadMenu: 1
+			};
+			
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../products/utilities/frame-rate-counter/index.html"><img src="../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../index.html">Unity</a></li>
+					<li><a href="../index.html">Hex Map</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hex Map 3.2.0</h1>
+					<p>Separating Search Data</p>
+				</header>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Cells are unaware of it, but pathfinding and visibility still work.</figcaption>
+				</figure>
+				
+				<p>This tutorial is made with Unity 2022.3.20f1 and follows <a href="../3-1-0/index.html">Hex Map 3.1.0</a>.</p>
+				
+				<section>
+					<h2>Cell Search Data</h2>
+					
+					<p>We have already significantly reduces the size of <code>HexCell</code> in the previous two tutorials, but it still contains a lot of data that doesn't directly relate to its current state. This time we will extract all data from it that is only used by our searching algorithm.</p>
+					
+					<p>Our search algorithm is A* for pathfinding, with slight tweaks for map generation and visibility determination. We use a priority queue with an implementation based on a bucket list, specifically a LIFO stack list as that produces the best paths for a hex grid. The stacks are implemented as linked lists.</p>
+						
+					<section>
+						<h3>Search Data Struct</h3>
+						
+						<p>The search data consists of six pieces of data, all currently stored in <code>HexCell</code>. We create a new <code>HexCellSearchData</code> struct to store them instead. While we could compact these values like we did for the other cell data, we'll keep it simple and define them as separate public fields. Further optimization could be done in the future. The struct has to be serializable so it can survive hot reloads.</p>
+						
+						<p>The search data consists of a distance, a reference to the next cell with the same priority, a reference to the cell where the path comes from, a search heuristic, and a search phase. The idea is that at some point we'll no longer use game objects for cells, so we're going to use cell indices instead of object references. Thus all fields are integers. There's also a property to get the search priority, being the sum of distance and heuristic.</p>
+						
+						<pre translate="no">[System.Serializable]
+public struct HexCellSearchData
+{
+	public int distance;
+	
+	public int nextWithSamePriority;
+
+	public int pathFrom;
+
+	public int heuristic;
+
+	public int searchPhase;
+
+	public readonly int SearchPriority => distance + heuristic;
+}</pre>
+						
+						<p>Instead of storing the search data per cell we will store it in an array in <code>HexGrid</code>, alongside the cells array.</p>
+						
+						<pre translate="no">	<ins>HexCellSearchData[] searchData;</ins>
+
+	&hellip;
+	
+	void CreateCells()
+	{
+		cells = new HexCell[CellCountZ * CellCountX];
+		<ins>searchData = new HexCellSearchData[cells.Length];</ins>
+
+		&hellip;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Paths</h3>
+						
+						<p>The <code>GetPath</code> method has always returned a list of cell indices. Now we can change it so it won't access cells at all, only working with the search data.</p>
+						
+						<pre translate="no">	public List&lt;int> GetPath()
+	{
+		&hellip;
+		List&lt;int> path = ListPool&lt;int>.Get();
+		for (<ins>int i = currentPathToIndex</ins>;
+			<ins>i</ins> != currentpathFrom;
+			<ins>i = searchData[i].pathFrom</ins>)
+		{
+			path.Add(<ins>i</ins>);
+		}
+		&hellip;
+	}</pre>
+						
+						<p>The <code>ClearPath</code> and <code>ShowPath</code> methods still need to access the cells themselves to change their visualization, but should now use the new distance and path data.</p>
+						
+						<pre translate="no">	public void ClearPath()
+	{
+		&hellip;
+				current.SetLabel(null);
+				current.DisableHighlight();
+				current = cells[<ins>searchData[current.Index].pathFrom</ins>];
+		&hellip;
+	}
+
+	void ShowPath(int speed)
+	{
+		&hellip;
+				int turn = (<ins>searchData[current.Index].distance</ins> - 1) / speed;
+				current.SetLabel(turn.ToString());
+				current.EnableHighlight(Color.white);
+				current = cells[<ins>searchData[current.Index].pathFrom</ins>];
+		&hellip;
+	}</pre>
+						
+						<p>This breaks pathfinding for now, but it will resume working once we've fully refactored our search algorithm to work with the new data.</p>
+					</section>
+					
+					<section>
+						<h3>Priority Queue</h3>
+						
+						<p>The next step is to change <code>HexCellPriorityQueue</code> so it also solely works with indices instead of the cells themselves. This requires it to access the search data stored by <code>HexGrid</code>, so give it a field to reference the grid and a constructor method to initialize it.</p>
+						
+						<pre translate="no">	readonly List&lt;<ins>int</ins>> list = new();
+
+	<ins>readonly HexGrid grid;</ins>
+
+	<ins>public HexCellPriorityQueue(HexGrid grid) => this.grid = grid;</ins></pre>
+						
+						<p>To access the search data array add a public getter property for it to <code>HexGrid</code>.</p>
+						
+						<pre translate="no">	<ins>public HexCellSearchData[] SearchData => searchData;</ins></pre>
+						
+						<p>While we're changing <code>HexCellPriorityQueue</code>, let's also get rid of its <code>count</code> field, as it isn't really necessary if we change our dequeueing approach a bit.</p>
+						
+						<pre translate="no">	<del>//int count = 0;</del>
+	
+	&hellip;
+	
+	public void Clear()
+	{
+		<del>//count = 0;</del>
+		&hellip;
+	}</pre>
+						
+						<p>Adjust <code>Enqueue</code> so it stores a cell index and uses the grid's search data. Use &minus;1 to indicate an empty priority, replacing <code>null</code>.</p>
+						
+						<pre translate="no">	public void Enqueue(<ins>int cellIndex</ins>)
+	{
+		<del>//count += 1;</del>
+		int priority = <ins>grid.SearchData[cellIndex]</ins>.SearchPriority;
+		if (priority &lt; minimum)
+		{
+			minimum = priority;
+		}
+		while (priority >= list.Count)
+		{
+			list.Add(<ins>-1</ins>);
+		}
+		<ins>grid.SearchData[cellIndex].nextWithSamePriority</ins> = list[priority];
+		list[priority] = <ins>cellIndex</ins>;
+	}</pre>
+						
+						<p>Adjust <code>Dequeue</code> to match, also refactoring it into <code>TryDequeue</code> with the cell index as an output parameter, returning whether an index was found.</p>
+						
+						<pre translate="no">	public <ins>bool TryDequeue</ins>(<ins>out int cellIndex</ins>)
+	{
+		<del>//count -= 1;</del>
+		for (; minimum &lt; list.Count; minimum++)
+		{
+			<ins>cellIndex</ins> = list[minimum];
+			if (<ins>cellIndex >= 0</ins>)
+			{
+				list[minimum] = <ins>grid.SearchData[cellIndex].nextWithSamePriority</ins>;
+				return <ins>true</ins>;
+			}
+		}
+		<ins>cellIndex = -1;</ins>
+		return <ins>false</ins>;
+	}</pre>
+						
+						<p>Give <code>Change</code> the same treatment, again replacing cell references with indices and using the grid's search data.</p>
+						
+						<pre translate="no">	public void Change(<ins>int cellIndex</ins>, int oldPriority)
+	{
+		<ins>int</ins> current = list[oldPriority];
+		<ins>int</ins> next = <ins>grid.SearchData[current].nextWithSamePriority</ins>;
+		if (current == <ins>cellIndex</ins>)
+		{
+			list[oldPriority] = next;
+		}
+		else
+		{
+			while (next != <ins>cellIndex</ins>)
+			{
+				current = next;
+				next = <ins>grid.SearchData[current].nextWithSamePriority</ins>;
+			}
+			<ins>grid.SearchData[current].nextWithSamePriority</ins> =
+				<ins>grid.SearchData[cellIndex].nextWithSamePriority</ins>;
+		}
+		Enqueue(<ins>cellIndex</ins>);
+	}</pre>
+						
+						<p>These changes cause compilation fail until we've updated our search code to use the new approach, which we'll do next.</p>
+					</section>
+					
+					<section>
+						<h3>Searching</h3>
+						
+						<p>We begin with out main pathfinding method, <code>HexGrid.Search</code>. The first step is to pass the grid itself to the search frontier when creating it. Let's also simplify the code by always clearing the search frontier, even the first time when it gets created. Then we set the search data for the first cell, simplified by creating a new <code>HexCellSearchData</code> value. After that we enqueue the first index, not a reference to the cell itself.</p>
+						
+						<pre translate="no">		int speed = unit.Speed;
+		searchFrontierPhase += 2;
+		<del>//if (searchFrontier == null)</del>
+		<del>//{</del>
+		searchFrontier <ins>??</ins>= new HexCellPriorityQueue(<ins>this</ins>);
+		<del>//}</del>
+		<del>//else</del>
+		<del>//{</del>
+		searchFrontier.Clear();
+		<del>//}</del>
+
+		<ins>searchData[fromCell.Index] = new HexCellSearchData</ins>
+		<ins>{</ins>
+			<ins>searchPhase</ins> = searchFrontierPhase
+		<ins>}</ins>;
+		<del>//fromCell.Distance = 0;</del>
+		searchFrontier.Enqueue(fromCell<ins>.Index</ins>);</pre>
+						
+						<p>The A* search loop now continues as long as dequeueing succeeds, instead of checking the queue's count. We then retrieve the current cell, calculate its distance once, and increment its search phase, using the new search data.</p>
+						
+						<pre translate="no">		while (<ins>searchFrontier.TryDequeue(out int currentIndex)</ins>)
+		{
+			HexCell current = <ins>cells[currentIndex]</ins>;
+			<ins>int currentDistance = searchData[currentIndex].distance;</ins>
+			<ins>searchData[currentIndex].searchPhase</ins> += 1;
+
+			if (current == toCell)
+			{
+				return true;
+			}
+
+			int currentTurn = (<ins>currentDistance</ins> - 1) / speed;
+
+			&hellip;
+		}</pre>
+						
+						<p>When looping through a cell's neighbors, we have to delay checking the neighbor's search phase until after we can retrieve its data.</p>
+						
+						<pre translate="no">				if (!current.TryGetNeighbor(d, out HexCell neighbor) <del>/||</del>
+					<del>//neighbor.SearchPhase > searchFrontier</del>)
+				{
+					continue;
+				}
+				<ins>HexCellSearchData neighborData = searchData[neighbor.Index];</ins>
+				if (<ins>neighborData.searchPhase > searchFrontierPhase ||</ins>
+					!unit.IsValidDestination(neighbor))
+				{
+					continue;
+				}</pre>
+					
+					<p>The rest of the code still does the same, except that it should now work with indices and the grid's search data.</p>
+					
+					<pre translate="no">				int distance = <ins>currentDistance</ins> + moveCost;
+				int turn = (distance - 1) / speed;
+				if (turn > currentTurn)
+				{
+					distance = turn * speed + moveCost;
+				}
+
+				if (<ins>neighborData.searchPhase</ins> &lt; searchFrontierPhase)
+				{
+					<ins>searchData[neighbor.Index] = new HexCellSearchData</ins>
+					<ins>{</ins>
+						<ins>searchPhase</ins> = searchFrontierPhase<ins>,</ins>
+						<ins>distance</ins> = distance<ins>,</ins>
+						<ins>pathFrom</ins> = currentIndex<ins>,</ins>
+						<ins>heuristic</ins> = neighbor.Coordinates.DistanceTo(
+							toCell.Coordinates)
+					<ins>};</ins>
+					searchFrontier.Enqueue(neighbor<ins>.Index</ins>);
+				}
+				else if (distance &lt; <ins>neighborData.distance</ins>)
+				{
+					<del>//int oldPriority = neighbor.SearchPriority;</del>
+					<ins>searchData[neighbor.Index].distance</ins> = distance;
+					<ins>searchData[neighbor.Index].pathFrom</ins> = <ins>currentIndex</ins>;
+					searchFrontier.Change(
+						neighbor<ins>.Index</ins>, <ins>neighborData.SearchPriority</ins>);
+				}</pre>
+					</section>
+					
+					<section>
+						<h3>Generating Maps</h3>
+						
+						<p>We fix <code>HexMapGenerator</code> next. Pass the grid to the new queue in <code>GenerateMap</code> when creating its search frontier and switch to resetting the grid's search data.</p>
+						
+						<pre translate="no">	public void GenerateMap(int x, int z, bool wrapping)
+	{
+		&hellip;
+		searchFrontier ??= new HexCellPriorityQueue(<ins>grid</ins>);
+		&hellip;
+		for (int i = 0; i &lt; cellCount; i++)
+		{
+			<ins>grid.SearchData[i].searchPhase</ins> = 0;
+		}
+
+		Random.state = originalRandomState;
+	}</pre>
+						
+						<p><code>RaiseTerrain</code> performs a simpler search variant to select a local group of cells to raise. We only have to set the search phase of the first cell, using the defaults for the other values.</p>
+						
+						<pre translate="no">		searchFrontierPhase += 1;
+		HexCell firstCell = GetRandomCell(region);
+		<ins>grid.SearchData[firstCell.Index] = new HexCellSearchData</ins>
+		<ins>{</ins>
+			<ins>searchPhase</ins> = searchFrontierPhase
+		<ins>}</ins>;
+		<del>//firstCell.Distance = 0;</del>
+		<del>//firstCell.SearchHeuristic = 0;</del>
+		searchFrontier.Enqueue(firstCell.Index);</pre>
+						
+						<p>Again, the search loop has to switch to the new dequeueing approach and work with the grid's search data.</p>
+						
+						<pre translate="no">		while (size &lt; chunkSize &amp;&amp; <ins>searchFrontier.TryDequeue(out int index)</ins>)
+		{
+			HexCell current = <ins>grid.GetCell(index)</ins>;
+			&hellip;
+
+			for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++)
+			{
+				if (current.TryGetNeighbor(d, out HexCell neighbor) &amp;&amp;
+					<ins>grid.SearchData[neighbor.Index].searchPhase</ins> &lt;
+						searchFrontierPhase)
+				{
+					<ins>grid.SearchData[neighbor.Index] = new HexCellSearchData</ins>
+					<ins>{</ins>
+						<ins>searchPhase</ins> = searchFrontierPhase<ins>,</ins>
+						<ins>distance</ins> = neighbor.Coordinates.DistanceTo(center)<ins>,</ins>
+						<ins>heuristic</ins> = Random.value &lt; jitterProbability ? 1 : 0
+					<ins>}</ins>;
+					searchFrontier.Enqueue(neighbor<ins>.Index</ins>);
+				}
+			}
+		}</pre>
+						
+						<p>Make the same changes to <code>LowerTerrain</code>. After that we've refactored the traditional search code, but our project still doesn't compile because we also perform a different type of search when determining visibility.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Cell Visibility</h2>
+					
+					<p>Cell visibility is determined by searching through the map. As we have moved the search data from cells to the grid let's move the cell visibility data there as well. This makes sense because whether a cell is currently visible doesn't just depend on the cell itself but also on units, and the grid manages both.</p>
+					
+					<section>
+						<h3>Visibility via Grid</h3>
+						
+						<p>Add an integer array field to <code>HexGrid</code> to track cell visibility.</p>
+						
+						<pre translate="no">	<ins>int[] cellVisibility;</ins>
+
+	&hellip;
+
+	void CreateCells()
+	{
+		cells = new HexCell[CellCountZ * CellCountX];
+		searchData = new HexCellSearchData[cells.Length];
+		<ins>cellVisibility = new int[cells.Length];</ins>
+
+		&hellip;
+	}</pre>
+						
+						<p>Also add a public method to check whether a cell is visible, given its index. Currently cells have the <code>IsVisible</code> property that also checks whether they're explorable, but this isn't necessary so we'll no longer include that check here.</p>
+						
+						<pre translate="no">	<ins>public bool IsCellVisible(int cellIndex) => cellVisibility[cellIndex] > 0;</ins></pre>
+						
+						<p>Adjust <code>HexCellShaderData.RefreshVisibility</code> so it relies on the grid to check the cell's visibility.</p>
+						
+						<pre translate="no">			cellTextureData[index].r =
+				<ins>Grid.IsCellVisible(cell.Index)</ins> ? (byte)255 : (byte)0;</pre>
+						
+						<p>Do the same for <code>HexCellShaderData.UpdateCellData</code>.</p>
+						
+						<pre translate="no">		if (<ins>Grid.IsCellVisible(cell.Index)</ins>)
+		{
+			if (data.r &lt; 255)
+			{
+				&hellip;
+			}
+		}</pre>
+					</section>
+					
+					<section>
+						<h3>Changing Visibility</h3>
+						
+						<p>Changing the cell visibility now becomes the sole responsibility of <code>HexGrid</code>. However, when a cell becomes visible for the first time they should be marked as explored. Introduce a public <code>HexCell.MarkAsExplored</code> method to make this possible.</p>
+						
+						<pre translate="no">	<ins>public void MarkAsExplored() => flags = flags.With(HexFlags.Explored);</ins></pre>
+						
+						<p>Now adjust <code>HexGrid.IncreaseVisibility</code> so it does the work <code>HexCell.IncreaseVisibility</code> used to do. Increment the visibility of all found cells, marking and refreshing them if their visibility increased to 1.</p>
+						
+						<pre translate="no">	public void IncreaseVisibility(HexCell fromCell, int range)
+	{
+		List&lt;HexCell> cells = GetVisibleCells(fromCell, range);
+		for (int i = 0; i &lt; cells.Count; i++)
+		{
+			<del>//cells[i].IncreaseVisibility();</del>
+			<ins>if (++cellVisibility[cells[i].Index] == 1)</ins>
+			<ins>{</ins>
+				<ins>cells[i].MarkAsExplored();</ins>
+				<ins>cellShaderData.RefreshVisibility(cells[i]);</ins>
+			<ins>}</ins>
+		}
+		ListPool&lt;HexCell>.Add(cells);
+	}</pre>
+						
+						<p>Adjust <code>DecreaseVisibility</code> and <code>ResetVisibility</code> in the same way.</p>
+						
+						<pre translate="no">	public void DecreaseVisibility(HexCell fromCell, int range)
+	{
+		List&lt;HexCell> cells = GetVisibleCells(fromCell, range);
+		for (int i = 0; i &lt; cells.Count; i++)
+		{
+			<del>//cells[i].DecreaseVisibility();</del>
+			<ins>if (--cellVisibility[cells[i].Index] == 0)</ins>
+			<ins>{</ins>
+				<ins>cellShaderData.RefreshVisibility(cells[i]);</ins>
+			<ins>}</ins>
+		}
+		ListPool&lt;HexCell>.Add(cells);
+	}
+
+	public void ResetVisibility()
+	{
+		for (int i = 0; i &lt; cells.Length; i++)
+		{
+			<del>//cells[i].ResetVisibility();</del>
+			<ins>if (cellVisibility[i] > 0)</ins>
+			<ins>{</ins>
+				<ins>cellVisibility[i] = 0;</ins>
+				<ins>cellShaderData.RefreshVisibility(cells[i]);</ins>
+			<ins>}</ins>
+		}
+		&hellip;
+	}</pre>
+						
+						<p>The last method that we have to change is <code>GetVisibleCells</code>. Adjust its beginning like for the other search methods. The only notable difference is that we should make sure that the path-from data is not accidentally cleared, because it might be needed to clear the current path. So we'll simply copy the existing value. Not doing so could cause <code>ClearPath</code> to fail, possibly getting stuck in an infinite loop.</p>
+						
+						<pre translate="no">		searchFrontierPhase += 2;
+		<del>//if (searchFrontier == null)</del>
+		<del>//{</del>
+		searchFrontier <ins>??</ins>= new HexCellPriorityQueue(<ins>this</ins>);
+		<del>//}</del>
+		<del>//else</del>
+		<del>//{</del>
+		searchFrontier.Clear();
+		<del>//}</del>
+		
+		range += fromCell.ViewElevation;
+		<ins>searchData[fromCell.Index] = new HexCellSearchData</ins>
+		<ins>{</ins>
+			<ins>searchPhase</ins> = searchFrontierPhase<ins>,</ins>
+			<ins>pathFrom = searchData[fromCell.Index].pathFrom</ins>
+		<ins>}</ins>;
+		<del>//fromCell.Distance = 0;</del>
+		searchFrontier.Enqueue(fromCell<ins>.Index</ins>);</pre>
+						
+						<p>Change its search loop, as before.</p>
+						
+						<pre translate="no">		while (<ins>searchFrontier.TryDequeue(out int currentIndex)</ins>)
+		{
+			HexCell current = <ins>cells[currentIndex]</ins>;
+			<ins>searchData[currentIndex].searchPhase</ins> += 1;
+			visibleCells.Add(current);
+			
+			&hellip;
+		}</pre>
+						
+						<p>And adapt the neighbor loop to work with the search data. Again we have to make sure that we do not change the path-from data.</p>
+						
+						<pre translate="no">			for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++)
+			{
+				if (!current.TryGetNeighbor(d, out HexCell neighbor)<ins>)</ins> <del>//||</del>
+				<ins>{</ins>
+					<ins>continue;</ins>
+				<ins>}</ins>
+				<ins>HexCellSearchData neighborData = searchData[neighbor.Index];</ins>
+				<ins>if (neighborData.searchPhase</ins> > searchFrontierPhase ||
+					!neighbor.Explorable)
+				{
+					continue;
+				}
+
+				int distance = <ins>searchData[currentIndex].distance</ins> + 1;
+				if (distance + neighbor.ViewElevation > range ||
+					distance > fromCoordinates.DistanceTo(neighbor.Coordinates))
+				{
+					continue;
+				}
+
+				if (<ins>neighborData.searchPhase</ins> &lt; searchFrontierPhase)
+				{
+					<ins>searchData[neighbor.Index] = new HexCellSearchData</ins>
+					<ins>{</ins>
+						<ins>searchPhase</ins> = searchFrontierPhase<ins>,</ins>
+						<ins>distance</ins> = distance<ins>,</ins>
+						<ins>pathFrom = neighborData.pathFrom</ins>
+					<ins>}</ins>;
+					<del>//neighbor.heuristic = 0;</del>
+					searchFrontier.Enqueue(neighbor<ins>.Index</ins>);
+				}
+				else if (distance &lt; <ins>searchData[neighbor.Index].distance</ins>)
+				{
+					<del>//int oldPriority = neighbor.SearchPriority;</del>
+					<ins>searchData[neighbor.Index].distance</ins> = distance;
+					searchFrontier.Change(
+						neighbor<ins>.Index</ins>, <ins>neighborData.SearchPriority</ins>);
+				}
+			}</pre>
+					</section>
+					
+					<section>
+						<h3>Cleanup</h3>
+						
+						<p>At this point our project should compile again and function as before, but now with search data and visibility separated from the cells. This allows us to delete quite a bit of code from <code>HexCell</code>. The <code>IsVisible</code>, <code>Distance</code>, <code>PathFromIndex</code>, <code>SearchHeuristic</code>, <code>SearchPriority</code>, <code>SearchPhase</code>, and <code>NextWithSamePriority</code> properties can be removed. So can the <code>distance</code> and <code>visibility</code> fields. And finally the <code>IncreaseVisibility</code>, <code>DecreaseVisibility</code>, and <code>ResetVisibility</code> methods.</p>
+						
+						<p>The next tutorial is <a href="../3-3-0/index.html">Hex Map 3.3.0</a>.</p>
+					</section>
+					
+					<a href="../../tutorials/license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecoding-projects/hex-map-project/src/0b563ca9db05ec0d1700d9f57240844ca3990adf/?at=release%2F3.2.0" class="repository">repository</a>
+					<a href="Hex-Map-3-2-0.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../tutorials/index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../tutorials/become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../tutorials/donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials/tutorials.js"></script>
+	</body>
+</html>

@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/hex-map/part-16/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/hex-map/part-16/tutorial-image.jpg">
+		<meta property="og:title" content="Hex Map 16">
+		<meta property="og:description" content="A Unity Hex Map tutorial about adding support for pathfinding. Part 16 of 27.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hex Map 16</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/hex-map/part-16/#article",
+				"headline": "Hex Map 16",
+				"alternativeHeadline": "Pathfinding",
+				"datePublished": "2017-04-19",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Hex Map tutorial about adding support for pathfinding. Part 16 of 27.",
+				"image": "https://catlikecoding.com/unity/tutorials/hex-map/part-16/tutorial-image.jpg",
+				"dependencies": "Unity 5.6.0",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/hex-map/", "name": "Hex Map" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				EdgeVertices: 1,
+				HexCell: 1,
+				HexCellPriorityQueue: 1,
+				HexEdgeType: 1,
+				HexCoordinates: 1,
+				HexCoordinatesDrawer: 1,
+				HexDirection: 1,
+				HexDirectionExtensions: 1,
+				HexFeatureCollection: 1,
+				HexFeatureManager: 1,
+				HexGrid: 1,
+				HexGridChunk: 1,
+				HexHash: 1,
+				HexMapCamera: 1,
+				HexMapEditor: 1,
+				HexMesh: 1,
+				HexMetrics: 1,
+				ListPool: 1,
+				NewMapMenu: 1,
+				OptionalToggle: 1,
+				SaveLoadItem: 1,
+				SaveLoadMenu: 1,
+				TextureArrayWizard: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Hex Map</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hex Map 16</h1>
+					<p>Pathfinding</p>
+					<ul>
+						<li>Highlight cells.</li>
+						<li>Pick a search destination.</li>
+						<li>Find the shortest path.</li>
+						<li>Create a priority queue.</li>
+					</ul>
+				</header>
+
+				<p>This is part 16 of a tutorial series about <a href="../index.html">hexagon maps</a>. After figuring out the distances between cells, we move on to finding paths between them.</p>
+				
+				<p>From now on, the Hex Map tutorials are made with Unity 5.6.0. Note that there is a bug in 5.6 that breaks texture arrays in builds on multiple platforms. The workaround is to enable <em translate="no">Is Readable</em> via the texture array's inspector.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Planning a journey.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Highlighting Cells</h2>
+					
+					<p>To search for a path between two cells, we first have to select these cells. It's no longer a matter of selecting a single cell and watching the search spread through the map. For example, we first select a starting cell, followed by a destination cell. After making these selections, it would be handy to highlight them. So let's add that functionality. We're not going to create a fancy or efficient highlighting method now, just a quick one to aid development.</p>
+					
+					<section>
+						<h3>Outline Texture</h3>
+						
+						<p>A simply way to highlight cells is by adding an outline to them. The most straightforward way to do this is with a texture that contains a hexagon outline. <a href="highlighting-cells/cell-outline.png">Here</a> is such a texture. It is transparent except for a white hexagon outline. By making it white, we can colorize it later as we see fit.</p>
+						
+						<figure>
+							<img src="highlighting-cells/cell-outline.png" width="128" height="128" style="background: #000000;">
+							<figcaption>Cell outline on black background.</figcaption>
+						</figure>
+						
+						<p>Import the texture and set its <em translate="no">Texture Type</em> to <em translate="no">Sprite</em>. Its <em translate="no">Sprite Mode</em> is <em translate="no">Single</em>, with the default settings. Because it's a pure white texture, we don't need <em translate="no">sRGB</em> conversion. The alpha channel represents transparency, so enable <em translate="no">Alpha is Transparency</em>. I also enabled mip maps and set the <em translate="no">Filter Mode</em> to <em translate="no">Trilinear</em>, because otherwise mip transitions can be obvious for outlines.</p>
+						
+						<figure>
+							<img src="highlighting-cells/cell-outline-inspector.png" width="320" height="410">
+							<figcaption>Texture import settings.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>One Sprite Per Cell</h3>
+						
+						<p>The quickest ways to add a potential outline to each cell, is to give each its own sprite. Create a new game object and add an image component to it, via <em translate="no">Component / UI / Image</em>, and assign our outline sprite to it. Then, put a <em translate="no">Hex Cell Label</em> prefab instance in the scene, make the sprite object a child of it, and apply the changes to the prefab. Then get rid of the instance.</p>
+						
+						<figure>
+							<img alt="hierarchy" src="highlighting-cells/sprite-hierarchy.png" width="118" height="34">
+							<img alt="inspector" src="highlighting-cells/sprite-inspector.png" width="320" height="378">
+							<figcaption>Highlight prefab child.</figcaption>
+						</figure>
+						
+						<p>Now every cells has a sprite, but they will be much too large. To make the outlines fit around the cell centers, change the <em translate="no">Width</em> and <em translate="no">Height</em> of the sprite's transform component to 17.</p>
+						
+						<figure>
+							<img src="highlighting-cells/highlight-sprites.png" width="380" height="250">
+							<figcaption>Highlight sprites, partially obscured by terrain.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Drawing on Top of Everything</h3>
+						
+						<p>Because the outline overlaps the cell edge regions, it often ends up below the terrain geometry. This causes part of the outline to disappear. Changing the vertical position of the sprites can prevent this for small elevation changes, but not for cliffs. What we can do instead, is always draw the outlines on top of everything else. We need to create a custom sprite shader for this. We can suffice by copying Unity's default sprite shader and making a few changes.</p>
+						
+						<pre translate="no" class="shader">Shader <ins>"Custom/Highlight"</ins> {
+	Properties {
+		[PerRendererData] _MainTex ("Sprite Texture", 2D) = "white" {}
+		_Color ("Tint", Color) = (1,1,1,1)
+		[MaterialToggle] PixelSnap ("Pixel snap", Float) = 0
+		[HideInInspector] _RendererColor ("RendererColor", Color) = (1,1,1,1)
+		[HideInInspector] _Flip ("Flip", Vector) = (1,1,1,1)
+		[PerRendererData] _AlphaTex ("External Alpha", 2D) = "white" {}
+		[PerRendererData] _EnableExternalAlpha ("Enable External Alpha", Float) = 0
+	}
+
+	SubShader {
+		Tags { 
+			"Queue"="Transparent"
+			"IgnoreProjector"="True"
+			"RenderType"="Transparent"
+			"PreviewType"="Plane"
+			"CanUseSpriteAtlas"="True"
+		}
+
+		Cull Off
+		ZWrite Off
+		Blend One OneMinusSrcAlpha
+
+		Pass {
+			CGPROGRAM
+			#pragma vertex SpriteVert
+			#pragma fragment SpriteFrag
+			#pragma target 2.0
+			#pragma multi_compile_instancing
+			#pragma multi_compile _ PIXELSNAP_ON
+			#pragma multi_compile _ ETC1_EXTERNAL_ALPHA
+			#include "UnitySprites.cginc"
+			ENDCG
+		}
+	}
+}</pre>
+						
+						<p>The first change is to ignore the depth buffer, by making the Z test always succeed.</p>
+						
+						<pre translate="no" class="shader">		ZWrite Off
+		<ins>ZTest Always</ins></pre>
+						
+						<p>The second change is to draw after all other transparent geometry. Adding 10 to the transparent queue should suffice.</p>
+						
+						<pre translate="no" class="shader">			"Queue"=<ins>"Transparent+10"</ins></pre>
+						
+						<p>Create a new material that uses this shader. We can ignore all its properties, sticking with the default values. Then have our sprite prefab use this material.</p>
+						
+						<figure>
+							<img alt="material" src="highlighting-cells/material-inspector.png" width="320" height="136">
+							<img alt="image" src="highlighting-cells/material-assigned.png" width="320" height="74">
+							<figcaption>Using a custom sprite material.</figcaption>
+						</figure>
+						
+						<p>Our highlights are now always visible. Even when a cell is hidden behind higher terrain, its outline will still be drawn on top of everything else. This might not be pretty, but it ensures that we can always spot the highlighted cells, which is useful.</p>
+						
+						<figure>
+							<img src="highlighting-cells/sprites-always.png" width="380" height="250">
+							<figcaption>Ignoring the depth buffer.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Controlling Highlights</h3>
+						
+						<p>We don't want all cells to be highlighted all the time. In fact, we want to start out with none of them highlighted. We can do this by disabling the image component of the <em translate="no">Highlight</em> prefab object.</p>
+						
+						<figure>
+							<img src="highlighting-cells/highlight-disabled.png" width="320" height="74">
+							<figcaption>Disabled image component.</figcaption>
+						</figure>
+						
+						<p>To enable the highlight of a cell, add an <code>EnableHighlight</code> method to <code>HexCell</code>. It has to grab the only child of its <code>uiRect</code> and enable its image component. Create a <code>DisableHighlight</code> method as well.</p>
+						
+						<pre translate="no">	<ins>public void DisableHighlight () {</ins>
+		<ins>Image highlight = uiRect.GetChild(0).GetComponent&lt;Image>();</ins>
+		<ins>highlight.enabled = false;</ins>
+	<ins>}</ins>
+	
+	<ins>public void EnableHighlight () {</ins>
+		<ins>Image highlight = uiRect.GetChild(0).GetComponent&lt;Image>();</ins>
+		<ins>highlight.enabled = true;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Finally, we can also provide a color to tint the highlight when enabling it.</p>
+						
+						<pre translate="no">	public void EnableHighlight (<ins>Color color</ins>) {
+		Image highlight = uiRect.GetChild(0).GetComponent&lt;Image>();
+		<ins>highlight.color = color;</ins>
+		highlight.enabled = true;
+	}</pre>
+					</section>
+					
+					<a href="highlighting-cells/highlighting-cells.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Finding a Path</h2>
+					
+					<p>Now that we can highlight cells, we can go ahead and select two cells, then search for a path between them. First we have to actually select the cells, then limit the search to finding a path, and finally show that path.</p>
+					
+					<section>
+						<h3>Search Start</h3>
+						
+						<p>We have two different cells to select, the start and the end point of the search. Let's say that to select the cell to search from, you have to hold down the left shift key while clicking. Doing so will highlight that cell with a blue color. We have to keep a reference to this cell for later searching. Also, when a new starting cell is chosen, the highlight of the old one should be disabled. So add a <code>searchFromCell</code> field to <code>HexMapEditor</code>.</p>
+						
+						<pre translate="no">	HexCell previousCell<ins>, searchFromCell</ins>;</pre>
+						
+						<p>Inside <code>HandleInput</code>, we can use <code>Input.GetKey(KeyCode.LeftShift)</code> to check whether the shift key is being held down.</p>
+						
+						<pre translate="no">			if (editMode) {
+				EditCells(currentCell);
+			}
+			<ins>else if (Input.GetKey(KeyCode.LeftShift)) {</ins>
+				<ins>if (searchFromCell) {</ins>
+					<ins>searchFromCell.DisableHighlight();</ins>
+				<ins>}</ins>
+				<ins>searchFromCell = currentCell;</ins>
+				<ins>searchFromCell.EnableHighlight(Color.blue);</ins>
+			<ins>}</ins>
+			else {
+				hexGrid.FindDistancesTo(currentCell);
+			}
+</pre>
+						<figure>
+							<img src="finding-a-path/searching-from.png" width="260" height="170">
+							<figcaption>Where to search from.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Search Destination</h3>
+						
+						<p>Instead of finding all distances to a cell, we're now looking for a path between two specific cells. So rename <code>HexGrid.FindDistancesTo</code> to <code>HexGrid.FindPath</code> and give it a second <code>HexCell</code> parameter. Adjust the <code>Search</code> method as well.</p>
+						
+						<pre translate="no">	public void <ins>FindPath</ins> (HexCell <ins>fromCell, HexCell toCell</ins>) {
+		StopAllCoroutines();
+		StartCoroutine(Search(<ins>fromCell, toCell</ins>));
+	}
+
+	IEnumerator Search (HexCell <ins>fromCell, HexCell toCell</ins>) {
+		for (int i = 0; i &lt; cells.Length; i++) {
+			cells[i].Distance = int.MaxValue;
+		}
+
+		WaitForSeconds delay = new WaitForSeconds(1 / 60f);
+		List&lt;HexCell> frontier = new List&lt;HexCell>();
+		<ins>fromCell</ins>.Distance = 0;
+		frontier.Add(<ins>fromCell</ins>);
+		&hellip;
+	}</pre>
+						
+						<p><code>HexMapEditor.HandleInput</code> now has to invoke the adjusted method, using <code>searchFromCell</code> and <code>currentCell</code> as arguments. Also, we can only look for a path when we know which cell to search from. And we don't have to bother looking for a path when the destination is the same as the start.</p>
+						
+						<pre translate="no">			if (editMode) {
+				EditCells(currentCell);
+			}
+			else if (Input.GetKey(KeyCode.LeftShift)) {
+				&hellip;
+			}
+			else <ins>if (searchFromCell &amp;&amp; searchFromCell != currentCell)</ins> {
+				hexGrid.<ins>FindPath(searchFromCell,</ins> currentCell);
+			}
+</pre>
+						
+						<p>Once we're going for a search, we should first get rid of all previous highlights. So have <code>HexGrid.Search</code> disable the highlights while it's resetting the distances. As this also disables the highlight of the starting cell, enable it again afterwards. At this point, we can also highlight the destination cell. Let's make it red.</p>
+						
+						<pre translate="no">	IEnumerator Search (HexCell fromCell, HexCell toCell) {
+		for (int i = 0; i &lt; cells.Length; i++) {
+			cells[i].Distance = int.MaxValue;
+			<ins>cells[i].DisableHighlight();</ins>
+		}
+		<ins>fromCell.EnableHighlight(Color.blue);</ins>
+		<ins>toCell.EnableHighlight(Color.red);</ins>
+		
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="finding-a-path/searching-to.png" width="260" height="170">
+							<figcaption>The endpoints of a potential path.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Limiting the Search</h3>
+						
+						<p>At this point, our search algorithm still computes the distances for all cells that are reachable from the starting cell. This is no longer necessary. We can stop as soon as we've found the final distance to the destination cell. So when the current cell is the destination, we can break out of the algorithm loop.</p>
+						
+						<pre translate="no">		while (frontier.Count > 0) {
+			yield return delay;
+			HexCell current = frontier[0];
+			frontier.RemoveAt(0);
+
+			<ins>if (current == toCell) {</ins>
+				<ins>break;</ins>
+			<ins>}</ins>
+
+			for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++) {
+				&hellip;
+			}
+		}</pre>
+						
+						<figure>
+							<img src="finding-a-path/stopping.png" width="260" height="230">
+							<figcaption>Stopping at the destination.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What happens if the destination cannot be reached?</h3>
+							<div>
+								<p>Then the algorithm continues until all reachable cells have been searched. Without the possibility to take an early exit, it will behave like the old <code>FindDistancesTo</code> method.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Showing the Path</h3>
+						
+						<p>We can find the distance between the start and end of a path, but we do not yet know what the actual path is. To do so, we have to keep track of how each cell was reached. How can we do this?</p>
+						
+						<p>When adding a cell to the frontier, we do so because it's a neighbor of the current cell. The only exception is the starting cell. All other cells were reached via the current cell. If we keep track of from which cell each cell was reached, we end up with a cell network. Spefically, a tree network with the starting cell as its root. We can use this to construct a path once we reach the destination.</p>
+						
+						<figure>
+							<img src="finding-a-path/path-tree.png" width="400" height="369">
+							<figcaption>A tree network describing paths to the center.</figcaption>
+						</figure>
+						
+						<p>We can store this information by adding another cell reference to <code>HexCell</code>. We don't need to serialize this data, so let's use a default property for it.</p>
+						
+						<pre translate="no">	<ins>public HexCell PathFrom { get; set; }</ins></pre>
+						
+						<p>Back in <code>HexGrid.Search</code>, set the neighbor's <code>PathFrom</code> to the current cell when adding it to the frontier. We also have to change this reference when we find a shorter route to a neighbor.</p>
+						
+						<pre translate="no">				if (neighbor.Distance == int.MaxValue) {
+					neighbor.Distance = distance;
+					<ins>neighbor.PathFrom = current;</ins>
+					frontier.Add(neighbor);
+				}
+				else if (distance &lt; neighbor.Distance) {
+					neighbor.Distance = distance;
+					<ins>neighbor.PathFrom = current;</ins>
+				}</pre>
+						
+						<p>After arriving at the destination, we can visualize the path by following these references back to the starting cell, and highlight them.</p>
+						
+						<pre translate="no">			if (current == toCell) {
+				<ins>current = current.PathFrom;</ins>
+				<ins>while (current != fromCell) {</ins>
+					<ins>current.EnableHighlight(Color.white);</ins>
+					<ins>current = current.PathFrom;</ins>
+				<ins>}</ins>
+				break;
+			}</pre>
+						
+						<figure>
+							<img src="finding-a-path/path.png" width="210" height="130">
+							<figcaption>A path has been found.</figcaption>
+						</figure>
+						
+						<p>Note that there are often multiple shortest paths. Which is found depends on the order in which the cells are processed. Some paths might look good, others might look bad, but there's never a shorter path. We'll get back to this later.</p>
+					</section>
+					
+					<section>
+						<h3>Adjusting the Seach Start</h3>
+						
+						<p>Once a starting cell has been chosen, changing the destination cell will trigger a new search. The same should happen when selecting a new starting cell. To make this possible, <code>HexMapEditor</code> also has to remember the destination cell.</p>
+						
+						<pre translate="no">	HexCell previousCell, searchFromCell<ins>, searchToCell</ins>;</pre>
+						
+						<p>Using this field, we can also initiate a new search when selecting a new start.</p>
+						
+						<pre translate="no">			else if (Input.GetKey(KeyCode.LeftShift)) {
+				if (searchFromCell) {
+					searchFromCell.DisableHighlight();
+				}
+				searchFromCell = currentCell;
+				searchFromCell.EnableHighlight(Color.blue);
+				<ins>if (searchToCell) {</ins>
+					<ins>hexGrid.FindPath(searchFromCell, searchToCell);</ins>
+				<ins>}</ins>
+			}
+			else if (searchFromCell &amp;&amp; searchFromCell != currentCell) {
+				<ins>searchToCell = currentCell;</ins>
+				hexGrid.FindPath(searchFromCell, <ins>searchToCell</ins>);
+			}</pre>
+						
+						<p>Also, we should avoid making the start cell equal to the destination cell.</p>
+						
+						<pre translate="no">			if (editMode) {
+				EditCells(currentCell);
+			}
+			else if (
+				Input.GetKey(KeyCode.LeftShift) <ins>&amp;&amp; searchToCell != currentCell</ins>
+			) {
+				&hellip;
+			}</pre>
+					</section>
+					
+					<a href="finding-a-path/finding-a-path.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Smarter Searching</h2>
+					
+					<p>Although our search algorithm finds the shortest path, it spends a lot of time investigating cells that obviously won't be part of that path. Obvious to us, at least. The algorithm doesn't have a high-level view of the map. It cannot see that searching in some directions will be pointless. It prefers to follow roads, even if they lead away from the destination. Can we make it smarter?</p>
+					
+					<p>Currently, we're only considering a cell's distance from the start when deciding which cell to process next. If we want to be smart about this, we also have to consider the distance to the destination. Unfortunately, we don't know this yet. But we could make an estimate of the remaining distance. Adding that to the cell distance gives us an indication of the total path length that goes through this cell. We can then use that to determine the search priorities for cells.</p>
+					
+					<section>
+						<h3>Search Heuristic</h3>
+						
+						<p>When we're relying on an estimate or guess instead of exactly known data, we say that we use a search heuristic. This heuristic represents our best guess of the remaining distance. We have to determine this value for each cell that we search through, so add an integer property for it to <code>HexCell</code>. We don't need to serialize it, so we can suffice with another default property.</p>
+						
+						<pre translate="no">	<ins>public int SearchHeuristic { get; set; }</ins></pre>
+						
+						<p>How do we guess the remaining distance? In the most ideal case, there would be a road leading straight to the destination. If so, the distance is equal to the unmodified distance between the coordinates of this cell and the destination cell. Let's use that as our heuristic.</p>
+						
+						<p>As the heuristic doesn't depend on the path traveled so far, it is constant during the search. So we only have to compute it once, when <code>HexGrid.Search</code> adds a cell to the frontier.</p>
+						
+						<pre translate="no">				if (neighbor.Distance == int.MaxValue) {
+					neighbor.Distance = distance;
+					neighbor.PathFrom = current;
+					<ins>neighbor.SearchHeuristic =</ins>
+						<ins>neighbor.coordinates.DistanceTo(toCell.coordinates);</ins>
+					frontier.Add(neighbor);
+				}
+</pre>
+					</section>
+					
+					<section>
+						<h3>Search Priority</h3>
+						
+						<p>From now on, we'll determine the search priority based on the cell distance plus its heuristic. Let's add a convenient property for this value to <code>HexCell</code>.</p>
+						
+						<pre translate="no">	<ins>public int SearchPriority {</ins>
+		<ins>get {</ins>
+			<ins>return distance + SearchHeuristic;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>To make this work, adjust <code>HexGrid.Search</code> so it uses this property to sort the frontier.</p>
+						
+						<pre translate="no">				frontier.Sort(
+					(x, y) => x.<ins>SearchPriority</ins>.CompareTo(y.<ins>SearchPriority</ins>)
+				);</pre>
+						
+						<figure>
+							<img alt="without" src="smarter-searching/without-heuristic.png" width="300" height="230">
+							<img alt="with" src="smarter-searching/with-heuristic.png" width="300" height="230">
+							<figcaption>Searching without vs. with heuristic.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Admissible Heuristic</h3>
+						
+						<p>Using our new search priorities, we indeed end up visiting fewer cells. However, on a featureless map the algorithm still processes cells that lie in the wrong direction. This happens because our default movement cost is 5 per step, while the heuristic only adds 1 per step. So the influence of the heuristic isn't very strong.</p>
+						
+						<p>If the movement costs are the same across the map, then we could use the same costs when determining the heuristic. In our case, that would be our current heuristic times 5. That would drastically reduce the amount of processed cells.</p>
+						
+						<figure>
+							<img src="smarter-searching/heuristic-5.png" width="190" height="150">
+							<figcaption>Using heuristic &times; 5.</figcaption>
+						</figure>
+						
+						<p>However, if there are roads on the map, we might end up overestimating the remaining distance. As a result, the algorithm can make mistakes and produce a path that isn't actually the shortest.</p>
+						
+						<figure>
+							<img alt="incorrect" src="smarter-searching/road-incorrect.png" width="190" height="150">
+							<img alt="correct" src="smarter-searching/road-correct.png" width="190" height="150">
+							<figcaption>Overestimating vs. admissible heuristic.</figcaption>
+						</figure>
+						
+						<p>To guarantee that we find the shortest path, we have to make sure that we never overestimate the remaining distance. This is known as an admissible heuristic. Because our minimum movement cost is 1, we have no choice but to use the same costs when determining the heuristic.</p>
+						
+						<p>Technically, it's fine to use an even lower cost, but that would only make the heuristic weaker. The lowest possible heuristic is zero, which is simply Dijkstra's algorithm. When the heuristic is nonzero, this algorithm is known as A<sup>*</sup>, pronounced as A-star.</p>
+						
+						<aside>
+							<h3>Why is it known as A<sup>*</sup>?</h3>
+							<div>
+								<p>The idea of adding a heuristic to Dijkstra's algorithm was first introduced by Nils Nilsson. He named his variant A1. Later, Bertram Raphael made a better version, which he named A2. After that, Peter Hart proved that A2 was optimal with a good heuristic, so there couldn't be a better version. That prompted him to name it A<sup>*</sup> to indicate that there would never be another improvement, like A3 or A4. So yes, the A<sup>*</sup> algorithm is the best you'll ever get, but it is only as good as its heuristic.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="smarter-searching/smarter-searching.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Priority Queue</h2>
+					
+					<p>Although A<sup>*</sup> is a good algorithm, our implementation of it is not that efficient. That's because we're using a list to store the frontier, which we have to sort each iteration. As mentioned in the <a href="../part-15/index.html">previous tutorial</a>, what we need is a priority queue, but there's no standard implementation of one. Let's now create one ourselves.</p>
+					
+					<p>Our queue must support an enqueue and a dequeue operation, based on priority. It must also support changing the priority of a cell that's already in the queue. Ideally, we implement this while minimizing searching, sorting, and memory allocations. And we want to keep it simple too.</p>
+					
+					<section>
+						<h3>Creating a Custom Queue</h3>
+						
+						<p>Create a new <code>HexCellPriorityQueue</code> class with the required public methods. We'll use a simple list to keep track of the queue's contents. Also, give it a <code>Clear</code> method to reset the queue, so we can reuse it.</p>
+						
+						<pre translate="no"><ins>using System.Collections.Generic;</ins>
+
+<ins>public class HexCellPriorityQueue {</ins>
+
+	<ins>List&lt;HexCell> list = new List&lt;HexCell>();</ins>
+
+	<ins>public void Enqueue (HexCell cell) {</ins>
+	<ins>}</ins>
+
+	<ins>public HexCell Dequeue () {</ins>
+		<ins>return null;</ins>
+	<ins>}</ins>
+	
+	<ins>public void Change (HexCell cell) {</ins>
+	<ins>}</ins>
+	
+	<ins>public void Clear () {</ins>
+		<ins>list.Clear();</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>We store the cell priorities in the cells themselves. So a cell's priority has to be set before it is added to the queue. But in case of a priority change, it is probably useful to know what was the old priority. So let's add that as a parameter to <code>Change</code>.</p>
+						
+						<pre translate="no">	public void Change (HexCell cell<ins>, int oldPriority</ins>) {
+	}</pre>
+						
+						<p>It's also useful to know how many cells are in the queue, so add a <code>Count</code> property for that. Simply use a field that is incremented and decremented appropriately.</p>
+						
+						<pre translate="no">	<ins>int count = 0;</ins>
+
+	<ins>public int Count {</ins>
+		<ins>get {</ins>
+			<ins>return count;</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	public void Enqueue (HexCell cell) {
+		<ins>count += 1;</ins>
+	}
+
+	public HexCell Dequeue () {
+		<ins>count -= 1;</ins>
+		return null;
+	}
+	
+	&hellip;
+	
+	public void Clear () {
+		list.Clear();
+		<ins>count = 0;</ins>
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Adding to the Queue</h3>
+						
+						<p>When a cell is added to the queue, let's start by simply using its priority as its index, treating the list as a simple array.</p>
+						
+						<pre translate="no">	public void Enqueue (HexCell cell) {
+		count += 1;
+		<ins>int priority = cell.SearchPriority;</ins>
+		<ins>list[priority] = cell;</ins>
+	}</pre>
+						
+						<p>However, that only works if the list is long enough, otherwise we go out of bounds. We can prevent that by adding dummy elements to the list until it has the required length. These empty elements don't reference a cell, so they're created by adding <code>null</code> to the list.</p>
+						
+						<pre translate="no">		int priority = cell.SearchPriority;
+		<ins>while (priority >= list.Count) {</ins>
+			<ins>list.Add(null);</ins>
+		<ins>}</ins>
+		list[priority] = cell;</pre>
+						
+						<figure>
+							<img src="priority-queue/list-with-holes.png" width="150" height="265">
+							<figcaption>List with holes.</figcaption>
+						</figure>
+						
+						<p>But this only stores a single cell per priority, while there will likely be multiple. To keep track of all the cells with the same priority, we have to use another list. While we could use an actual list per priority, we can also add a property to <code>HexCell</code> to link them together. This allows us to create a chain of cells, known as a linked list.</p>
+						
+						<pre translate="no">	<ins>public HexCell NextWithSamePriority { get; set; }</ins></pre>
+						
+						<p>To create the chain, have <code>HexCellPriorityQueue.Enqueue</code> make the newly added cell reference the current value at the same priority, before replacing it.</p>
+						
+						<pre translate="no">		<ins>cell.NextWithSamePriority = list[priority];</ins>
+		list[priority] = cell;
+</pre>
+						
+						<figure>
+							<img src="priority-queue/chained-list.png" width="310" height="265">
+							<figcaption>List of linked lists.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Removing from the Queue</h3>
+						
+						<p>To retrieve a cell from the priority queue, we have to access the linked list at the lowest non-empty index. So loop through the list until we find it. If we don't, then the queue is empty and we return <code>null</code>.</p>
+						
+						<p>We could return any cell from the found chain, because they all have the same priority. It's simplest to return the cell at the start of the chain.</p>
+						
+						<pre translate="no">	public HexCell Dequeue () {
+		count -= 1;
+		<ins>for (int i = 0; i &lt; list.Count; i++) {</ins>
+			<ins>HexCell cell = list[i];</ins>
+			<ins>if (cell != null) {</ins>
+				<ins>return cell;</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		return null;
+	}</pre>
+						
+						<p>To keep a reference to the rest of the chain, use the next cell with the same priority as the new start. If there was only one cell at this priority level, the element will become <code>null</code> and it will be skipped in the future.</p>
+						
+						<pre translate="no">			if (cell != null) {
+				<ins>list[i] = cell.NextWithSamePriority;</ins>
+				return cell;
+			}</pre>
+					</section>
+					
+					<section>
+						<h3>Keeping Track of the Minimum</h3>
+						
+						<p>This approach works, but requires us to iterate through the list each time we retrieve a cell. We cannot avoid searching for the lowest non-empty index, but we do not have to start from zero every time. Instead, we could keep track of the minimum priority, and start the search from there. Initially, the minimum is effectively infinite.</p>
+						
+						<pre translate="no">	<ins>int minimum = int.MaxValue;</ins>
+
+	&hellip;
+	
+	public void Clear () {
+		list.Clear();
+		count = 0;
+		<ins>minimum = int.MaxValue;</ins>
+	}</pre>
+						
+						<p>When a cell is added to the queue, adjust the minimum if necessary.</p>
+						
+						<pre translate="no">	public void Enqueue (HexCell cell) {
+		count += 1;
+		int priority = cell.SearchPriority;
+		<ins>if (priority &lt; minimum) {</ins>
+			<ins>minimum = priority;</ins>
+		<ins>}</ins>
+		&hellip;
+	}</pre>
+						
+						<p>And when dequeuing, use the minimum to iterate through the list, instead of starting at zero.</p>
+						
+						<pre translate="no">	public HexCell Dequeue () {
+		count -= 1;
+		for (<ins>; minimum &lt; list.Count; minimum++</ins>) {
+			HexCell cell = list[<ins>minimum</ins>];
+			if (cell != null) {
+				list[<ins>minimum</ins>] = cell.NextWithSamePriority;
+				return cell;
+			}
+		}
+		return null;
+	}</pre>
+						
+						<p>This drastically reduces the amount of time we have to spend looping through our priority list.</p>
+					</section>
+					
+					<section>
+						<h3>Changing Priorities</h3>
+						
+						<p>When a cell's priority changes, it has to be removed from the linked list that it's currently a part of. To do so, we have to follow the chain until we find it.</p>
+						
+						<p>Begin by declaring the head of the old priority list to be the current cell, and also keep track of the next cell. We can directly grab the next cell, because we know that there is at least one cell at this index.</p>
+						
+						<pre translate="no">	public void Change (HexCell cell, int oldPriority) {
+		<ins>HexCell current = list[oldPriority];</ins>
+		<ins>HexCell next = current.NextWithSamePriority;</ins>
+	}</pre>
+						
+						<p>If the current cell is the changed cell, then it is the head cell and we can cut it away, as if we dequeued it.</p>
+						
+						<pre translate="no">		HexCell current = list[oldPriority];
+		HexCell next = current.NextWithSamePriority;
+		<ins>if (current == cell) {</ins>
+			<ins>list[oldPriority] = next;</ins>
+		<ins>}</ins></pre>
+						
+						<p>If not, we have to follow the chain until we end up at the cell in front of the changed cell. That one holds the reference to the cell that has been changed.</p>
+						
+						<pre translate="no">		if (current == cell) {
+			list[oldPriority] = next;
+		}
+		<ins>else {</ins>
+			<ins>while (next != cell) {</ins>
+				<ins>current = next;</ins>
+				<ins>next = current.NextWithSamePriority;</ins>
+			<ins>}</ins>
+		<ins>}</ins></pre>
+						
+						<p>At this point, we can remove the changed cell from the linked list, by skipping it.</p>
+						
+						<pre translate="no">			while (next != cell) {
+				current = next;
+				next = current.NextWithSamePriority;
+			}
+			<ins>current.NextWithSamePriority = cell.NextWithSamePriority;</ins></pre>
+						
+						<p>After the cell has been removed, it has to be added again so it ends up in the list for its new priority.</p>
+						
+						<pre translate="no">	public void Change (HexCell cell, int oldPriority) {
+		&hellip;
+		<ins>Enqueue(cell);</ins>
+	}</pre>
+						
+						<p>The <code>Enqueue</code> method increments the count, but we're not actually adding a new cell. So we have to decrement the count to compensate for that.</p>
+						
+						<pre translate="no">		Enqueue(cell);
+		<ins>count -= 1;</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Using the Queue</h3>
+						
+						<p>Now we can use our custom priority queue in <code>HexGrid</code>. We can make do with a single instance that we reuse for all searches.</p>
+						
+						<pre translate="no">	<ins>HexCellPriorityQueue searchFrontier;</ins>
+	
+	&hellip;
+	
+	IEnumerator Search (HexCell fromCell, HexCell toCell) {
+		<ins>if (searchFrontier == null) {</ins>
+			<ins>searchFrontier = new HexCellPriorityQueue();</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>searchFrontier.Clear();</ins>
+		<ins>}</ins>
+		
+		&hellip;
+	}</pre>
+						
+						<p>The <code>Search</code> method now has to enqueue <code>fromCell</code> before starting its loop, and each iteration begins by dequeuing a cell. This replaces the old frontier code.</p>
+						
+						<pre translate="no">		WaitForSeconds delay = new WaitForSeconds(1 / 60f);
+<del>//		List&lt;HexCell> frontier = new List&lt;HexCell>();</del>
+		fromCell.Distance = 0;
+<del>//		frontier.Add(fromCell);</del>
+		<ins>searchFrontier.Enqueue(fromCell);</ins>
+		while (<ins>searchFrontier.Count > 0</ins>) {
+			yield return delay;
+			HexCell current = <ins>searchFrontier.Dequeue()</ins>;
+<del>//			frontier.RemoveAt(0);</del>
+			&hellip;
+		}</pre>
+						
+						<p>Adjust the code for adding and changing a neighbor as well. Make sure to remember the old priority before changing it.</p>
+						
+						<pre translate="no">				if (neighbor.Distance == int.MaxValue) {
+					neighbor.Distance = distance;
+					neighbor.PathFrom = current;
+					neighbor.SearchHeuristic =
+						neighbor.coordinates.DistanceTo(toCell.coordinates);
+<del>//					frontier.Add(neighbor);</del>
+					<ins>searchFrontier.Enqueue(neighbor);</ins>
+				}
+				else if (distance &lt; neighbor.Distance) {
+					<ins>int oldPriority = neighbor.SearchPriority;</ins>
+					neighbor.Distance = distance;
+					neighbor.PathFrom = current;
+					<ins>searchFrontier.Change(neighbor, oldPriority);</ins>
+				}</pre>
+						
+						<p>Finally, we no longer need to sort the frontier.</p>
+						
+						<pre translate="no"><del>//				frontier.Sort(</del>
+<del>//					(x, y) => x.SearchPriority.CompareTo(y.SearchPriority)</del>
+<del>//				);</del></pre>
+						
+						<figure>
+							<video width="320" height="230" controls loop muted>
+								<source src="priority-queue/searching.mp4" type="video/mp4">
+							</video>
+							<figcaption>Searching with a priority queue.</figcaption>
+						</figure>
+
+						<p>As mentioned earlier, which shortest path is found depends on the order in which the cells are processed. Our queue produces a different order than a sorted list, hence you can get different paths. Because we're both adding to and removing from the head of the linked lists for each priority, they function as stacks rather than queues. The cells that were added last get processed first. A side effect of this approach is that the algorithm tends to zigzag. This makes it more likely to produce paths that zigzag as well. Fortunately, such paths tend to look better, so it's a nice side effect.</p>
+						
+						<figure>
+							<img alt="sorted list" src="smarter-searching/with-heuristic.png" width="300" height="230">
+							<img alt="priority queue" src="priority-queue/with-priority-queue.png" width="300" height="230">
+							<figcaption>Sorted list vs. priority queue.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../part-17/index.html">Limited Movement</a>.</p>
+					</section>
+					
+					<a href="priority-queue/priority-queue.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Hex-Map-16.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

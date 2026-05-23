@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/maze/3-0-0/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/maze/3-0-0/tutorial-image.jpg">
+		<meta property="og:title" content="Maze 3.0.0">
+		<meta property="og:description" content="Unity Maze 3.0.0 tutorial, about building cells with smaller parts.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Maze 3.0.0</title>
+		<link href="../../tutorials/tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../site.webmanifest.html">
+
+		
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/maze/3-0-0/#article",
+				"headline": "Maze 3.0.0",
+				"alternativeHeadline": "Building Cells",
+				"datePublished": "2024-08-29",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "Unity Maze 3.0.0 tutorial, about building cells with smaller parts",
+				"image": "https://catlikecoding.com/unity/maze/3-0-0/tutorial-image.jpg",
+				"dependencies": "Unity 2022.3.43f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/maze/", "name": "Maze" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				Agent: 1,
+				MazeCellBuilder: 1,
+				CellData: 1,
+				ClearOcclusionJob: 1,
+				DisperseScentJob: 1,
+				FieldOfView: 1,
+				FindDiagonalPassagesJob: 1,
+				Game: 1,
+				GenerateMazeJob: 1,
+				Maze: 1,
+				MazeCellObject: 1,
+				MazeFlags: 1,
+				MazeFlagsExtensions: 1,
+				MazeVisualization: 1,
+				OcclusionJob: 1,
+				Player: 1,
+				PrefabInstancePool: 1,
+				Quadrant: 1,
+				Scan: 1,
+				ScanStack: 1,
+				Scent : 1,
+				ScentJob: 1,
+				T: 1
+			};
+			
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../products/utilities/frame-rate-counter/index.html"><img src="../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../index.html">Unity</a></li>
+					<li><a href="../index.html">Maze</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Maze 3.0.0</h1>
+					<p>Building Cells</p>
+				</header>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Green stuff is built using a different approach.</figcaption>
+				</figure>
+				
+				<p>This tutorial is made with Unity 2022.3.43f1 and follows <a href="../2-2-0/index.html">Maze 2.2.0</a>.</p>
+				
+				<section>
+					<h2>Prefab Instance Pool</h2>
+					
+					<p>We're upgrading our project to major version 3, because we're making a significant change. But first we incorporate the <code>PrefabInstancePool</code> class into our project. It's an improved way to pool prefab instances that was introduced in <a href="../../tutorials/prototypes/index.html">game prototype tutorials</a> that released after the original <a href="../../tutorials/prototypes/maze-2/index.html">Maze 2</a> prototype.</p>
+					
+					<p>We copy the class to our project verbatim. It supports hot reloading, which our project doesn't because it stores game state in native arrays, but we keep the functionality anyway.</p>
+					
+					<pre translate="no">using System.Collections.Generic;
+using UnityEngine;
+
+public struct PrefabInstancePool&lt;T> where T : MonoBehaviour
+{
+	Stack&lt;T> pool;
+
+	public T GetInstance(T prefab)
+	{
+		if (pool == null)
+		{
+			pool = new();
+		}
+#if UNITY_EDITOR
+		else if (pool.TryPeek(out T i) &amp;&amp; !i)
+		{
+			// Instances destroyed, assuming due to exiting play mode.
+			pool.Clear();
+		}
+#endif
+
+		if (pool.TryPop(out T instance))
+		{
+			instance.gameObject.SetActive(true);
+		}
+		else
+		{
+			instance = Object.Instantiate(prefab);
+		}
+		return instance;
+	}
+
+	public readonly void Recycle(T instance)
+	{
+#if UNITY_EDITOR
+		if (pool == null)
+		{
+			// Pool lost, assuming due to hot reload.
+			Object.Destroy(instance.gameObject);
+			return;
+		}
+#endif
+		pool.Push(instance);
+		instance.gameObject.SetActive(false);
+	}
+}</pre>
+					
+					<p>Now we can use this pool in <code>MazeCellObject</code>, simplifying it a lot.</p>
+					
+					<pre translate="no"><del>//using System.Collections.Generic;</del>
+using UnityEngine;
+
+public class MazeCellObject : MonoBehaviour
+{
+<del>//#if UNITY_EDITOR</del>
+	<del>//&hellip;</del>
+<del>//#endif</del>
+	 
+	<del>//[System.NonSerialized]</del>
+	<ins>PrefabInstancePool</ins>&lt;MazeCellObject> pool;
+
+	public MazeCellObject GetInstance()
+	{
+		<ins>MazeCellObject instance = pool.GetInstance(this);</ins>
+		<ins>instance.pool = pool;</ins>
+		<ins>return instance;</ins>
+	}
+
+	public void Recycle()
+	{
+		<ins>pool.Recycle(this);</ins>
+	}
+}</pre>
+				</section>
+				
+				<section>
+					<h2>Building Cells</h2>
+					
+					<p>The big change is that we're going to use a new approach to build maze cell visualizations. The prototype used unique prefabs for all possible cell configurations, but this is inflexible and doesn't scale well if we add more cell variety. Instead we will build cells on demand, using simpler prefab parts. This matches the approach used in the old Maze 1 tutorial.</p>
+					
+					<section>
+						<h3>Prefab Parts</h3>
+						
+						<p>Create prefabs for all cell parts that we need. First is the container cell object, which can be made by duplicating any of the existing prefabs and removing all its child objects. Second is a floor prefab, which can be made by duplicate the open X junction prefab and removing its ceiling. Create a prefab for the ceiling in the same way.</p>
+						
+						<p>Do the same for a wall, making it a north wall. Note that prefab is then made such that when centered on a cell the wall is in the correct position. We also need a full corner, which is the square pillar in the northeast corner of a cell. And finally also a cut corner in the same place.</p>
+						
+						<p>Give the renderers of these prefabs a different material to visually distinguish them from the old prefabs. I gave them a green color.</p>
+					</section>
+					
+					<section>
+						<h3>Cell Builder</h3>
+						
+						<p>To build a cell we introduce a new <code>MazeCellBuilder</code> scriptable object type, based on <code>MazeVisualization</code>. It needs the same rotations array and a <code>BuildCell</code> method with a maze and a cell index as parameters, returning a cell object. Give it configuration fields for the six prefabs that we need.</p>
+						
+						<p><code>BuildCell</code> starts with getting a cell instance, settings its position, and returning it. We won't rotate it. Keep track of its <code>Transform</code> and <code>MazeFlags</code> with local variables as we'll use them when filling the cell with parts.</p>
+						
+						<pre translate="no">using UnityEngine;
+
+[CreateAssetMenu]
+public class MazeCellBuilder : ScriptableObject
+{
+	static readonly Quaternion[] rotations =
+	{
+		Quaternion.identity,
+		Quaternion.Euler(0f, 90f, 0f),
+		Quaternion.Euler(0f, 180f, 0f),
+		Quaternion.Euler(0f, 270f, 0f)
+	};
+
+	[SerializeField]
+	MazeCellObject
+		cell, floor, ceiling, wall, cornerCut, cornerFull;
+
+	public MazeCellObject BuildCell(Maze maze, int cellIndex)
+	{
+		MazeCellObject instance = cell.GetInstance();
+		Transform t = instance.transform;
+		t.localPosition = maze.IndexToWorldPosition(cellIndex);
+		MazeFlags f = maze[cellIndex];
+		
+		return instance;
+	}
+}</pre>
+						
+						<p>The floor and ceiling are easy to add. Get instances of them and make the cell their parent, without changing their local position.</p>
+						
+						<pre translate="no">		MazeFlags f = maze[cellIndex];
+
+		<ins>floor.GetInstance().transform.SetParent(t, false);</ins>
+		<ins>ceiling.GetInstance().transform.SetParent(t, false);</ins></pre>
+						
+						<p>Next, check whether we need to place a wall in each direction and store this data in boolean variables, as we'll refer to it more than once. A wall is needed if there isn't a passage.</p>
+						
+						<pre translate="no">		ceiling.GetInstance().transform.SetParent(t, false);
+
+		<ins>bool wallN = f.HasNot(MazeFlags.PassageN);</ins>
+		<ins>bool wallE = f.HasNot(MazeFlags.PassageE);</ins>
+		<ins>bool wallS = f.HasNot(MazeFlags.PassageS);</ins>
+		<ins>bool wallW = f.HasNot(MazeFlags.PassageW);</ins></pre>
+						
+						<p>To build a wall we have to get an instance of it, set its rotation, and set its parent without changing its position. Create a convenient method for this, with the parent and rotation as parameters.</p>
+						
+						<pre translate="no">	<ins>void BuildWall(Transform parent, int rotation)</ins>
+	<ins>{</ins>
+		<ins>MazeCellObject w = wall.GetInstance();</ins>
+		<ins>w.transform.localRotation = rotations[rotation];</ins>
+		<ins>w.transform.SetParent(parent, false);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Use that method to build the necessary walls in <code>BuildCell</code>.</p>
+						
+						<pre translate="no">		bool wallW = f.HasNot(MazeFlags.PassageW);
+		<ins>if (wallN)</ins>
+		<ins>{</ins>
+			<ins>BuildWall(t, 0);</ins>
+		<ins>}</ins>
+		<ins>if (wallE)</ins>
+		<ins>{</ins>
+			<ins>BuildWall(t, 1);</ins>
+		<ins>}</ins>
+		<ins>if (wallS)</ins>
+		<ins>{</ins>
+			<ins>BuildWall(t, 2);</ins>
+		<ins>}</ins>
+		<ins>if (wallW)</ins>
+		<ins>{</ins>
+			<ins>BuildWall(t, 3);</ins>
+		<ins>}</ins></pre>
+						
+						<p>Also create a <code>BuildCorner</code> method that does the same as <code>BuildWall</code>, except that it also has a parameter to indicate whether the corner is cut, which it uses to get an instance of the appropriate prefab.</p>
+						
+						<pre translate="no">	<ins>void BuildCorner(Transform parent, int rotation, bool cut)</ins>
+	<ins>{</ins>
+		<ins>MazeCellObject c = (cut ? cornerCut : cornerFull).GetInstance();</ins>
+		<ins>c.transform.localRotation = rotations[rotation];</ins>
+		<ins>c.transform.SetParent(parent, false);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Use that method to build the necessary corners in <code>BuildCell</code>. A corner needs to be built only when none of its adjacent walls exist and there isn't a diagonal passage through it either.</p>
+						
+						<pre translate="no">		if (wallW)
+		{
+			BuildWall(t, 3);
+		}
+
+		<ins>bool cut = f.Has(MazeFlags.CutCorners);</ins>
+		<ins>if (!(wallN || wallE || f.Has(MazeFlags.PassageNE)))</ins>
+		<ins>{</ins>
+			<ins>BuildCorner(t, 0, cut);</ins>
+		<ins>}</ins>
+		<ins>if (!(wallE || wallS || f.Has(MazeFlags.PassageSE)))</ins>
+		<ins>{</ins>
+			<ins>BuildCorner(t, 1, cut);</ins>
+		<ins>}</ins>
+		<ins>if (!(wallS || wallW || f.Has(MazeFlags.PassageSW)))</ins>
+		<ins>{</ins>
+			<ins>BuildCorner(t, 2, cut);</ins>
+		<ins>}</ins>
+		<ins>if (!(wallW || wallN || f.Has(MazeFlags.PassageNW)))</ins>
+		<ins>{</ins>
+			<ins>BuildCorner(t, 3, cut);</ins>
+		<ins>}</ins></pre>
+						
+						<p>Create a new cell builder via the asset menu and hook up its prefabs.</p>
+						
+						<p>Note that with this new approach it's possible to build a cell that has four walls, which wasn't possible earlier. This isn't useful, but shows that the new approach is more flexible.</p>
+					</section>
+					
+					<section>
+						<h3>Mixing Approaches</h3>
+						
+						<p>Add a configuration field for a cell builder to <code>Game</code> and hook up our new asset.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>MazeCellBuilder cellBuilder;</ins></pre>
+						
+						<p>To verify that both approaches should produce visually identical results and are interchangeable we will initially use both together, randomly picking one of them for each cell. Adjust the cell-creation loop in <code>StartNewGame</code> to do this based on a random value.</p>
+						
+						<pre translate="no">		for (int i = 0; i &lt; maze.Length; i++)
+		{
+			<ins>if (Random.value &lt; 0.5f)</ins>
+			<ins>{</ins>
+				<ins>cellObjects[i] = cellBuilder.BuildCell(maze, i);</ins>
+			<ins>}</ins>
+			<ins>else</ins>
+			<ins>{</ins>
+				cellObjects[i] = (maze[i].Has(MazeFlags.CutCorners) ?
+					visualizationCutCorners :
+					visualizationFullCorners).Visualize(maze, i);
+			<ins>}</ins>
+		}</pre>
+						<figure>
+							<img src="building-cells/mixed-approach.png" width="460" height="284">
+							<figcaption>Mixed approach.</figcaption>
+						</figure>
+						
+						<p>Because I made the new parts green I get mazes that contain a mix of white and green cells.</p>
+						
+						<p>Note that the new approach is slightly less efficient because there are more cases where floors, ceilings, and walls extend outside the visible space. This can be seen via the scene window. However, this shouldn't result in noticeable performance degradation.</p>
+					</section>
+					
+					<section>
+						<h3>Recycling Parts</h3>
+						
+						<p>Although everything might appear to work correctly at this point, it goes wrong if a new game is started after the first win or loss during the same play session. Incorrect walls will start showing up. This happens because we're reusing cells without clearing them.</p>
+						
+						<p>Besides recycling the root cell objects we also have to recycle their parts. We do this by looping through all game object children in <code>MazeCellObject.Recycle</code> and recycling each child that has a <code>MazeCellObject</code> component. To fully clean up the cells we should also detach the parts from them by setting their parent to <code>null</code>, again making sure to not adjust their local position. To keep the loop working while removing children we have to iterate through the children backwards.</p>
+						
+						<pre translate="no">	public void Recycle()
+	{
+		<ins>Transform t = transform;</ins>
+		<ins>for (int i = t.childCount - 1; i >= 0; i--)</ins>
+		<ins>{</ins>
+			<ins>var child = t.GetChild(i).GetComponent&lt;MazeCellObject>();</ins>
+			<ins>if (child)</ins>
+			<ins>{</ins>
+				<ins>child.transform.SetParent(null, false);</ins>
+				<ins>child.Recycle();</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		pool.Recycle(this);
+	}</pre>
+						
+						<p>Now everything gets correctly recycled when a new game starts.</p>
+						
+						<p>Note that not only the root cell object recycles its children, this behavior applies to all parts. This isn't useful at this point, but it allows us to add sub-parts in the future that will also get recycled correctly.</p>
+					</section>
+					
+					<section>
+						<h3>Removing old Visualization</h3>
+						
+						<p>Once we've observed that the new approach works correctly and is functionally identical to the old one we only have to keep the new approach. Remove the choice in <code>Game.StartNewGame</code>, only keeping the cell builder.</p>
+						
+						<pre translate="no">		for (int i = 0; i &lt; maze.Length; i++)
+		{
+			<del>// if (Random.value &lt; 0.5f)</del>
+			<del>// {</del>
+			cellObjects[i] = cellBuilder.BuildCell(maze, i);
+			<del>// }</del>
+			<del>// else { &hellip; }</del>
+		}</pre>
+						
+						<p>Also remove the two <code>MazeVisualization</code> fields.</p>
+						
+						<pre translate="no">	<del>//[SerializeField]</del>
+	<del>//MazeVisualization visualizationCutCorners, visualizationFullCorners;</del></pre>
+						
+						<p>Then remove the corresponding visualization assets, the <code>MazeVisualization</code> script, and all old prefabs and their material. Finally, adjust the material used by our parts so our maze will be white again.</p>
+						
+						<p>The next tutorial is <a href="../4-0-0/index.html">Maze 4.0.0</a>.</p>
+					</section>
+					
+					<a href="../../tutorials/license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecoding-projects/maze-project/src/7a48f4df6157fcb40215b154a10f69ba3e764949/?at=release%2F3.0.0" class="repository">repository</a>
+					<a href="Maze-3-0-0.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../tutorials/index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../tutorials/become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../tutorials/donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials/tutorials.js"></script>
+	</body>
+</html>

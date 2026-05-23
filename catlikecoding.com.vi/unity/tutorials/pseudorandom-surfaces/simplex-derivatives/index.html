@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/pseudorandom-surfaces/simplex-derivatives/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/pseudorandom-surfaces/simplex-derivatives/tutorial-image.jpg">
+		<meta property="og:title" content="Simplex Derivatives">
+		<meta property="og:description" content="A Unity C# Pseudorandom Surfaces tutorial about calculating derivatives of simplex noise.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Simplex Derivatives</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/pseudorandom-surfaces/simplex-derivatives/#article",
+				"headline": "Simplex Derivatives",
+				"alternativeHeadline": "Analytical Normals and Tangents",
+				"datePublished": "2022-08-30",
+				"dateModified": "2022-09-23",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity C# Applied Noise tutorial about calculating derivatives of simplex noise.",
+				"image": "https://catlikecoding.com/unity/tutorials/pseudorandom-surfaces/simplex-derivatives/tutorial-image.jpg",
+				"dependencies": "Unity 2020.3.35f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/pseudorandom-surfaces/", "name": "Pseudorandom Surfaces" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				AdvancedMeshJobScheduleDelegate: 1,
+				BaseGradients: 1,
+				G: 1,
+				IGradient: 1,
+				IMeshGenerator: 1,
+				IMeshStreams: 1,
+				INoise: 1,
+				Job: 1,
+				LatticeNormal: 1,
+				Lattice1D: 1,
+				Lattice2D: 1,
+				Lattice3D: 1,
+				MaterialMode: 1,
+				MathExtensions: 1,
+				MeshJob: 1,
+				MultiStream: 1,
+				N: 1,
+				Noise: 1,
+				NoiseType: 1,
+				Perlin: 1,
+				PositionStream: 1,
+				ProceduralMesh: 1,
+				ProceduralSurface: 1,
+				S: 1,
+				Sample4: 1,
+				Settings: 1,
+				SharedSquareGrid: 1,
+				Simplex: 1,
+				Simplex1D: 1,
+				Simplex2D: 1,
+				Simplex3D: 1,
+				SingleStream: 1,
+				SmallXXHash4: 1,
+				Smoothstep: 1,
+				SurfaceJob: 1,
+				SurfaceJobScheduleDelegate: 1,
+				SmallXXHash: 1,
+				SpaceTRS: 1,
+				Stream0: 1,
+				Turbulence: 1,
+				Value: 1,
+				Vertex4: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Pseudorandom Surfaces</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Simplex Derivatives</h1>
+					<p>Analytical Normals and Tangents</p>
+					<ul>
+						<li>Add derivative data to noise samples.</li>
+						<li>Derive tangents and normals from derivatives.</li>
+						<li>Calculate derivatives for simplex noise.</li>
+						<li>Create a smooth turbulence variant.</li>
+					</ul>
+				</header>
+				
+				<p>This is the second tutorial in a series about <a href="../index.html">pseudorandom surfaces</a>. In it we will calculate derivatives of simplex noise and use them to generate normal and tangent vectors.</p>
+				
+				<p>This tutorial is made with Unity 2020.3.35f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Rotated 3D smooth turbulence simplex noise with analytical normal vectors.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Simplex Noise</h2>
+					
+					<p>We can ask Unity to recalculate normal and tangent vectors, but this isn't a perfect approach. Recalculation requires a complete mesh and thus has to wait until all Burst jobs have finished and takes place on the main thread. Also, recalculating tangents requires UV coordinates and takes a long time.</p>
+					
+					<p>It would be much better if normals and tangents could be generated directly by <code>SurfaceJob</code>. This is possible by relying on the derivatives of the noise function, so we're going to calculate those derivatives ourselves. As simplex noise has the simplest derivatives we'll begin with that noise type.</p>
+					
+					<section>
+						<h3>Noise Configuration</h3>
+						
+						<p>We'll work our way up from one to three dimensions, and also from the simpler simplex value noise to the more complex simplex gradient noise. Let's reintroduce a noise selection configuration option for this, like we made in the <a href="../../pseudorandom-noise/index.html">Pseudorandom Noise</a> series.</p>
+						
+						<p>Create a <code>SurfaceJobScheduleDelegate</code> type for the <code>SurfaceJob.ScheduleParallel</code> method. As it doesn't belong to a specific noise type it must exist outside the generic <code>SurfaceJob</code> so let's put it directly below it in the same file.</p>
+						
+						<pre>public struct SurfaceJob&lt;N> : IJobFor where N : struct, INoise { &hellip; }
+
+<ins>public delegate JobHandle SurfaceJobScheduleDelegate (</ins>
+	<ins>Mesh.MeshData meshData, int resolution, Settings settings, SpaceTRS domain,</ins>
+	<ins>float displacement, JobHandle dependency</ins>
+<ins>);</ins></pre>
+						
+						<p>Before we add a second static jobs array to <code>ProceduralSurface</code> refactor rename the <code>jobs</code> array to <code>meshJobs</code> for clarity.</p>
+						
+						<pre>	static AdvancedMeshJobScheduleDelegate[] <ins>meshJobs</ins> = { &hellip; };</pre>
+						
+						<p>Then add a two-dimensional array of surface job delegates for all three dimensions of regular simplex and simplex value noise, along with a noise type and dimensions configuration option, matching the apporach used in the <a href="../../pseudorandom-noise/index.html">Pseudorandom Noise</a> series.</p>
+						
+						<pre>	<ins>static SurfaceJobScheduleDelegate[,] surfaceJobs = {</ins>
+		<ins>{</ins>
+			<ins>SurfaceJob&lt;Simplex1D&lt;Simplex>>.ScheduleParallel,</ins>
+			<ins>SurfaceJob&lt;Simplex2D&lt;Simplex>>.ScheduleParallel,</ins>
+			<ins>SurfaceJob&lt;Simplex3D&lt;Simplex>>.ScheduleParallel</ins>
+		<ins>},</ins>
+		<ins>{</ins>
+			<ins>SurfaceJob&lt;Simplex1D&lt;Value>>.ScheduleParallel,</ins>
+			<ins>SurfaceJob&lt;Simplex2D&lt;Value>>.ScheduleParallel,</ins>
+			<ins>SurfaceJob&lt;Simplex3D&lt;Value>>.ScheduleParallel</ins>
+		<ins>}</ins>
+	<ins>};</ins>
+
+	<ins>public enum NoiseType {</ins>
+		<ins>Simplex€, SimplexValue</ins>
+	<ins>}</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>NoiseType noiseType;</ins>
+
+	<ins>[SerializeField, Range(1, 3)]</ins>
+	<ins>int dimensions = 1;</ins></pre>
+						
+						<figure>
+							<img src="simplex-noise/configuration.png" width="320" height="80">
+							<figcaption>Configuration for noise type and dimensions.</figcaption>
+						</figure>
+						
+						<p>Now adjust <code>GenerateMesh</code> so it schedules the configured surface job.</p>
+						
+						<pre>		<del>//SurfaceJob&lt;Lattice2D&lt;LatticeNormal, Perlin>>.ScheduleParallel(</del>
+		<ins>surfaceJobs[(int)noiseType, dimensions - 1](</ins>
+			meshData, resolution, noiseSettings, domain, displacement,
+			meshJobs[(int)meshType](
+				mesh, meshData, resolution, default,
+				new Vector3(0f, Mathf.Abs(displacement)), true
+			)
+		).Complete();</pre>
+						
+						<figure>
+							<img src="simplex-noise/2d-simplex-noise.png" width="260" height="250">
+							<figcaption>2D simplex noise; frequency 4.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Noise Derivative Data</h2>
+					
+					<p>In order to work with the derivatives of the noise we have to change our noise code so it provides this data along with the noise values.</p>
+					
+					<section>
+						<h3>Vectorized Noise Sample</h3>
+						
+						<p>Each time we sample the noise function we get a value. Now we also want to get the value of the derivatives of that function. But a single derivative value isn't enough, because our noise function can have up to three dimensions, and thus the noise function could have a derivative is each of those dimensions. So each noise sample must contain four values, all of which are vectorized. We'll introduce a new <code>Noise.Sample4</code> struct type for this, which we put in a new <em>Noise.Sample</em> partial class asset file in the <em>Noise</em> folder. Begin by only including a field for the sample value that we already provide, simply naming it <code>v</code> for value.</p>
+						
+						<pre><ins>using Unity.Mathematics;</ins>
+
+<ins>using static Unity.Mathematics.math;</ins>
+
+<ins>public static partial class Noise {</ins>
+
+	<ins>public struct Sample4 {</ins>
+		
+		<ins>public float4 v;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Let's give it an implicit cast operator from <code>float4</code> to <code>Sample4</code>, simply passing along the value. This makes sense because the derivative of a constant is zero.</p>
+						
+						<pre>		<ins>public static implicit operator Sample4 (float4 v) => new Sample4 { v = v };</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Interface Adjustment</h3>
+						
+						<p>Now we can upgrade our noise by changing the return type of <code>INoise.GetNoise4</code> to <code>Sample4</code>.</p>
+						
+						<pre>	public interface INoise {
+		<ins>Sample4</ins> GetNoise4 (float4x3 positions, SmallXXHash4 hash, int frequency);
+	}</pre>
+						
+						<p>We also have to change the implementations of this method to match. I only show this once, but it has to be done for all <code>INoise</code> structs.</p>
+						
+						<pre>		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public <ins>Sample4</ins> GetNoise4(float4x3 positions, SmallXXHash4 hash, int frequency) { &hellip; }</pre>
+						
+						<p>This change will result in compiler errors where <code>GetNoise4</code> is invoked. Fix these by accessing the value of the sample.</p>
+						
+						<pre>	&hellip;.GetNoise4(&hellip;)<ins>.v</ins>&hellip;</pre>
+					</section>
+					
+					<section>
+						<h3>Derivative Data</h3>
+						
+						<p>Let's now expand our <code>Sample4</code> data to also include the derivatives. If there were only a single derivative function then we could suffice with adding a single extra field, which we could name <code>dv</code>, standing for the delta of the value, indicating how fast it changes.</p>
+						
+						<pre>		public float4 v<ins>, dv</ins>;</pre>
+						
+						<p>But because our noise can vary in up to three dimensions there are three such values. We'll name them <code>dx</code>, <code>dy</code>, and <code>dz</code>.</p>
+						
+						<pre>		public float4 v, <ins>dx, dy, dz</ins>;</pre>
+					</section>
+					
+					<section>
+						<h3>Derivative Math</h3>
+						
+						<p>We already know that the derivatives of values can be added just like the values themselves. Mathematically, we can say if `f(x)=g(x)+h(x)` then `f'(x)=g'(x)+h'(x)`.</p>
+						
+						<p>Thus we have a well-defined addition for our <code>Sample4</code> type, so let's give it a custom addition operator method.</p>
+						
+						<pre>		<ins>public static Sample4 operator + (Sample4 a, Sample4 b) => new Sample4 {</ins>
+			<ins>v = a.v + b.v,</ins>
+			<ins>dx = a.dx + b.dx,</ins>
+			<ins>dy = a.dy + b.dy,</ins>
+			<ins>dz = a.dz + b.dz</ins>
+		<ins>};</ins></pre>
+						
+						<p>And the same goes for subtraction.</p>
+						
+						<pre>		<ins>public static Sample4 operator - (Sample4 a, Sample4 b) => new Sample4 {</ins>
+			<ins>v = a.v - b.v,</ins>
+			<ins>dx = a.dx - b.dx,</ins>
+			<ins>dy = a.dy - b.dy,</ins>
+			<ins>dz = a.dz - b.dz</ins>
+		<ins>};</ins></pre>
+						
+						<p>Scaling also applies to the derivative normally. We can see this mathematically via `2f(x)=f(x)+f(x)` thus `(2f(x))'=f'(x)+f'(x)=2f'(x)`.</p>
+						
+						<p>So let's add multiplication methods for <code>Sample4</code> and <code>float4</code> operands and the other way around.</p>
+						
+						<pre>		<ins>public static Sample4 operator * (Sample4 a, float4 b) => new Sample4 {</ins>
+			<ins>v = a.v * b,</ins>
+			<ins>dx = a.dx * b,</ins>
+			<ins>dy = a.dy * b,</ins>
+			<ins>dz = a.dz * b</ins>
+		<ins>};</ins>
+		
+		<ins>public static Sample4 operator * (float4 a, Sample4 b) => b * a;</ins></pre>
+						
+						<p>And let's also add a method to support division by a <code>float4</code>, because `f(x)/2=1/2f(x)`.</p>
+						
+						<pre>		<ins>public static Sample4 operator / (Sample4 a, float4 b) => new Sample4 {</ins>
+			<ins>v = a.v / b,</ins>
+			<ins>dx = a.dx / b,</ins>
+			<ins>dy = a.dy / b,</ins>
+			<ins>dz = a.dz / b</ins>
+		<ins>};</ins></pre>
+						
+						<p>We won't add an operator for division with a sample, nor for sample-sample multiplication, because those are more complicated and not something that we currently need.</p>
+					</section>
+					
+					<section>
+						<h3>Fractal Noise Method</h3>
+						
+						<p>We currently have two jobs that both contain code for a fractal noise loop. Let's consolidate them into a single static generic <code>Noise.GetFractalNoise</code> method that returns the fractal sample. Use the relevant code from <code>SurfaceJob.Execute</code>.</p>
+						
+						<pre>using System;
+<ins>using System.Runtime.CompilerServices;</ins>
+&hellip;
+
+public static partial class Noise {
+
+	&hellip;
+
+	public interface INoise {
+		Sample4 GetNoise4 (float4x3 positions, SmallXXHash4 hash, int frequency);
+	}
+
+	<ins>[MethodImpl(MethodImplOptions.AggressiveInlining)]</ins>
+	<ins>public static Sample4 GetFractalNoise&lt;N> (</ins>
+		<ins>float4x3 position, Settings settings</ins>
+	<ins>) where N : struct, INoise {</ins>
+		<del>//float4x3 position = domainTRS.TransformVectors(transpose(positions[i]));</del>
+		var hash = SmallXXHash4.Seed(settings.seed);
+		int frequency = settings.frequency;
+		float amplitude = 1f, amplitudeSum = 0f;
+		float4 sum = 0f;
+
+		for (int o = 0; o < settings.octaves; o++) {
+			sum += amplitude * default(N).GetNoise4(position, hash + o, frequency).v;
+			amplitudeSum += amplitude;
+			frequency *= settings.lacunarity;
+			amplitude *= settings.persistence;
+		}
+		<del>//noise[i] = sum / amplitudeSum;</del>
+		<ins>return sum / amplitudeSum;</ins>
+	<ins>}</ins>
+	
+	&hellip;
+}</pre>
+						
+						<p><code>Noise.Job.Execute</code> can then be reduced to a single assignment.</p>
+						
+						<pre>		public void Execute (int i) <ins>=> noise[i] = GetFractalNoise&lt;N>(</ins>
+			<ins>domainTRS.TransformVectors(transpose(positions[i])), settings</ins>
+		<ins>).v;</ins></pre>
+						
+						<p>And <code>SurfaceJob.Execute</code> can also be simplified.</p>
+						
+						<pre>	public void Execute (int i) {
+		Vertex4 v = vertices[i];
+		<del>//&hellip;</del>
+		float4 noise = <ins>GetFractalNoise&lt;N>(</ins>
+			<ins>domainTRS.TransformVectors(transpose(float3x4(</ins>
+				<ins>v.v0.position, v.v1.position, v.v2.position, v.v3.position</ins>
+			<ins>))),</ins>
+			<ins>settings</ins>
+		<ins>).v * displacement</ins>;
+		<del>//noise *= displacement;</del>
+
+		v.v0.position.y = noise.x;
+		v.v1.position.y = noise.y;
+		v.v2.position.y = noise.z;
+		v.v3.position.y = noise.w;
+		vertices[i] = v;
+	}</pre>
+						
+						<p>Now we can make <code>GetFractalNoise</code> return a proper sample by changing the type of the sum and accumulating the entire samples.</p>
+						
+						<pre>		<ins>Sample4</ins> sum = <ins>default</ins>;
+
+		for (int o = 0; o < settings.octaves; o++) {
+			sum += amplitude * default(N).GetNoise4(position, hash + o, frequency)<ins>;</ins> <del>//.v;</del>
+			amplitudeSum += amplitude;
+			frequency *= settings.lacunarity;
+			amplitude *= settings.persistence;
+		}</pre>
+						
+						<p>Adjust the type of <code>noise</code> in <code>SurfaceJob.Execute</code> as well.</p>
+						
+						<pre>		<ins>Sample4</ins> noise = GetFractalNoise&lt;N>(
+			&hellip;
+		) <ins>* displacement;</ins> <del>//.v * displacement;</del>
+
+		v.v0.position.y = noise.<ins>v.</ins>x;
+		v.v1.position.y = noise.<ins>v.</ins>y;
+		v.v2.position.y = noise.<ins>v.</ins>z;
+		v.v3.position.y = noise.<ins>v.</ins>w;</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Analytical Tangents</h3>
+						
+						<p>The tangent vectors of the mesh can be derived for the analytical noise derivatives of the X dimension. The X derivative represents the rate of change per unit along X. As we use the noise to offset the Y position this derivative represents the elevation change. Thus we have a 2D vector `t=[[1],[d_x]]` where `d_x` is the X derivative, which we can expand to a tangent vector. Let's initially do this only for the first out of four vertices.</p>
+						
+						<pre>		v.v3.position.y = noise.v.w;
+
+		<ins>v.v0.tangent = float4(1f, noise.dx.x, 0f, -1f);</ins>
+
+		vertices[i] = v;</pre>
+						
+						<p>To make this a proper tangent vector it has to be normalized. Explicitly for our vector, `||t||=[[1],[d_x]]1/sqrt(d_x^2+1)`. If we extract the normalizer factor we can directly use it for the X component of the vector.</p>
+						
+						<pre>		<ins>float4 normalizer = rsqrt(noise.dx * noise.dx + 1f);</ins>
+		<ins>float4 tangentY = noise.dx * normalizer;</ins>
+		v.v0.tangent = float4(<ins>normalizer.x</ins>, <ins>tangentY.x</ins>, 0f, -1f);</pre>
+						
+						<p>Expand this approach to set the tangents of all four vertices.</p>
+						
+						<pre>		v.v0.tangent = float4(normalizer.x, tangentY.x, 0f, -1f);
+		<ins>v.v1.tangent = float4(normalizer.y, tangentY.y, 0f, -1f);</ins>
+		<ins>v.v2.tangent = float4(normalizer.z, tangentY.z, 0f, -1f);</ins>
+		<ins>v.v3.tangent = float4(normalizer.w, tangentY.w, 0f, -1f);</ins></pre>
+						
+						<p>If we disable the recalculation options of our procedural mesh we'll now see it use tangent vectors derived from analytical derivatives instead of a mesh-based approximation. But because all derivative data is still zero at this point all tangent vectors will be flat.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>1D Derivatives</h2>
+					
+					<p>We begin with 1D noise so we only have to worry about a single dimension.</p>
+					
+					<section>
+						<h3>Simplex Value Noise</h3>
+						
+						<p>Let's initially consider simplex value noise. Because its gradient is a constant value and derivatives can be added, we only have to consider the individual kernel falloff function `f(x)=(1-x^2)^3` scaled by some value that is constant per kernel. Adjust <code>Simplex1D.Kernel</code> so it returns this as a <code>Sample4</code>. Use `(1-x^2)` as the base function and raise it to the third power and scale it when setting the sample value.</p>
+						
+						<pre>		static <ins>Sample4</ins> Kernel (SmallXXHash4 hash, float4 lx, float4x3 positions) {
+			float4 x = positions.c0 - lx;
+			float4 f = 1f - x * x;
+			<del>//f = f * f * f;</del>
+			<ins>float4 g = default(G).Evaluate(hash, x);</ins>
+			return <ins>new Sample4 {</ins>
+				<ins>v = f * f * f * g</ins>
+			<ins>}</ins>;
+		}</pre>
+						
+						<p>By applying the chain rule we find `f'(x)=-6x(1-x^2)^2`. Use that to set the X derivative, also scaling it by the same gradient, which we consider to be constant.</p>
+						
+						<pre>			return new Sample4 {
+				v = f * f * f * g<ins>,</ins>
+				<ins>dx = f * f * -6f * x * g</ins>
+			};</pre>
+						
+						<aside>
+							<h3>What's the chain rule?</h3>
+							<div>
+								<p>The chain rule states that if `f(x)=g(h(x))` then `f'(x)=g'(h(x))h'(x)`. What this means is that we can treat `h(x)` as if it were simply `x` for the purpose of finding the derivative of `f(x)`, but afterwards we have to replace `x` with `h(x)`  and multiply the result with `h'(x)`.</p>
+								
+								<p>An example is `g(x)=x^2` and `h(x)=3x`. If we treat `h(x)` as if it were simply `x` then `f'(x)=2x`. However, after that we have to replace `x` with `h(x)`, so we get `f'(x)=2h(x)=6x`. Then we also have to multiply that with `h'(x)=3` which leads to `f'(x)=18x`.</p>
+									
+									
+								<p>We can verify that this is correct by rewriting `f(x)=g(h(x))=g(3x)=(3x)^2=9x^2`, which has the same derivative.</p>
+								
+								<p>Note that a trivial example is any function where we replace `x` with `h(x)=x`, which is the identity function. As `h'(x)=1` multiplying with it makes no difference.</p>
+							</div>
+						</aside>
+						
+						<aside>
+							<h3>How did you find that derivative?</h3>
+							<div>
+								<p>Using the chain rule, declare `f(x)=g(x)^3` where `g(x)=1-x^2`. Then `f'(x)=3g(x)^2g'(x)=3g(x)^2(-2x)=-6xg(x)^2=-6x(1-x^2)^2`.</p>
+								
+								<p>Note that `g(x)` is a substitution function and does not refer to the constant value <code>g</code>, which is ignored here.</p>
+								
+								<p>Also, in <a href="../../pseudorandom-noise/simplex-noise/index.html#1.3">section 1.3 of Pseudorandom Noise / Simplex Noise</a> we found that `f'(x)=-6x^5+12x^3-6x=-6x(x^4-2x^2+1)=-6x(1-x^2)^2`.</p>
+							</div>
+						</aside>
+						
+						<p>At this point we again get a compilation error, because <code>EvaluateCombined</code> expects a <code>float4</code> argument. Change the <code>IGradient.EvaluateCombined</code> interface method declaration so it acts on a <code>Sample4</code> instead.</p>
+						
+						<pre>		<ins>Sample4</ins> EvaluateCombined (<ins>Sample4</ins> value);</pre>
+						
+						<p>Adjust all the gradient implementations to match. This is trivial for all gradients except the <code>Turbulence</code> variant.</p>
+						
+						<pre>		public <ins>Sample4</ins> EvaluateCombined (<ins>Sample4</ins> value) => value;</pre>
+						
+						<p><code>Turbulence</code> takes the absolute value of the noise. We'll deal with this later, simply pass through the unadjusted sample for now.</p>
+						
+						<pre>		public <ins>Sample4</ins> EvaluateCombined (Sample4 value) =>
+			<del>//abs(default(G).EvaluateCombined(value));</del>
+			<ins>default(G).EvaluateCombined(value);</ins></pre>
+						
+						<figure>
+							<img src="1d-derivatives/value-tangents-incorrect.png" width="260" height="280">
+							<figcaption>Incorrect tangents; simplex value noise; frequency 4.</figcaption>
+						</figure>
+						
+						<p>We finally get to see analytical tangent vectors. However, they are incorrect unless the frequency is set to 1. This happens because the frequency acts like a scalar for the rate of change of the noise. Effectively, if the frequency is set to 4 we're using `f(g(x))` with `g(x)=4x` and have to apply the chain rule.</p>
+						
+						<p>So to fix this <code>Simplex1D.GetNoise4</code> has to factor the frequency into its derivative.</p>
+						
+						<pre>			<ins>Sample4 s =</ins> default(G).EvaluateCombined(
+				Kernel(hash.Eat(x0), x0, positions) + Kernel(hash.Eat(x1), x1, positions)
+			);
+			<ins>s.dx *= frequency;</ins>
+			<ins>return s;</ins></pre>
+						
+						<figure>
+							<img src="1d-derivatives/value-tangents-correct.png" width="260" height="290">
+							<figcaption>Correct tangents.</figcaption>
+						</figure>
+						
+						<p>Because derivatives can be added the tangents are also correct when multiple octaves of noise are added.</p>
+						
+						<figure>
+							<img src="1d-derivatives/value-tangents-two-octaves.png" width="260" height="240">
+							<figcaption>Two octaves.</figcaption>
+						</figure>
+						
+						<p>Note that because the analytical tangent vectors are based on the noise and not the mesh they might become weird when the frequency becomes too high relative to the mesh resolution, or when there are too many octaves. Recalculated mesh-based tangents will automatically conform to the mesh surface, but the analytical tangents won't. This shouldn't be a problem because in such cases the noise pattern gets under-sampled anyway and result will be bad.</p>
+						
+						<aside>
+							<h3>Can we set the resolution limit higher than 50?</h3>
+							<div>
+								<p>Yes, but if you set it above 52 then you'd need to increase the mesh index buffer format to <code>IndexFormat.UInt32</code>, doubling its size.</p>
+								
+								<p>The 16-bit index limit is 52 because the cube sphere has the most vertices: `24r^2`. The maximum is the largest `r` that satisfies `24r^2<2^16`. Equating both sides leads to `r=sqrt(2^16/24)~~52.26`. Rounding down to an integer we find `lfloorrrfloor=52`.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Simplex Noise</h3>
+						
+						<p>If we switch to simplex noise the tangents will be wrong again, because we assumed that the gradients are constant, which is only true for simplex value noise.</p>
+						
+						<figure>
+							<img src="1d-derivatives/simplex-tangents-incorrect.png" width="280" height="170">
+							<figcaption>Incorrect tangents; simplex noise; frequency 2.</figcaption>
+						</figure>
+						
+						<p>Gradients have derivatives as well, so change the <code>IGradient</code> interface so all <code>Evaluate</code> methods return <code>Sample4</code> values.</p>
+						
+						<pre>		<ins>Sample4</ins> Evaluate (SmallXXHash4 hash, float4 x);
+
+		<ins>Sample4</ins> Evaluate (SmallXXHash4 hash, float4 x, float4 y);
+
+		<ins>Sample4</ins> Evaluate (SmallXXHash4 hash, float4 x, float4 y, float4 z);</pre>
+						
+						<p>Adjust all implementations to match and fix all compiler errors by extracting the sample values from the <code>Evaluate</code> invocations.</p>
+						
+						<p>The 1D simplex gradient forwards its invocation to <code>BaseGradients.Line</code>, only scaling the result. So we'll adjust that method, making it return a <code>Sample4</code> value. Our straight line is simply the function `f(x)=lx` where `l` is some constant that we base on the hash, thus `f'(x)=l`. Adjust <code>Line</code> to return both.</p>
+						
+						<pre>		public static <ins>Sample4</ins> Line (SmallXXHash4 hash, float4 x) <ins>{</ins>
+			<ins>float4 l =</ins>
+				<ins>(1f + hash.Floats01A) * select(-<ins>1f</ins>, <ins>1f</ins>, ((uint4)hash & 1 << 8) == 0);</ins>
+			<ins>return new Sample4 {</ins>
+				<ins>v = l * x,</ins>
+				<ins>dx = l</ins>
+			<ins>};</ins>
+		<ins>}</ins></pre>
+						
+						<p>With the gradient no longer constant the function in <code>Simplex1D.Kernel</code> becomes `f(x)=(1-x^2)^3g(x)`. By applying the product rule we find that `f'(x)=(1-x^2)^2((1-x^2)g'(x)-6xg(x))`.</p>
+						
+						<pre>			<ins>Sample4</ins> g = default(G).Evaluate(hash, x); <del>//.v;</del>
+			return new Sample4 {
+				v = f * f * f * g<ins>.v</ins>,
+				dx = f * f * <ins>(f * g.dx</ins> -<ins> </ins>6f * x * g<ins>.v)</ins>
+			};</pre>
+						
+						<aside>
+							<h3>What's the product rule?</h3>
+							<div>
+								<p>The product rule states that if `f(x)=g(x)h(x)` then `f'(x)=g(x)h'(x)+g'(x)h(x)`. This means that the derivative of the product of two functions is formed by the product of the first with the derivative of the second, plus the other way around.</p>
+								
+								<p>An example is `g(x)=x^2` and `h(x)=3x`. Then `f'(x)=x^2h'(x)+2xh(x)=3x^2+6x^2=9x^2`.</p>
+									
+								<p>We can verify that this is correct by rewriting `f(x)=g(x)h(x)=g(x)3x=3x^3`, which has the same derivative.</p>
+								
+								<p>Note that a trivial example is any function that we multiply with `h(x)=1`. Then `f'(x)=g(x)0+g'(x)1=g'(x)`.</p>
+							</div>
+						</aside>
+						
+						<aside>
+							<h3>How did you find that derivative?</h3>
+							<div>
+								<p>Using the product rule, `f'(x)=h(x)^3g'(x)-6xh(x)^2g(x)=h(x)^2(h(x)g'(x)-6xg(x))` where `h(x)=1-x^2`.</p>
+								
+								<p>Note that here `g(x)` does refer to the <code>g</code>, which is no longer a constant.</p>
+							</div>
+						</aside>
+						
+						<figure>
+							<img src="1d-derivatives/simplex-tangents-correct.png" width="260" height="180">
+							<figcaption>Correct tangents.</figcaption>
+						</figure>
+						
+						<p>We can simplify the code a bit by multiplying the entire sample with `(1-x^2)^2`.</p>
+						
+						<pre>			return new Sample4 {
+				v = <ins>f * g.v</ins>,
+				dx = <ins>f * g.dx - 6f * x * g.v</ins>
+			} <ins>* f * f</ins>;</pre>
+					</section>
+					
+					<section>
+						<h3>Analytical Normals</h3>
+						
+						<p>Now that we have correct derivatives for simplex noise let's also use them to generate the normal vectors in <code>SurfaceJob.Execute</code>. Because we're only dealing with one dimension we can currently suffice with rotating the tangent vector 90&deg; counterclockwise.</p>
+						
+						<pre>		v.v0.tangent = float4(normalizer.x, tangentY.x, 0f, -1f);
+		v.v1.tangent = float4(normalizer.y, tangentY.y, 0f, -1f);
+		v.v2.tangent = float4(normalizer.z, tangentY.z, 0f, -1f);
+		v.v3.tangent = float4(normalizer.w, tangentY.w, 0f, -1f);
+
+		<ins>v.v0.normal = float3(-v.v0.tangent.y, v.v0.tangent.x, 0f);</ins>
+		<ins>v.v1.normal = float3(-v.v1.tangent.y, v.v1.tangent.x, 0f);</ins>
+		<ins>v.v2.normal = float3(-v.v2.tangent.y, v.v2.tangent.x, 0f);</ins>
+		<ins>v.v3.normal = float3(-v.v3.tangent.y, v.v3.tangent.x, 0f);</ins></pre>
+						
+						<figure>
+							<img src="1d-derivatives/normals-tangents-analytical.png" width="280" height="200" alt="analytical">
+							<img src="1d-derivatives/normals-tangents-recalculated.png" width="280" height="200" alt="recalculated">
+							<figcaption>Both normals and tangents; analytical and recalculated.</figcaption>
+						</figure>
+						
+						<p>There will almost always be a difference between analytical and recalculated normals and tangents, but the higher the resolution of the mesh the more they look alike. The difference is most obvious when under-sampling the noise.</p>
+						
+						<figure>
+							<img src="1d-derivatives/six-octaves-analytical.png" width="320" height="190" alt="analytical">
+							<img src="1d-derivatives/six-octaves-recalculated.png" width="320" height="190" alt="recalculated">
+							<img src="1d-derivatives/six-octaves-analytical-no-gizmos.png" width="320" height="120" alt="analytical no gizmos">
+							<img src="1d-derivatives/six-octaves-recaluclated-no-gizmos.png" width="320" height="120" alt="recalculated no gizmos">
+							<figcaption>Six octaves; analytical and recalculated.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why do weird normals and tangent sometimes appear at random?</h3>
+							<div>
+								<p>This can happen when you change the procedural surface while in play mode, for example toggling recalculation. It's because the unused vertices that remain uninitialized can end up with random data due to memory reuse. There can be up to three such vertices. Our gizmo visualization shows them because it doesn't know that they're unused.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Domain Rotation</h3>
+						
+						<p>Our analytical normal and tangent vectors should also correctly adapt to domain rotation, but this is currently not the case. This can be verified by applying a 90&deg; domain rotation around the Y axis. The tangents should become flat and the normals should have also rotated, but this doesn't happen.</p>
+						
+						<figure>
+							<img src="1d-derivatives/rotated-analytical-incorrect.png" width="290" height="210" alt="analytical">
+							<img src="1d-derivatives/rotated-recalculated.png" width="290" height="210" alt="recalculated">
+							<figcaption>Rotated 90&deg; around Y axis; analytical and recalculated.</figcaption>
+						</figure>
+						
+						<p>The noise code is unaware of the transformation. This isn't a problem for translation, because that simply shifts the sample position. But in the case of rotation we have to compensate by applying the inverse rotation to the derivative vector.</p>
+						
+						<p>To apply a rotation we need a 3&times;3 matrix, constructed by rotating in the opposite direction and in reverse order of the domain rotation. So we need a negative YXZ rotation. We can construct such a matrix via <code>float3x3.EulerYXZ</code> and let's provide it via a new <code>SpaceTRS.DerivativeMatrix</code> property.</p>
+						
+						<pre>	<ins>public float3x3 DerivativeMatrix => float3x3.EulerYXZ(-math.radians(rotation));</ins></pre>
+						
+						<p>To apply this matrix to vectorized derivatives add a variant <code>TransformVectors</code> method to <code>MathExtensions</code> that acts on a 3&times;3 matrix instead of on a 3&times;4 matrix.</p>
+						
+						<pre>	<ins>public static float4x3 TransformVectors (this float3x3 m, float4x3 v) => float4x3(</ins>
+		<ins>m.c0.x * v.c0 + m.c1.x * v.c1 + m.c2.x * v.c2,</ins>
+		<ins>m.c0.y * v.c0 + m.c1.y * v.c1 + m.c2.y * v.c2,</ins>
+		<ins>m.c0.z * v.c0 + m.c1.z * v.c1 + m.c2.z * v.c2</ins>
+	<ins>);</ins></pre>
+						
+						<p>Let's also add a convenient <code>Sample4.Derivatives</code> property that provides the derivatives as a vectorized <code>float4x3</code> package.</p>
+						
+						<pre>		<ins>public float4x3 Derivatives => float4x3(dx, dy, dz);</ins></pre>
+						
+						<p>Now add a field for the derivative matrix to <code>SurfaceJob</code> and set it in <code>ScheduleParallel</code>.</p>
+						
+						<pre>	<ins>float3x3 derivativeMatrix;</ins>
+
+	&hellip;
+
+	public static JobHandle ScheduleParallel (&hellip;) => new SurfaceJob&lt;N>() {
+		vertices =
+			meshData.GetVertexData&lt;SingleStream.Stream0>().Reinterpret&lt;Vertex4>(12 * 4),
+		settings = settings,
+		domainTRS = domain.Matrix,
+		<ins>derivativeMatrix = domain.DerivativeMatrix,</ins>
+		displacement = displacement
+	}.ScheduleParallel(meshData.vertexCount / 4, resolution, dependency);</pre>
+						
+						<p>Then transform the derivative vectors of the noise and use the X components of the result to construct the tangent vectors in <code>Execute</code>.</p>
+						
+						<pre>		<ins>float4x3 dNoise =</ins>
+			<ins>derivativeMatrix.TransformVectors(noise.Derivatives);</ins>
+
+		float4 normalizer = rsqrt(<ins>dNoise.c0</ins> * <ins>dNoise.c0</ins> + 1f);
+		float4 tangentY = <ins>dNoise.c0</ins> * normalizer;</pre>
+						
+						<figure>
+							<img src="1d-derivatives/rotated-analytical-tangents.png" width="290" height="190">
+							<figcaption>Only tangents rotated.</figcaption>
+						</figure>
+						
+						<p>This fixed the tangents. To also construct correct normal vectors we have to switch to a 2D approach, because the derivative vector can now point in any direction in the XZ plane. So it becomes `[[-d_x],[1],[-d_z]]1/sqrt(d_x^2+d_z^2+1)`.</p>
+						
+						<pre>		<ins>normalizer = rsqrt(dNoise.c0 * dNoise.c0 + dNoise.c2 * dNoise.c2 + 1f);</ins>
+		<ins>float4 normalX = -dNoise.c0 * normalizer;</ins>
+		<ins>float4 normalZ = -dNoise.c2 * normalizer;</ins>
+		v.v0.normal = float3(<ins>normalX.x, normalizer.x, normalZ.x</ins>);
+		v.v1.normal = float3(<ins>normalX.y, normalizer.y, normalZ.y</ins>);
+		v.v2.normal = float3(<ins>normalX.z, normalizer.z, normalZ.z</ins>);
+		v.v3.normal = float3(<ins>normalX.w, normalizer.w, normalZ.w</ins>);</pre>
+						
+						<figure>
+							<img src="1d-derivatives/rotated-analytical-correct.png" width="290" height="190">
+							<figcaption>Rotated normals.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>How is that normal vector found?</h3>
+							<div>
+								<p>Like there is a tangent vector in the X dimension there is also a tangent vector in the Z dimension. The normal vector is found by taking the cross product of the Z and X tangent vectors.</p>
+								
+								<p>`[[0],[d_z],[1]]xx[[1],[d_x],[0]]=[[d_z0-1d_x],[1-0],[0d_x-d_z1]]=[[-d_x],[1],[-d_z]]`.</p>
+								
+								<p>Note that without rotation `d_z` is zero and the 1D tangent is unmodified.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Domain Scale</h3>
+						
+						<p>Domain scaling should also affect the tangent and normal vectors. However, before we deal with that we have to first observe that the <code>float4.TRS</code> method doesn't provide the expected transformation. It scales after rotation, so it does TSR instead of TRS. This doesn't matter when scaling is uniform, but nonuniform scaling goes wrong. To make our domain behave the same way as Unity's game object transformation let's create the matrix provided by <code>SpaceTRS.Matrix</code> ourselves.</p>
+						
+						<pre>	public float3x4 Matrix {
+		get {
+			<del>//float4x4 m = float4x4.TRS(</del>
+			<del>//	translation, quaternion.EulerZXY(math.radians(rotation)), scale</del>
+			<del>//);</del>
+			<del>//return math.float3x4(m.c0.xyz, m.c1.xyz, m.c2.xyz, m.c3.xyz);</del>
+			<ins>float3x3 m = math.mul(</ins>
+				<ins>float3x3.Scale(scale), float3x3.EulerZXY(math.radians(rotation))</ins>
+			<ins>);</ins>
+			<ins>return math.float3x4(m.c0, m.c1, m.c2, translation);</ins>
+		}
+	}</pre>
+						
+						<p>Now we can observe a combination of nonuniform scaling and rotation, which leads to incorrect analytical tangents and normals.</p>
+						
+						<figure>
+							<img src="1d-derivatives/scaled-analytical-incorrect.png" width="320" height="180" alt="analytical">
+							<img src="1d-derivatives/scaled-recalculated.png" width="320" height="180" alt="recalculated">
+							<figcaption>X scaled down to &frac14; and a 45&deg; rotation around Y axis; analytical and recalculated.</figcaption>
+						</figure>
+						
+						<p>Scaling this way is effectively changing the frequency in each dimension independently, so we should scale the derivatives by the same amount. We have to swap the order of rotation and scaling to arrive at the final derivative matrix.</p>
+						
+						<pre>	public float3x3 DerivativeMatrix =>
+		<ins>math.mul(</ins>float3x3.EulerYXZ(-math.radians(rotation))<ins>, float3x3.Scale(scale))</ins>;</pre>
+						
+						<figure>
+							<img src="1d-derivatives/scaled-analytical-correct.png" width="300" height="160">
+							<figcaption>Correctly scaled and rotated.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>2D Derivatives</h2>
+					
+					<p>Because each dimension has its own derivative they can be calculated separately. So we can use the same approach for 2D noise that we used for 1D noise.</p>
+					
+					<section>
+						<h3>Simplex Value Noise</h3>
+						
+						<p>Adjust <code>Simplex2D.GetNoise4</code> so it also treats the evaluated kernels as a <code>Sample4</code> and appropriately scales its two derivatives.</p>
+						
+						<pre>		public Sample4 GetNoise4 (float4x3 positions, SmallXXHash4 hash, int frequency) {
+			positions *= frequency * (1f / sqrt(3f));
+			&hellip;
+
+			<ins>Sample4 s =</ins> default(G).EvaluateCombined(
+				Kernel(h0.Eat(z0), x0, z0, positions) +
+				Kernel(h1.Eat(z1), x1, z1, positions) +
+				Kernel(hC.Eat(zC), xC, zC, positions)
+			);
+			<ins>s.dx *= frequency * (1f / sqrt(3f));</ins>
+			<ins>s.dz *= frequency * (1f / sqrt(3f));</ins>
+			<ins>return s;</ins>
+		}</pre>
+						
+						<p>Then change <code>Kernel</code> so it sets its X derivative just like for 1D noise. Besides that, clamp the entire sample so its falloff doesn't go below zero.</p>
+						
+						<pre>		static <ins>Sample4</ins> Kernel (
+			SmallXXHash4 hash, float4 lx, float4 lz, float4x3 positions
+		) {
+			float4 unskew = (lx + lz) * ((3f - sqrt(3f)) / 6f);
+			float4 x = positions.c0 - lx + unskew, z = positions.c2 - lz + unskew;
+			float4 f = 0.5f - x * x - z * z;
+			<del>//f = f * f * f * 8f;</del>
+			<del>//return max(0f, f) * default(G).Evaluate(hash, x, z).v;</del>
+			<ins>Sample4 g = default(G).Evaluate(hash, x, z);</ins>
+			<ins>return new Sample4 {</ins>
+				<ins>v = f * g.v,</ins>
+				<ins>dx = f * g.dx - 6f * x * g.v</ins>
+			<ins>} * f * f * select(0f, 8f, f >= 0f);</ins>
+		}</pre>
+						
+						<figure>
+							<img src="2d-derivatives/value-analytical-x.png" width="340" height="320" alt="analytical">
+							<img src="2d-derivatives/value-recalculated.png" width="340" height="320" alt="recalculated">
+							<figcaption>2D simplex value noise; analytical with only X derivatives and recalculated.</figcaption>
+						</figure>
+						
+						<p>At this point the tangent vectors are already correct if no rotation is applied. This makes sense, because Z is constant in the X dimension. If we ignore the gradient for a moment, we've taken the partial derivative of `f(x,z)=(1/2-x^2-z^2)^3` in the X dimension, which is `f'_x(x,z)=-6x(1/2-x^2-z^2)^2`. After that we can incorporate the gradient via the product rule exactly as we did for 1D noise.</p>
+						
+						<aside>
+							<h3>How did you find that derivative?</h3>
+							<div>
+								<p>In the X dimension `z` is constant, so we have `f_x(x)=g(x)^3` with `g(x)=1/2-x^2-z^2`.</p>
+								
+								<p>`g'(x)=-2x`, note that `z` is eliminated.</p>
+								
+								<p>`f'_x(x)=3g(x)^2g'(x)=-6xg(x)^2=-6x(1/2-x^2-z^2)^2`.</p>
+							</div>
+						</aside>
+						
+						<p>The partial derivative in the Z dimension `f_z'(x,z)` is found the same way, but with `z` variable and `x` constant. Add it to the sample.</p>
+						
+						<pre>			return new Sample4 {
+				v =  f * g<ins>.v</ins>,
+				dx = f * g.dx - 6f * x * g.v<ins>,</ins>
+				<ins>dz = f * g.dz - 6f * z * g.v</ins>
+			} * f * f * select(0f, 8f, f >= 0f);</pre>
+						
+						
+						<figure>
+							<img src="2d-derivatives/value-analytical-xz.png" width="340" height="320">
+							<figcaption>Complete analytical derivatives.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Simplex Gradients</h3>
+						
+						<p>To get correct derivatives for simplex gradient noise we have to make <code>BaseGradients.Circle</code> provide derivatives as well. In this case we have `f(x,z)=ax+by` so the partial derivatives are `f_x'(x,z)=a` and `f_z'(x,z)=b`.</p>
+						
+						<pre>		public static <ins>Sample4</ins> Circle (SmallXXHash4 hash, float4 x, float4 y) {
+			float4x2 v = SquareVectors(hash);
+			return <ins>new Sample4 {</ins>
+				<ins>v = </ins>v.c0 * x + v.c1 * y<ins>,</ins>
+				<ins>dx = v.c0,</ins>
+				<ins>dz = v.c1</ins>
+			<ins>}</ins> * rsqrt(v.c0 * v.c0 + v.c1 * v.c1);
+		}</pre>
+						
+						<figure>
+							<img src="2d-derivatives/simplex-analytical.png" width="330" height="300" alt="analytical">
+							<img src="2d-derivatives/simplex-recalculated.png" width="330" height="300" alt="recalculated">
+							<figcaption>2D simplex noise; analytical and recalculated.</figcaption>
+						</figure>
+						
+						<p>At this point it is easy to illustrate an additional benefit of analytical derivatives. Because recalculated tangents and normals depend on the mesh data, vertices at the edge of the mesh have only partial data to work with, so these vectors will be biased toward the inside of the mesh. The result of this is that when you use separate meshes to tile the surface there will be normal and tangent discontinuities along the seams. The analytical approach does not have this problem.</p>
+						
+						<figure>
+							<img src="2d-derivatives/tiling-analytical.png" width="250" height="250" alt="analytical">
+							<img src="2d-derivatives/tiling-recalculated.png" width="250" height="250" alt="recalculated">
+							<figcaption>Four separate procedural meshes; analytical and recalculated.</figcaption>
+						</figure>
+						
+						<p>You can see this by putting multiple procedural meshes next to each other and translating their domains so they form a continuous surface.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>3D Derivatives</h2>
+					
+					<p>Going from two to three dimensions is as simple as going from one to two.</p>
+					
+					<section>
+						<h3>Simplex Value Noise</h3>
+						
+						<p>First adjust <code>Simplex3D.GetNoise4</code>.</p>
+						
+						<pre>		public Sample4 GetNoise4 (float4x3 positions, SmallXXHash4 hash, int frequency) {
+			positions *= frequency * 0.6f;
+			&hellip;
+
+			<ins>Sample4 s =</ins> default(G).EvaluateCombined(
+				Kernel(h0.Eat(y0).Eat(z0), x0, y0, z0, positions) +
+				Kernel(h1.Eat(y1).Eat(z1), x1, y1, z1, positions) +
+				Kernel(hA.Eat(yCA).Eat(zCA), xCA, yCA, zCA, positions) +
+				Kernel(hB.Eat(yCB).Eat(zCB), xCB, yCB, zCB, positions)
+			);
+			<ins>s.dx *= frequency * 0.6f;</ins>
+			<ins>s.dy *= frequency * 0.6f;</ins>
+			<ins>s.dz *= frequency * 0.6f;</ins>
+			<ins>return s;</ins>
+		}</pre>
+						
+						<p>Then change <code>Kernel</code> so it provides all three partial derivatives.</p>
+						
+						<pre>		static <ins>Sample4</ins> Kernel (
+			SmallXXHash4 hash, float4 lx, float4 ly, float4 lz, float4x3 positions
+		) {
+			&hellip;
+			float4 f = 0.5f - x * x - y * y - z * z;
+			<del>//f = f * f * f * 8f;</del>
+			<del>//return max(0f, f) * default(G).Evaluate(hash, x, y, z).g;</del>
+			<ins>Sample4 g = default(G).Evaluate(hash, x, y, z);</ins>
+			<ins>return new Sample4 {</ins>
+				<ins>v = f * g.v,</ins>
+				<ins>dx = f * g.dx - 6f * x * g.v,</ins>
+				<ins>dy = f * g.dy - 6f * y * g.v,</ins>
+				<ins>dz = f * g.dz - 6f * z * g.v</ins>
+			<ins>} * f * f * select(0f, 8f, f >= 0f);</ins>
+		}</pre>
+						
+						<p>This is enough to get correct 3D simplex value noise.</p>
+						
+						<figure>
+							<img src="3d-derivatives/value-analytical.png" width="330" height="250" alt="analytical">
+							<img src="3d-derivatives/value-recalculated.png" width="330" height="250" alt="recalculated">
+							<figcaption>3D simplex value noise; analytical and recalculated.</figcaption>
+						</figure>
+						
+						<p>Note that if we do not rotate the domain around the X or Z axes we don't need the derivative in the Y dimension, because we never leave the XZ plane. But when an arbitrary rotation is applied all three derivatives are needed.</p>
+						
+						<figure>
+							<img src="3d-derivatives/value-rotated-xyz.png" width="270" height="250" alt="xyz">
+							<img src="3d-derivatives/value-rotated-xz.png" width="270" height="250" alt="xz">
+							<figcaption>Rotated 90&deg; around X axis; correct and with only XZ derivatives.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Simplex Gradients</h3>
+						
+						<p>To complete simplex gradient noise we have to add derivatives to <code>BaseGradients.Sphere</code>.</p>
+						
+						<pre>		public static <ins>Sample4</ins> Sphere (SmallXXHash4 hash, float4 x, float4 y, float4 z) {
+			float4x3 v = OctahedronVectors(hash);
+			return <ins>new Sample4 {</ins>
+				<ins>v = </ins>v.c0 * x + v.c1 * y + v.c2 * z<ins>,</ins>
+				<ins>dx = v.c0,</ins>
+				<ins>dy = v.c1,</ins>
+				<ins>dz = v.c2</ins>
+			<ins>}</ins> * rsqrt(v.c0 * v.c0 + v.c1 * v.c1 + v.c2 * v.c2);
+		}</pre>
+						
+						<figure>
+							<img src="3d-derivatives/simplex-analytical.png" width="270" height="290" alt="analytical">
+							<img src="3d-derivatives/simplex-recalculated.png" width="270" height="290" alt="recalculated">
+							<figcaption>3D simplex noise; analytical and recalculated.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Turbulence</h2>
+					
+					<p>Simplex noise is now complete, but earlier we skipped providing a correct solution for the turbulence variant. We're going to deal with that now.</p>
+					
+					<section>
+						<h3>Derivative of Absolute Function</h3>
+						
+						<p>Let's add a turbulence variant for simplex gradient noise only, leaving out simplex turbulence value noise. Add it to <code>ProceduralSurface</code>.</p>
+						
+						<pre>	static SurfaceJobScheduleDelegate[,] surfaceJobs = {
+		{ &hellip; },
+		<ins>{</ins>
+			<ins>SurfaceJob&lt;Simplex1D&lt;Turbulence&lt;Simplex>>>.ScheduleParallel,</ins>
+			<ins>SurfaceJob&lt;Simplex2D&lt;Turbulence&lt;Simplex>>>.ScheduleParallel,</ins>
+			<ins>SurfaceJob&lt;Simplex3D&lt;Turbulence&lt;Simplex>>>.ScheduleParallel</ins>
+		<ins>},</ins>
+		{ &hellip; }
+	};
+
+	public enum NoiseType {
+		Simplex€, <ins>SimplexTurbulence,</ins> SimplexValue
+	}</pre>
+						
+						<p>Then make <code>Turbulence.EvaluateCombined</code> return the absolute value of the sample, leaving the derivatives unchanged for now.</p>
+						
+						<pre>		public Sample4 EvaluateCombined (Sample4 value) <ins>{</ins>
+			<ins>Sample4 s =</ins> default(G).EvaluateCombined(value);
+			<ins>s.v = abs(s.v);</ins>
+			<ins>return s;</ins>
+		<ins>}</ins></pre>
+						
+						<figure>
+							<img src="turbulence/turbulence-analytical-incorrect.png" width="320" height="260" alt="analytical">
+							<img src="turbulence/turbulence-recalculated.png" width="320" height="260" alt="recalculated">
+							<figcaption>2D simplex turbulence noise; frequency 2; analytical and recalculated.</figcaption>
+						</figure>
+						
+						<p>The analytical results are obviously incorrect, because the derivatives are not negated when they should be. This negation is based on the value, not the derivatives themselves.</p>
+						
+						<pre>			Sample4 s = default(G).EvaluateCombined(value);
+			<ins>s.dx = select(-s.dx, s.dx, s.v >= 0f);</ins>
+			<ins>s.dy = select(-s.dy, s.dy, s.v >= 0f);</ins>
+			<ins>s.dz = select(-s.dz, s.dz, s.v >= 0f);</ins>
+			s.v = abs(s.v);</pre>
+						
+						<aside>
+							<h3>What's the derivative of an absolute value, mathematically?</h3>
+							<div>
+								<p>If `f(x)=|x|` then `f'(x)=x/|x|`.</p>
+								
+								<p>Because `x/x=1` That derivate is always either 1 or &minus;1. The exception is when `x=0`, where it is undefined. This corresponds to the point where the sign flip occurs, where there is a discontinuity in the derivative.</p>
+							</div>
+						</aside>
+						
+						<figure>
+							<img src="turbulence/turbulence-analytical-correct.png" width="320" height="260">
+							<figcaption>Correct analytical derivatives.</figcaption>
+						</figure>
+						
+						<p>The sign flip of the noise causes a sudden change in direction. We simply pick one option for the derivatives at that point. The recalculated vectors produce smoother results in this case.</p>
+						
+						<figure>
+							<img src="turbulence/discontinuity-analytical.png" width="200" height="140" alt="analytical">
+								<img src="turbulence/discontinuity-recalculated.png" width="200" height="140" alt="recalculated">
+							<figcaption>1D turbulence; frequency 1; analytical and recalculated.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Smoothstep</h3>
+						
+						<p>The sudden sign flip of turbulence noise tends to create ugly jagged seams in the mesh. We could smooth that a bit by applying a different modification. The simplest option would be to use `f(x)=x^2` instead of `f(x)=|x|`, but that would weaken the noise a lot. A better choice would be the smoothstep function `f(x)=3x^2-2x^3` applied on top of turbulence.</p>
+						
+						<figure>
+							<img src="turbulence/graph.png" width="400" height="400">
+							<figcaption>`|x|`, `x^2`, and `3|x|^2-2|x|^3`.</figcaption>
+						</figure>
+						
+						<p>So let's add a <code>Smoothstep</code> gradient modifier to <em>Noise.Gradient</em>. The derivative of `f(x)=3g(x)^2-2g(x)^3` is `f'(x)=6g(x)(1-g(x))g'(x)`.</p>
+						
+						<aside>
+							<h3>How did you find that derivative?</h3>
+							<div>
+								<p>First without the gradient, `f(x)=3x^2-2x^3` and `f'(x)=6x-6x^2=6x(1-x)`.</p>
+								
+								<p>Then apply the chain rule for the derivative of `f(g(x))`.</p>
+							</div>
+						</aside>
+						
+						<pre>
+	<ins>public struct Smoothstep&lt;G> : IGradient where G : struct, IGradient {</ins>
+
+		<ins>public Sample4 Evaluate (SmallXXHash4 hash, float4 x) =></ins>
+			<ins>default(G).Evaluate(hash, x);</ins>
+
+		<ins>public Sample4 Evaluate (SmallXXHash4 hash, float4 x, float4 y) =></ins>
+			<ins>default(G).Evaluate(hash, x, y);</ins>
+
+		<ins>public Sample4 Evaluate (SmallXXHash4 hash, float4 x, float4 y, float4 z) =></ins>
+			<ins>default(G).Evaluate(hash, x, y, z);</ins>
+
+		<ins>public Sample4 EvaluateCombined (Sample4 value) {</ins>
+			<ins>Sample4 s = default(G).EvaluateCombined(value);</ins>
+			<ins>float4 d = 6f * s.v * (1f - s.v);</ins>
+			<ins>s.dx *= d;</ins>
+			<ins>s.dy *= d;</ins>
+			<ins>s.dz *= d;</ins>
+			<ins>s.v *= s.v * (3f - 2f * s.v);</ins>
+			<ins>return s;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now adjust <code>ProceduralSurface</code> so it produces a smoothed turbulence variant.</p>
+						
+						<pre>	static SurfaceJobScheduleDelegate[,] surfaceJobs = {
+		{ &hellip; },
+		{
+			SurfaceJob&lt;Simplex1D&lt;<ins>Smoothstep&lt;</ins>Turbulence&lt;Simplex><ins>></ins>>>.ScheduleParallel,
+			SurfaceJob&lt;Simplex2D&lt;<ins>Smoothstep&lt;</ins>Turbulence&lt;Simplex><ins>></ins>>>.ScheduleParallel,
+			SurfaceJob&lt;Simplex3D&lt;<ins>Smoothstep&lt;</ins>Turbulence&lt;Simplex><ins>></ins>>>.ScheduleParallel
+		},
+		{ &hellip; }
+	};
+
+	public enum NoiseType {
+		Simplex€, <ins>SimplexSmoothTurbulence</ins>, SimplexValue
+	}</pre>
+						
+						<figure>
+							<img src="turbulence/discontinuity-smoothed-analytical.png" width="200" height="140" alt="analytical">
+								<img src="turbulence/discontinuity-smoothed-recalculated.png" width="200" height="140" alt="recalculated">
+							<figcaption>1D smooth turbulence; analytical and recalculated.</figcaption>
+						</figure>
+						
+						<p>The smoothing flattens the noise when it approaches zero, eliminating the discontinuity of the derivatives. How effective this is depends on the resolution of the mesh relative to the noise frequency. The recalculated results will still be smoother, but the analytical results of the smooth variant can also be acceptable.</p>
+						
+						<figure>
+							<img src="turbulence/regular-analytical.png" width="280" height="210" alt="regular analytical">
+							<img src="turbulence/regular-recalculated.png" width="280" height="210" alt="regular recalculated">
+								<img src="turbulence/smooth-analytical.png" width="280" height="210" alt="smooth analytical">
+							<img src="turbulence/smooth-recalculated.png" width="280" height="210" alt="smooth recalculated">
+							<figcaption>3D regular and smooth turbulence; displacement 0.25; analytical and recalculated.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../perlin-derivatives/index.html">Perlin derivatives</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/pseudorandom-surfaces-02-simplex-derivatives/" class="repository">repository</a>
+					<a href="Simplex-Derivatives.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

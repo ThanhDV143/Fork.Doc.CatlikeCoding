@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html>
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/editor/star/">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/editor/star/star.png">
+		<meta property="og:description" content="A Unity C# scripting tutorial that teaches you how to create a WYSIWYG editor.">
+		<meta name="description" content="A Unity C# scripting tutorial that teaches you how to create a WYSIWYG editor.">
+		<meta property="og:title" content="Star, a Unity C# Editor Tutorial">
+		<title>Star, a Unity C# Editor Tutorial</title>
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<link href="../../../default.css" rel="stylesheet">
+		<script>
+			var customTypes = {
+				ColorPoint: 1,
+				ColorPointDrawer: 1,
+				ColorPointTester: 1,
+				List: 1,
+				ListAttribute: 1,
+				ListDrawer: 1,
+				ListTester: 1,
+				Star: 1,
+				StarInspector: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header data-type="tutorial"></header>
+
+		<article class="tutorial" data-type="tutorial" itemscope="" itemtype="http://schema.org/TechArticle">
+			<h1 itemprop="name headline">Star<span>, an introduction to WYSIWYG editing</span></h1>
+
+			<h2>Introduction</h2>
+			
+			<div class="instructions">
+				<span itemprop="about description">In this tutorial you will create a simple star component and write your own custom editor for it.</span>
+				You will learn to
+
+				<ul>
+					<li>dynamically generate a mesh</li>
+					<li>support WYSIWYG editing</li>
+					<li>support editing in the scene view</li>
+				</ul>
+				<p>
+				<span itemprop="dependencies">This tutorial comes after the <a href="../custom-list/index.html">Custom List</a> tutorial.</span>
+				<p>
+				This tutorial is for Unity version 4.3 and above.
+			</div>
+			
+			<aside class="share"></aside>
+			
+			<figure>
+				<img src="star.png" width="320" height="320" itemprop="image">
+				<figcaption>WYSIWYG Star.</figcaption>
+			</figure>
+
+			<h2>Creating the star</h2>
+
+			<div class="instructions">
+				We start with the finished <a href="https://catlikecoding.com/unity/tutorials/editor/custom_list/">Custom List</a> tutorial project, or by
+				creating a new empty project and importing <a href="../custom-list/custom-list.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Unity', 'Download', 'Custom List Tutorial']);" target="_blank">custom-list.unitypackage</a>.
+				<p>
+				We will be using the color point and editor list that we created previously, but we can get rid of all the testing code and objects.
+				<p>
+				The first thing we add is a C# script named <i>Star</i>. We'll use
+				this script to create a circle made of triangles to produce
+				a starlike effect, which requires a <code>Mesh</code>.
+
+			</div>
+
+			<aside>
+				<ul>
+					<li><a href="index.html#a-mesh" id="q-mesh">What's a <code>Mesh</code>?</a></li>
+				</ul>
+			</aside>
+
+			<pre translate="no"><mark>using UnityEngine;</mark>
+
+<mark>public class Star : MonoBehaviour {</mark>
+
+	<mark>private Mesh mesh;</mark>
+<mark>}</mark></pre>
+
+			<div class="instructions">
+				For this mesh to be of any use, it must be assigned to a <code>MeshFilter</code> component, which in turn
+				is used by a <code>MeshRenderer</code> component. Only then will the mesh be drawn by Unity.
+				So it is required that both these components are attached to the game object that our star component
+				is also attached to.
+				<p>
+				Of course we can manually add these components, but we can also do this automatically by
+				adding a <code>RequireComponent</code> attribute to our component.
+			</div>
+
+			<pre translate="no">using UnityEngine;
+
+<mark>[RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]</mark>
+public class Star : MonoBehaviour {
+
+	private Mesh mesh;
+
+}</pre>
+
+			<div class="instructions">
+				Now we create a new empty game object, name it <i>My First Star</i>, and add our component to.
+				You will see that the object has also gained the other two components.
+			</div>
+
+			<figure>
+				<img src="component-empty.png" width="786" height="254">
+				<figcaption>Add one, get three.</figcaption>
+			</figure>
+
+			<div class="instructions">
+				The next step is to create a mesh. We'll do this in the <code>Start</code> Unity event method for now, so it
+				happens as soon as we enter play mode. We also assign the mesh to the <code>MeshFilter</code> in one go
+				and give it a descriptive name.
+			</div>
+
+			<pre translate="no">	<mark>void Start () {</mark>
+		<mark>GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();</mark>
+		<mark>mesh.name = "Star Mesh";</mark>
+	<mark>}</mark></pre>
+
+			<figure>
+				<img alt="without mesh" src="component-mesh.png" width="320" height="232">
+				<figcaption>A mesh appears in play mode.</figcaption>
+			</figure>
+
+			<div class="instructions">
+				Of course we won't see anything yet when entering play mode, because the mesh remains empty. So let's add
+				an array of vertices, an option to control how many points our star has, and where these points should be
+				placed relative to the center of the star.
+				<p>
+				The first vertex of our triangle fan sits at the center of the star, with all other vertices placed
+				around it clockwise. We'll use a quaternion to rotate the points. The rotation angle is negative because we assume
+				that we're looking down the Z axis, which makes positive rotation around Z go counterclockwise. We don't
+				need to set the first vertex because vectors are set to zero by default.
+			</div>
+
+			<pre translate="no">	<mark>public Vector3 point = Vector3.up;</mark>
+	<mark>public int numberOfPoints = 10;</mark>
+
+	private Mesh mesh;
+	<mark>private Vector3[] vertices;</mark>
+
+	void Start () {
+		GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();
+		mesh.name = "Star Mesh";
+
+		<mark>vertices = new Vector3[numberOfPoints + 1];</mark>
+		<mark>float angle = -360f / numberOfPoints;</mark>
+		<mark>for(int v = 1; v &lt; vertices.Length; v++){</mark>
+			<mark>vertices[v] = Quaternion.Euler(0f, 0f, angle * (v - 1)) * point;</mark>
+		<mark>}</mark>
+
+		<mark>mesh.vertices = vertices;</mark>
+	}</pre>
+
+			<figure>
+				<img src="component-points.png" width="320" height="90">
+				<figcaption>Some points.</figcaption>
+			</figure>
+
+			<div class="instructions">
+				Triangles are stored as an array of vertex indices, three per triangle. Because we're using a triangle fan approach,
+				every triangle starts at the first vertex and connects with the previous and next triangle. The last triangle wraps back to the first one.
+				Fox example, if we had four triangles, the vertex indices would be <code>{0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 1}</code>.
+			</div>
+
+			<aside>
+				<ul>
+					<li><a href="index.html#a-for" id="q-for">What's with the weird <code>for</code> loop?</a></li>
+				</ul>
+			</aside>
+
+			<pre translate="no">	<mark>private int[] triangles;</mark>
+
+	void Start () {
+		GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();
+		mesh.name = "Star Mesh";
+
+		vertices = new Vector3[numberOfPoints + 1];
+		<mark>triangles = new int[numberOfPoints * 3];</mark>
+		float angle = -360f / numberOfPoints;
+		for(int v = 1<mark>, t = 1</mark>; v &lt; vertices.Length; v++<mark>, t += 3</mark>){
+			vertices[v] = Quaternion.Euler(0f, 0f, angle * (v - 1)) * point;
+			<mark>triangles[t] = v;</mark>
+			<mark>triangles[t + 1] = v + 1;</mark>
+		}
+		<mark>triangles[triangles.Length - 1] = 1;</mark>
+
+		mesh.vertices = vertices;
+		<mark>mesh.triangles = triangles;</mark>
+	}</pre>
+
+			<figure>
+				<img src="star-ugly.png" width="240" height="240">
+				<figcaption>One ugly star.</figcaption>
+			</figure>
+
+			<div class="instructions">
+				Right now our star looks like a very ugly polygon. Unity also complains about missing texture
+				coordinates because the default shader expects them. As we won't be using a texture at all,
+				let's get rid of that warning by creating our own shader that only uses vertex colors.
+				<p>
+				Create a new shader asset and name it <i>Star</i>, then put the following code in it.
+			</div>
+
+			<aside>
+				<ul>
+					<li><a href="index.html#a-shader" id="q-shader">What does the CGPROGRAM do?</a></li>
+					<li><a href="index.html#a-fixed-function" id="q-fixed-function">Why no fixed-function shader?</a></li>
+				</ul>
+			</aside>
+
+			<pre translate="no">Shader "Star" {
+	SubShader {
+		Tags { "Queue"="Transparent" "IgnoreProjector"="True" "RenderType"="Transparent" }
+		Blend SrcAlpha OneMinusSrcAlpha
+		Cull Off
+		Lighting Off
+		ZWrite Off
+		Pass {
+			CGPROGRAM
+				#pragma vertex vert
+				#pragma fragment frag
+
+				struct data {
+					float4 vertex : POSITION;
+					fixed4 color: COLOR;
+				};
+
+				data vert (data v) {
+					v.vertex = mul(UNITY_MATRIX_MVP, v.vertex);
+					return v;
+				}
+
+				fixed4 frag(data f) : COLOR {
+					return f.color;
+				}
+			ENDCG
+		}
+	}
+}</pre>
+
+			<div class="instructions">
+				Now we create a new material named &ndash; you guessed it &ndash; <i>Star</i>, set its shader to the
+				one we just created, and drag it onto <i>My First Star</i>.
+			</div>
+
+			<figure>
+				<img alt="star" src="star-white.png" width="240" height="240">
+				<img alt="component" src="project-material.png" width="786" height="280">
+				<figcaption>A white star.</figcaption>
+			</figure>
+
+			<div class="instructions">
+				Vertex colors are white by default, so now our polygon turns up white. However, we want a multicolored
+				star with points at varying distances from the center. So instead of configuring a single point, let's
+				configure an array of points instead.
+				<p>
+				Let's also add a frequency option so we can automatically repeat point sequences instead of having
+				to configure every single point of the star. This option replaces <code>numberOfPoints</code>.
+				<p>
+				We also include a check to make sure that the frequency is at least 1, because anything less wouldn't make any sense.
+				And finally it is only possible to construct a mesh when we have at leasts three points.
+			</div>
+
+			<aside>
+				<ul>
+					<li><a href="index.html#a-null-check" id="q-null-check">Why check for <code>null</code>?</a></li>
+				</ul>
+			</aside>
+
+			<pre translate="no">	<mark>public Vector3[] points;</mark>
+	<mark>public int frequency = 1;</mark>
+
+	void Start () {
+		GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();
+		mesh.name = "Star Mesh";
+		
+		<mark>if (frequency &lt; 1) {</mark>
+			<mark>frequency = 1;</mark>
+		<mark>}</mark>
+		<mark>if (points == null) {</mark>
+			<mark>points = new Vector3[0];</mark>
+		<mark>}</mark>
+		<mark>int numberOfPoints = frequency * points.Length;</mark>
+		vertices = new Vector3[numberOfPoints + 1];
+		triangles = new int[numberOfPoints * 3];
+		
+		<mark>if (numberOfPoints >= 3) {</mark>
+			float angle = -360f / numberOfPoints;
+			<mark>for(int repetitions = 0,</mark> v = 1, t = 1; <mark>repetitions &lt; frequency; repetitions++){</mark>
+				<mark>for(int p = 0; p &lt; points.Length; p += 1,</mark> v += 1, t += 3){
+					vertices[v] = Quaternion.Euler(0f, 0f, angle * (v - 1)) * <mark>points[p]</mark>;
+					triangles[t] = v;
+					triangles[t + 1] = v + 1;
+				}
+			}
+			triangles[triangles.Length - 1] = 1;
+		<mark>}</mark>
+		mesh.vertices = vertices;
+		mesh.triangles = triangles;
+	}</pre>
+
+			<figure>
+				<img alt="star" src="star-pointy.png" width="240" height="240">
+				<img alt="component" src="component-pointy.png" width="320" height="160">
+				<figcaption>Now with pointy points.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				It's time to add some color! We can do this quite easily by using our <code>ColorPoint</code> data
+				structure instead of just vectors for our points array. Let's also use a color point to define the
+				center of the star, so we could move it around as well.
+			</div>
+
+			<pre translate="no">	<mark>public ColorPoint center;</mark>
+	public <mark>ColorPoint[]</mark> points;
+
+	<mark>private Color[] colors;</mark>
+
+	void Start () {
+		GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();
+		mesh.name = "Star Mesh";
+		
+		if (frequency &lt; 1) {
+			frequency = 1;
+		}
+		if (points == null) {
+			points = new <mark>ColorPoint</mark>[0];
+		}
+		int numberOfPoints = frequency * points.Length;
+		vertices = new Vector3[numberOfPoints + 1];
+		<mark>colors = new Color[numberOfPoints + 1];</mark>
+		triangles = new int[numberOfPoints * 3];
+		
+		if (numberOfPoints >= 3) {
+			<mark>vertices[0] = center.position;</mark>
+			<mark>colors[0] = center.color;</mark>
+			float angle = -360f / numberOfPoints;
+			for(int repetitions = 0, v = 1, t = 1; repetitions &lt; frequency; repetitions++){
+				for(int p = 0; p &lt; points.Length; p += 1, v += 1, t += 3){
+					vertices[v] = Quaternion.Euler(0f, 0f, angle * (v - 1)) * points[p]<mark>.position</mark>;
+					<mark>colors[v] = points[p].color;</mark>
+					triangles[t] = v;
+					triangles[t + 1] = v + 1;
+				}
+			}
+			triangles[triangles.Length - 1] = 1;
+		}
+		mesh.vertices = vertices;
+		<mark>mesh.colors = colors;</mark>
+		mesh.triangles = triangles;
+	}</pre>
+
+			<figure>
+				<img alt="star" src="star-colored.png" width="300" height="300">
+				<img alt="component" src="component-colored.png" width="320" height="272">
+				<figcaption>Now with colored points.</figcaption>
+			</figure>
+
+			<div class="instructions">
+				If you see nothing when entering play mode after this step, try adjusting the alpha component of the colors.
+				I've set the center color to fully opaque and left all other points fully transparent,
+				resulting in a fade from the center to the edge.
+			</div>
+
+			<h2>Improving the Inspector</h2>
+
+			<div class="instructions">
+				Now that we can make nice stars, let's focus on our component's inspector. Thanks to the
+				property drawer of <code>ColorPoint</code> it's looking decent, but we can improve it by
+				creating a custom editor.
+				<p>
+				Create a new C# script named <i>StarInspector</i> in the <i>Editor</i> folder. Make it a custom editor with a
+				straightforward GUI method, just like we did in the
+				<a href="../custom-list/index.html">Custom List</a> tutorial.
+			</div>
+
+			<pre translate="no"><mark>using UnityEditor;</mark>
+<mark>using UnityEngine;</mark>
+
+<mark>[CustomEditor(typeof(Star)), CanEditMultipleObjects]</mark>
+<mark>public class StarInspector : Editor {</mark>
+	
+	<mark>public override void OnInspectorGUI () {</mark>
+		<mark>serializedObject.Update();</mark>
+		<mark>EditorGUILayout.PropertyField(serializedObject.FindProperty("center"));</mark>
+		<mark>EditorGUILayout.PropertyField(serializedObject.FindProperty("points"), true);</mark>
+		<mark>EditorGUILayout.PropertyField(serializedObject.FindProperty("frequency"));</mark>
+		<mark>serializedObject.ApplyModifiedProperties();</mark>
+	<mark>}</mark>
+<mark>}</mark></pre>
+			
+			<figure>
+				<img src="component-editor.png" width=554 height="352">
+				<figcaption>Custom editor.</figcaption>
+			</figure>
+
+			<div class="instructions">
+				Now let's improve this layout by using our <code>EditorList</code> to display the points more compact and with
+				button. Let's also use an integer slider with a range of 1&ndash;20 for the frequency.
+			</div>
+
+			<pre translate="no">	public override void OnInspectorGUI () {
+		serializedObject.Update();
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("center"));
+		<mark>EditorList.Show</mark>(
+			serializedObject.FindProperty("points"),
+			<mark>EditorListOption.Buttons | EditorListOption.ListLabel</mark>);
+		EditorGUILayout.<mark>IntSlider</mark>(serializedObject.FindProperty("frequency")<mark>, 1, 20</mark>);
+		serializedObject.ApplyModifiedProperties();
+	}</pre>
+
+			<figure>
+				<img src="inspector-improved.png" width="320" height="156">
+				<figcaption>Improved inspector.</figcaption>
+			</figure>
+
+			<div class="instructions">
+				As an additional feature, we could display how many points our star has, or give a warning when there are not enough points.
+			</div>
+			
+			<pre translate="no">	public override void OnInspectorGUI () {
+		<mark>SerializedProperty</mark>
+			<mark>points = serializedObject.FindProperty("points"),</mark>
+			<mark>frequency = serializedObject.FindProperty("frequency");</mark>
+		serializedObject.Update();
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("center"));
+		EditorList.Show(<mark>points</mark>, EditorListOption.Buttons | EditorListOption.ListLabel);
+		EditorGUILayout.IntSlider(<mark>frequency</mark>, 1, 20);
+		<mark>int totalPoints = frequency.intValue * points.arraySize;</mark>
+		<mark>if (totalPoints &lt; 3) {</mark>
+			<mark>EditorGUILayout.HelpBox("At least three points are needed.", MessageType.Warning);</mark>
+		<mark>}</mark>
+		<mark>else {</mark>
+			<mark>EditorGUILayout.HelpBox(totalPoints + " points in total.", MessageType.Info);</mark>
+		<mark>}</mark>
+		star.ApplyModifiedProperties();
+	}</pre>
+
+			<figure>
+				<img src="inspector-not-enough.png" alt="number of points" width="320" height="166">
+				<img src="inspector-point-count.png" alt="not enough points" width="320" height="198">
+				<figcaption>Extra info.</figcaption>
+			</figure>
+
+			<h2>WYSIWYG</h2>
+
+			<div class="instructions">
+				While our inspector is pretty good at this point, it's a bummer we can't see the
+				star while we're editing it. It's about time we change that!
+				<p>
+				The first thing we need to do is tell Unity that our component should be active in edit mode. We indicate this
+				by adding the <code>ExecuteInEditMode</code> class attribute. From now on, our <code>Start</code> method
+				will be called whenever a star manifests in the editor.
+				<p>
+				Because we create a mesh in <code>Start</code>, it will be created in edit mode. As we assign it to a
+				<code>MeshFilter</code>, it will persist and be saved in the scene. We don't want this to happen, because
+				we generate the mesh dynamically. We can prevent Unity from saving the
+				mesh by settings the appropriate <code>HideFlags</code>.
+			</div>
+
+			<pre translate="no">using UnityEngine;
+
+[<mark>ExecuteInEditMode</mark>, RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
+public class Star : MonoBehaviour {
+	
+	public ColorPoint center;
+	public ColorPoint[] points;
+	public int frequency = 1;
+	
+	private Mesh mesh;
+	private Vector3[] vertices;
+	private Color[] colors;
+	private int[] triangles;
+
+	void Start () {
+		GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();
+		mesh.name = "Star Mesh";
+		<mark>mesh.hideFlags = HideFlags.HideAndDontSave;</mark>
+		
+		if (frequency &lt; 1) {
+			frequency = 1;
+		}
+		if (points == null) {
+			points = new ColorPoint[0];
+		}
+		int numberOfPoints = frequency * points.Length;
+		vertices = new Vector3[numberOfPoints + 1];
+		colors = new Color[numberOfPoints + 1];
+		triangles = new int[numberOfPoints * 3];
+		
+		if (numberOfPoints >= 3) {
+			vertices[0] = center.position;
+			colors[0] = center.color;
+			float angle = -360f / numberOfPoints;
+			for(int repetitions = 0, v = 1, t = 1; repetitions &lt; frequency; repetitions++){
+				for(int p = 0; p &lt; points.Length; p += 1, v += 1, t += 3){
+					vertices[v] = Quaternion.Euler(0f, 0f, angle * (v - 1)) * points[p].position;
+					colors[v] = points[p].color;
+					triangles[t] = v;
+					triangles[t + 1] = v + 1;
+				}
+			}
+			triangles[triangles.Length - 1] = 1;
+		}
+		mesh.vertices = vertices;
+		mesh.colors = colors;
+		mesh.triangles = triangles;
+	}
+}</pre>
+
+			<div class="instructions">
+				Now when the editor redraws &ndash; you can click or save the scene to trigger this &ndash; our star will show up in editor mode!
+				However, it won't change when we modify the star component.
+				That's because <code>Start</code> only gets called the first time the component is activated.
+				Let's move the code to its own public method so we can explicitly call it whenever we want to.
+				We'll also add a few checks that prevent recreation of the mesh and the arrays if that's not needed.
+				<p>
+				Finally, because we're reusing the mesh, we should clear it when the amount of vertices changes
+				before assigning new data to it. Otherwise it will complain about a mismatch.
+			</div>
+
+			<pre translate="no">	void Start () {
+		<mark>UpdateMesh();</mark>
+	}
+	
+	<mark>public void UpdateMesh () {</mark>
+		<mark>if (mesh == null) {</mark>
+			GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();
+			mesh.name = "Star Mesh";
+			mesh.hideFlags = HideFlags.HideAndDontSave;
+		<mark>}</mark>
+		
+		if (frequency &lt; 1) {
+			frequency = 1;
+		}
+		if (points == null) {
+			points = new ColorPoint[0];
+		}
+		int numberOfPoints = frequency * points.Length;
+		<mark>if (vertices == null || vertices.Length != numberOfPoints + 1) {</mark>
+			vertices = new Vector3[numberOfPoints + 1];
+			colors = new Color[numberOfPoints + 1];
+			triangles = new int[numberOfPoints * 3];
+			<mark>mesh.Clear();</mark>
+		<mark>}</mark>
+		
+		if (numberOfPoints >= 3) {
+			vertices[0] = center.position;
+			colors[0] = center.color;
+			float angle = -360f / numberOfPoints;
+			for(int repetitions = 0, v = 1, t = 1; repetitions &lt; frequency; repetitions++){
+				for(int p = 0; p &lt; points.Length; p += 1, v += 1, t += 3){
+					vertices[v] = Quaternion.Euler(0f, 0f, angle * (v - 1)) * points[p].position;
+					colors[v] = points[p].color;
+					triangles[t] = v;
+					triangles[t + 1] = v + 1;
+				}
+			}
+			triangles[triangles.Length - 1] = 1;
+		}
+		mesh.vertices = vertices;
+		mesh.colors = colors;
+		mesh.triangles = triangles;
+	<mark>}</mark></pre>
+
+			<div class="instructions">
+				In our editor, the <code>ApplyModifiedProperties</code> method returns whether any modifications were
+				actually made. If so, we should call the <code>UpdateStar</code> method of the changed stars. The editor
+				contains a <code>targets</code> array with all the currently selected <code>Star</code> components, so we can
+				iterate through that.
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-foreach" id="q-foreach">What does <code>foreach</code> do?</a></li>
+				</ul>
+			</aside>
+
+			<pre translate="no">	public override void OnInspectorGUI () {
+		SerializedProperty
+			points = serializedObject.FindProperty("points"),
+			frequency = serializedObject.FindProperty("frequency");
+		serializedObject.Update();
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("center"));
+		EditorList.Show(points, EditorListOption.Buttons | EditorListOption.ListLabel);
+		EditorGUILayout.IntSlider(frequency, 1, 20);
+		int totalPoints = frequency.intValue * points.arraySize;
+		if (totalPoints &lt; 3) {
+			EditorGUILayout.HelpBox("At least three points are needed.", MessageType.Warning);
+		}
+		else {
+			EditorGUILayout.HelpBox(totalPoints + " points in total.", MessageType.Info);
+		}
+		<mark>if (</mark>serializedObject.ApplyModifiedProperties()<mark>) {</mark>
+			<mark>foreach (Star s in targets) {</mark>
+				<mark>s.UpdateMesh();</mark>
+			<mark>}</mark>
+		<mark>}</mark>
+	}</pre>
+
+			<div class="instructions">
+				Now the mesh gets updated immediately after we make a modification. This makes editing a whole lot easier!
+				Alas, it does not respond to undo!
+				<p>
+				Unfortunately, there's no easy universal guaranteed way to detect undo events in Unity, but we can get
+				pretty close. In our case, we can suffice by checking whether a <code>ValidateCommand</code> event happened that
+				refers to an undo action. As this event must relate to the currently selected object, we just assume it
+				was our component that got modified.
+			</div>
+
+			<aside>
+				<ul>
+					<li><a href="index.html#a-validatecommand" id="q-validatecommand">What's a <code>ValidateCommand</code>?</a></li>
+					<li><a href="index.html#a-undo-bug" id="q-undo-bug">Undo still doesn't work?</a></li>
+				</ul>
+			</aside>
+
+			<pre translate="no">	public override void OnInspectorGUI () {
+		SerializedProperty
+			points = serializedObject.FindProperty("points"),
+			frequency = serializedObject.FindProperty("frequency");
+		serializedObject.Update();
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("center"));
+		EditorList.Show(points, EditorListOption.Buttons | EditorListOption.ListLabel);
+		EditorGUILayout.IntSlider(frequency, 1, 20);
+		int totalPoints = frequency.intValue * points.arraySize;
+		if (totalPoints &lt; 3) {
+			EditorGUILayout.HelpBox("At least three points are needed.", MessageType.Warning);
+		}
+		else {
+			EditorGUILayout.HelpBox(totalPoints + " points in total.", MessageType.Info);
+		}
+		if (serializedObject.ApplyModifiedProperties() <mark>||</mark>
+			<mark>(Event.current.type == EventType.ValidateCommand &&</mark>
+			<mark>Event.current.commandName == "UndoRedoPerformed")</mark>) {
+			foreach (Star s in targets) {
+				s.UpdateMesh();
+			}
+		}
+	}</pre>
+
+			<div class="instructions">
+				Finally, sweet editing! Anything else? Well, ever reset a component? At the top right of each component's inspector sits a
+				gear icon with an option to reset that component. Sure enough, our mesh does not get updated when
+				you reset the star component.
+				<p>
+				We can detect a component reset by adding a <code>Reset</code> method to <code>Star</code> component. This is a Unity event method that is only
+				used inside the editor. Whenever this event happens, all we need to do is update the mesh.
+			</div>
+
+			<pre translate="no">	<mark>void Reset () {</mark>
+		<mark>UpdateMesh();</mark>
+	<mark>}</mark></pre>
+
+			<div class="instructions">
+				Ok, now resetting works too. Are we done? Well, what about prefabs?
+				<p>
+				Granted, it doesn't make much sense to use prefabs for our star, because each star generates its
+				own little mesh. If you wanted to use lots of similar stars, it would be a better idea to create
+				a star model in a 3D editor and import the mesh. That way all the stars can share the same mesh.
+				But suppose we do want to support using a prefab, just to instantiate similar stars that we might later
+				tweak individually.
+				<p>
+				Because prefabs don't exist as instances in the scene, we do not want to create a mesh for them.
+				Their Unity event methods will never be called, but we would still update it ourselves in our editor.
+				We can use the <code>PrefabUtility.GetPrefabType</code> method to detect whether our inspector
+				target is a prefab. If so, we won't update it.
+			</div>
+			
+			<pre translate="no">	public override void OnInspectorGUI () {
+		SerializedProperty
+			points = serializedObject.FindProperty("points"),
+			frequency = serializedObject.FindProperty("frequency");
+		serializedObject.Update();
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("center"));
+		EditorList.Show(points, EditorListOption.Buttons | EditorListOption.ListLabel);
+		EditorGUILayout.IntSlider(frequency, 1, 20);
+		int totalPoints = frequency.intValue * points.arraySize;
+		if (totalPoints &lt; 3) {
+			EditorGUILayout.HelpBox("At least three points are needed.", MessageType.Warning);
+		}
+		else {
+			EditorGUILayout.HelpBox(totalPoints + " points in total.", MessageType.Info);
+		}
+		if (serializedObject.ApplyModifiedProperties() ||
+			(Event.current.type == EventType.ValidateCommand &&
+			Event.current.commandName == "UndoRedoPerformed")) {
+			foreach (Star s in targets) {
+				<mark>if (PrefabUtility.GetPrefabType(s) != PrefabType.Prefab) {</mark>
+					s.UpdateMesh();
+				<mark>}</mark>
+			}
+		}
+	}</pre>
+			
+			<figure>
+				<img src="prefab.png" width="320" height="296">
+				<figcaption>Star prefab.</figcaption>
+			</figure>
+
+			<div class="instructions">
+				Now we can safely drag a star from the hierarchy into the project view to turn it into a prefab.
+				<p>
+				Unfortunately, modifications to the prefab do not cause an update of the mesh of the prefab instance.
+				It turns out that every prebab modification triggers the <code>OnDisable</code> and <code>OnEnable</code> Unity event methods
+				of all their instances. We can use this to update our mesh.
+				And because <code>OnEnable</code> is also always called when an object becomes active, we can simply
+				replace our <code>Start</code> method with <code>OnEnable</code>. Now changes to the prefab will get picked up by their instances.
+			</div>
+
+			<pre translate="no">	void <mark>OnEnable</mark> () {
+		UpdateMesh();
+	}</pre>
+
+			<div class="instructions">
+				Another little detail is multi-object editing. While that works fine, it doesn't make much sense to show
+				the point total, because this needn't be the same for the entire selection. So let's only show it when we
+				have a single-object selection.
+			</div>
+
+			<pre translate="no">	public override void OnInspectorGUI () {
+		SerializedProperty
+			points = serializedObject.FindProperty("points"),
+			frequency = serializedObject.FindProperty("frequency");
+		serializedObject.Update();
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("center"));
+		EditorList.Show(points, EditorListOption.Buttons | EditorListOption.ListLabel);
+		EditorGUILayout.IntSlider(frequency, 1, 20);
+		<mark>if (!serializedObject.isEditingMultipleObjects) {</mark>
+			int totalPoints = frequency.intValue * points.arraySize;
+			if (totalPoints &lt; 3) {
+				EditorGUILayout.HelpBox("At least three points are needed.", MessageType.Warning);
+			}
+			else {
+				EditorGUILayout.HelpBox(totalPoints + " points in total.", MessageType.Info);
+			}
+		<mark>}</mark>
+		if (serializedObject.ApplyModifiedProperties() ||
+			(Event.current.type == EventType.ValidateCommand &&
+			Event.current.commandName == "UndoRedoPerformed")) {
+			foreach (Star s in targets) {
+				if (PrefabUtility.GetPrefabType(s) != PrefabType.Prefab) {
+					s.UpdateMesh();
+				}
+			}
+		}
+	}</pre>
+
+			<figure>
+				<img src="inspector-multiple.png" width="320" height="156">
+				<figcaption>Multi-object editing.</figcaption>
+			</figure>
+
+			<h2>Editing in the Scene View</h2>
+
+			<div class="instructions">
+				Now we do have a nice inspector indeed, but wouldn't it be cool if we could edit the points
+				directly in the scene view? By adding the <code>OnSceneGUI</code> Unity event method to our inspector, we can.
+				This method will be called once per selected object, during which that object will be assigned to the <code>target</code>
+				variable. We shouldn't use our <code>SerializedObject</code> here. In fact, it's best to think of this
+				method as being completely separate from the rest of our editor.
+			</div>
+
+			<aside>
+				<ul>
+					<li><a href="index.html#a-onscenegui" id="q-onscenegui">Why does <code>OnSceneGUI</code> mess with target?</a></li>
+				</ul>
+			</aside>
+
+			<pre translate="no">	<mark>void OnSceneGUI () {</mark>
+	<mark>}</mark></pre>
+
+			<div class="instructions">
+				Let's put a small square handle at the top of the star's points. We only do this the first time
+				a point appears, not for all their repetitions due to frequency. Placing these points works just like
+				generating the star's mesh, except that we're working in world space here, not local space, so we need to apply
+				the star's transformation.
+				<p>
+				We'll use the <code>Handles.FreeMoveHandle</code> method to draw our handles, which has a couple of parameters.
+				First, it needs the position &ndash; in world space &ndash; for the handle. Then it needs the rotation of
+				the handle, which we'll just leave unrotated. Next it wants the size of the handle, we'll use a small value
+				here that looks good. Then comes a vector used for the snapping size (hold Control or Command to snap), which we configure as (0.1, 0.1 0.1). The last
+				parameter is used to define the shape of the handle.
+			</div>
+
+			<aside>
+				<ul>
+					<li><a href="index.html#a-to-world" id="q-to-world">How do we convert to world space?</a></li>
+				</ul>
+			</aside>
+
+			<pre translate="no">	<mark>private static Vector3 pointSnap = Vector3.one * 0.1f;</mark>
+
+	void OnSceneGUI () {
+		<mark>Star star = target as Star;</mark>
+		<mark>Transform starTransform = star.transform;</mark>
+
+		<mark>float angle = -360f / (star.frequency * star.points.Length);</mark>
+		<mark>for (int i = 0; i &lt; star.points.Length; i++) {</mark>
+			<mark>Quaternion rotation = Quaternion.Euler(0f, 0f, angle * i);</mark>
+			<mark>Vector3 oldPoint = starTransform.TransformPoint(rotation * star.points[i].position);</mark>
+			<mark>Handles.FreeMoveHandle(oldPoint, Quaternion.identity, 0.02f, pointSnap, Handles.DotCap);</mark>
+		<mark>}</mark>
+	}</pre>
+
+			<figure>
+				<img src="scene-points.png" width="290" height="290">
+				<figcaption>Extra points for the scene view.</figcaption>
+			</figure>
+
+			<div class="instructions">
+				We now have nice handles that don't do much yet. You can click one and it becomes yellow, that's it.
+				What we need to do is compare the position we put into the handle with the position that the handle
+				returns. If they differ, the user dragged the handle and we should modify the star. We shouldn't forget to
+				convert the new position back to the star's local space before assigning it to the point's offset
+				and updating the star.
+			</div>
+
+			<aside>
+				<ul>
+					<li><a href="index.html#a-to-local" id="q-to-local">How do we convert to local space?</a></li>
+				</ul>
+			</aside>
+
+			<pre translate="no">	void OnSceneGUI () {
+		Star star = target as Star;
+		Transform starTransform = star.transform;
+
+		float angle = -360f / (star.frequency * star.points.Length);
+		for (int i = 0; i &lt; star.points.Length; i++) {
+			Quaternion rotation = Quaternion.Euler(0f, 0f, angle * i);
+			Vector3
+				oldPoint = starTransform.TransformPoint(rotation * star.points[i].position)<mark>,</mark>
+				<mark>newPoint =</mark> Handles.FreeMoveHandle(
+					oldPoint, Quaternion.identity, 0.02f, pointSnap, Handles.DotCap);
+			<mark>if (oldPoint != newPoint) {</mark>
+				<mark>star.points[i].position = Quaternion.Inverse(rotation) *</mark>
+					<mark>starTransform.InverseTransformPoint(newPoint);</mark>
+				<mark>star.UpdateMesh();</mark>
+			<mark>}</mark>
+		}
+	}</pre>
+
+			<div class="instructions">
+				Yes, it works! Wait, it doesn't support undo! We can't rely on <code>SerializedObject</code> here, but
+				fortunately the handles can take care of the undo stuff for us. All we need to do is tell them which
+				object is being edited and how the undo step should be named. We can do that with the
+				<code>Undo.RecordObject</code> method.
+			</div>
+
+			<pre translate="no">	void OnSceneGUI () {
+		Star star = target as Star;
+		Transform starTransform = star.transform;
+
+		float angle = -360f / (star.frequency * star.points.Length);
+		for (int i = 0; i &lt; star.points.Length; i++) {
+			Quaternion rotation = Quaternion.Euler(0f, 0f, angle * i);
+			Vector3
+				oldPoint = starTransform.TransformPoint(rotation * star.points[i].position),
+				newPoint = Handles.FreeMoveHandle(
+					oldPoint, Quaternion.identity, 0.02f, pointSnap, Handles.DotCap);
+			if (oldPoint != newPoint) {
+				<mark>Undo.RecordObject(star, "Move");</mark>
+				star.points[i].position = Quaternion.Inverse(rotation) *
+					starTransform.InverseTransformPoint(newPoint);
+				star.UpdateMesh();
+			}
+		}
+	}</pre>
+
+			<div class="instructions">
+				And with that, we're done! Have fun designing stars!
+			</div>
+			
+			<aside class="share"></aside>
+			
+			<h2>Downloads</h2>
+
+				<dl>
+					<dt><a href="star.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Star', 'Final']);" target="_blank" download rel="nofollow">star.unitypackage</a></dt>
+					<dd>The finished project.</dd>
+				</dl>
+		</article>
+
+		<h1>Questions &amp; Answers</h1>
+
+		<dl class="questions-answers">
+			<dt><a href="index.html#q-mesh" id="a-mesh">What's a <code>Mesh</code>?</a></dt>
+			<dd>
+				Conceptually, a <code>Mesh</code> is a construct used by the graphics hardware to draw complex stuff.
+				It contains at least a collection of points in 3D space plus a set of triangles &ndash; the most basic
+				2D shapes &ndash; defined by these points. The triangles constitute the surface of whatever the mesh
+				respresents. Often, you won't realize that you're looking at a bunch of triangles instead of a real object.
+			</dd>
+
+			<dt><a href="index.html#q-for" id="a-for">What's with the weird <code>for</code> loop?</a></dt>
+			<dd>
+				You can put multiple statements in the iterator declaration and increment parts of a <code>for</code> construct.
+				The only weird thing is that you have to separate the statements with a comma in both places.
+				<p>
+				<code>for(int iA = 0, iB = 0; iA &lt; 10; iA++, iB++) { DoStuff(iA, iB); }</code>
+				<p>
+				does the same as
+				<p>
+				<code>int iA = 0, iB = 0; while(iA &lt; 10) { DoStuff(iA++, iB++); }</code>
+			</dd>
+
+			<dt><a href="index.html#q-shader" id="a-shader">What does the CGPROGRAM do?</a></dt>
+			<dd>
+				Basically, data flows from the Unity engine into the graphics card, where it's processed per vertex.
+				Then interpolated data flows from the vertices down to the individual pixels. In this case, we pass
+				position and color data all the way down. The only additional thing we do is convert vertex positions
+				from world space to screen space.
+				<p>
+				The statements above the CGPROGRAM switch off default lighting and depth buffer writing. Culling is
+				switched off so we can see the triangles from both sides, not just the front. "Blend SrcAlpha OneMinusSrcAlpha"
+				is default alpha blending, allowing for transparency.
+			</dd>
+
+			<dt><a href="index.html#q-fixed-function" id="a-fixed-function">Why no fixed function shader?</a></dt>
+			<dd>
+				Fixed function shaders belong to the past. Also, the
+				CGPROGRAM makes it more obvious how data from Unity is transformed into screen pixels.
+			</dd>
+
+			<dt><a href="index.html#q-null-check" id="a-null-check">Why check for <code>null</code>?</a></dt>
+			<dd>
+				When freshly created, our star component won't have an array yet. It's also technically possible
+				for scripts to explicitly set our array to <code>null</code>. We need to watch out for that, to prevent errors.
+			</dd>
+
+			<dt><a href="index.html#q-foreach" id="a-foreach">What does <code>foreach</code> do?</a></dt>
+			<dd>
+				<code>foreach</code> is a convenient alternative for a <code>for</code> loop. Because it has some
+				overhead compared to a regular <code>for</code> loop, I never use it in game code. But I don't have
+				such reservations for using it in editor code if I don't need the iterator integer.
+				<p>
+				<code>foreach(Star s in targets) { s.UpdateStar(); }</code>
+				<p>
+				does the same as
+				<p>
+				<code>for(int i = 0; i &lt; targets.Length; i++) { (targets[i] as Star).UpdateStar(); }</code>
+				<p>
+				An additional benefit of <code>foreach</code> is that it performs an implicit cast, so we don't need to write
+				it ourselves.
+			</dd>
+
+			<dt><a href="index.html#q-validatecommand" id="a-validatecommand">What's a <code>ValidateCommand</code>?</a></dt>
+			<dd>
+				<code>ValidateCommand</code> is a type of GUI event, which indicates that some special action happened, like
+				undo or redo. So why isn't it called something like <code>ExecuteCommand</code>? Actually, that command type
+				exists as well. While they have a slightly different meaning, in practice you use them for the exact
+				same purpose. Unfortunately, depening on exactly where you're checking and how you're constructing your
+				GUI, either one or the other event happens, but not both. Why this is so, I do not know.
+				<p>
+				So to be perfectly safe, you have to check for both command types. In this case, however, you can suffice
+				with checking <code>ValidateCommand</code>.
+			</dd>
+			
+			<dt><a href="index.html#q-undo-bug" id="a-undo-bug">Undo still doesn't work?</a></dt>
+			<dd>
+				Unfortunately Unity 4.3 is plagued by undo and redo bugs. What does and doesn't work depends on which 4.3.x version
+				you are using. This can vary from undo not working while a control is still active, to simply not working
+				at all for prefabs.
+			</dd>
+
+			<dt><a href="index.html#q-onscenegui" id="a-onscenegui">Why does <code>OnSceneGUI</code> mess with target?</a></dt>
+			<dd>
+				Probably for backwards compatibility. Multi-object editing was introduced in Unity 3.5. Versions
+				before that only had the <code>target</code> variable.
+			</dd>
+
+			<dt><a href="index.html#q-to-world" id="a-to-world">How do we convert to world space?</a></dt>
+			<dd>
+				You convert a point from local to world space by appling all transformation matrices of its object
+				hierarchy to it. Unity takes care of this when rendering the scene, but sometimes you need to do it yourself.
+				You can use the <code>Transform.TransformPoint</code> method for this.
+			</dd>
+
+			<dt><a href="index.html#q-to-local" id="a-to-local">How do we conver to local space?</a></dt>
+			<dd>
+				You have to perform the exact opposite steps for converting to world space, in reverse order.
+				You can use the <code>Transform.InverseTransformPoint</code> method for this. Note that when going to world
+				space we rotated in local space first, then transformed. So to convert back, we inverse transform first,
+				then inverse rotate in local space.
+			</dd>
+		</dl>
+
+		<footer></footer>
+		<script src="../../../jquery.js"></script>
+		<script src="../../../default.js"></script>
+	</body>
+</html>

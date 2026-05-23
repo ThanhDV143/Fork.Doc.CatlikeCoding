@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/rendering/part-3/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/rendering/part-3/tutorial-image.jpg">
+		<meta property="og:title" content="Rendering 3">
+		<meta property="og:description" content="A Unity Shader tutorial about combining multiple textures. Part 3 of 20.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Rendering 3</title>
+		<link href="../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/rendering/part-3/#article",
+				"headline": "Rendering 3",
+				"alternativeHeadline": "Combining Textures",
+				"datePublished": "2016-04-29",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Shader tutorial about combining multiple textures. Part 3 of 20.",
+				"image": "https://catlikecoding.com/unity/tutorials/rendering/part-3/tutorial-image.jpg",
+				"dependencies": "Unity 5.4.0b15",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/rendering/", "name": "Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+			};
+			
+			var hasAnimations = false;
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../products/utilities/frame-rate-counter/index.html"><img src="../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../index.html">Unity</a></li>
+					<li><a href="../index.html">Tutorials</a></li>
+					<li><a href="index.html">Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Rendering 3</h1>
+					<p>Combining Textures</p>
+					<ul>
+						<li>Sample multiple textures.</li>
+						<li>Apply a detail texture.</li>
+						<li>Deal with colors in linear space.</li>
+						<li>Use a splat map.</li>
+					</ul>
+				</header>
+
+				<p>This is the third part of a tutorial series about rendering. The <a href="part-2.1.html">previous part</a> introduced shaders and textures. We've seen how you can use a single texture to make a flat surface appear more complex. Now we go beyond that and use multiple textures at the same time.</p>
+				
+				<p>This tutorials was made using Unity 5.4.0b15.</p>
+				
+				<figure>
+					<img src="part-3/tutorial-image.jpg" width="512" height="256">
+					<figcaption>Combining multiple textures.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Detail Textures</h2>
+					
+					<p>Textures are nice, but they have limitations. They have a fixed amount of texels, no matter at what size they are displayed. If they are rendered small, we can use mipmaps to keep them looking good. But when they are rendered large, they become blurry. We cannot invent extra details out of nothing, so there's no way around that. Or is there?</p>
+					
+					<p>Of course, we could use a larger texture. More texels means more details. But there's a limit to a texture's size. And it is kind of wasteful to store a lot of extra data that is only noticeable up close.</p>
+					
+					<p>Another way to increase the texel density is to tile a texture. Then you can get as small as you want, but you will obviously get a repeating pattern. This might not be noticeable up close, though. After all, when you're standing with your nose touching a wall, you'll only see a very small section of the entire wall.</p>
+					
+					<p>So we should be able to add details by combining an untiled texture with a tiled texture. To try this out, let's use a texture with an obvious pattern. Here's a checkered grid. Grab it and put it to your project, with the default import settings. I perturbed the grid lines a bit, to make it more interesting and to make it possible to perceive its tiling.</p>
+					
+					<figure>
+						<img src="part-3/detail-textures/grid.png" width="256" height="256">
+						<figcaption>Slightly distorted grid texture.</figcaption>
+					</figure>
+					
+					<p>Duplicate <em translate="no">My First Shader</em> and rename it to <em translate="no">Textured With Detail</em>. We'll use this new shader from now on.</p>
+					
+					<pre translate="no" class="shader">Shader <ins>"Custom/Textured With Detail"</ins> {
+
+	Properties {
+		_Tint ("Tint", Color) = (1, 1, 1, 1)
+		_MainTex ("Texture", 2D) = "white" {}
+	}
+
+	SubShader {
+		&hellip;
+	}
+}</pre>
+					
+					<p>Create a new material with this shader, then assign the grid texture to it.</p>
+					
+					<figure>
+						<img alt="inspector" src="part-3/detail-textures/detailed-inspector.png" width="320" height="136">
+						<img alt="scene" src="part-3/detail-textures/detailed-scene.png" width="430" height="240">
+						<figcaption>Detailed material, with grid.</figcaption>
+					</figure>
+					
+					<p>Assign the material to a quad and have a look at it. From a distance, it will look fine. But get too close, and it will become blurry and fuzzy. Besides the lack of details, artifacts caused by texture compression will also become obvious.</p>
+					
+					<figure>
+						<img src="part-3/detail-textures/grid-close-up.png" width="400" height="300">
+						<figcaption>Close-up of the grid, showing low texel density and DXT1 artifacts.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Multiple Texture Samples</h3>
+						
+						<p>Right now we're taking a single texture sample and using that as the result of our fragment shader. As we're going to change that approach, it's handy to store the sampled color in a temporary variable.</p>
+						
+						<pre translate="no" class="shader">			float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+				<ins>float4 color =</ins> tex2D(_MainTex, i.uv) * _Tint;
+				return <ins>color</ins>;
+			}</pre>
+						
+						<p>We reasoned that we can increase the texel density by introducing a tiled texture. Let's simply perform a second texture sample which tiles ten times as much as the original sample. Actually replace the original color, don't add to it just yet.</p>
+						
+						<pre translate="no" class="shader">				float4 color = tex2D(_MainTex, i.uv) * _Tint;
+				<ins>color = tex2D(_MainTex, i.uv * 10);</ins>
+				return color;</pre>
+						
+						<p>This produces a much smaller grid. You can get much closes to that before it starts to look bad. Of course, because the grid is irregular, it is obviously a repeating pattern.</p>
+						
+					<figure>
+						<img src="part-3/detail-textures/tiling.png" width="400" height="300">
+						<figcaption>Hard-coded tiling.</figcaption>
+					</figure>
+						
+						<p>Notice that at this point we're performing two texture samples, but end up using only one of them. This seems wasteful. Is it? Take a look at the compiled fragment programs. Just like in the <a href="part-2.1.html">previous tutorial</a>, I'll include the relevant compiled code for OpenGLCore and Direct3D 11.</p>
+						
+						<pre translate="no" class="shader">uniform  sampler2D _MainTex;
+in  vec2 vs_TEXCOORD0;
+layout(location = 0) out vec4 SV_TARGET0;
+vec2 t0;
+void main()
+{
+    t0.xy = vs_TEXCOORD0.xy * vec2(10.0, 10.0);
+    SV_TARGET0 = texture(_MainTex, t0.xy);
+    return;
+}</pre>
+						
+						<pre translate="no" class="shader">SetTexture 0 [_MainTex] 2D 0
+      ps_4_0
+      dcl_sampler s0, mode_default
+      dcl_resource_texture2d (float,float,float,float) t0
+      dcl_input_ps linear v0.xy
+      dcl_output o0.xyzw
+      dcl_temps 1
+   0: mul r0.xy, v0.xyxx, l(10.000000, 10.000000, 0.000000, 0.000000)
+   1: sample o0.xyzw, r0.xyxx, t0.xyzw, s0
+   2: ret</pre>
+						
+						<p>Did you notice that there is only one texture sample in the compiled code? That's right, the compiler removed the unnecessary code for us! Basically, it works its way back from the end result, and discards anything that ends up unused.</p>
+						
+						<p>Of course, we don't want to replace the original sample. We want to combine both samples. Let's do so by multiplying them together. But once again, let's add a twist. Sample the texture twice, with the exact same UV coordinates.</p>
+						
+						<pre translate="no" class="shader">				float4 color = tex2D(_MainTex, i.uv) * _Tint;
+				color <ins>*=</ins> tex2D(_MainTex, <ins>i.uv</ins>);
+				return color;</pre>
+						
+						<p>What does the shader compiler make of that?</p>
+						
+						<pre translate="no" class="shader">uniform  sampler2D _MainTex;
+in  vec2 vs_TEXCOORD0;
+layout(location = 0) out vec4 SV_TARGET0;
+mediump vec4 t16_0;
+lowp vec4 t10_0;
+void main()
+{
+    t10_0 = texture(_MainTex, vs_TEXCOORD0.xy);
+    t16_0 = t10_0 * t10_0;
+    SV_TARGET0 = t16_0 * _Tint;
+    return;
+}</pre>
+						
+						<pre translate="no" class="shader">SetTexture 0 [_MainTex] 2D 0
+ConstBuffer "$Globals" 144
+Vector 96 [_Tint]
+BindCB  "$Globals" 0
+      ps_4_0
+      dcl_constantbuffer cb0[7], immediateIndexed
+      dcl_sampler s0, mode_default
+      dcl_resource_texture2d (float,float,float,float) t0
+      dcl_input_ps linear v0.xy
+      dcl_output o0.xyzw
+      dcl_temps 1
+   0: sample r0.xyzw, v0.xyxx, t0.xyzw, s0
+   1: mul r0.xyzw, r0.xyzw, r0.xyzw
+   2: mul o0.xyzw, r0.xyzw, cb0[6].xyzw
+   3: ret</pre>
+						
+						<p>Once again, we end up with a single texture sample. The compiler detected the duplicate code and optimized it. So the texture is only sampled once. The result is stored in a register and reused. The compiler is smart enough to detect such code duplications, even when you use intermediary variables and such. It traces everything back to its original input. It then reorganizes everything as efficiently as possible.</p>
+						
+						<p>Now put back the &times;10 UV coordinates for the second sample. We'll finally see the large and small grids combined.</p>
+						
+						<pre translate="no" class="shader">				color *= tex2D(_MainTex, i.uv <ins>* 10</ins>);</pre>
+						
+						<figure>
+							<img src="part-3/detail-textures/multiplied.png" width="400" height="300">
+							<figcaption>Multiplying two different tilings.</figcaption>
+						</figure>
+						
+						<p>As the texture samples are no longer the same, the compiler will have to use two of them as well.</p>
+						
+						<pre translate="no" class="shader">uniform  sampler2D _MainTex;
+in  vec2 vs_TEXCOORD0;
+layout(location = 0) out vec4 SV_TARGET0;
+vec4 t0;
+lowp vec4 t10_0;
+vec2 t1;
+lowp vec4 t10_1;
+void main()
+{
+    t10_0 = texture(_MainTex, vs_TEXCOORD0.xy);
+    t0 = t10_0 * _Tint;
+    t1.xy = vs_TEXCOORD0.xy * vec2(10.0, 10.0);
+    t10_1 = texture(_MainTex, t1.xy);
+    SV_TARGET0 = t0 * t10_1;
+    return;
+}</pre>
+						
+						<pre translate="no" class="shader">SetTexture 0 [_MainTex] 2D 0
+ConstBuffer "$Globals" 144
+Vector 96 [_Tint]
+BindCB  "$Globals" 0
+      ps_4_0
+      dcl_constantbuffer cb0[7], immediateIndexed
+      dcl_sampler s0, mode_default
+      dcl_resource_texture2d (float,float,float,float) t0
+      dcl_input_ps linear v0.xy
+      dcl_output o0.xyzw
+      dcl_temps 2
+   0: sample r0.xyzw, v0.xyxx, t0.xyzw, s0
+   1: mul r0.xyzw, r0.xyzw, cb0[6].xyzw
+   2: mul r1.xy, v0.xyxx, l(10.000000, 10.000000, 0.000000, 0.000000)
+   3: sample r1.xyzw, r1.xyxx, t0.xyzw, s0
+   4: mul o0.xyzw, r0.xyzw, r1.xyzw
+   5: ret</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Separate Detail Texture</h3>
+						
+						<p>When you multiply two textures together, the result will be darker. Unless at least one of the textures is white. That's because each color channel of a texel has a value between 0 and 1. When adding details to a texture, you might want to do so by darkening, but also by brightening.</p>
+						
+						<p>To brighten the original texture, you need values that are greater than 1. Let's say up to 2, which would double the original color. This can be supported by doubling the detail sample before multiplying it with the original color.</p>
+						
+						<pre translate="no" class="shader">				color *= tex2D(_MainTex, i.uv * 10) <ins>* 2</ins>;</pre>
+						
+						<figure>
+							<img src="part-3/detail-textures/doubled.png" width="400" height="300">
+							<figcaption>Doubled details.</figcaption>
+						</figure>
+						
+						<p>This approach requires that we reinterpret the texture used for the details. Multiplying by 1 does not change anything. But as we double the detail sample, this is now true for &frac12;. This means that a solid gray &ndash; not white &ndash; texture will produce no change. All values below &frac12; will darken the result, while anything above &frac12; will brighten it.</p>
+						
+						<p>So we need a special detail texture, which is centered around gray. Here is such a texture for the grid.</p>
+						
+						<figure>
+							<img src="part-3/detail-textures/grid-detail.png" width="256" height="256">
+							<figcaption>Grid detail texture.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Must detail textures be grayscale?</h3>
+							<div>
+								<p>They don't have to be grayscale, but they commonly are. Grayscale detail textures will adjust the original color strictly by brightening and darkening it. This is relatively straightforward to work with. Multiplication with non-gray colors produces less intuitive results. But nothing is stopping you from doing it. Colored detail textures are used to produce subtle color shifts.</p>
+							</div>
+						</aside>
+						
+						<p>To use this separate detail texture, we have to add a second texture property to our shader. Use gray as its default, as that doesn't change the main texture's appearance.</p>
+						
+						<pre translate="no" class="shader">	Properties {
+		_Tint ("Tint", Color) = (1, 1, 1, 1)
+		_MainTex ("Texture", 2D) = "white" {}
+		<ins>_DetailTex ("Detail Texture", 2D) = "gray" {}</ins>
+	}</pre>
+						
+						<p>Assign the detail texture to our material and set its tiling to 10.</p>
+						
+						<figure>
+							<img src="part-3/detail-textures/detail-texture-inspector.png" width="320" height="164">
+							<figcaption>Two textures.</figcaption>
+						</figure>
+						
+						<p>Of course we have to add variables to access the detail texture and its tiling and offset data.</p>
+						
+						<pre translate="no" class="shader">			sampler2D _MainTex<ins>, _DetailTex</ins>;
+			float4 _MainTex_ST<ins>, _DetailTex_ST</ins>;</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Using Two UV Pairs</h3>
+						
+						<p>Instead of using a hard-coded multiplication by 10, we should use the tiling and offset data of the detail texture. We can compute the final detail UV like the main UV, in the vertex program. This means that we need to interpolate an additional UV pair.</p>
+						
+						<pre translate="no" class="shader">			struct Interpolators {
+				float4 position : SV_POSITION;
+				float2 uv : TEXCOORD0;
+				<ins>float2 uvDetail : TEXCOORD1;</ins>
+			};</pre>
+						
+						<p>The new detail UV are created by transforming the original UV with the detail texture's tiling and offset.</p>
+						
+						<pre translate="no" class="shader">			Interpolators MyVertexProgram (VertexData v) {
+				Interpolators i;
+				i.position = mul(UNITY_MATRIX_MVP, v.position);
+				i.uv = TRANSFORM_TEX(v.uv, _MainTex);
+				<ins>i.uvDetail = TRANSFORM_TEX(v.uv, _DetailTex);</ins>
+				return i;
+			}</pre>
+						
+						<pre translate="no" class="shader">uniform 	vec4 _Tint;
+uniform 	vec4 _MainTex_ST;
+uniform 	vec4 _DetailTex_ST;
+in  vec4 in_POSITION0;
+in  vec2 in_TEXCOORD0;
+out vec2 vs_TEXCOORD0;
+out vec2 vs_TEXCOORD1;
+vec4 t0;
+void main()
+{
+    t0 = in_POSITION0.yyyy * glstate_matrix_mvp[1];
+    t0 = glstate_matrix_mvp[0] * in_POSITION0.xxxx + t0;
+    t0 = glstate_matrix_mvp[2] * in_POSITION0.zzzz + t0;
+    gl_Position = glstate_matrix_mvp[3] * in_POSITION0.wwww + t0;
+    vs_TEXCOORD0.xy = in_TEXCOORD0.xy * _MainTex_ST.xy + _MainTex_ST.zw;
+    vs_TEXCOORD1.xy = in_TEXCOORD0.xy * _DetailTex_ST.xy + _DetailTex_ST.zw;
+    return;
+}</pre>
+						
+						<pre translate="no" class="shader">Vector 112 [_MainTex_ST]
+Vector 128 [_DetailTex_ST]
+ConstBuffer "UnityPerDraw" 352
+Matrix 0 [glstate_matrix_mvp]
+BindCB  "$Globals" 0
+BindCB  "UnityPerDraw" 1
+      vs_4_0
+      dcl_constantbuffer cb0[9], immediateIndexed
+      dcl_constantbuffer cb1[4], immediateIndexed
+      dcl_input v0.xyzw
+      dcl_input v1.xy
+      dcl_output_siv o0.xyzw, position
+      dcl_output o1.xy
+      dcl_output o1.zw
+      dcl_temps 1
+   0: mul r0.xyzw, v0.yyyy, cb1[1].xyzw
+   1: mad r0.xyzw, cb1[0].xyzw, v0.xxxx, r0.xyzw
+   2: mad r0.xyzw, cb1[2].xyzw, v0.zzzz, r0.xyzw
+   3: mad o0.xyzw, cb1[3].xyzw, v0.wwww, r0.xyzw
+   4: mad o1.xy, v1.xyxx, cb0[7].xyxx, cb0[7].zwzz
+   5: mad o1.zw, v1.xxxy, cb0[8].xxxy, cb0[8].zzzw
+   6: ret</pre>
+						
+						<p>Note how the two UV outputs are defined in both compiler vertex programs. OpenGLCore uses two outputs, <code>vs_TEXCOORD0</code> and <code>vs_TEXCOORD1</code>, as you would expect. In contrast, Direct3D 11 uses only a single output, <code>o1</code>. How this works is explained by the output comment section that I usually omit from these code snippets.</p>
+						
+						<pre translate="no" class="shader">// Output signature:
+//
+// Name                 Index   Mask Register SysValue  Format   Used
+// -------------------- ----- ------ -------- -------- ------- ------
+// SV_POSITION              0   xyzw        0      POS   float   xyzw
+// TEXCOORD                 0   xy          1     NONE   float   xy  
+// TEXCOORD                 1     zw        1     NONE   float     zw</pre>
+						
+						<p>What this means is that both UV pairs get packed into a single output register. The first ends up in the X and Y channels, and the second in the Z and W channels. This is possible because the registers are always groups of four numbers. The Direct3D 11 compiler took advantage of that.</p>
+						
+						<aside>
+							<h3>Can you manually pack outputs like that?</h3>
+							<div>
+								<p>Yes, you can output anything you want. So packing logically separate information in a single four-value output package is fair game. Using less output registers might improve the performance of your shader, if interpolation ends up being the bottleneck.</p>
+								
+								<p>The common reason to manually pack outputs is because there are only a few interpolators available. Shader Model 2 hardware supports 8 general-purpose interpolators, while Shader Model 3 hardware supports 10. Complex shaders can run into this limit.</p>
+							</div>
+						</aside>
+						
+						<p>Now we can use the extra UV pair in the fragment program.</p>
+						
+						<pre translate="no" class="shader">			float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+				float4 color = tex2D(_MainTex, i.uv) * _Tint;
+				color *= tex2D(_DetailTex, <ins>i.uvDetail</ins>) * 2;
+				return color;
+			}</pre>
+						
+						<pre translate="no" class="shader">uniform 	vec4 _Tint;
+uniform 	vec4 _MainTex_ST;
+uniform 	vec4 _DetailTex_ST;
+uniform  sampler2D _MainTex;
+uniform  sampler2D _DetailTex;
+in  vec2 vs_TEXCOORD0;
+in  vec2 vs_TEXCOORD1;
+layout(location = 0) out vec4 SV_TARGET0;
+vec4 t0;
+lowp vec4 t10_0;
+lowp vec4 t10_1;
+void main()
+{
+    t10_0 = texture(_MainTex, vs_TEXCOORD0.xy);
+    t0 = t10_0 * _Tint;
+    t10_1 = texture(_DetailTex, vs_TEXCOORD1.xy);
+    t0 = t0 * t10_1;
+    SV_TARGET0 = t0 + t0;
+    return;
+}</pre>
+						
+						<pre translate="no" class="shader">SetTexture 0 [_MainTex] 2D 0
+SetTexture 1 [_DetailTex] 2D 1
+ConstBuffer "$Globals" 144
+Vector 96 [_Tint]
+BindCB  "$Globals" 0
+      ps_4_0
+      dcl_constantbuffer cb0[7], immediateIndexed
+      dcl_sampler s0, mode_default
+      dcl_sampler s1, mode_default
+      dcl_resource_texture2d (float,float,float,float) t0
+      dcl_resource_texture2d (float,float,float,float) t1
+      dcl_input_ps linear v0.xy
+      dcl_input_ps linear v0.zw
+      dcl_output o0.xyzw
+      dcl_temps 2
+   0: sample r0.xyzw, v0.xyxx, t0.xyzw, s0
+   1: mul r0.xyzw, r0.xyzw, cb0[6].xyzw
+   2: sample r1.xyzw, v0.zwzz, t1.xyzw, s1
+   3: mul r0.xyzw, r0.xyzw, r1.xyzw
+   4: add o0.xyzw, r0.xyzw, r0.xyzw
+   5: ret</pre>
+						
+						<p>Our shader is now fully functional. The main texture becomes both brighter and dimmer based on the detail texture.</p>
+						
+						<figure>
+							<img alt="far away" src="part-3/detail-textures/grid-with-detail.png" width="430" height="240">
+							<img alt="close-up" src="part-3/detail-textures/grid-close-up-detail.png" width="400" height="298">
+							<figcaption>Brighting and dimming.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Fading Details</h3>
+						
+						<p>The idea of adding details was that they improve the material's appearance up close or zoomed in. They're not supposed to be visible far away or zoomed out, because that makes the tiling obvious. So we need a way to fade the details away as the display size of the texture decreases. We can do so by fading the detail texture to gray, as that results in no color change.</p>
+						
+						<p>We have done this before! All we need to do is enable <em translate="no">Fadeout Mip Maps</em> in the detail texture's import settings. Note that this also automatically switches the filter mode to trilinear, so that the fade to gray is gradual.</p>
+						
+						<figure>
+							<img alt="inspector" src="part-3/detail-textures/fading-inspector.png" width="320" height="172">
+							<img alt="scene" src="part-3/detail-textures/grid-fading-detail.png" width="430" height="240">
+							<figcaption>Fading details.</figcaption>
+						</figure>
+						
+						<p>The grid makes the transition from detailed to not detailed very obvious, but you normally wouldn't notice it. For example, here is a main and a detail texture for a marble material. Grab them and use the same texture import settings we used for the grid textures.</p>
+						
+						<figure>
+							<img alt="marble" src="part-3/detail-textures/marble.png" width="256" height="256">
+							<img alt="detail" src="part-3/detail-textures/marble-detail.png" width="256" height="256">
+							<figcaption>Marble textures.</figcaption>
+						</figure>
+						
+						<p>Once our material uses these textures, the fading of the detail texture is no longer noticeable.</p>
+						
+						<figure>
+							<img alt="inspector" src="part-3/detail-textures/marble-inspector.png" width="320" height="164">
+							<img alt="scene" src="part-3/detail-textures/marble-scene.png" width="430" height="240">
+							<figcaption>Marble material.</figcaption>
+						</figure>
+						
+						<p>However, thanks to the detail texture, the marble looks much better up close.</p>
+						
+						<figure>
+							<img alt="without detail" src="part-3/detail-textures/marble-close.png" width="400" height="300">
+							<img alt="with detail" src="part-3/detail-textures/marble-close-detail.png" width="400" height="300">
+							<figcaption>Close-up without and with details.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Linear Color Space</h3>
+						
+						<p>Our shader works fine while we're rendering our scene in gamma color space, but it will go wrong if we switch to linear color space. Which color space you use is a project-wide setting. It is configured in the <em translate="no">Other Settings</em> panel of the player settings, which you can access via <em translate="no">Edit / Project Settings / Player</em>.</p>
+						
+						<figure>
+							<img src="part-3/detail-textures/color-space-inspector.png" width="296" height="80">
+							<figcaption>Selecting the color space.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What is gamma space?</h3>
+							<div>
+								<p>Gamma space refers to gamma-corrected colors. Gamma correction is an adjustment of the intensity of light. The simplest approach is to raise the original value to some power, so value<sup>gamma</sup>. A gamma of 1 means that there is no change. A gamma of 2 means that the original value is squared.</p>
+								
+								<p>This conversion was originally introduced to accommodate the nonlinear nature of CRT display monitors. An added benefit is that it also roughly corresponds to how sensitive our eyes are to different light intensities. We notice differences between dark colors more than differences between bright colors. So it makes sense to dedicate more bits of a digital number to darker values than to lighter ones. Exponentiation allows us to do this, by stretching lower values over a larger range, while squashing higher values.</p>
+								
+								<p>The most widely used image color format is sRGB. It uses a more complex formula than simple exponentiation, but it stores colors with an average gamma of 1/2.2. This is a reasonable approximation in many cases. To convert this data back to its original color, apply a gamma correction of 2.2.</p>
+								
+								<figure>
+									<img alt="1/2.2" src="part-3/detail-textures/linear-to-gamma.png" width="200" height="200">
+									<img alt="2.2" src="part-3/detail-textures/gamma-to-linear.png" width="200" height="200">
+									<figcaption>Encoding with gamma 1/2.2 and decoding with gamma 2.2.</figcaption>
+								</figure>
+							</div>
+						</aside>
+						
+						<p>Unity assumes that textures and colors are stored as sRGB. When rendering in gamma space, shaders directly access the raw color and texture data. This is what we assumed up to this point.</p>
+						
+						<p>When rendering in linear space, this is no longer true. The GPU will convert texture samples to linear space. Also, Unity will convert material color properties to linear space as well. The shader then operates with these linear colors. After that, the output of the fragment program will be converted back to gamma space.</p>
+						
+						<p>One of the advantages of using linear colors is that it enables more realistic lighting calculations. That's because light interactions are linear in real life, not exponential. Unfortunately, it screws up our detail material. After switching to linear space, it becomes much darker. Why does this happen?</p>
+						
+						<figure>
+							<img alt="gamma" src="part-3/detail-textures/gamma-space.png" width="200" height="200">
+							<img alt="linear" src="part-3/detail-textures/linear-space.png" width="200" height="200">
+							<figcaption>Gamma vs. linear space.</figcaption>
+						</figure>
+						
+						<p>Because we double the detail texture sample, a value of &frac12; results in no change to the main texture. However, the conversion to linear space changes this to something near &frac12;<sup>2.2</sup> &asymp; 0.22. Doubling that is roughly 0.44, which is much less that 1. That explains the darkening.</p>
+						
+						<p>We could solve this error by enabling <em translate="no">Bypass sRGB Sampling</em> in the detail texture's import settings. This prevents the conversion from gamma to linear space, so the shader will always access the raw image data. However, the detail texture is an sRGB image, so the result would still be wrong.</p>
+						
+						<p>The best solution is to realign the detail colors so they're centered around 1 again. We can do that by multiplying by 1 / &frac12;<sup>2.2</sup> &asymp; 4.59, instead of by 2. But we must only do this when we are rendering in linear space.</p>
+						
+						<p>Fortunately, <em translate="no">UnityCG</em> defines a uniform variable which will contain the correct numbers to multiply with. It is a <code class="shader">float4</code> which has either 2 or roughly 4.59 in its rgb components, as appropriate. As gamma correction is not applied to the alpha channel, it is always 2.</p>
+						
+						<pre translate="no" class="shader">				color *= tex2D(_DetailTex, i.uvDetail) * <ins>unity_ColorSpaceDouble</ins>;</pre>
+						
+						<p>With that change, our detail material will look the same no matter which color space we're rendering in.</p>
+					</section>
+					
+					<a href="part-3/detail-textures/detail-textures.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Texture Splatting</h2>
+					
+					<p>A limitation of detail textures is that the same details are used for the entire surface. This works fine for a uniform surface, like a slab of marble. However, if your material does not have a uniform appearance, you don't want to use the same details everywhere.</p>
+					
+					<p>Consider a large terrain. It can have grass, sand, rocks, snow, and so on. You want those terrain types to be fairly detailed up close. But a texture that covers the entire terrain will never have enough texels for that. You can solve that by using a separate texture for each surface type, and tile those. But how do you know which texture to use where?</p>
+					
+					<p>Let's assume that we have a terrain with two different surface types. At every point, we have to decide which surface texture to use. Either the first, or the second. We could represent that with a boolean value. If it is set to true, we use the first texture, otherwise the second. We can use a grayscale texture to store this choice. A value of 1 represents the first texture, while a value of 0 represents the second texture. In fact, we can use these values to linearly interpolate between both textures. Then values in between 0 and 1 represent a blend between both textures. This makes smooth transitions possible.</p>
+					
+					<p>Such a texture is know as a splat map. It's like you splatter multiple terrain features onto a canvas. Because of the interpolation, this map doesn't even require a high resolution. Here's a small example map.</p>
+					
+					<figure>
+						<img src="part-3/texture-splatting/binary-splat-map.png" width="128" height="128">
+						<figcaption>Binary splat map.</figcaption>
+					</figure>
+					
+					<p>After adding it to your project, switch its import type to advanced. Enable <em translate="no">Bypass sRGB Sampling</em> and indicate that its mipmaps should be generated <em translate="no">In Linear Space</em>. This is required because the texture doesn't represent sRGB colors, but choices. So it should not be converted when rendering in linear space. Also, set its <em translate="no">Wrap Mode</em> to clamp, as we're not going to tile this map.</p>
+					
+					<figure>
+						<img src="part-3/texture-splatting/splat-map-binary-import.png" width="320" height="400">
+						<figcaption>Import settings.</figcaption>
+					</figure>
+					
+					<p>Create a new <em translate="no">Texture Splatting</em> shader by duplicating <code>My First Shader</code> and changing its name. Because terrains are typically not uniformly tinted, let's get rid of that functionality.</p>
+					
+					<pre translate="no" class="shader">Shader <ins>"Custom/Texture Splatting"</ins> {
+
+	Properties {
+<del>//		_Tint ("Tint", Color) = (1, 1, 1, 1)</del>
+		_MainTex (<ins>"Splat Map"</ins>, 2D) = "white" {}
+	}
+
+	SubShader {
+
+		Pass {
+			CGPROGRAM
+
+			#pragma vertex MyVertexProgram
+			#pragma fragment MyFragmentProgram
+
+			#include "UnityCG.cginc"
+
+<del>//			float4 _Tint;</del>
+			sampler2D _MainTex;
+			float4 _MainTex_ST;
+			
+			struct VertexData {
+				float4 position : POSITION;
+				float2 uv : TEXCOORD0;
+			};
+
+			struct Interpolators {
+				float4 position : SV_POSITION;
+				float2 uv : TEXCOORD0;
+			};
+
+			Interpolators MyVertexProgram (VertexData v) {
+				Interpolators i;
+				i.position = mul(UNITY_MATRIX_MVP, v.position);
+				i.uv = TRANSFORM_TEX(v.uv, _MainTex);
+				return i;
+			}
+
+			float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+				return tex2D(_MainTex, i.uv)<ins>;</ins> <del>// * _Tint;</del>
+			}
+
+			ENDCG
+		}
+	}
+}</pre>
+					
+					<p>Make a new material that uses this shader, and assign the splat map as its main texture. Because we haven't changed the shader yet, it will just show the map.</p>
+					
+					<figure>
+						<img alt="material" src="part-3/texture-splatting/splat-map-binary-inspector.png" width="320" height="118">
+						<img alt="scene" src="part-3/texture-splatting/splat-map-binary-scene.png" width="330" height="190">
+						<figcaption>Showing the splat map.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Adding Textures</h3>
+						
+						<p>To be able to choose between two textures, we have to add them as properties to our shader. Let's just name them <em translate="no">Texture1</em> and <em translate="no">Texture2</em>.</p>
+						
+						<pre translate="no" class="shader">	Properties {
+		_MainTex ("Splat Map", 2D) = "white" {}
+		<ins>_Texture1 ("Texture 1", 2D) = "white" {}</ins>
+		<ins>_Texture2 ("Texture 2", 2D) = "white" {}</ins>
+	}</pre>
+						
+						<p>You can use any texture you want for them. I simply picked the grid and marble textures that we already have.</p>
+						
+						<figure>
+							<img src="part-3/texture-splatting/two-textures-inspector.png" width="320" height="218">
+							<figcaption>Two additional textures.</figcaption>
+						</figure>
+						
+						<p>Of course we get tiling and offset controls for each texture that we add to the shader. We could indeed support separate tiling and offset for every texture individually. But that would require us to pass more data from the vertex to the fragment shader, or to calculate the UV adjustments in the pixel shader. This is fine, but typically all textures of a terrain are tiled the same. And a splat map is not tiled at all. So we need only one instance of tiling and offset controls.</p>
+						
+						<p>You can add attributes to shader properties, just like in C# code. The <code class="shader">NoScaleOffset</code> attribute will do as its name suggests. Yes, it does refer to tiling and offset as scale and offset. It's not very consistent naming.</p>
+						
+						<p>Let's add this attribute to our extra textures, and keep the tiling and offset inputs for the main texture.</p>
+						
+						<pre translate="no" class="shader">	Properties {
+		_MainTex ("Splat Map", 2D) = "white" {}
+		<ins>[NoScaleOffset]</ins> _Texture1 ("Texture 1", 2D) = "white" {}
+		<ins>[NoScaleOffset]</ins> _Texture2 ("Texture 2", 2D) = "white" {}
+}</pre>
+						
+						<p>The idea is that the tiling and offset controls appear at the top of our shader inspector. While they're next to the splat map, we'll actually apply them to the other textures. Put in some tiling, like 4.</p>
+						
+						<figure>
+							<img src="part-3/texture-splatting/no-tiling-offset.png" width="320" height="218">
+							<figcaption>No extra tiling and offset controls.</figcaption>
+						</figure>
+						
+						<p>Now we have to add the sampler variables to our shader code. But we don't have to add their corresponding <code class="shader">_ST</code> variables.</p>
+						
+						<pre translate="no" class="shader">			sampler2D _MainTex;
+			float4 _MainTex_ST;
+
+			<ins>sampler2D _Texture1, _Texture2;</ins></pre>
+						
+						<p>To check that we can indeed sample both textures this way, change the fragment shader so it adds them together.</p>
+						
+						<pre translate="no" class="shader">			float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+				return
+					<ins>tex2D(_Texture1, i.uv) +</ins>
+					<ins>tex2D(_Texture2, i.uv)</ins>;
+			}</pre>
+						
+						<figure>
+							<img src="part-3/texture-splatting/textures-added.png" width="330" height="190">
+							<figcaption>Two textures, added.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Using the Splat Map</h3>
+						
+						<p>To sample the splat map, we have to also pass the unmodified UV from the vertex program to the fragment program.</p>
+						
+						<pre translate="no" class="shader">			struct Interpolators {
+				float4 position : SV_POSITION;
+				float2 uv : TEXCOORD0;
+				<ins>float2 uvSplat : TEXCOORD1;</ins>
+			};
+
+			Interpolators MyVertexProgram (VertexData v) {
+				Interpolators i;
+				i.position = mul(UNITY_MATRIX_MVP, v.position);
+				i.uv = TRANSFORM_TEX(v.uv, _MainTex);
+				<ins>i.uvSplat = v.uv;</ins>
+				return i;
+			}</pre>
+						
+						<p>We can then sample the splat map before sampling the other textures.</p>
+						
+						<pre translate="no" class="shader">			float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+				<ins>float4 splat = tex2D(_MainTex, i.uvSplat);</ins>
+				return
+					tex2D(_Texture1, i.uv) +
+					tex2D(_Texture2, i.uv);
+			}</pre>
+						
+						<p>We decided that a value of 1 represents the first texture. As our splat map is monochrome, we can use any of the RGB channels to retrieve this value. Let's use the R channel and multiply it with the texture.</p>
+						
+						<pre translate="no" class="shader">				return
+					tex2D(_Texture1, i.uv) <ins>* splat.r</ins> +
+					tex2D(_Texture2, i.uv);</pre>
+						
+						<figure>
+							<img src="part-3/texture-splatting/modulating-first-texture.png" width="330" height="190">
+							<figcaption>Modulating the first texture.</figcaption>
+						</figure>
+						
+						<p>The first texture is now modulated by the splat map. To complete the interpolation, we have to multiply the other texture with 1 - R.</p>
+						
+						<pre translate="no" class="shader">				return
+					tex2D(_Texture1, i.uv) * splat.r +
+					tex2D(_Texture2, i.uv) <ins>* (1 - splat.r)</ins>;</pre>
+						
+						<figure>
+							<img src="part-3/texture-splatting/modulating-both-textures.png" width="330" height="190">
+							<figcaption>Modulating both textures.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>RGB Splat Map</h3>
+						
+						<p>We have a functional splat material, but it only supports two textures. Can we support more? We're only using the R channel, so how about we add the G and B channels as well? Then (1,0,0) represents the first texture, (0,1,0) represents the second texture, and (0,0,1) represents a third texture. To get a correct interpolation between those three, we just have to make sure that the RGB channels always add up to 1.</p>
+						
+						<p>But wait, when we used only one channel, we could support two textures. That's because the weight of the second texture was derived via 1 - R. This same trick works for any number of channels. So it is possible to support yet another texture, via 1 - R - G - B.</p>
+						
+						<p>This leads to a splat map with three colors, and black. As long as the three channels added together don't exceed 1, it is a valid map. Here is such a map, grab it and use the same import settings as before.</p>
+						
+						<figure>
+							<img src="part-3/texture-splatting/rgb-splat-map.png" width="128" height="128">
+							<figcaption>RGB splat map.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What happens when R + G + B exceeds 1?</h3>
+							<div>
+								<p>Then the combination of the first three textures will be too strong. And at the same time, the fourth texture will be subtracted instead of added. If the error is tiny, then you won't notice and the result is good enough. The example RGB map actually isn't perfect, but you won't notice. Texture compression introduces even more errors, but again it's hardly noticeable.</p>
+							</div>
+						</aside>
+						
+						<aside>
+							<h3>Can we use the alpha channel as well?</h3>
+							<div>
+								<p>Indeed you can! This means that a single RGBA splat map can support up to five different terrain types. But for this tutorial, four is enough.</p>
+								
+								<p>If you want to use more than five textures, you'd have to use multiple splat maps. While this is possible, you end up with a lot of texture samples. There are better techniques to use at this point, like texture arrays.</p>
+							</div>
+						</aside>
+						
+						<p>To support RGB splat maps, we have to add two additional textures to our shader. I assigned the marble detail and the test texture to them.</p>
+						
+						<pre translate="no" class="shader">	Properties {
+		_MainTex ("Splat Map", 2D) = "white" {}
+		[NoScaleOffset] _Texture1 ("Texture 1", 2D) = "white" {}
+		[NoScaleOffset] _Texture2 ("Texture 2", 2D) = "white" {}
+		<ins>[NoScaleOffset] _Texture3 ("Texture 3", 2D) = "white" {}</ins>
+		<ins>[NoScaleOffset] _Texture4 ("Texture 4", 2D) = "white" {}</ins>
+	}</pre>
+						
+						<figure>
+							<img src="part-3/texture-splatting/splat-map-rgb-inspector.png" width="320" height="360">
+							<figcaption>Four textures.</figcaption>
+						</figure>
+						
+						<p>Add the required variables to the shader. Once again, no extra <code class="shader">_ST</code> variables needed.</p>
+						
+						<pre translate="no" class="shader">			sampler2D _Texture1, _Texture2<ins>, _Texture3, _Texture4</ins>;</pre>
+						
+						<p>Inside the fragment program, add the extra texture samples. The second sample now uses the G channel and the third uses the B channel. The final sample is modulated with (1 - R - G - B).</p>
+						
+						<pre translate="no" class="shader">				return
+					tex2D(_Texture1, i.uv) * splat.r +
+					tex2D(_Texture2, i.uv) * <ins>splat.g +</ins>
+					<ins>tex2D(_Texture3, i.uv) * splat.b +</ins>
+					<ins>tex2D(_Texture4, i.uv) * (1 - splat.r - splat.g - splat.b)</ins>;
+</pre>
+						
+						<figure>
+							<img src="part-3/texture-splatting/four-textures-splatted.png" width="330" height="190">
+							<figcaption>Four textures splatted.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why do the blended regions look different in linear color space?</h3>
+							<div>
+								<p>Our splat map bypasses sRGB sampling, so the blending shouldn't depend on which color space we're using, right? The splat map is indeed unaffected. But the color space in which the blend happens does change.</p>
+								
+								<p>In the case of gamma space rendering, the samples are blended in gamma space and that's it. But when rendering in linear space, they are first converted to linear space, then blended, and then converted back to gamma space. The result is slightly different. In linear space, the blending is linear as well. But in gamma space, the blending is slanted towards darker colors.</p>
+							</div>
+						</aside>
+						
+						<p>Now you know how to apply detail textures and how to blend multiple textures with a splat map. It is also possible to combine these approaches.</p>
+						
+						<p>You could add four detail textures to the splat shader and use the map to blend between them. Of course this requires four additional texture samples, so it doesn't come for free.</p>
+						
+						<p>You could also use a map to control where a detail texture is applied, and where it is omitted. In that case, you need a monochrome map and it functions as a mask. This is useful when a single texture contains regions that represent different materials, but on not as large a scale as a terrain. For example, if our marble texture also contained pieces of metal, you wouldn't want the marble details to be applied there.</p>
+						
+						<p>The next tutorial is <a href="part-4.1.html">The First Light</a>.</p>
+					</section>
+					
+					<a href="part-3/texture-splatting/texture-splatting.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="part-3/Rendering-3.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../tutorials.js"></script>
+	</body>
+</html>

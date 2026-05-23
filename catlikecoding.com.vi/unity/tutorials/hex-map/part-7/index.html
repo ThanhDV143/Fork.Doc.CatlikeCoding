@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/hex-map/part-7/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/hex-map/part-7/tutorial-image.jpg">
+		<meta property="og:title" content="Hex Map 7">
+		<meta property="og:description" content="A Unity Hex Map tutorial about adding support for roads. Part 7 of 27.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hex Map 7</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/hex-map/part-7/#article",
+				"headline": "Hex Map 7",
+				"alternativeHeadline": "Roads",
+				"datePublished": "2016-07-25",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Hex Map tutorial about adding support for roads. Part 7 of 27.",
+				"image": "https://catlikecoding.com/unity/tutorials/hex-map/part-7/tutorial-image.jpg",
+				"dependencies": "Unity 5.3.1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/hex-map/", "name": "Hex Map" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				EdgeVertices: 1,
+				HexCell: 1,
+				HexEdgeType: 1,
+				HexCoordinates: 1,
+				HexCoordinatesDrawer: 1,
+				HexDirection: 1,
+				HexDirectionExtensions: 1,
+				HexGrid: 1,
+				HexGridChunk: 1,
+				HexMapCamera: 1,
+				HexMapEditor: 1,
+				HexMesh: 1,
+				HexMetrics: 1,
+				ListPool: 1,
+				OptionalToggle: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Hex Map</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hex Map 7</h1>
+					<p>Roads</p>
+					<ul>
+						<li>Add support for roads.</li>
+						<li>Triangulate roads.</li>
+						<li>Combine roads and rivers.</li>
+						<li>Give roads a rugged appearance.</li>
+					</ul>
+				</header>
+
+				<p>This tutorial is the seventh part of a series about <a href="../index.html">hexagon maps</a>. In part six, we added rivers to our terrain. This time, we'll add roads.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>The first signs of civilization.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Cells With Roads</h2>
+					
+					<p>Like rivers, roads go from cell to cell, through the middle of cell edges. The big difference is that roads don't have flowing water, so they're bidirectional. Also, a functional road network requires crossroads, so we'll support more than two roads per cell.</p>
+					
+					<p>Allowing roads to go in all six directions means that a cell can contain from zero to six roads. This leads to fourteen possible road configurations. That's a lot more than the five possible configurations for rivers. To make this workable, we'll have to use a generic approach that can handle all configurations.</p>
+					
+					<figure>
+						<img src="cells-with-roads/road-configurations.png" width="500" height="525">
+						<figcaption>14 possible road configurations.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Keeping Track of Roads</h3>
+						
+						<p>The most straightforward way to keep track of roads per cell is to use an array of booleans. Add a private array field to <code>HexCell</code> and make it serializable, so we can see it in the inspector. Set the array size via the cell prefab so it supports six roads.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>bool[] roads;</ins></pre>
+						
+						<figure>
+							<img src="cells-with-roads/prefab-inspector.png" width="320" height="256">
+							<figcaption>Cell prefab with six roads.</figcaption>
+						</figure>
+						
+						<p>Add a method to check whether the cell has a road in a certain direction.</p>
+						
+						<pre translate="no">	<ins>public bool HasRoadThroughEdge (HexDirection direction) {</ins>
+		<ins>return roads[(int)direction];</ins>
+	<ins>}</ins></pre>
+						
+						<p>It is also handy to know whether a cell has at least one road, so add a property for that. Just loop through the array and return <code>true</code> as soon as you find a road. If there isn't any, return <code>false</code>.</p>
+						
+						<pre translate="no">	<ins>public bool HasRoads {</ins>
+		<ins>get {</ins>
+			<ins>for (int i = 0; i &lt; roads.Length; i++) {</ins>
+				<ins>if (roads[i]) {</ins>
+					<ins>return true;</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+			<ins>return false;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+					</section>
+					
+					<section>
+						<h3>Removing Roads</h3>
+						
+						<p>Just like with rivers, we'll add a method to remove all roads from a cell. It's done with a loop that turns off each road that was previously enabled.</p>
+						
+						<pre translate="no">	<ins>public void RemoveRoads () {</ins>
+		<ins>for (int i = 0; i &lt; neighbors.Length; i++) {</ins>
+			<ins>if (roads[i]) {</ins>
+				<ins>roads[i] = false;</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Of course we also have to disable the corresponding roads of the cell's neighbors.</p>
+						
+						<pre translate="no">			if (roads[i]) {
+				roads[i] = false;
+				<ins>neighbors[i].roads[(int)((HexDirection)i).Opposite()] = false;</ins>
+			}</pre>
+						
+						<p>And after we're done, we have to make sure that both cells are refreshed. As the roads are local to the cells, we only have to refresh the cells themselves, not also their neighbors.</p>
+						
+						<pre translate="no">			if (roads[i]) {
+				roads[i] = false;
+				neighbors[i].roads[(int)((HexDirection)i).Opposite()] = false;
+				<ins>neighbors[i].RefreshSelfOnly();</ins>
+				<ins>RefreshSelfOnly();</ins>
+			}</pre>
+					</section>
+					
+					<section>
+						<h3>Adding Roads</h3>
+						
+						<p>Adding a road works like removing a road. The only difference is that we set the boolean to <code>true</code> instead of to <code>false</code>. We can create a private method that can do either. Then we can use it both when adding and removing roads.</p>
+						
+						<pre translate="no">	<ins>public void AddRoad (HexDirection direction) {</ins>
+		<ins>if (!roads[(int)direction]) {</ins>
+			<ins>SetRoad((int)direction, true);</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	public void RemoveRoads () {
+		for (int i = 0; i &lt; neighbors.Length; i++) {
+			if (roads[i]) {
+				<ins>SetRoad(i, false);</ins>
+			}
+		}
+	}
+
+	<ins>void SetRoad (int index, bool state) {</ins>
+		roads[<ins>index</ins>] = <ins>state</ins>;
+		neighbors[<ins>index</ins>].roads[(int)((HexDirection)<ins>index</ins>).Opposite()] = <ins>state</ins>;
+		neighbors[<ins>index</ins>].RefreshSelfOnly();
+		RefreshSelfOnly();
+	<ins>}</ins></pre>
+						
+						<p>We cannot have both a river and a road going in the same direction. So make sure that there is room for the new road, before adding it.</p>
+						
+						<pre translate="no">	public void AddRoad (HexDirection direction) {
+		if (!roads[(int)direction] <ins>&amp;&amp; !HasRiverThroughEdge(direction)</ins>) {
+			SetRoad((int)direction, true);
+		}
+	}</pre>
+						
+						<p>Roads also cannot be combined with cliffs, as they're too steep. Or maybe you might be OK with a road across a low cliff, but not across a high cliff? To determine this, we can create a method that tells us the elevation difference in a certain direction.</p>
+						
+						<pre translate="no">	<ins>public int GetElevationDifference (HexDirection direction) {</ins>
+		<ins>int difference = elevation - GetNeighbor(direction).elevation;</ins>
+		<ins>return difference >= 0 ? difference : -difference;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can enforce that roads are only added when the elevation difference is small enough. I'll limit it to slopes at most, so that's a maximum of 1.</p>
+						
+						<pre translate="no">	public void AddRoad (HexDirection direction) {
+		if (
+			!roads[(int)direction] &amp;&amp; !HasRiverThroughEdge(direction) <ins>&amp;&amp;</ins>
+			<ins>GetElevationDifference(direction) &lt;= 1</ins>
+		) {
+			SetRoad((int)direction, true);
+		}
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Removing Invalid Roads</h3>
+						
+						<p>We made sure that roads are only added when allowed. Now we have to make sure to remove them when they become invalid later. For example, when adding a river. We could disallow rivers to be placed on top of roads, but rivers aren't stopped by roads. Let them wash the roads away.</p>
+						
+						<p>We can suffice with setting the road to <code>false</code>, regardless whether there actually was a road. This will always refresh both cells, so we don't have to explicitly invoke <code>RefreshSelfOnly</code> anymore in <code>SetOutgoingRiver</code>.</p>
+						
+						<pre translate="no">	public void SetOutgoingRiver (HexDirection direction) {
+		if (hasOutgoingRiver &amp;&amp; outgoingRiver == direction) {
+			return;
+		}
+
+		HexCell neighbor = GetNeighbor(direction);
+		if (!neighbor || elevation &lt; neighbor.elevation) {
+			return;
+		}
+
+		RemoveOutgoingRiver();
+		if (hasIncomingRiver &amp;&amp; incomingRiver == direction) {
+			RemoveIncomingRiver();
+		}
+		hasOutgoingRiver = true;
+		outgoingRiver = direction;
+<del>//		RefreshSelfOnly();</del>
+		
+		neighbor.RemoveIncomingRiver();
+		neighbor.hasIncomingRiver = true;
+		neighbor.incomingRiver = direction.Opposite();
+<del>//		neighbor.RefreshSelfOnly();</del>
+		
+		<ins>SetRoad((int)direction, false);</ins>
+	}</pre>
+						
+						<p>The other operation that can invalidate roads is an elevation change. In this case, we'll have to check for roads in all directions. If an elevation difference has become too great, an existing road has to be removed.</p>
+						
+						<pre translate="no">	public int Elevation {
+		get {
+			return elevation;
+		}
+		set {
+			&hellip;
+
+			<ins>for (int i = 0; i &lt; roads.Length; i++) {</ins>
+				<ins>if (roads[i] &amp;&amp; GetElevationDifference((HexDirection)i) > 1) {</ins>
+					<ins>SetRoad(i, false);</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+
+			Refresh();
+		}
+	}</pre>
+					</section>
+					
+					<a href="cells-with-roads/cells-with-roads.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Editing Roads</h2>
+					
+					<p>Editing roads works exactly like editing rivers. So <code>HexMapEditor</code> requires another optional toggle, plus an accompanying method to set its state.</p>
+					
+					<pre translate="no">	OptionalToggle riverMode<ins>, roadMode</ins>;
+
+	public void SetRiverMode (int mode) {
+		riverMode = (OptionalToggle)mode;
+	}
+
+	<ins>public void SetRoadMode (int mode) {</ins>
+		<ins>roadMode = (OptionalToggle)mode;</ins>
+	<ins>}</ins></pre>
+					
+					<p>The <code>EditCell</code> method now has to support removing and adding roads as well. That means it has two possible actions to take when a drag happened. Restructure the code a bit so both toggle states are checked when there's a valid drag.</p>
+					
+					<pre translate="no">	void EditCell (HexCell cell) {
+		if (cell) {
+			if (applyColor) {
+				cell.Color = activeColor;
+			}
+			if (applyElevation) {
+				cell.Elevation = activeElevation;
+			}
+			if (riverMode == OptionalToggle.No) {
+				cell.RemoveRiver();
+			}
+			<ins>if (roadMode == OptionalToggle.No) {</ins>
+				<ins>cell.RemoveRoads();</ins>
+			<ins>}</ins>
+			<ins>if (isDrag) {</ins>
+				HexCell otherCell = cell.GetNeighbor(dragDirection.Opposite());
+				<ins>if (</ins>otherCell<ins>) {</ins>
+					<ins>if (</ins>riverMode == OptionalToggle.Yes<ins>) {</ins>
+						otherCell.SetOutgoingRiver(dragDirection);
+					<ins>}</ins>
+					<ins>if (roadMode == OptionalToggle.Yes) {</ins>
+						<ins>otherCell.AddRoad(dragDirection);</ins>
+					<ins>}</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+		}
+	}</pre>
+					
+					<p>You can quickly add a road panel to the UI by copying the river panel and adjusting the method that the toggles invoke.</p>
+					
+					<p>This will result in a pretty tall UI. To combat this, I changed the layout of the color panel to match the more compact road and river panels.</p>
+					
+					<figure>
+						<img src="editing-roads/ui.png" width="108" height="342">
+						<figcaption>UI with roads.</figcaption>
+					</figure>
+					
+					<p>Because I'm now using two rows of three options for the colors, there's room for another color. So I added an entry for orange.</p>
+					
+					<figure>
+						<img alt="inspector" src="editing-roads/colors-inspector.png" width="320" height="184">
+						<img alt="scene" src="editing-roads/colors-scene.png" width="460" height="250">
+						<figcaption>Five colors, yellow, green, blue, orange, and white.</figcaption>
+					</figure>
+					
+					<p>You can now edit roads, although they aren't visible yet. You can use the inspector to verify that it does work.</p>
+					
+					<figure>
+						<img src="editing-roads/cell-with-roads.png" width="320" height="144">
+						<figcaption>Inspecting a cell with roads.</figcaption>
+					</figure>
+					
+					<a href="editing-roads/editing-roads.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Triangulating Roads</h2>
+					
+					<p>To visualize the roads, we'll have to triangulate them. This works like the water mesh for rivers, except that the terrain doesn't get a channel.</p>
+					
+					<p>First, create a new standard shader that once again uses the UV coordinates to color the road surface.</p>
+					
+					<pre translate="no" class="shader">Shader "Custom/<ins>Road</ins>" {
+	Properties {
+		_Color ("Color", Color) = (1,1,1,1)
+		_MainTex ("Albedo (RGB)", 2D) = "white" {}
+		_Glossiness ("Smoothness", Range(0,1)) = 0.5
+		_Metallic ("Metallic", Range(0,1)) = 0.0
+	}
+	SubShader {
+		Tags { "RenderType"="Opaque" }
+		LOD 200
+		
+		CGPROGRAM
+		#pragma surface surf Standard fullforwardshadows
+		#pragma target 3.0
+
+		sampler2D _MainTex;
+
+		struct Input {
+			float2 uv_MainTex;
+		};
+
+		half _Glossiness;
+		half _Metallic;
+		fixed4 _Color;
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			fixed4 c = <ins>fixed4(IN.uv_MainTex, 1, 1)</ins>;
+			o.Albedo = c.rgb;
+			o.Metallic = _Metallic;
+			o.Smoothness = _Glossiness;
+			o.Alpha = c.a;
+		}
+		ENDCG
+	}
+	FallBack "Diffuse"
+}</pre>
+					
+					<p>Create a road material that uses this shader.</p>
+					
+					<figure>
+						<img src="triangulating-roads/material.png" width="320" height="178">
+						<figcaption>Road material.</figcaption>
+					</figure>
+					
+					<p>Then adjust the chunk prefab so it gets another hex mesh child, for the roads. This mesh shouldn't cast shadows, and only uses UV coordinates. The quickest way to do this &ndash; via a prefab instance &ndash; is to duplicate the <em translate="no">Rivers</em> object and change its material.</p>
+					
+					<figure>
+						<img alt="hierarchy" src="triangulating-roads/hierarchy.png" width="140" height="80">
+						<img alt="inspector" src="triangulating-roads/roads.png" width="320" height="368">
+						<figcaption>Roads child object.</figcaption>
+					</figure>
+					
+					<p>After that, add a public <code>HexMesh roads</code> field to <code>HexGridChunk</code> and include it in <code>Triangulate</code>. Connect it to the <em translate="no">Roads</em> object via the inspector.</p>
+					
+					<pre translate="no">	public HexMesh terrain, rivers<ins>, roads</ins>;
+	
+	public void Triangulate () {
+		terrain.Clear();
+		rivers.Clear();
+		<ins>roads.Clear();</ins>
+		for (int i = 0; i &lt; cells.Length; i++) {
+			Triangulate(cells[i]);
+		}
+		terrain.Apply();
+		rivers.Apply();
+		<ins>roads.Apply();</ins>
+	}</pre>
+					
+					<figure>
+						<img src="triangulating-roads/chunk.png" width="320" height="94">
+						<figcaption>Roads object connected.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Roads Between Cells</h3>
+						
+						<p>Let's first consider the road segments in between cells. Like rivers, roads will cover the middle two quads. We'll completely cover these connection quads with road quads, so we can use the same six vertex positions. Add a <code>TriangulateRoadSegment</code> method to <code>HexGridChunk</code> for this.</p>
+						
+						<pre translate="no">	<ins>void TriangulateRoadSegment (</ins>
+		<ins>Vector3 v1, Vector3 v2, Vector3 v3,</ins>
+		<ins>Vector3 v4, Vector3 v5, Vector3 v6</ins>
+	<ins>) {</ins>
+		<ins>roads.AddQuad(v1, v2, v4, v5);</ins>
+		<ins>roads.AddQuad(v2, v3, v5, v6);</ins>
+	<ins>}</ins></pre>
+						
+						<p>As we don't have to worry about water flow, we don't need the V coordinate, so we'll just set it zero everywhere. We can use the U coordinate to indicate whether we're at the middle of the road, or at the side. Let's set it to 1 at the middle and 0 at both sides.</p>
+						
+						<pre translate="no">	void TriangulateRoadSegment (
+		Vector3 v1, Vector3 v2, Vector3 v3,
+		Vector3 v4, Vector3 v5, Vector3 v6
+	) {
+		roads.AddQuad(v1, v2, v4, v5);
+		roads.AddQuad(v2, v3, v5, v6);
+		<ins>roads.AddQuadUV(0f, 1f, 0f, 0f);</ins>
+		<ins>roads.AddQuadUV(1f, 0f, 0f, 0f);</ins>
+	}</pre>
+						
+						<figure>
+							<img src="triangulating-roads/road-segment.png" width="240" height="140">
+							<figcaption>Road segment between cells.</figcaption>
+						</figure>
+						
+						<p><code>TriangulateEdgeStrip</code> is the logical place to invoke this method, but only when a road is actually there. Add a boolean parameter to the method, so we can communicate this information.</p>
+						
+						<pre translate="no">	void TriangulateEdgeStrip (
+		EdgeVertices e1, Color c1,
+		EdgeVertices e2, Color c2<ins>,</ins>
+		<ins>bool hasRoad</ins>
+	) {
+		&hellip;
+	}</pre>
+						
+						<p>Of course we get compiler errors now, because we're not supplying this information yet. The solution is to add <code>false</code> as a final argument everywhere we invoke <code>TriangulateEdgeStrip</code>. However, we can also declare that the default value for this parameter is <code>false</code>. This turns it into an optional parameter and solves the compile errors.</p>
+						
+						<pre translate="no">	void TriangulateEdgeStrip (
+		EdgeVertices e1, Color c1,
+		EdgeVertices e2, Color c2,
+		bool hasRoad <ins>= false</ins>
+	) {
+		&hellip;
+	}</pre>
+						
+						<aside>
+							<h3>How do optional parameters work?</h3>
+							<div>
+								<p>Think of them as a shorthands for writing alternative methods that fill in the missing arguments. For example, the method</p>
+								
+								<pre translate="no">int MyMethod (int x = 1, int y = 2) { return x + y; }</pre>
+								
+								<p>is equivalent to three methods</p>
+								
+								<pre translate="no">int MyMethod (int x, int y) { return x + y; }
+
+int MyMethod (int x) { return MyMethod(x, 2); }
+
+int MyMethod () { return MyMethod(1, 2}; }</pre>
+								
+								<p>Order matters here. Optional parameters can be omitted from right to left. The last parameter is dropped first. They always come after mandatory parameters.</p>
+							</div>
+						</aside>
+						
+						<p>To triangulate the road, simply invoke <code>TriangulateRoadSegment</code> with the middle six vertices, if there is a need for it.</p>
+						
+						<pre translate="no">	void TriangulateEdgeStrip (
+		EdgeVertices e1, Color c1,
+		EdgeVertices e2, Color c2,
+		bool hasRoad = false
+	) {
+		terrain.AddQuad(e1.v1, e1.v2, e2.v1, e2.v2);
+		terrain.AddQuadColor(c1, c2);
+		terrain.AddQuad(e1.v2, e1.v3, e2.v2, e2.v3);
+		terrain.AddQuadColor(c1, c2);
+		terrain.AddQuad(e1.v3, e1.v4, e2.v3, e2.v4);
+		terrain.AddQuadColor(c1, c2);
+		terrain.AddQuad(e1.v4, e1.v5, e2.v4, e2.v5);
+		terrain.AddQuadColor(c1, c2);
+
+		<ins>if (hasRoad) {</ins>
+			<ins>TriangulateRoadSegment(e1.v2, e1.v3, e1.v4, e2.v2, e2.v3, e2.v4);</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>That takes care of flat cell connections. To support roads on terraces, we have to also tell <code>TriangulateEdgeTerraces</code> whether it has to add a road. It can simply pass this knowledge on to <code>TriangulateEdgeStrip</code>.</p>
+						
+						<pre translate="no">	void TriangulateEdgeTerraces (
+		EdgeVertices begin, HexCell beginCell,
+		EdgeVertices end, HexCell endCell<ins>,</ins>
+		<ins>bool hasRoad</ins>
+	) {
+		EdgeVertices e2 = EdgeVertices.TerraceLerp(begin, end, 1);
+		Color c2 = HexMetrics.TerraceLerp(beginCell.Color, endCell.Color, 1);
+
+		TriangulateEdgeStrip(begin, beginCell.Color, e2, c2<ins>, hasRoad</ins>);
+
+		for (int i = 2; i &lt; HexMetrics.terraceSteps; i++) {
+			EdgeVertices e1 = e2;
+			Color c1 = c2;
+			e2 = EdgeVertices.TerraceLerp(begin, end, i);
+			c2 = HexMetrics.TerraceLerp(beginCell.Color, endCell.Color, i);
+			TriangulateEdgeStrip(e1, c1, e2, c2<ins>, hasRoad</ins>);
+		}
+
+		TriangulateEdgeStrip(e2, c2, end, endCell.Color<ins>, hasRoad</ins>);
+	}</pre>
+						
+						<p><code>TriangulateEdgeTerraces</code> is invoked inside <code>TriangulateConnection</code>. This is where we can determine whether there's actually a road going through the current direction. Both when triangulating an edge, and when triangulating terraces.</p>
+						
+						<pre translate="no">
+		if (cell.GetEdgeType(direction) == HexEdgeType.Slope) {
+			TriangulateEdgeTerraces(
+				e1, cell, e2, neighbor<ins>, cell.HasRoadThroughEdge(direction)</ins>
+			);
+		}
+		else {
+			TriangulateEdgeStrip(
+				e1, cell.Color, e2, neighbor.Color<ins>,</ins>
+				<ins>cell.HasRoadThroughEdge(direction)</ins>
+			);
+		}</pre>
+						
+						<figure>
+							<img src="triangulating-roads/roads-between-cells.png" width="360" height="240">
+							<figcaption>Road segments between cells.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Rendering On Top</h3>
+						
+						<p>When drawing roads, you'll see road segments pop up in between cells. The middle of these segments will be magenta, transitioning to blue at the sides.</p>
+						
+						<p>However, when you move the camera around, the segments will probably flicker, and sometimes disappear completely. This happens because the road triangles exactly overlap the terrain triangles. It is arbitrary which ends up rendered on top. Fixing this requires two steps.</p>
+						
+						<p>First, we want to always draw the roads after the terrain has been drawn. This is accomplished by rendering them after the regular geometry is drawn, by putting them in a later render queue.</p>
+						
+						<pre translate="no" class="shader">		Tags {
+			"RenderType"="Opaque"
+			<ins>"Queue" = "Geometry+1"</ins>
+		}</pre>
+						
+						<p>Second, we want to make sure that the roads are drawn on top of the terrain triangles that sit in the same position. We do this by adding a depth test offset. This lets the GPU treat the triangles as if they are closer to the camera than they really are.</p>
+						
+						<pre translate="no" class="shader">		Tags {
+			"RenderType"="Opaque"
+			"Queue" = "Geometry+1"
+		}
+		LOD 200
+		<ins>Offset -1, -1</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Roads Across Cells</h3>
+						
+						<p>When triangulating rivers, we only had to deal with at most two river directions per cell. We could identify the five possible scenarios and triangulate them differently to create well-behaved rivers. However, there are fourteen possible scenarios for roads. We're not going to use a different approach for each of these scenarios. Instead, we'll treat each of the six cell directions the exact same way, regardless of the specific road configuration.</p>
+						
+						<p>When there's a road running across a cell part, we'll run it straight to the cell center, without going outside of the triangular zone. We'll draw a road segment from the edge halfway towards the center. Then we'll use two triangles to cover the rest of the way to the center.</p>
+						
+						<figure>
+							<img src="triangulating-roads/road-across-cell.png" width="290" height="250">
+							<figcaption>Triangulating part of a road.</figcaption>
+						</figure>
+						
+						<p>To triangulate this, we need to know the cell's center, the left and right middle vertices, and the edge vertices. Add a <code>TriangulateRoad</code> method with the corresponding parameters.</p>
+						
+						<pre translate="no">	<ins>void TriangulateRoad (</ins>
+		<ins>Vector3 center, Vector3 mL, Vector3 mR, EdgeVertices e</ins>
+	<ins>) {</ins>
+	<ins>}</ins></pre>
+						
+						<p>We need one additional vertex to construct the road segment. It sits between the left and right middle vertices.</p>
+						
+						<pre translate="no">	void TriangulateRoad (
+		Vector3 center, Vector3 mL, Vector3 mR, EdgeVertices e
+	) {
+		<ins>Vector3 mC = Vector3.Lerp(mL, mR, 0.5f);</ins>
+		<ins>TriangulateRoadSegment(mL, mC, mR, e.v2, e.v3, e.v4);</ins>
+	}
+</pre>
+						
+						<p>Now we can also add the remaining two triangles.</p>
+						
+						<pre translate="no">		TriangulateRoadSegment(mL, mC, mR, e.v2, e.v3, e.v4);
+		<ins>roads.AddTriangle(center, mL, mC);</ins>
+		<ins>roads.AddTriangle(center, mC, mR);</ins></pre>
+						
+						<p>And we have to add the UV coordinates of the triangles as well. Two of their vertices sit in the middle of the road, the other at its edge.</p>
+						
+						<pre translate="no">		roads.AddTriangle(center, mL, mC);
+		roads.AddTriangle(center, mC, mR);
+		<ins>roads.AddTriangleUV(</ins>
+			<ins>new Vector2(1f, 0f), new Vector2(0f, 0f), new Vector2(1f, 0f)</ins>
+		<ins>);</ins>
+		<ins>roads.AddTriangleUV(</ins>
+			<ins>new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(0f, 0f)</ins>
+		<ins>);</ins></pre>
+						
+						<p>For now, let's only concern ourselves with cells that don't have a river in them. In those cases, <code>Triangulate</code> simply created an edge fan. Move this code to its own method. Then add an invocation of <code>TriangulateRoad</code>, when there's actually a road. The left and right middle vertices can be found by interpolating between the center and the two corner vertices.</p>
+						
+						<pre translate="no">	void Triangulate (HexDirection direction, HexCell cell) {
+		&hellip;
+
+		if (cell.HasRiver) {
+			&hellip;
+		}
+		else {
+			<ins>TriangulateWithoutRiver(direction, cell, center, e);</ins>
+		}
+
+		&hellip;
+	}
+
+	<ins>void TriangulateWithoutRiver (</ins>
+		<ins>HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e</ins>
+	<ins>) {</ins>
+		TriangulateEdgeFan(center, e, cell.Color);
+		
+		<ins>if (cell.HasRoadThroughEdge(direction)) {</ins>
+			<ins>TriangulateRoad(</ins>
+				<ins>center,</ins>
+				<ins>Vector3.Lerp(center, e.v1, 0.5f),</ins>
+				<ins>Vector3.Lerp(center, e.v5, 0.5f),</ins>
+				<ins>e</ins>
+			<ins>);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="triangulating-roads/roads-across-cells.png" width="320" height="200">
+							<figcaption>Roads across cells.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Road Edges</h3>
+						
+						<p>We can now see the roads, but they taper toward the cell centers. Because we're not checking which of the fourteen road scenarios we're dealing with, we can't move the road center to produce more pleasing shapes. What we can do instead is add additional road edges in other parts of the cell.</p>
+						
+						<p>When a cell has roads through it, but not in the current direction, add a road edge triangle. This triangle is defined by the center, and the left and right middle vertices. In this case, only the center vertex lies in the middle of the road. The other two vertices sits at its edge.</p>
+						
+						<pre translate="no">	<ins>void TriangulateRoadEdge (Vector3 center, Vector3 mL, Vector3 mR) {</ins>
+		<ins>roads.AddTriangle(center, mL, mR);</ins>
+		<ins>roads.AddTriangleUV(</ins>
+			<ins>new Vector2(1f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f)</ins>
+		<ins>);</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="triangulating-roads/road-edge.png" width="290" height="250">
+							<figcaption>Part of the edge of a road.</figcaption>
+						</figure>
+						
+						<p>Whether we should triangulate a full road or only an edge, is something we'll leave up to <code>TriangulateRoad</code>. To do so, it needs to know whether a road is going through the direction of the current cell edge. So add a parameter for that.</p>
+						
+						<pre translate="no">	void TriangulateRoad (
+		Vector3 center, Vector3 mL, Vector3 mR,
+		EdgeVertices e<ins>, bool hasRoadThroughCellEdge</ins>
+	) {
+		<ins>if (hasRoadThroughCellEdge) {</ins>
+			Vector3 mC = Vector3.Lerp(mL, mR, 0.5f);
+			TriangulateRoadSegment(mL, mC, mR, e.v2, e.v3, e.v4);
+			roads.AddTriangle(center, mL, mC);
+			roads.AddTriangle(center, mC, mR);
+			roads.AddTriangleUV(
+				new Vector2(1f, 0f), new Vector2(0f, 0f), new Vector2(1f, 0f)
+			);
+			roads.AddTriangleUV(
+				new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(0f, 0f)
+			);
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>TriangulateRoadEdge(center, mL, mR);</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p><code>TriangulateWithoutRiver</code> will now have to invoke <code>TriangulateRoad</code> whenever the cell has any roads going through it. And it'll have to pass along whether a road goes through the current edge.</p>
+						
+						<pre translate="no">	void TriangulateWithoutRiver (
+		HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e
+	) {
+		TriangulateEdgeFan(center, e, cell.Color);
+
+		if (<ins>cell.HasRoads</ins>) {
+			TriangulateRoad(
+				center,
+				Vector3.Lerp(center, e.v1, 0.5f),
+				Vector3.Lerp(center, e.v5, 0.5f),
+				e<ins>, cell.HasRoadThroughEdge(direction)</ins>
+			);
+		}
+	}</pre>
+						
+						<figure>
+							<img src="triangulating-roads/bulging-roads.png" width="320" height="200">
+							<figcaption>Roads with complete edges.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Smoothing Roads</h3>
+						
+						<p>Our roads are now complete. Unfortunately, this approach produces bulges at the center of cells. Placing the left and right vertices halfway between the center and corners is fine, when there's a road adjacent to them. But when there isn't, it results in a bulge. To counter this, we could place the vertices closer to the center in those cases. Specifically, by interpolating with &frac14; instead of with &frac12;.</p>
+						
+						<p>Let's create a separate method to figure out which interpolators we should use. As there's two of them, we can put the result in a <code>Vector2</code>. Its X component is the interpolator for the left point, and its Y component is the interpolator for the right point.</p>
+						
+						<pre translate="no">	<ins>Vector2 GetRoadInterpolators (HexDirection direction, HexCell cell) {</ins>
+		<ins>Vector2 interpolators;</ins>
+		<ins>return interpolators;</ins>
+	<ins>}</ins></pre>
+						
+						<p>If there's a road going in the current direction, we can put the points halfway.</p>
+						
+						<pre translate="no">	Vector2 GetRoadInterpolators (HexDirection direction, HexCell cell) {
+		Vector2 interpolators;
+		<ins>if (cell.HasRoadThroughEdge(direction)) {</ins>
+			<ins>interpolators.x = interpolators.y = 0.5f;</ins>
+		<ins>}</ins>
+		return interpolators;
+	}</pre>
+						
+						<p>Otherwise, it depends. For the left point, we can use &frac12; when there's a road going through the previous direction. If not, we should use &frac14;. The same goes for the right point, but with the next direction.</p>
+						
+						<pre translate="no">	Vector2 GetRoadInterpolators (HexDirection direction, HexCell cell) {
+		Vector2 interpolators;
+		if (cell.HasRoadThroughEdge(direction)) {
+			interpolators.x = interpolators.y = 0.5f;
+		}
+		<ins>else {</ins>
+			<ins>interpolators.x =</ins>
+				<ins>cell.HasRoadThroughEdge(direction.Previous()) ? 0.5f : 0.25f;</ins>
+			<ins>interpolators.y =</ins>
+				<ins>cell.HasRoadThroughEdge(direction.Next()) ? 0.5f : 0.25f;</ins>
+		<ins>}</ins>
+		return interpolators;
+	}</pre>
+						
+						<p>Now we can use this new method to determine which interpolators to use. This will smooth out the roads.</p>
+						
+						<pre translate="no">	void TriangulateWithoutRiver (
+		HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e
+	) {
+		TriangulateEdgeFan(center, e, cell.Color);
+
+		if (cell.HasRoads) {
+			<ins>Vector2 interpolators = GetRoadInterpolators(direction, cell);</ins>
+			TriangulateRoad(
+				center,
+				Vector3.Lerp(center, e.v1, <ins>interpolators.x</ins>),
+				Vector3.Lerp(center, e.v5, <ins>interpolators.y</ins>),
+				e, cell.HasRoadThroughEdge(direction)
+			);
+		}
+	}</pre>
+						
+						<figure>
+							<img alt="detail" src="triangulating-roads/smooth-roads.png" width="320" height="200">
+							<img alt="map" src="triangulating-roads/road-network.png" width="420" height="274">
+							<figcaption>Smooth roads.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="triangulating-roads/triangulating-roads.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Combining Rivers and Roads</h2>
+					
+					<p>At this point we have functional roads, but only if there aren't any rivers. When a cell has a river in it, no roads will be triangulated.</p>
+					
+					<figure>
+						<img src="combining-rivers-and-roads/no-roads.png" width="270" height="180">
+						<figcaption>No roads near rivers.</figcaption>
+					</figure>
+					
+					<p>Let's create a new <code>TriangulateRoadAdjacentToRiver</code> method to take care of roads in this situation. Give it the usual parameters. Invoke it at the beginning of the <code>TriangulateAdjacentToRiver</code> method.</p>
+					
+					<pre translate="no">	void TriangulateAdjacentToRiver (
+		HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e
+	) {
+		<ins>if (cell.HasRoads) {</ins>
+			<ins>TriangulateRoadAdjacentToRiver(direction, cell, center, e);</ins>
+		<ins>}</ins>
+
+		&hellip;
+	}
+
+	<ins>void TriangulateRoadAdjacentToRiver (</ins>
+		<ins>HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e</ins>
+	<ins>) {</ins>
+	<ins>}</ins></pre>
+					
+					<p>To start with, do the same thing as for roads without rivers. Check whether a road goes through the current edge, get the interpolators, create the middle vertices, and invoke <code>TriangulateRoad</code>. But because rivers will get in the way, we'll have to push the roads away from them. As a result, the center of the road will end up at a different position. We'll use a <code>roadCenter</code> variable to hold this new position. It starts out equal to the cell center.</p>
+					
+					<pre translate="no">void TriangulateRoadAdjacentToRiver (
+		HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e
+	) {
+		<ins>bool hasRoadThroughEdge = cell.HasRoadThroughEdge(direction);</ins>
+		<ins>Vector2 interpolators = GetRoadInterpolators(direction, cell);</ins>
+		<ins>Vector3 roadCenter = center;</ins>
+		<ins>Vector3 mL = Vector3.Lerp(roadCenter, e.v1, interpolators.x);</ins>
+		<ins>Vector3 mR = Vector3.Lerp(roadCenter, e.v5, interpolators.y);</ins>
+		<ins>TriangulateRoad(roadCenter, mL, mR, e, hasRoadThroughEdge);</ins>
+	}</pre>
+					
+					<p>This will produce partial roads in cells with rivers. The directions with rivers through them will cut gaps in the roads.</p>
+					
+					<figure>
+						<img src="combining-rivers-and-roads/roads-with-gaps.png" width="270" height="180">
+						<figcaption>Roads with gaps.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>River Begin Or End</h3>
+						
+						<p>Let's first consider cells that contain either the beginning or end of a river. To make sure that roads don't overlap with the water, we'll have to push the road center away from the river. To get the direction of the incoming or outgoing river, add a convenient property to <code>HexCell</code>.</p>
+						
+						<pre translate="no">	<ins>public HexDirection RiverBeginOrEndDirection {</ins>
+		<ins>get {</ins>
+			<ins>return hasIncomingRiver ? incomingRiver : outgoingRiver;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can use this property in <code>HexGridChunk.TriangulateRoadAdjacentToRiver</code> to push the road center in the opposite direction. Moving a third of the way towards the middle edge in that direction does the trick.</p>
+						
+						<pre translate="no">		bool hasRoadThroughEdge = cell.HasRoadThroughEdge(direction);
+		Vector2 interpolators = GetRoadInterpolators(direction, cell);
+		Vector3 roadCenter = center;
+
+		<ins>if (cell.HasRiverBeginOrEnd) {</ins>
+			<ins>roadCenter += HexMetrics.GetSolidEdgeMiddle(</ins>
+				<ins>cell.RiverBeginOrEndDirection.Opposite()</ins>
+			<ins>) * (1f / 3f);</ins>
+		<ins>}</ins>
+
+		Vector3 mL = Vector3.Lerp(roadCenter, e.v1, interpolators.x);
+		Vector3 mR = Vector3.Lerp(roadCenter, e.v5, interpolators.y);
+		TriangulateRoad(roadCenter, mL, mR, e, hasRoadThroughEdge);</pre>
+						
+						<figure>
+							<img src="combining-rivers-and-roads/adjusted-roads.png" width="270" height="180">
+							<figcaption>Adjusted roads.</figcaption>
+						</figure>
+						
+						<p>Next, we have to close the gaps. We do this by adding additional road edge triangles when we're adjacent to a river. If there is a river in the previous direction, then we add a triangle between the road center, the cell center, and the middle left point. And if there's a river in the next direction, then we add a triangle between the road center, the middle right point, and the cell center.</p>
+						
+						<p>We're going to do this no matter what river configuration we're dealing with, so put this code at the end of the method.</p>
+						
+						<pre translate="no">		Vector3 mL = Vector3.Lerp(roadCenter, e.v1, interpolators.x);
+		Vector3 mR = Vector3.Lerp(roadCenter, e.v5, interpolators.y);
+		TriangulateRoad(roadCenter, mL, mR, e, hasRoadThroughEdge);
+		<ins>if (cell.HasRiverThroughEdge(direction.Previous())) {</ins>
+			<ins>TriangulateRoadEdge(roadCenter, center, mL);</ins>
+		<ins>}</ins>
+		<ins>if (cell.HasRiverThroughEdge(direction.Next())) {</ins>
+			<ins>TriangulateRoadEdge(roadCenter, mR, center);</ins>
+		<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Can't we use an <code>else</code> statement?</h3>
+							<div>
+								<p>That wouldn't work in all cases. It is possible to have rivers going through both directions at the same time.</p>
+							</div>
+						</aside>
+						
+						<figure>
+							<img src="combining-rivers-and-roads/roads-complete.png" width="270" height="180">
+							<figcaption>Complete roads.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Straight Rivers</h3>
+						
+						<p>Cells with straight rivers pose an extra challenge, because they effectively split the cell center in two. We're already adding extra triangles to fill the gaps along rivers, but we also have to disconnect the roads on opposite sides of the river.</p>
+						
+						<figure>
+							<img src="combining-rivers-and-roads/straight-incorrect.png" width="270" height="180">
+							<figcaption>Roads overlapping a straight river.</figcaption>
+						</figure>
+						
+						<p>If the cell doesn't have the beginning or end of a river, we can check whether the incoming and outgoing rivers go in opposite directions. If so, we have a straight river.</p>
+						
+						<pre translate="no">		if (cell.HasRiverBeginOrEnd) {
+			roadCenter += HexMetrics.GetSolidEdgeMiddle(
+				cell.RiverBeginOrEndDirection.Opposite()
+			) * (1f / 3f);
+		}
+		<ins>else if (cell.IncomingRiver == cell.OutgoingRiver.Opposite()) {</ins>
+		<ins>}</ins></pre>
+						
+						<p>To determine where the river is relative to the current direction, we'll have to check the adjacent directions. The river is either on the left, or on the right. As we're also doing this at the end of the method, cache these queries in boolean variables. This also makes our code easier to read.</p>
+						
+						<pre translate="no">		bool hasRoadThroughEdge = cell.HasRoadThroughEdge(direction);
+		<ins>bool previousHasRiver =</ins> cell.HasRiverThroughEdge(direction.Previous())<ins>;</ins>
+		<ins>bool nextHasRiver =</ins> cell.HasRiverThroughEdge(direction.Next())<ins>;</ins>
+		Vector2 interpolators = GetRoadInterpolators(direction, cell);
+		Vector3 roadCenter = center;
+
+		if (cell.HasRiverBeginOrEnd) {
+			roadCenter += HexMetrics.GetSolidEdgeMiddle(
+				cell.RiverBeginOrEndDirection.Opposite()
+			) * (1f / 3f);
+		}
+		else if (cell.IncomingRiver == cell.OutgoingRiver.Opposite()) {
+			<ins>if (previousHasRiver) {</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+			<ins>}</ins>
+		}
+
+		Vector3 mL = Vector3.Lerp(roadCenter, e.v1, interpolators.x);
+		Vector3 mR = Vector3.Lerp(roadCenter, e.v5, interpolators.y);
+		TriangulateRoad(roadCenter, mL, mR, e, hasRoadThroughEdge);
+		if (<ins>previousHasRiver</ins>) {
+			TriangulateRoadEdge(roadCenter, center, mL);
+		}
+		if (<ins>nextHasRiver</ins>) {
+			TriangulateRoadEdge(roadCenter, mR, center);
+		}</pre>
+						
+						<p>We have to push the road center towards the corner vector that points straight away from the river. If the river goes through the previous direction, then that's second solid corner. Otherwise, it's the first solid corner.</p>
+						
+						<pre translate="no">		else if (cell.IncomingRiver == cell.OutgoingRiver.Opposite()) {
+			<ins>Vector3 corner;</ins>
+			if (previousHasRiver) {
+				<ins>corner = HexMetrics.GetSecondSolidCorner(direction);</ins>
+			}
+			else {
+				<ins>corner = HexMetrics.GetFirstSolidCorner(direction);</ins>
+			}
+		}</pre>
+						
+						<p>To shift the road so it ends up adjacent to the river, we have to move the road center half of the way towards that corner. Then, we have to also move the cell center a quarter of the way in that direction.</p>
+						
+						<pre translate="no">		else if (cell.IncomingRiver == cell.OutgoingRiver.Opposite()) {
+			Vector3 corner;
+			if (previousHasRiver) {
+				corner = HexMetrics.GetSecondSolidCorner(direction);
+			}
+			else {
+				corner = HexMetrics.GetFirstSolidCorner(direction);
+			}
+			<ins>roadCenter += corner * 0.5f;</ins>
+			<ins>center += corner * 0.25f;</ins>
+		}</pre>
+						
+						<figure>
+							<img src="combining-rivers-and-roads/straight-adjusted.png" width="270" height="180">
+							<figcaption>Separated roads.</figcaption>
+						</figure>
+						
+						<p>We have split the road network inside this cell. This is fine when there are roads on both sides of the river. But when one side doesn't have a road, we end up with a small bit of isolated road. That doesn't make much sense, so let's get rid of such parts.</p>
+						
+						<p>Verify that there is a road going through the current direction. If there isn't, check the other direction on the same side of the river for a road. If neither have a road going through them, jump out of the method before triangulating anything.</p>
+						
+						<pre translate="no">			if (previousHasRiver) {
+				<ins>if (</ins>
+					<ins>!hasRoadThroughEdge &amp;&amp;</ins>
+					<ins>!cell.HasRoadThroughEdge(direction.Next())</ins>
+				<ins>) {</ins>
+					<ins>return;</ins>
+				<ins>}</ins>
+				corner = HexMetrics.GetSecondSolidCorner(direction);
+			}
+			else {
+				<ins>if (</ins>
+					<ins>!hasRoadThroughEdge &amp;&amp;</ins>
+					<ins>!cell.HasRoadThroughEdge(direction.Previous())</ins>
+				<ins>) {</ins>
+					<ins>return;</ins>
+				<ins>}</ins>
+				corner = HexMetrics.GetFirstSolidCorner(direction);
+			}</pre>
+						
+						<figure>
+							<img src="combining-rivers-and-roads/straight-pruned.png" width="270" height="180">
+							<figcaption>Pruned roads.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What about bridges?</h3>
+							<div>
+								<p>We're limiting ourselves to just roads for now. Bridges and other structures will be covered in a future tutorial.</p>
+							</div>
+						</aside>
+						
+					</section>
+					
+					<section>
+						<h3>Zigzag Rivers</h3>
+						
+						<p>The next type of river that we'll deal with are zigzags. These rivers do not split the road network, so we only have to move the road center.</p>
+						
+						<figure>
+							<img src="combining-rivers-and-roads/zigzag-incorrect.png" width="270" height="180">
+							<figcaption>Zigzags cutting through roads.</figcaption>
+						</figure>
+						
+						<p>The simplest way to check for zigzags is to compare the directions of the incoming and outgoing rivers. If they're adjacent, then we have a zigzag. This leads to two possible cases, depending on the flow direction.</p>
+						
+						<pre translate="no">		if (cell.HasRiverBeginOrEnd) {
+			&hellip;
+		}
+		else if (cell.IncomingRiver == cell.OutgoingRiver.Opposite()) {
+			&hellip;
+		}
+		<ins>else if (cell.IncomingRiver == cell.OutgoingRiver.Previous()) {</ins>
+		<ins>}</ins>
+		<ins>else if (cell.IncomingRiver == cell.OutgoingRiver.Next()) {</ins>
+		<ins>}</ins></pre>
+						
+						<p>We can move the road center by using one of the corners of the incoming river direction. Which corner it is depends on the flow direction. Push the road center away from that corner with a factor of 0.2.</p>
+						
+						<pre translate="no">		else if (cell.IncomingRiver == cell.OutgoingRiver.Previous()) {
+			<ins>roadCenter -= HexMetrics.GetSecondCorner(cell.IncomingRiver) * 0.2f;</ins>
+		}
+		else if (cell.IncomingRiver == cell.OutgoingRiver.Next()) {
+			<ins>roadCenter -= HexMetrics.GetFirstCorner(cell.IncomingRiver) * 0.2f;</ins>
+		}</pre>
+						
+						<figure>
+							<img src="combining-rivers-and-roads/zigzag-adjusted.png" width="270" height="180">
+							<figcaption>Road pushed away from the zigzags.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Inside of Curved Rivers</h3>
+						
+						<p>The final river configuration is a smooth curve. Like a straight river, this one can also disconnect roads. But in this case, the sides are different. We'll first deal with the inside of the curve.</p>
+						
+						<figure>
+							<img src="combining-rivers-and-roads/curved-incorrect.png" width="270" height="180">
+							<figcaption>Curved river with overlapping roads.</figcaption>
+						</figure>
+						
+						<p>When there's a river on both sides of the current direction, then we're on the inside of a curve.</p>
+						
+						<pre translate="no">		else if (cell.IncomingRiver == cell.OutgoingRiver.Next()) {
+			&hellip;
+		}
+		<ins>else if (previousHasRiver &amp;&amp; nextHasRiver) {</ins>
+		<ins>}</ins></pre>
+						
+						<p>We have to pull the road center towards the current cell edge, shortening the road by a lot. A factor of 0.7 is fine. The cell center has to move as well, with a factor of 0.5.</p>
+						
+						<pre translate="no">		else if (previousHasRiver &amp;&amp; nextHasRiver) {
+			<ins>Vector3 offset = HexMetrics.GetSolidEdgeMiddle(direction) *</ins>
+				<ins>HexMetrics.innerToOuter;</ins>
+			<ins>roadCenter += offset * 0.7f;</ins>
+			<ins>center += offset * 0.5f;</ins>
+		}</pre>
+						
+						<figure>
+							<img src="combining-rivers-and-roads/curved-inside-adjusted.png" width="270" height="180">
+							<figcaption>Shortened roads.</figcaption>
+						</figure>
+						
+						<p>Like with straight rivers, we'll have to prune isolated road parts. In this case, we only have to check the current direction.</p>
+						
+						<pre translate="no">		else if (previousHasRiver &amp;&amp; nextHasRiver) {
+			<ins>if (!hasRoadThroughEdge) {</ins>
+				<ins>return;</ins>
+			<ins>}</ins>
+			Vector3 offset = HexMetrics.GetSolidEdgeMiddle(direction) *
+				HexMetrics.innerToOuter;
+			roadCenter += offset * 0.7f;
+			center += offset * 0.5f;
+		}</pre>
+						
+						<figure>
+							<img src="combining-rivers-and-roads/curved-inside-pruned.png" width="270" height="180">
+							<figcaption>Pruned roads.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Outside of Curved Rivers</h3>
+						
+						<p>After checking all the previous cases, the only remaining possibility is that we're on the outside of a curving river. There are three cell parts on the outside. We have to find the middle direction. Once we have it, we can move the road center towards that edge by a factor of 0.25.</p>
+						
+						<pre translate="no">		else if (previousHasRiver &amp;&amp; nextHasRiver) {
+			&hellip;
+		}
+		<ins>else {</ins>
+			<ins>HexDirection middle;</ins>
+			<ins>if (previousHasRiver) {</ins>
+				<ins>middle = direction.Next();</ins>
+			<ins>}</ins>
+			<ins>else if (nextHasRiver) {</ins>
+				<ins>middle = direction.Previous();</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>middle = direction;</ins>
+			<ins>}</ins>
+			<ins>roadCenter += HexMetrics.GetSolidEdgeMiddle(middle) * 0.25f;</ins>
+		<ins>}</ins></pre>
+						
+						<figure>
+							<img src="combining-rivers-and-roads/curved-outside-adjusted.png" width="270" height="180">
+							<figcaption>Adjusted roads on the outside.</figcaption>
+						</figure>
+						
+						<p>As a final step, we have to prune roads on this side of the river as well. The simplest way it to check all three directions for a road, relative to the middle. If there is no road, abort.</p>
+						
+						<pre translate="no">		else {
+			HexDirection middle;
+			if (previousHasRiver) {
+				middle = direction.Next();
+			}
+			else if (nextHasRiver) {
+				middle = direction.Previous();
+			}
+			else {
+				middle = direction;
+			}
+			<ins>if (</ins>
+				<ins>!cell.HasRoadThroughEdge(middle) &amp;&amp;</ins>
+				<ins>!cell.HasRoadThroughEdge(middle.Previous()) &amp;&amp;</ins>
+				<ins>!cell.HasRoadThroughEdge(middle.Next())</ins>
+			<ins>) {</ins>
+				<ins>return;</ins>
+			<ins>}</ins>
+			roadCenter += HexMetrics.GetSolidEdgeMiddle(middle) * 0.25f;
+		}</pre>
+						
+						<figure>
+							<img alt="not pruned" src="combining-rivers-and-roads/curved-outside-not-pruned.png" width="270" height="180">
+							<img alt="pruned" src="combining-rivers-and-roads/curved-outside-pruned.png" width="270" height="180">
+							<figcaption>Roads before and after pruning.</figcaption>
+						</figure>
+						
+						<p>Having covered all river scenarios, our rivers and road can now coexist. The rivers ignore roads, and the roads adjust to the rivers.</p>
+						
+						<figure>
+							<img src="combining-rivers-and-roads/rivers-and-roads.png" width="420" height="274">
+							<figcaption>Combining rivers and roads.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="combining-rivers-and-roads/combining-rivers-and-roads.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Road Appearance</h2>
+					
+					<p>Up to this point, we've used the road's UV coordinates as its colors. Because we're only varying the U coordinate, what we're really visualizing is the transition between the middle of the road and the edge.</p>
+					
+					<figure>
+						<img src="road-appearance/uv.png" width="350" height="200">
+						<figcaption>Showing UV coordinates.</figcaption>
+					</figure>
+					
+					<p>Now that we are sure that the roads are triangulated correctly, we can change the road shader so it renders something more road-like. Just as for rivers, this will be a simple visualization, nothing fancy.</p>
+					
+					<p>We'll begin by using a solid color for the roads. Just use the material's color. I made it red.</p>
+					
+					<pre translate="no" class="shader">		void surf (Input IN, inout SurfaceOutputStandard o) {
+			fixed4 c = <ins>_Color</ins>;
+			
+			o.Albedo = c.rgb;
+			o.Metallic = _Metallic;
+			o.Smoothness = _Glossiness;
+			o.Alpha = c.a;
+		}</pre>
+					
+					<figure>
+						<img src="road-appearance/red.png" width="350" height="200">
+						<figcaption>Red roads.</figcaption>
+					</figure>
+					
+					<p>This already looks a lot better! But let's continue by blending the road with the terrain, by using the U coordinate as a blend factor.</p>
+					
+					<pre translate="no" class="shader">		void surf (Input IN, inout SurfaceOutputStandard o) {
+			fixed4 c = _Color;
+			<ins>float blend = IN.uv_MainTex.x;</ins>
+			
+			o.Albedo = c.rgb;
+			o.Metallic = _Metallic;
+			o.Smoothness = _Glossiness;
+			o.Alpha = <ins>blend</ins>;
+		}</pre>
+					
+					<p>This seems to have no effect. That's because our shader is opaque. It now needs to be alpha-blended. Specifically, we need a blending decal surface shader. We can get the desired shader by adding <code class="shader">decal:blend</code> to the <code class="shader">#pragma surface</code> directive.</p>
+					
+					<pre translate="no" class="shader">		#pragma surface surf Standard fullforwardshadows <ins>decal:blend</ins></pre>
+					
+					<figure>
+						<img src="road-appearance/decal.png" width="350" height="200">
+						<figcaption>Blending roads.</figcaption>
+					</figure>
+					
+					<p>This produces a smooth linear blend from middle to edge, which doesn't look very good. To make it look like a road, we need a solid region, followed by a quick transition to an opaque region. We can use the <code class="shader">smoothstep</code> function for this. It turns a linear progression form 0 to 1 into an S-curve.</p>
+					
+					<figure>
+						<img src="road-appearance/smoothstep-curve.png" width="200" height="200">
+						<figcaption>Linear and smoothstep.</figcaption>
+					</figure>
+					
+					<p>The <code class="shader">smoothstep</code> function has a minimum and maximum parameter, to fit the curve inside an arbitrary range. Inputs outside of this range are clamped so the curve becomes flat. Let's use 0.4 as the start of the curve and 0.7 and the end. This means that U coordinates from 0 to 0.4 will be fully transparent. And U coordinates from 0.7 to 1 will be fully opaque. The transition happens between 0.4 and 0.7.</p>
+					
+					<pre translate="no" class="shader">			float blend = IN.uv_MainTex.x;
+			<ins>blend = smoothstep(0.4, 0.7, blend);</ins></pre>
+					
+					<figure>
+						<img src="road-appearance/smoothstep.png" width="350" height="200">
+						<figcaption>Quick transition between opaque and transparent.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Noisy Road</h3>
+						
+						<p>Because the road mesh gets perturbed, the roads have varying widths. As a result, the width of the edge transition varies as well. Sometimes it is fuzzy, sometimes it is sharp. This variability is fine when we think of our roads as dirt or sand roads.</p>
+						
+						<p>Let's go a step further and add some noise to the road edges. This will make them look more rugged and less polygonal. We can do this by sampling our noise texture. We can use the world XZ coordinates to sample it, just like we do when perturbing cell vertices.</p>
+						
+						<p>To access the world position in the surface shader, add <code class="shader">float3 worldPos</code> to the input structure.</p>
+						
+						<pre translate="no" class="shader">		struct Input {
+			float2 uv_MainTex;
+			<ins>float3 worldPos;</ins>
+		};</pre>
+						
+						<p>Now we can use that position in <code class="shader">surf</code> to sample the main texture. Make sure to scale down the coordinates, otherwise the texture will tile too quickly.</p>
+						
+						<pre translate="no" class="shader">			<ins>float4 noise = tex2D(_MainTex, IN.worldPos.xz * 0.025);</ins>
+			fixed4 c = _Color;
+			float blend = IN.uv_MainTex.x;</pre>
+						
+						<p>Perturb the transition by multiplying the U coordinate with <code class="shader">noise.x</code>. But because the noise values are 0.5 on average, that would wipe out most of the roads. To prevent this, add 0.5 to the noise before multiplying.</p>
+						
+						<pre translate="no" class="shader">			float blend = IN.uv_MainTex.x;
+			<ins>blend *= noise.x + 0.5;</ins>
+			blend = smoothstep(0.4, 0.7, blend);</pre>
+						
+						<figure>
+							<img alt="inspector" src="road-appearance/inspector.png" width="320" height="136">
+							<img alt="scene" src="road-appearance/perturbed.png" width="350" height="200">
+							<figcaption>Perturbed road edges.</figcaption>
+						</figure>
+						
+						<p>To wrap things up, let's also perturb the road color. This gives the roads a hint of dirtiness to match their messy edges.</p>
+						
+						<p>Multiply the color by a different noise channel, say <code class="shader">noise.y</code>. This will half the color on average. As that is a bit much, scale down the noise somewhat and add a constant so the total can still reach 1.</p>
+						
+						<pre translate="no" class="shader">			fixed4 c = _Color <ins>* (noise.y * 0.75 + 0.25)</ins>;</pre>
+						
+						<figure>
+							<img src="road-appearance/colorized.png" width="350" height="200">
+							<figcaption>Messy roads.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../part-8/index.html">Water</a>.</p>
+					</section>
+					
+					<a href="road-appearance/road-appearance.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Hex-Map-7.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

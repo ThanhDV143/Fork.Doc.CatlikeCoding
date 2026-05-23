@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html>
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/marching-squares-4/">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/marching-squares-4/tutorial-image.jpg">
+		<meta property="og:image:width" content="750">
+		<meta property="og:image:height" content="430">
+		<meta property="og:description" content="A Unity C# scripting tutorial in which you will add walls to a Marching Squares surface and refactor code.">
+		<meta name="description" content="A Unity C# scripting tutorial in which you will add wall to a Marching Squares surface and refactor code.">
+		<meta property="og:title" content="Marching Squares 4, a Unity C# Tutorial">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Marching Squares 4, a Unity C# Tutorial</title>
+		<link href="../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../site.webmanifest.html">
+
+
+		<script>
+			var customTypes = {
+				Voxel: 1,
+				VoxelGrid: 1,
+				VoxelGridSurface: 1,
+				VoxelGridWall: 1,
+				VoxelMap: 1,
+				VoxelStencil: 1,
+				VoxelStencilCircle: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../products/utilities/frame-rate-counter/index.html"><img src="../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<p><a href="../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></p>
+			<p class="category"><a href="../index.html">Unity C# Tutorials</a></p>
+		</header>
+		
+		<main>
+			<article itemscope itemtype="http://schema.org/TechArticle">
+				<header>
+					<h1 itemprop="name headline">Marching Squares 4</h1>
+					<p>Erecting Walls</p>
+					<ul>
+						<li>Refactor code.</li>
+						<li>Construct walls.</li>
+						<li>Add normals.</li>
+					</ul>
+				</header>
+
+				<p itemprop="about description">In this tutorial we'll add some depth to Marching Squares, and refactor some code.</p>
+
+				<p itemprop="dependencies">This tutorial comes after <a href="../marching-squares-3/index.html">Marching Squares 3</a>. Like the previous ones, it has been made with Unity 4.5.2 and might not work for older versions.</p>
+
+				<figure>
+					<img src="tutorial-image.jpg" width="375" height="215" itemprop="image">
+					<figcaption>You'll add some depth to your shapes.</figcaption>
+				</figure>
+
+				<section>
+					<h2>Refactoring Code</h2>
+					
+					<p>While Marching Squares is strictly 2D, we have no obligation to keep its visualization perfectly flat. For example, we could place walls at the borders between filled and empty space. However, that entails triangulating even more stuff, and <code>VoxelGrid</code> is already quite a large class. So let's see if we can split it up.</p>
+					
+					<p>The main responsibility of <code>VoxelGrid</code> is to manage voxels and figure out how to triangulate them. To do so it also needs to manage a vertex cache and know how to convert polygons into mesh data. But if we were to change our meshing approach it wouldn't really affect the voxel management part. This indicates that we could isolate these chunks of functionality from each other.</p>
+					
+					<figure>
+						<img src="01-separation-of-concerns.png" width="320" height="130">
+						<figcaption>Separation of concerns.</figcaption>
+					</figure>
+					
+					<p>So let's create a <code>VoxelGridSurface</code> class to take care of the mesh, vertices, triangles, and caches. Just copy the existing fields from <code>VoxelGrid</code>.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+<ins>using System.Collections.Generic;</ins>
+
+<ins>public class VoxelGridSurface : MonoBehaviour {</ins>
+
+	private Mesh mesh;
+	
+	private List&lt;Vector3> vertices;
+	private List&lt;int> triangles;
+	
+	private int[] rowCacheMax, rowCacheMin;
+	private int edgeCacheMin, edgeCacheMax;
+
+<ins>}</ins></pre>
+					
+					<p>Also copy the initialization code into a new <code>Initialize</code> method. Adjust the mesh's name to indicate that it is now managed by a different class.</p>
+					
+					<pre translate="no">	<ins>public void Initialize (int resolution) {</ins>
+		GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();
+		mesh.name = <ins>"VoxelGridSurface Mesh"</ins>;
+		vertices = new List&lt;Vector3>();
+		triangles = new List&lt;int>();
+		rowCacheMax = new int[resolution * 2 + 1];
+		rowCacheMin = new int[resolution * 2 + 1];
+	<ins>}</ins></pre>
+					
+					<p>Now create a prefab with our new <code>VoxelGridSurface</code> component. It also needs a <code>MeshFilter</code> and a <code>MeshRenderer</code> with our flat material, just like the <i>Voxel Grid</i> prefab.</p>
+					
+					<figure>
+						<img src="01-surface-prefab.png" width="320" height="363">
+						<figcaption>The surface as a prefab.</figcaption>
+					</figure>
+					
+					<p>Add a prefab variable to <code>VoxelGrid</code>, so we can connect the prefabs. As it will no longer create a mesh for itself, the <i>Voxel Grid</i> prefab no longer needs its mesh components.</p>
+					
+					<pre translate="no">	<ins>public VoxelGridSurface surfacePrefab;</ins></pre>
+					
+					<figure>
+						<img src="01-grid-prefab.png" width="320" height="264">
+						<figcaption>Trimmed-down grid prefab.</figcaption>
+					</figure>
+					
+					<aside>
+						<h3>Why a separate prefab?</h3>
+						
+						<div>
+							<p>We could also have <code>VoxelGrid</code> construct a surface instance through code, or bake the surface instance into the grid prefab. The choice of a separate prefab means that all the details of construction and mesh components are completely removed from the voxel grid itself.</p>
+							<p>Also, it will make it easier to attach multiple surfaces to a single voxel grid. While this is not something we're interested in right now, we might in a future tutorial.</p>
+						</div>
+					</aside>
+					
+					<p><code>VoxelGrid</code> now has to instantiate the surface prefab when it is initialized, instead of creating its own mesh and cache data. To position it correctly, make it a child of the grid.</p>
+					
+					<pre translate="no">	<ins>private VoxelGridSurface surface;</ins>
+
+	public void Initialize (int resolution, float size, float maxFeatureAngle) {
+		&hellip;
+		
+		for (int i = 0, y = 0; y &lt; resolution; y++) {
+			for (int x = 0; x &lt; resolution; x++, i++) {
+				CreateVoxel(i, x, y);
+			}
+		}
+		
+		<ins>surface = Instantiate(surfacePrefab) as VoxelGridSurface;</ins>
+		<ins>surface.transform.parent = transform;</ins>
+		<ins>surface.transform.localPosition = Vector3.zero;</ins>
+		<ins>surface.Initialize(resolution);</ins>
+		
+		Refresh();
+	}</pre>
+					
+					<p>Now transplant the <code>AddTriangle</code>, <code>AddQuad</code>, <code>AddPentagon</code>, and <code>AddHexagon</code> methods from <code>VoxelGrid</code> to <code>VoxelGridSurface</code>. Do the same with the other <code>Add&hellip;</code> methods &ndash; <code>AddTriangleA</code> and so on &ndash; and make them public.</p>
+					
+					<p>We now get lots of compile errors in <code>VoxelGrid</code>, as its methods are gone. To fix this, prepend <code>surface.</code> to all invocations of those methods, redirecting them to the surface instance. This fixes the errors.</p>
+					
+					<p>After that, delete the mesh and cache fields from <code>VoxelGrid</code>. You can also remove the <code>using System.Collections.Generic</code> statement, as we no longer create any generic lists here.</p>
+					
+					<p>Of course we again get compile errors. Let's start by fixing <code>Triangulate</code>. It tries to clear and apply changes to the mesh, which is now gone. Instead, delegate these tasks to the surface.</p>
+					
+					<pre translate="no">	private void Triangulate () {
+		<ins>surface.Clear();</ins>
+		FillFirstRowCache();
+		TriangulateCellRows();
+		if (yNeighbor != null) {
+			TriangulateGapRow();
+		}
+		<ins>surface.Apply();</ins>
+	}</pre>
+					
+					<p>The old code gets a new home in <code>VoxelGridSurface</code>.</p>
+					
+					<pre translate="no">	<ins>public void Clear () {</ins>
+		vertices.Clear();
+		triangles.Clear();
+		mesh.Clear();
+	<ins>}</ins>
+	
+	<ins>public void Apply () {</ins>
+		mesh.vertices = vertices.ToArray();
+		mesh.triangles = triangles.ToArray();
+	<ins>}</ins></pre>
+					
+					<p>Now we have to deal with the caching code. Let's extract the minimum code that accesses the caches and vertices and put it in new methods for <code>VoxelGridSurface</code>. While we are at it, we can simplify the caching of edge intersections by using the edge point properties that we added in the previous tutorial.</p>
+					
+					<pre translate="no">	<ins>public void CacheFirstCorner (Voxel voxel) {</ins>
+		rowCacheMax[0] = vertices.Count;
+		vertices.Add(voxel.position);
+	<ins>}</ins>
+	
+	<ins>public void CacheNextCorner (int i, Voxel voxel) {</ins>
+		rowCacheMax[i + 2] = vertices.Count;
+		vertices.Add(voxel.position);
+	<ins>}</ins>
+	
+	<ins>public void CacheXEdge (int i, Voxel voxel) {</ins>
+		rowCacheMax[i + 1] = vertices.Count;
+		vertices.Add(<ins>voxel.XEdgePoint</ins>);
+	}
+	
+	<ins>public void CacheYEdge (Voxel voxel) {</ins>
+		edgeCacheMax = vertices.Count;
+		vertices.Add(<ins>voxel.YEdgePoint</ins>);
+	<ins>}</ins>
+	
+	<ins>public void PrepareCacheForNextCell () {</ins>
+		yEdgeMin = yEdgeMax;
+	<ins>}</ins>
+	
+	<ins>public void PrepareCacheForNextRow () {</ins>
+		int[] rowSwap = rowCacheMin;
+		rowCacheMin = rowCacheMax;
+		rowCacheMax = rowSwap;
+	<ins>}</ins></pre>
+					
+					<p>From now on <code>VoxelGrid</code> will have to use these methods.</p>
+					
+					<pre translate="no">	private void CacheFirstCorner (Voxel voxel) {
+		if (voxel.state) {
+			<ins>surface.CacheFirstCorner(voxel);</ins>
+		}
+	}
+	
+	private void CacheNextEdgeAndCorner (int i, Voxel xMin, Voxel xMax) {
+		if (xMin.state != xMax.state) {
+			<ins>surface.CacheXEdge(i, xMin);</ins>
+		}
+		if (xMax.state) {
+			<ins>surface.CacheNextCorner(i, xMax);</ins>
+		}
+	}
+	
+	private void CacheNextMiddleEdge (Voxel yMin, Voxel yMax) {
+		<ins>surface.PrepareCacheForNextCell();</ins>
+		if (yMin.state != yMax.state) {
+			<ins>surface.CacheYEdge(yMin);</ins>
+		}
+	}
+	
+	private void SwapRowCaches () {
+		<ins>surface.PrepareCacheForNextRow();</ins>
+	}</pre>
+					
+					<p>It works again, and <code>VoxelGrid</code> no longer needs to worry about the details of the cache arrays. Or does it? It still has to double the cell's row index to provide a cache index. It would make more sense to simply pass along the current cell's row index unmodified. So let's do that instead!</p>
+					
+					<pre translate="no">	private void FillFirstRowCache () {
+		CacheFirstCorner(voxels[0]);
+		int i;
+		for (i = 0; i &lt; resolution - 1; i++) {
+			CacheNextEdgeAndCorner(<ins>i</ins>, voxels[i], voxels[i + 1]);
+		}
+		if (xNeighbor != null) {
+			dummyX.BecomeXDummyOf(xNeighbor.voxels[0], gridSize);
+			CacheNextEdgeAndCorner(<ins>i</ins>, voxels[i], dummyX);
+		}
+	}
+	
+	private void TriangulateCellRows () {
+		&hellip;
+			for (int x = 0; x &lt; cells; x++, i++) {
+				Voxel
+					a = voxels[i],
+					b = voxels[i + 1],
+					c = voxels[i + resolution],
+					d = voxels[i + resolution + 1];
+				CacheNextEdgeAndCorner(<ins>x</ins>, c, d);
+				CacheNextMiddleEdge(b, d);
+				TriangulateCell(<ins>x</ins>, a, b, c, d);
+			}
+		&hellip;
+	}
+	
+	private void TriangulateGapCell (int i) {
+		&hellip;
+		int cacheIndex = <ins>resolution - 1</ins>;
+		&hellip;
+	}
+	
+	private void TriangulateGapRow () {
+		&hellip;
+		for (int x = 0; x &lt; cells; x++) {
+			Voxel dummySwap = dummyT;
+			dummySwap.BecomeYDummyOf(yNeighbor.voxels[x + 1], gridSize);
+			dummyT = dummyY;
+			dummyY = dummySwap;
+			CacheNextEdgeAndCorner(<ins>x</ins>, dummyT, dummyY);
+			CacheNextMiddleEdge(voxels[x + offset + 1], dummyY);
+			TriangulateCell(
+				<ins>x</ins>, voxels[x + offset], voxels[x + offset + 1], dummyT, dummyY);
+		}
+
+		if (xNeighbor != null) {
+			dummyT.BecomeXYDummyOf(xyNeighbor.voxels[0], gridSize);
+			CacheNextEdgeAndCorner(<ins>cells</ins>, dummyY, dummyT);
+			CacheNextMiddleEdge(dummyX, dummyT);
+			TriangulateCell(
+				<ins>cells</ins>, voxels[voxels.Length - 1], dummyX, dummyY, dummyT);
+		}
+	}</pre>
+					
+					<p>Too keep the cache functional, we'll now have to double the index in <code>VoxelGridSurface</code>. But let's change things so we don't have to, by splitting the cache rows into separate arrays for corners and edges. Let's do some renaming too.</p>
+					
+					<figure>
+						<img src="01-caches.png" width="270" height="220">
+						<figcaption>The new cache structure.</figcaption>
+					</figure>
+					
+					<p>First rename <code>edgeCacheMin</code> to <code>yEdgeMin</code> and <code>edgeCacheMax</code> to <code>yEdgeMax</code>. Then rename <code>rowCacheMin</code> to <code>cornersMin</code> and <code>rowCacheMax</code> to <code>cornersMax</code>. Then add two new arrays for the X edges.</p>
+					
+					<pre translate="no">	private int[] cornersMin, cornersMax;
+	<ins>private int[] xEdgesMax, xEdgesMin;</ins>
+	private int yEdgeMin, yEdgeMax;</pre>
+					
+					<p>Next, include these arrays in <code>Initialize</code> and <code>PrepareCacheForNextRow</code>.</p>
+					
+					<pre translate="no">	public void Initialize (int resolution) {
+		&hellip;
+		cornersMax = new int[<ins>resolution + 1</ins>];
+		cornersMin = new int[<ins>resolution + 1</ins>];
+		<ins>xEdgesMax = new int[resolution];</ins>
+		<ins>xEdgesMin = new int[resolution];</ins>
+	}
+	
+	public void PrepareCacheForNextRow () {
+		&hellip;
+		<ins>rowSwap = xEdgesMax;</ins>
+		<ins>xEdgesMax = xEdgesMin;</ins>
+		<ins>xEdgesMin = rowSwap;</ins>
+	}</pre>
+					
+					<p>Now we have to rewrite some code fragments. Replace <code>cornersMin[i + 1]</code> with <code>xEdgesMax[i]</code> and <code>cornersMax[i + 1]</code> with <code>xEdgesMin[i]</code>. That way every access to the X edges will work with the new arrays.</p>
+					
+					<p>Finally, correct the corner cache indices by replacing <code>[i + 2]</code> with <code>[i + 1]</code>. It is important to do this last, otherwise we would mix up corners and edges.</p>
+					
+					<aside>
+						<h3>Does this require tedious manual work?</h3>
+						
+						<div>
+							<p>While you could do it by hand, it is a really good idea to use the capabilities of your code editor. The options vary between IDEs, but all of them should at least have basic replace functionality. If used properly, it both makes you life easier and leads to less errors.</p>
+						</div>
+					</aside>
+
+					<a href="ms4-01-refactoring-code.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Adding Depth</h2>
+					
+					<p>With that out of the way, it's time to add some walls! And to keep from overburdening <code>VoxelGrid</code> again, let's create a new <code>VoxelGridWall</code> class to take care of the required meshing and caching. The basic structure is the same as <code>VoxelGridSurface</code>, except that walls always go through cell edges and never go through corners. So we don't need to cache corner vertices.</p>
+					
+					<figure>
+						<img src="02-caches.png" width="270" height="220">
+						<figcaption>Walls need no corners.</figcaption>
+					</figure>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+<ins>using System.Collections.Generic;</ins>
+
+<ins>public class VoxelGridWall : MonoBehaviour {</ins>
+
+	<ins>private Mesh mesh;</ins>
+	
+	<ins>private List&lt;Vector3> vertices;</ins>
+	<ins>private List&lt;int> triangles;</ins>
+	
+	<ins>private int[] xEdgesMin, xEdgesMax;</ins>
+	<ins>private int yEdgeMin, yEdgeMax;</ins>
+
+	<ins>public void Initialize (int resolution) {</ins>
+		<ins>GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();</ins>
+		<ins>mesh.name = "VoxelGridWall Mesh";</ins>
+		<ins>vertices = new List&lt;Vector3>();</ins>
+		<ins>triangles = new List&lt;int>();</ins>
+		<ins>xEdgesMin = new int[resolution];</ins>
+		<ins>xEdgesMax = new int[resolution];</ins>
+	<ins>}</ins>
+	
+	<ins>public void Clear () {</ins>
+		<ins>vertices.Clear();</ins>
+		<ins>triangles.Clear();</ins>
+		<ins>mesh.Clear();</ins>
+	<ins>}</ins>
+	
+	<ins>public void Apply () {</ins>
+		<ins>mesh.vertices = vertices.ToArray();</ins>
+		<ins>mesh.triangles = triangles.ToArray();</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+					
+					<p>As the voxel data doesn't include height, we have to tell the wall how high it should be. We do that by adding a bottom and top offset to control the wall's dimensions placement.</p>
+					
+					<pre translate="no">	<ins>public float bottom, top;</ins></pre>
+					
+					<p>Now create a prefab for it, just like we did for <code>VoxelGridSurface</code>. Let's use the voxel surface to define where the top of the wall is. Because the surface has no elevation, set the wall's top to <b>0</b> and bottom somewhere below that, say at <b>&minus;0.1</b>.</p>
+					
+					<figure>
+						<img src="02-wall-prefab.png" width="320" height="250">
+						<figcaption>Wall prefab.</figcaption>
+					</figure>
+					
+					<p>Again add prefab and instance variables to <code>VoxelGrid</code> and connect the prefabs.</p>
+					
+					<pre translate="no">	<ins>public VoxelGridWall wallPrefab;</ins>
+
+	<ins>private VoxelGridWall wall;</ins></pre>
+					
+					<figure>
+						<img src="02-grid-prefab.png" width="320" height="224">
+						<figcaption>Now with both surface and wall prefabs.</figcaption>
+					</figure>
+					
+					<p>Caching is different for <code>VoxelGridWall</code>, because it has to store two vertices per edge intersection. One for the bottom, and one for the top of the wall. Because these two vertices will aways be put into the vertex array together, we can suffice with caching only a single index per edge intersection, which would be the bottom one. Note that this means that the caches will only contain odd indices, never even indices.</p>
+					
+					<figure>
+						<img src="02-cache-bottom.png" width="170" height="150">
+						<figcaption>Only bottom indices need to be cached.</figcaption>
+					</figure>
+					
+					<pre translate="no">	<ins>public void CacheXEdge (int i, Voxel voxel) {</ins>
+		<ins>xEdgesMax[i] = vertices.Count;</ins>
+		<ins>Vector3 v = voxel.XEdgePoint;</ins>
+		<ins>v.z = bottom;</ins>
+		<ins>vertices.Add(v);</ins>
+		<ins>v.z = top;</ins>
+		<ins>vertices.Add(v);</ins>
+	<ins>}</ins>
+	
+	<ins>public void CacheYEdge (Voxel voxel) {</ins>
+		<ins>yEdgeMax = vertices.Count;</ins>
+		<ins>Vector3 v = voxel.YEdgePoint;</ins>
+		<ins>v.z = bottom;</ins>
+		<ins>vertices.Add(v);</ins>
+		<ins>v.z = top;</ins>
+		<ins>vertices.Add(v);</ins>
+	<ins>}</ins>
+	
+	<ins>public void PrepareCacheForNextCell () {</ins>
+		<ins>yEdgeMin = yEdgeMax;</ins>
+	<ins>}</ins>
+	
+	<ins>public void PrepareCacheForNextRow () {</ins>
+		<ins>int[] swap = xEdgesMin;</ins>
+		<ins>xEdgesMin = xEdgesMax;</ins>
+		<ins>xEdgesMax = swap;</ins>
+	<ins>}</ins></pre>
+					
+					<p>Now we can include the wall in the initialization and caching code of <code>VoxelGrid</code>.</p>
+					
+					<pre translate="no">	public void Initialize (int resolution, float size, float maxFeatureAngle) {
+		&hellip;
+
+		<ins>wall = Instantiate(wallPrefab) as VoxelGridWall;</ins>
+		<ins>wall.transform.parent = transform;</ins>
+		<ins>wall.transform.localPosition = Vector3.zero;</ins>
+		<ins>wall.Initialize(resolution);</ins>
+
+		Refresh();
+	}
+	
+	private void Triangulate () {
+		surface.Clear();
+		<ins>wall.Clear();</ins>
+		&hellip;
+		surface.Apply();
+		<ins>wall.Apply();</ins>
+	}
+					
+	private void CacheNextEdgeAndCorner (int i, Voxel xMin, Voxel xMax) {
+		if (xMin.state != xMax.state) {
+			surface.CacheXEdge(i, xMin);
+			<ins>wall.CacheXEdge(i, xMin);</ins>
+		}
+		if (xMax.state) {
+			surface.CacheNextCorner(i, xMax);
+		}
+	}
+
+	private void CacheNextMiddleEdge (Voxel yMin, Voxel yMax) {
+		surface.PrepareCacheForNextCell();
+		<ins>wall.PrepareCacheForNextCell();</ins>
+		if (yMin.state != yMax.state) {
+			surface.CacheYEdge(yMin);
+			<ins>wall.CacheYEdge(yMin);</ins>
+		}
+	}
+
+	private void SwapRowCaches () {
+		surface.PrepareCacheForNextRow();
+		<ins>wall.PrepareCacheForNextRow();</ins>
+	}</pre>
+					
+					<a href="ms4-02-adding-depth.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Building Walls</h2>
+					
+					<p>We have the vertices, now to actually triangulate the walls. A single straight wall section is simply a quad. Because the cached bottom and top vertices are paired, we need just two vertex indices to construct one.</p>
+					
+					<p>Besides that, we also need to know which side of the wall is facing outward so we can use the correct triangle winding order. Let's say that placing wall segments in a clockwise order will indicate that the walls should face outward.</p>
+					
+					<figure>
+						<img src="03-section.png" width="480" height="160">
+						<figcaption>Constructing a wall section.</figcaption>
+					</figure>
+					
+					<pre translate="no">	<ins>private void AddSection (int a, int b) {</ins>
+		<ins>triangles.Add(a);</ins>
+		<ins>triangles.Add(b);</ins>
+		<ins>triangles.Add(b + 1);</ins>
+		<ins>triangles.Add(a);</ins>
+		<ins>triangles.Add(b + 1);</ins>
+		<ins>triangles.Add(a + 1);</ins>
+	<ins>}</ins></pre>
+					
+					<p>If a cell has a sharp feature, we can simply use two wall sections to correctly triangulate it. Just like with the surface, we can support this via another method that accepts an extra point.</p>
+					
+					<pre translate="no">	<ins>private void AddSection (int a, int b, Vector3 extraPoint) {</ins>
+		<ins>int p = vertices.Count;</ins>
+		<ins>extraPoint.z = bottom;</ins>
+		<ins>vertices.Add(extraPoint);</ins>
+		<ins>extraPoint.z = top;</ins>
+		<ins>vertices.Add(extraPoint);</ins>
+		<ins>AddSection(a, p);</ins>
+		<ins>AddSection(p, b);</ins>
+	<ins>}</ins></pre>
+					
+					<p>But these methods are for private use. <code>VoxelGrid</code> will simply want a wall connection between two edges of a cell. It's up to <code>VoxelGridWall</code> to figure out which cache entries that maps to.</p>
+					
+					<p>Consider cell case 1. It should have a wall connecting the AC edge with the AB edge, either directly or via a sharp feature point. <code>VoxelGridWall</code> can facilitate this by adding two public methods.</p>
+					
+					<pre translate="no">	<ins>public void AddACAB (int i) {</ins>
+		<ins>AddSection(yEdgeMin, xEdgesMin[i]);</ins>
+	<ins>}</ins>
+	
+	<ins>public void AddACAB (int i, Vector2 extraVertex) {</ins>
+		<ins>AddSection(yEdgeMin, xEdgesMin[i], extraVertex);</ins>
+	<ins>}</ins></pre>
+					
+					<p>Now <code>VoxelGrid</code> can request walls for all case 1 cells.</p>
+					
+					<pre translate="no">	private void TriangulateCase1 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		Vector2 n1 = a.xNormal;
+		Vector2 n2 = a.yNormal;
+		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = GetIntersection(a.XEdgePoint, n1, a.YEdgePoint, n2);
+			if (ClampToCellMaxMax(ref point, a, d)) {
+				surface.AddQuadA(i, point);
+				<ins>wall.AddACAB(i, point);</ins>
+				return;
+			}
+		}
+		surface.AddTriangleA(i);
+		<ins>wall.AddACAB(i);</ins>
+	}</pre>
+					
+					<figure>
+						<img src="03-white-wall.png" width="240" height="220">
+						<figcaption>The first glimpse of a wall.</figcaption>
+					</figure>
+					
+					<p>To better distinguish between wall and surface, give the prefab another material. Just duplicating the 2D material and changing its color will do for now.</p>
+					
+					<figure>
+						<img alt="prefab" src="03-colored-wall-prefab.png" width="320" height="246">
+						<img alt="wall" src="03-colored-wall.png" width="180" height="180">
+						<figcaption>Color-coded walls.</figcaption>
+					</figure>
+					
+					<p>As you can start a wall from each edge and then go to one of the three other edges, there are twelve different ways to place a wall. This can be either without of with an extra feature point, so we end up with 24 public <code>Add&hellip;</code> methods for <code>VoxelGridWall</code>. It's simply a matter of picking the correct cache entries. Here are those starting at AB.</p>
+					
+					<figure>
+						<img src="03-ab-walls.png" width="270" height="220">
+						<figcaption>Walls starting at AB.</figcaption>
+					</figure>
+					
+					<pre translate="no">	<ins>public void AddABAC (int i) {</ins>
+		<ins>AddSection(xEdgesMin[i], yEdgeMin);</ins>
+	<ins>}</ins>
+	
+	<ins>public void AddABAC (int i, Vector2 extraVertex) {</ins>
+		<ins>AddSection(xEdgesMin[i], yEdgeMin, extraVertex);</ins>
+	<ins>}</ins>
+	
+	<ins>public void AddABBD (int i) {</ins>
+		<ins>AddSection(xEdgesMin[i], yEdgeMax);</ins>
+	<ins>}</ins>
+	
+	<ins>public void AddABBD (int i, Vector2 extraVertex) {</ins>
+		<ins>AddSection(xEdgesMin[i], yEdgeMax, extraVertex);</ins>
+	<ins>}</ins>
+
+	<ins>public void AddABCD (int i) {</ins>
+		<ins>AddSection(xEdgesMin[i], xEdgesMax[i]);</ins>
+	<ins>}</ins>
+	
+	<ins>public void AddABCD (int i, Vector2 extraVertex) {</ins>
+		<ins>AddSection(xEdgesMin[i], xEdgesMax[i], extraVertex);</ins>
+	<ins>}</ins></pre>
+					
+					<p>And those that start at AC. We already did ACAB.</p>
+					
+					<pre translate="no">	public void AddACAB (int i) {
+		AddSection(yEdgeMin, xEdgesMin[i]);
+	}
+	
+	public void AddACAB (int i, Vector2 extraVertex) {
+		AddSection(yEdgeMin, xEdgesMin[i], extraVertex);
+	}
+
+	<ins>public void AddACBD (int i) {</ins>
+		<ins>AddSection(yEdgeMin, yEdgeMax);</ins>
+	<ins>}</ins>
+	
+	<ins>public void AddACBD (int i, Vector2 extraVertex) {</ins>
+		<ins>AddSection(yEdgeMin, yEdgeMax, extraVertex);</ins>
+	<ins>}</ins>
+	
+	<ins>public void AddACCD (int i) {</ins>
+		<ins>AddSection(yEdgeMin, xEdgesMax[i]);</ins>
+	<ins>}</ins>
+	
+	<ins>public void AddACCD (int i, Vector2 extraVertex) {</ins>
+		<ins>AddSection(yEdgeMin, xEdgesMax[i], extraVertex);</ins>
+	<ins>}</ins></pre>
+					
+					<p>Next up are those starting at BD.</p>
+					
+					<pre translate="no">	<ins>public void AddBDAB (int i) {</ins>
+		<ins>AddSection(yEdgeMax, xEdgesMin[i]);</ins>
+	<ins>}</ins>
+	
+	<ins>public void AddBDAB (int i, Vector2 extraVertex) {</ins>
+		<ins>AddSection(yEdgeMax, xEdgesMin[i], extraVertex);</ins>
+	<ins>}</ins>
+
+	<ins>public void AddBDAC (int i) {</ins>
+		<ins>AddSection(yEdgeMax, yEdgeMin);</ins>
+	<ins>}</ins>
+	
+	<ins>public void AddBDAC (int i, Vector2 extraVertex) {</ins>
+		<ins>AddSection(yEdgeMax, yEdgeMin, extraVertex);</ins>
+	<ins>}</ins>
+
+	<ins>public void AddBDCD (int i) {</ins>
+		<ins>AddSection(yEdgeMax, xEdgesMax[i]);</ins>
+	<ins>}</ins>
+	
+	<ins>public void AddBDCD (int i, Vector2 extraVertex) {</ins>
+		<ins>AddSection(yEdgeMax, xEdgesMax[i], extraVertex);</ins>
+	<ins>}</ins></pre>
+					
+					<p>And finally those going from CD to the other edges.</p>
+					
+					<pre translate="no">	<ins>public void AddCDAB (int i) {</ins>
+		<ins>AddSection(xEdgesMax[i], xEdgesMin[i]);</ins>
+	<ins>}</ins>
+	
+	<ins>public void AddCDAB (int i, Vector2 extraVertex) {</ins>
+		<ins>AddSection(xEdgesMax[i], xEdgesMin[i], extraVertex);</ins>
+	<ins>}</ins>
+
+	<ins>public void AddCDAC (int i) {</ins>
+		<ins>AddSection(xEdgesMax[i], yEdgeMin);</ins>
+	<ins>}</ins>
+	
+	<ins>public void AddCDAC (int i, Vector2 extraVertex) {</ins>
+		<ins>AddSection(xEdgesMax[i], yEdgeMin, extraVertex);</ins>
+	<ins>}</ins>
+
+	<ins>public void AddCDBD (int i) {</ins>
+		<ins>AddSection(xEdgesMax[i], yEdgeMax);</ins>
+	<ins>}</ins>
+	
+	<ins>public void AddCDBD (int i, Vector2 extraVertex) {</ins>
+		<ins>AddSection(xEdgesMax[i], yEdgeMax, extraVertex);</ins>
+	<ins>}</ins></pre>
+					
+					<p>Now to use them in the triangulation methods of <code>VoxelGrid</code>. It's simply a matter of adding <code>wall.Add&hellip;</code> each time <code>surface.Add&hellip;</code> is invoked, like we already did for case 1. You just have to add the correct walls. I won't bother showing all the code, instead here's a table which shows which surface and wall methods belong together, and which cell cases use them.</p>
+					
+					<table>
+						<thead><tr><th>Surface</th><th>Wall</th><th>Cases</th></tr></thead>
+						<tbody>
+							<tr><td>A</td><td>ACAB</td><td>1, 9</td></tr>
+							<tr><td>B</td><td>ABBD</td><td>2, 6</td></tr>
+							<tr><td>C</td><td>CDAC</td><td>4, 6</td></tr>
+							<tr><td>D</td><td>BDCD</td><td>8, 9</td></tr>
+							<tr><td>ABC</td><td>CDBD</td><td>7</td></tr>
+							<tr><td>ABD</td><td>ACCD</td><td>11</td></tr>
+							<tr><td>ACD</td><td>BDAB</td><td>13</td></tr>
+							<tr><td>BCD</td><td>ABAC</td><td>14</td></tr>
+							<tr><td>AB</td><td>ACBD</td><td>3</td></tr>
+							<tr><td>AC</td><td>CDAB</td><td>5</td></tr>
+							<tr><td>BD</td><td>ABCD</td><td>10</td></tr>
+							<tr><td>CD</td><td>BDAC</td><td>12</td></tr>
+							<tr><td>BCToA</td><td>ABAC</td><td>6</td></tr>
+							<tr><td>BCToD</td><td>CDBD</td><td>6</td></tr>
+							<tr><td>ADToB</td><td>BDAB</td><td>9</td></tr>
+							<tr><td>ADToC</td><td>ACCD</td><td>9</td></tr>
+						</tbody>
+					</table>
+					
+					<figure>
+						<img src="03-walls.png" width="440" height="200">
+						<figcaption>Everything walled up.</figcaption>
+					</figure>
+					
+					<a href="ms4-03-building-walls.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Lighting the Walls</h2>
+					
+					<p>While we have complete walls now, they're all the same solid color without any lighting. Currently our directional light is shining straight at the surface. To get any variety in the lighting, give it some rotation, for example <b>(0, 315, 0)</b>.</p>
+					
+					<p>The result is still flat. This is because we're using our <i>Flat 2D</i> shader, which has fixed normals. We could use the standard diffuse shader instead, but that one wants texture coordinates and we don't have those. Fortunately, we can create a new wall shader by simply duplicating the <i>2D Flat</i> shader and removing the vertex program that inserts normals.</p>
+					
+					<pre translate="no">Shader <ins>"Custom/Wall"</ins> {
+	Properties {
+		_Color ("Color", Color) = (1,1,1,1)
+	}
+	SubShader {
+		Tags { "RenderType"="Opaque" }
+		LOD 200
+		
+		CGPROGRAM
+		<ins>#pragma surface surf Lambert</ins>
+		
+		fixed4 _Color;
+
+		struct Input {
+			float dummy;
+		};
+		
+		void surf (Input IN, inout SurfaceOutput o) {
+			o.Albedo = _Color.rgb;
+		}
+		ENDCG
+	} 
+	FallBack "Diffuse"
+}</pre>
+					<p>Then adjust the <i>Wall</i> material so it uses this new shader instead of the flat one.</p>
+					
+					<figure>
+						<img alt="material" src="04-wall-material.png" width="320" height="70">
+						<img alt="scene" src="04-no-normals.png" width="284" height="164">
+						<figcaption>Using normals, without providing any.</figcaption>
+					</figure>
+					
+					<p>We get some shading now, but it doesn't make any sense because our wall mesh doesn't have normals yet. So <code>VoxelGridWall</code> also has to add and cache normals.</p>
+					
+					<pre translate="no">private List&lt;Vector3> vertices<ins>, normals</ins>;
+	
+	public void Initialize (int resolution) {
+		GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();
+		mesh.name = "VoxelGridWall Mesh";
+		vertices = new List&lt;Vector3>();
+		<ins>normals = new List&lt;Vector3>();</ins>
+		triangles = new List&lt;int>();
+		xEdgesMax = new int[resolution];
+		xEdgesMin = new int[resolution];
+	}
+
+	public void Clear () {
+		vertices.Clear();
+		<ins>normals.Clear();</ins>
+		triangles.Clear();
+		mesh.Clear();
+	}
+	
+	public void Apply () {
+		mesh.vertices = vertices.ToArray();
+		<ins>mesh.normals = normals.ToArray();</ins>
+		mesh.triangles = triangles.ToArray();
+	}</pre>
+					
+					<p>When an edge intersection is cached, we can simply grab the intersection's normal and directly use it as our wall's normal. This will result in smooth shading along cell boundaries. We have to add them twice, for both the bottom and the top vertex.</p>
+					
+					<pre translate="no">	public void CacheXEdge (int i, Voxel voxel) {
+		&hellip;
+		<ins>Vector3 n = voxel.xNormal;</ins>
+		<ins>normals.Add(n);</ins>
+		<ins>normals.Add(n);</ins>
+	}
+	
+	public void CacheYEdge (Voxel voxel) {
+		&hellip;
+		<ins>Vector3 n = voxel.yNormal;</ins>
+		<ins>normals.Add(n);</ins>
+		<ins>normals.Add(n);</ins>
+	}</pre>
+					
+					<p>We need to add normals for the sharp feature point as well. The most straightforward approach is to simply reuse the normals of the starting point.</p>
+					
+					<pre translate="no">	private void AddSection (int a, int b, Vector3 extraPoint) {
+		int p = vertices.Count;
+		extraPoint.z = bottom;
+		vertices.Add(extraPoint);
+		extraPoint.z = top;
+		vertices.Add(extraPoint);
+		<ins>Vector3 n = normals[a];</ins>
+		<ins>normals.Add(n);</ins>
+		<ins>normals.Add(n);</ins>
+		AddSection(a, p);
+		AddSection(p, b);
+	}</pre>
+					
+					<p>However, that only makes sense for the first section. As it is a sharp feature, we should not have any smooth shading here. To make it a proper crease, we have to add the feature point again, now with the normals of the end point.</p>
+					
+					<pre translate="no">	private void AddSection (int a, int b, Vector3 extraPoint) {
+		&hellip;
+		AddSection(a, p);
+
+		<ins>p = vertices.Count;</ins>
+		<ins>extraPoint.z = bottom;</ins>
+		<ins>vertices.Add(extraPoint);</ins>
+		<ins>extraPoint.z = top;</ins>
+		<ins>vertices.Add(extraPoint);</ins>
+		<ins>n = normals[b];</ins>
+		<ins>normals.Add(n);</ins>
+		<ins>normals.Add(n);</ins>
+		AddSection(p, b);
+	}</pre>
+										
+					<aside>
+						<h3>Do we really need to duplicate the point?</h3>
+						
+						<div>
+							<p>Yes, as each vertex can have only one normal associated with it. This vertex duplication trick is used in every mesh that has creases or smoothing groups.</p>
+							<p>While technically you could store more data per vertex, which you could interpret as an additional normal, you'd have no way of knowing which normal to use when. This is because triangles do not have an identity.</p>
+						</div>
+					</aside>
+					
+					<figure>
+						<img src="04-with-normals.png" width="360" height="240">
+						<figcaption>Shaded walls.</figcaption>
+					</figure>
+					
+					<p>And we have nicely shaded walls! Only sharp features have hard transitions, the rest is smooth. However, you could end up with wobbly lighting when painting loosely with the small brushes. This is because small deviations in edge intersection directions show up in the shading, even though they don't produce sharp features. It can also look strange when a potential sharp feature was discarded, which could produce sharp bends at cell boundaries in combination with smooth shading. Overall though, it's reasonably accurate.</p>
+					
+					<p>It is also possible to use flat shading, which produces a faceted look. That would require every wall section to use the same normal for its four vertices. Like with sharp feature points, you'd have to duplicate every point, which means that you couldn't reuse any vertices.</p>
+					
+					<a href="ms4-04-lighting-walls.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Marching-Squares-4.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../index.html">tutorials</a>? Are they useful?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../tutorials.js"></script>
+	</body>
+</html>

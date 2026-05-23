@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/maze/5-1-0/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/maze/5-1-0/tutorial-image.jpg">
+		<meta property="og:title" content="Maze 5.1.0">
+		<meta property="og:description" content="Unity Maze 5.1.0 tutorial, about adding windows to walls.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Maze 5.1.0</title>
+		<link href="../../tutorials/tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../site.webmanifest.html">
+		
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/maze/5-1-0/#article",
+				"headline": "Maze 5.1.0",
+				"alternativeHeadline": "Windows",
+				"datePublished": "2025-10-30",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "Unity Maze 5.1.0 tutorial, about adding windows to walls",
+				"image": "https://catlikecoding.com/unity/maze/5-1-0/tutorial-image.jpg",
+				"dependencies": "Unity 6000.1.12f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/maze/", "name": "Maze" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				Agent: 1,
+				MazeCellBuilder: 1,
+				CellData: 1,
+				ClearOcclusionJob: 1,
+				DetermineVisibilityJob: 1,
+				DisperseScentJob: 1,
+				FieldOfView: 1,
+				FindDiagonalPassagesJob: 1,
+				Game: 1,
+				GenerateMazeJob: 1,
+				Maze: 1,
+				MazeCellObject: 1,
+				MazeFlags: 1,
+				MazeFlagsExtensions: 1,
+				MazeVisualization: 1,
+				OcclusionJob: 1,
+				Player: 1,
+				PrefabInstancePool: 1,
+				Quadrant: 1,
+				Scan: 1,
+				ScanStack: 1,
+				Scent : 1,
+				ScentJob: 1,
+				T: 1
+			};
+			
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../products/utilities/frame-rate-counter/index.html"><img src="../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../index.html">Unity</a></li>
+					<li><a href="../index.html">Maze</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Maze 5.1.0</h1>
+					<p>Windows</p>
+				</header>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>So close, yet so far away.</figcaption>
+				</figure>
+				
+				<p>This tutorial is made with Unity 6000.1.12f1 and follows <a href="../5-0-0/index.html">Maze 5.0.0</a>.</p>
+				
+				<section>
+					<h2>Separate Visibility Data</h2>
+					
+					<p>This time we're going to upgrade our maze so its walls can contain windows. These will be internal windows only, there won't be windows on the outside edge of the maze.</p>
+					
+					<p>If a wall in the maze has a window we can look through it even though there is no passage. This means that visibility has to be decoupled from passages. We can no longer rely on the passage data of the maze and have to add separate visibility data. Fortunately we still have plenty of bits of <code>MazeFlags</code> available to store the visibility data.</p>
+					
+					<p>First, let's add a bit mask for all passage flags, which are both the straight and diagonal flags.</p>
+					
+					<pre>	PassagesDiagonal = 0b1111_0000,
+
+	<ins>PassageFlags = 0b1111_1111,</ins></pre>
+					
+					<p>Then add flags for straight and diagonal visibility, matching the passage flags but shifted 16 bits to the left. Also include a mask for all of them.</p>
+					
+					<pre>	VisibleToAll = 0b1111_0000_0000_0000<ins>,</ins>
+
+	<ins>VisibilityN = 0b0001_0000_0000_0000_0000,</ins>
+	<ins>VisibilityE = 0b0010_0000_0000_0000_0000,</ins>
+	<ins>VisibilityS = 0b0100_0000_0000_0000_0000,</ins>
+	<ins>VisibilityW = 0b1000_0000_0000_0000_0000,</ins>
+
+	<ins>VisibilityNE = 0b0001_0000_0000_0000_0000_0000,</ins>
+	<ins>VisibilitySE = 0b0010_0000_0000_0000_0000_0000,</ins>
+	<ins>VisibilitySW = 0b0100_0000_0000_0000_0000_0000,</ins>
+	<ins>VisibilityNW = 0b1000_0000_0000_0000_0000_0000,</ins>
+
+	<ins>VisibilityFlags = 0b1111_1111_0000_0000_0000_0000</ins></pre>
+					
+					<p>To facilitate conversion from passage to visibility flags add a <code>PassagesAsVisibility</code> method that extracts the passage bits and shifts them to the visibility bits.</p>
+					
+					<pre>	<ins>public static MazeFlags PassagesAsVisibility(this MazeFlags flags)</ins>
+	<ins>{</ins>
+		<ins>var bits = (int)(flags & MazeFlags.PassageFlags);</ins>
+		<ins>bits &lt;&lt;= 16;</ins>
+		<ins>return (MazeFlags)bits;</ins>
+	<ins>}</ins></pre>
+					
+					<p>Then create a <code>DetermineVisibilityJob</code> job that use the new method to determine the visibility of each cell based on its passages.</p>
+					
+					<pre>using Unity.Burst;
+using Unity.Jobs;
+
+[BurstCompile]
+public struct DetermineVisibilityJob : IJobFor
+{
+	public Maze maze;
+
+	public void Execute(int i)
+	{
+		MazeFlags cell = maze[i];
+		cell |= cell.PassagesAsVisibility();
+		maze[i] = cell;
+	}
+}</pre>
+					
+					<p>We have to schedule this job in <code>Game.StartNewGame</code> after diagonal passages have been found. Let's first restructure the job-scheduling code so it's no longer nested and we get a hold of the job handle.</p>
+					
+					<pre>		<del>//new FindDiagonalPassagesJob</del>
+		<del>//{</del>
+			<del>//maze = maze</del>
+		<del>//}.ScheduleParallel(</del>
+			<del>//maze.Length, maze.SizeEW, new GenerateMazeJob</del>
+			<del>//{ &hellip; }.Schedule()).Complete();</del>
+
+		<ins>JobHandle handle = new GenerateMazeJob</ins>
+		<ins>{</ins>
+			<ins>maze = maze,</ins>
+			<ins>seed = seed != 0 ? seed : Random.Range(1, int.MaxValue),</ins>
+			<ins>pickLastProbability = pickLastProbability,</ins>
+			<ins>openDeadEndProbability = openDeadEndProbability,</ins>
+			<ins>openArbitraryProbability = openArbitraryProbability,</ins>
+			<ins>cutCornerProbability = cutCornerProbability</ins>
+		<ins>}.Schedule();</ins>
+		<ins>handle = new FindDiagonalPassagesJob</ins>
+		<ins>{</ins>
+			<ins>maze = maze</ins>
+		<ins>}.ScheduleParallel(maze.Length, maze.SizeEW, handle);</ins>
+		<ins>handle.Complete();</ins></pre>
+					
+					<p>Then schedule the <code>DetermineVisibility</code> job at the end.</p>
+					
+					<pre>		handle = new FindDiagonalPassagesJob
+		{
+			maze = maze
+		}.ScheduleParallel(maze.Length, maze.SizeEW, handle);
+		<ins>handle = new DetermineVisibilityJob</ins>
+		<ins>{</ins>
+			<ins>maze = maze</ins>
+		<ins>}.ScheduleParallel(maze.Length, maze.SizeEW, handle);</ins>
+		handle.Complete();</pre>
+					
+					<p>The visibility data now mirrors the passage data. So can switch to using the visibility data by changing which flags we use in <code>OcclusionJob.Quadrant</code>. Replace all passage flags with their equivalent visibility flags.</p>
+					
+					<pre>		public Quadrant(bool flipNS, bool flipEW)
+		{
+			this.flipNS = flipNS;
+			this.flipEW = flipEW;
+
+			north = flipNS ? MazeFlags.<ins>VisibilityS</ins> : MazeFlags.<ins>VisibilityN</ins>;
+			south = flipNS ? MazeFlags.<ins>VisibilityN</ins> : MazeFlags.<ins>VisibilityS</ins>;
+			east = flipEW ? MazeFlags.<ins>VisibilityW</ins> : MazeFlags.<ins>VisibilityE</ins>;
+
+			if (flipEW)
+			{
+				if (flipNS)
+				{
+					northwest = MazeFlags.<ins>VisibilitySE</ins>;
+					northeast = MazeFlags.<ins>VisibilitySW</ins>;
+					southeast = MazeFlags.<ins>VisibilityNW</ins>;
+				}
+				else
+				{
+					northwest = MazeFlags.<ins>VisibilityNE</ins>;
+					northeast = MazeFlags.<ins>VisibilityNW</ins>;
+					southeast = MazeFlags.<ins>VisibilitySW</ins>;
+				}
+			}
+			else if (flipNS)
+			{
+				northwest = MazeFlags.<ins>VisibilitySW</ins>;
+				northeast = MazeFlags.<ins>VisibilitySE</ins>;
+				southeast = MazeFlags.<ins>VisibilityNE</ins>;
+			}
+			else
+			{
+				northwest = MazeFlags.<ins>VisibilityNW</ins>;
+				northeast = MazeFlags.<ins>VisibilityNE</ins>;
+				southeast = MazeFlags.<ins>VisibilitySE</ins>;
+			}
+		}</pre>
+					
+					<p>Our visibility logic should still work the same as before, but visibility is now decoupled from the passages.</p>
+				</section>
+				
+				<section>
+					<h2>Generating Windows</h2>
+					
+					<p>To keep track of where the windows are we'll add flags for them to <code>MazeFlags</code>, along with a mask for all windows.</p>
+					
+					<pre>	VisibilityFlags = 0b1111_1111_0000_0000_0000_0000<ins>,</ins>
+
+	<ins>WindowN = 0b0001_0000_0000_0000_0000_0000_0000,</ins>
+	<ins>WindowE = 0b0010_0000_0000_0000_0000_0000_0000,</ins>
+	<ins>WindowS = 0b0100_0000_0000_0000_0000_0000_0000,</ins>
+	<ins>WindowW = 0b1000_0000_0000_0000_0000_0000_0000,</ins>
+
+	<ins>WindowFlags = 0b1111_0000_0000_0000_0000_0000_0000</ins></pre>
+					
+					
+					<p>We add the windows in <code>GenerateMazeJob</code>. Give it a field to control the window probability.</p>
+					
+					<pre>	public float
+		pickLastProbability,
+		openDeadEndProbability,
+		openArbitraryProbability,
+		cutCornerProbability<ins>,</ins>
+		<ins>windowProbability</ins>;</pre>
+					
+					<p>Create an <code>AddWindows</code> method like the other methods that add extra things to the maze. In this case we're interested in the inner wall segments of the maze, so the cell edges instead of the cells themselves. We'll visit them be looping through the maze grid using cell coordinates, skipping the first one in both dimensions.</p>
+					
+					<pre>	<ins>Random AddWindows(Random random)</ins>
+		<ins>int2 coords;</ins>
+		<ins>for (coords.y = 1; coords.y &lt; maze.SizeNS; coords.y++)</ins>
+		<ins>{</ins>
+			<ins>for (coords.x = 1; coords.x &lt; maze.SizeEW; coords.x++)</ins>
+			<ins>{</ins>
+				<ins>int index = maze.CoordinatesToIndex(coords);</ins>
+				<ins>MazeFlags cell = maze[index];</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>return random;</ins>
+	<ins>}</ins></pre>
+					
+					<p>This guarantees that each visited cell has a south and west neighbor. Check if there isn't a west passage because that means that there is a west wall. If this is the case, and we randomly decide to place a window, then set the west window flag. We also have to set the east window flag of the west neighbor cell so the window exists on both sides of the wall.</p>
+					
+					<pre>				MazeFlags cell = maze[index];
+				<ins>if (cell.HasNot(MazeFlags.PassageW) &amp;&amp;</ins>
+					<ins>random.NextFloat() &lt; windowProbability)</ins>
+				<ins>{</ins>
+					<ins>maze.Set(index, MazeFlags.WindowW);</ins>
+					<ins>maze.Set(index + maze.StepW, MazeFlags.WindowE);</ins>
+				}</pre>
+					
+					<p>Using the same approach we can also randomly insert a window in the south wall, if it exists.</p>
+					
+					<pre>				if (cell.HasNot(MazeFlags.PassageW) &amp;&amp;
+					random.NextFloat() &lt; windowProbability)
+				{
+					maze.Set(index, MazeFlags.WindowW);
+					maze.Set(index + maze.StepW, MazeFlags.WindowE);
+				}
+				<ins>if (cell.HasNot(MazeFlags.PassageS) &amp;&amp;</ins>
+					<ins>random.NextFloat() &lt; windowProbability)</ins>
+				<ins>{</ins>
+					<ins>maze.Set(index, MazeFlags.WindowS);</ins>
+					<ins>maze.Set(index + maze.StepS, MazeFlags.WindowN);</ins>
+				<ins>}</ins></pre>
+					
+					<p>Invoke this method at the end of <code>Execute</code>.</p>
+					
+					<pre>		if (cutCornerProbability > 0f)
+		{
+			random = CutCorners(random);
+		}
+
+		<ins>if (windowProbability > 0f)</ins>
+		<ins>{</ins>
+			<ins>random = AddWindows(random);</ins>
+		<ins>}</ins></pre>
+					
+					<p>Finally, add a configuration field for the window probability to <code>Game</code> and pass it to <code>GenerateMazeJob</code>. We don't want too many windows, so let's use 0.2 for its default value.</p>
+					
+					<pre>	float
+		pickLastProbability = 0.5f,
+		openDeadEndProbability = 0.5f,
+		openArbitraryProbability = 0.5f,
+		cutCornerProbability = 0.5f<ins>,</ins>
+		<ins>windowProbability = 0.2f</ins>;
+	
+	&hellip;
+
+	void StartNewGame()
+	{
+		&hellip;
+		new FindDiagonalPassagesJob
+		{
+			maze = maze
+		}.ScheduleParallel(
+			maze.Length, maze.SizeEW, new GenerateMazeJob
+			{
+				maze = maze,
+				seed = seed != 0 ? seed : Random.Range€(1, int.MaxValue),
+				pickLastProbability = pickLastProbability,
+				openDeadEndProbability = openDeadEndProbability,
+				openArbitraryProbability = openArbitraryProbability,
+				cutCornerProbability = cutCornerProbability<ins>,</ins>
+				<ins>windowProbability = windowProbability</ins>
+			}.Schedule()).Complete();
+		
+		&hellip;
+	}</pre>
+					
+					<p>Our maze will now contain windows, even though they aren't visible yet.</p>
+				</section>
+				
+				<section>
+					<h2>Showing Windows</h2>
+					
+					<p>What's left to do is create a wall variant with a window in it. Duplicate the <em>Wall</em> prefab and name it <em>Windowed Wall</em>. Adjust and duplicate its quad so we end up with a wall that has a rectangular hole in it. The exact shape of the window doesn't matter, as long as it stays from the sides of the wall so it won't end up clipping into an adjacent orthogonal wall. The visibility algorithm treats the wall as fully open, regardless how much of the wall actually blocks vision.</p>
+					
+					<p>Add four more quads to fill in the edges of the wall around the window. These quads must have a width of 0.25 and a Z position of 0.875. Note that these edges fill the space from the wall face to the edge of the cell, so visually the edge will appear twice as thick as it appears in the prefab editor. I also removed the colliders from the inner edges, as the player should never collide with them.</p>
+					
+					<figure>
+						<img src="showing-windows/windowed-wall-prefab.png" width="250" height="370">
+						<figcaption>Windowed wall prefab.</figcaption>
+					</figure>
+					
+					<p>Add a configuration field for the windowed wall prefab to <code>MazeCellBuilder</code> and hook it up.</p>
+					
+					<pre>	MazeCellObject
+		cell, floor, ceiling, wall, <ins>windowedWall,</ins> cornerCut, cornerFull;</pre>
+					
+					<p>Now the <code>BuildWall</code> method needs to know whether the wall it's creating has a window in it. Add a parameter for this so it can instantiate the appropriate prefab. Also, let's only add ornaments to walls without windows, so they won't end up hanging in front of the windows.</p>
+					
+					<pre>	void BuildWall(Transform parent, int rotation<ins>, bool hasWindow</ins>)
+	{
+		MazeCellObject w = <ins>(hasWindow ? windowedWall :</ins> wall<ins>)</ins>.GetInstance();
+		w.transform.localRotation = rotations[rotation];
+		w.transform.SetParent(parent, false);
+
+		if (<ins>!hasWindow &amp;&amp;</ins> Random.value &lt; wallOrnamentProbability)
+		{
+			MazeCellObject o = wallOrnaments[
+				Random.Range(0, wallOrnaments.Length)].GetInstance();
+			o.transform.localRotation = rotations[rotation];
+			o.transform.SetParent(parent, false);
+		}
+	}</pre>
+					
+					<p>Now <code>BuildCell</code> has to indicate whether each wall has a window in it.</p>
+					
+					<pre>		if (wallN)
+		{
+			BuildWall(t, 0<ins>, f.Has(MazeFlags.WindowN)</ins>);
+		}
+		if (wallE)
+		{
+			BuildWall(t, 1<ins>, f.Has(MazeFlags.WindowE)</ins>);
+		}
+		if (wallS)
+		{
+			BuildWall(t, 2<ins>, f.Has(MazeFlags.WindowS)</ins>);
+		}
+		if (wallW)
+		{
+			BuildWall(t, 3<ins>, f.Has(MazeFlags.WindowW)</ins>);
+		}</pre>
+					
+					<figure>
+						<img src="showing-windows/window-incorrect-visibility.png" width="570" height="360">
+						<figcaption>Window with incorrect visibility.</figcaption>
+					</figure>
+				</section>
+				
+				<section>
+					<h2>Looking Through Windows</h2>
+					
+					<p>We can now see the windows in the maze. But visibility doesn't take them into account yet, so what's visible through the windows is likely wrong. We end up seeing through holes in the maze because some cells will be incorrectly hidden. To address this we add a <code>WindowsAsVisibility</code> method to <code>MazeFlags</code>, which reinterprets the window flags as straight visibility flags, by shifting them eight bits to the right.</p>
+					
+					<pre>	<ins>public static MazeFlags WindowsAsVisibility(this MazeFlags flags)</ins>
+	<ins>{</ins>
+		<ins>var bits = (int)(flags & MazeFlags.WindowFlags);</ins>
+		<ins>bits >>= 8;</ins>
+		<ins>return (MazeFlags)bits;</ins>
+	<ins>}</ins></pre>
+					
+					<p>Use this method to combine the passage and window visibility in <code>DetermineVisibilityJob</code></p>
+					
+					<pre>	public void Execute(int i)
+	{
+		MazeFlags cell = maze[i];
+		cell |= cell.PassagesAsVisibility();
+		<ins>cell |= cell.WindowsAsVisibility();</ins>
+		maze[i] = cell;
+	}</pre>
+					
+					<figure>
+						<img src="showing-windows/window-correct-visibility.png" width="570" height="360">
+						<figcaption>Window with correct visibility.</figcaption>
+					</figure>
+					
+					
+					<p>Our maze now has functional windows, which makes it a bit easier to navigate as we have more visual information to work with. We can spot enemy agents and the goal earlier so we know where to go. Of course we could also end up in a dead end with a window, seeing the goal without an obvious way to reach it.</p>
+					
+					<a href="../../tutorials/license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecoding-projects/maze-project/src/d9d38ca599af8ba70bd325688bdaec942527a733/?at=release%2F5.1.0" class="repository">repository</a>
+					<a href="Maze-5-1-0.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../tutorials/index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../tutorials/become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../tutorials/donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials/tutorials.js"></script>
+	</body>
+</html>

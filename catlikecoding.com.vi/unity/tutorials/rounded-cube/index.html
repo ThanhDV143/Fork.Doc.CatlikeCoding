@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html>
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/rounded-cube/">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/rounded-cube/tutorial-image.jpg">
+		<meta property="og:image:width" content="750">
+		<meta property="og:image:height" content="438">
+		<meta property="og:description" content="A Unity C# scripting tutorial in which we'll create a rounded cube.">
+		<meta name="description" content="A Unity C# scripting tutorial in which we'll create a rounded cube.">
+		<meta property="og:title" content="Rounded Cube, a Unity C# Tutorial">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Rounded Cube, a Unity C# Tutorial</title>
+		<link href="../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../site.webmanifest.html">
+
+
+		<script>
+			var customTypes = {
+				Cube: 1,
+				RoundedCube: 1
+			};
+			
+			var hasAnimations = true;
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../products/utilities/frame-rate-counter/index.html"><img src="../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<p><a href="../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></p>
+			<p class="category"><a href="../index.html">Unity C# Tutorials</a></p>
+		</header>
+		
+		<main>
+			<article itemscope itemtype="http://schema.org/TechArticle">
+				<header>
+					<h1 itemprop="name headline">Rounded Cube</h1>
+					<p>Building in 3D</p>
+					<ul>
+						<li>Create a cube with a seamless mesh.</li>
+						<li>Add rounded edges to the cube.</li>
+						<li>Define normals.</li>
+						<li>Use sub-meshes.</li>
+						<li>Create a custom shader.</li>
+						<li>Combine primitive colliders.</li>
+					</ul>
+				</header>
+
+				<p itemprop="about description">In this tutorial we'll create a rounded cube with a single mesh.</p>
+
+				<p itemprop="dependencies">This tutorial follows <a href="../procedural-grid.1.html">Procedural Grid</a>. It has been made for Unity 5.0.1 and up.</p>
+
+				<figure>
+					<img src="tutorial-image.jpg" width="375" height="219" itemprop="image">
+					<figcaption>Rounded cubes in various shapes.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Compositing a Cube</h2>
+					
+					<p>After tackling 2D grids, the next logical step is to procedurally generate 3D structures. Let's have a look at a cube. Conceptually, it consists of six 2D faces that are positioned and rotated such that they enclose a 3D volume. We can do this with six instances of our grid.</p>
+					
+					<p>Our grid lies in the XY plane and faces the negative Z direction. This is the -Z face of the cube. You can create the +Z face by duplicating it, settings its Y rotation to 180&deg;, and repositioning it so both faces line up.</p>
+					
+					<p>The -X and +X faces are created the same way, but with Y rotations of 90&deg; and 270&deg;. You can also give these faces a different <i>xSize</i> than the Z faces if you want to, but their <i>ySize</i> must match. The four faces must be aligned so they form a closed ring.</p>
+					
+					<p>The -Y and +Y faces are made with X rotations of 270&deg; and 90&deg;. Their <i>xSize</i> should match those of the Z faces, and their <i>ySize</i> should match the <i>xSize</i> of the X faces.</p>
+					
+					<figure>
+						<img alt="scene" src="01-composite-cube.png" width="275" height="250">
+						<img alt="hierarchy" src="01-cube-hierarchy.png" width="110" height="115">
+						<figcaption>A cube made with six separate grids.</figcaption>
+					</figure>
+					
+					<p>This gives us a cube that consists of six separate meshes. While it looks fine and is a good reference, it isn't very practical. We could combine the meshes via <code>Mesh.CombineMeshes</code>, but we might as well create the whole cube at once.</p>
+					
+					<a href="rc-01-Compositing-a-Cube.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Creating Cube Vertices</h2>
+					
+					<p>To create our own cube, we need to create a new component script. Let's bootstrap it by recycling some code from the previous tutorial. The only new thing right now is the third dimension, so we have to add <code>zSize</code>. I once again use a coroutine and gizmos to help visualize what's going on.</p>
+					
+					<pre translate="no">using UnityEngine;
+using System.Collections;
+
+[RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
+public class <ins>Cube</ins> : MonoBehaviour {
+
+	public int xSize, ySize<ins>, zSize</ins>;
+
+	private Mesh mesh;
+	private Vector3[] vertices;
+
+	private void Awake () {
+		StartCoroutine(Generate());
+	}
+
+	private IEnumerator Generate () {
+		GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();
+		mesh.name = <ins>"Procedural Cube"</ins>;
+		WaitForSeconds wait = new WaitForSeconds(0.05f);
+
+		yield return wait;
+	}
+
+	private void OnDrawGizmos () {
+		if (vertices == null) {
+			return;
+		}
+		Gizmos.color = Color.black;
+		for (int i = 0; i &lt; vertices.Length; i++) {
+			Gizmos.DrawSphere(vertices[i], 0.1f);
+		}
+	}
+}</pre>
+					
+					<p>Now you can add a new game object to the scene and turn it into a cube by adding this component. Or replace the grid component of an existing object.</p>
+					
+					<figure>
+						<img src="02-cube-inspector.png" width="320" height="98">
+						<figcaption>Adding the third dimension.</figcaption>
+					</figure>
+					
+					<p>Before we can add the vertices of our cube, we first have to know how many there are. We already know the amount of vertices needed for a single face.</p>
+					
+					<p class="formula">`(#x + 1)(#y + 1)`</p>
+					
+					<p>So we can just add these six faces together to get the total.</p>
+					
+					<p class="formula">`2(
+	(#x + 1)(#y + 1) +
+	(#x + 1)(#z + 1) +
+	(#y + 1)(#z + 1)
+)`</p>
+					
+					<p>However, As the edges of the faces touch each other, their vertices will overlap, which leads to duplicate vertices. Each of the cube's corner vertices are tripled, while all vertices along its edges are doubled.</p>
+					
+					<figure>
+						<img src="02-vertex-overlap.png" width="250" height="250">
+						<figcaption>Overlapping face vertices.</figcaption>
+					</figure>
+					
+					<p>This doesn't need to be a problem. In fact, vertex duplication is very common, as it is used to create sharp edges in a mesh with normals. So we can create the six faces completely separate from one another, just combined in a single array.</p>
+					
+					<p>But that's not what we're going to do, because we already know how to create grids. Our cube won't have duplicate vertices. It's more interesting that way.</p>
+					
+					<p>So how many vertices do we need? Let's break it down by type. First we have eight corner vertices, that's easy. Then we have twelve edges, four in each direction. As we don't include the corners, each edge has an amount of vertices equal to the corresponding size minus one. Alternatively, think of it as four sets of an X, Y, and Z edge.</p>
+					
+					<p class="formula">`4(#x + #y + #z - 3)`</p>
+
+					<p>The remaining vertices are those that lie inside the faces. That's equal to a cube with duplicated vertices that has its size reduced by two.</p>
+					
+					<p class="formula">`2(
+	(#x - 1)(#y - 1) +
+	(#x - 1)(#z - 1) +
+	(#y - 1)(#z - 1)
+)`</p>
+					
+					<p>Now we finally know how many vertices we need.</p>
+					
+					<pre translate="no">	private IEnumerator Generate () {
+		GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();
+		mesh.name = "Procedural Cube";
+		WaitForSeconds wait = new WaitForSeconds(0.05f);
+
+		<ins>int cornerVertices = 8;</ins>
+		<ins>int edgeVertices = (xSize + ySize + zSize - 3) * 4;</ins>
+		<ins>int faceVertices = (</ins>
+			<ins>(xSize - 1) * (ySize - 1) +</ins>
+			<ins>(xSize - 1) * (zSize - 1) +</ins>
+			<ins>(ySize - 1) * (zSize - 1)) * 2;</ins>
+		<ins>vertices = new Vector3[cornerVertices + edgeVertices + faceVertices];</ins>
+
+		yield return wait;
+	}</pre>
+					<p>Positioning the vertices of the first face row is exactly like positioning the first row of a grid.</p>
+					
+					<pre translate="no">		vertices = new Vector3[cornerVertices + edgeVertices + faceVertices];
+
+		<ins>int v = 0;</ins>
+		<ins>for (int x = 0; x &lt;= xSize; x++) {</ins>
+			<ins>vertices[v++] = new Vector3(x, 0, 0);</ins>
+			yield return wait;
+		<ins>}</ins></pre>
+					
+					<aside>
+						<h3>Why increment <code>v</code> when accessing the array?</h3>
+						<div>
+							<p>The idea is that each time we assign a vertex to the array, the vertex index should increase. So that's literally what I'm doing. The rule is that whenever a position is set, it should be done with <code>vertices[v++]</code> and never <code>vertices[v]</code>. This way you never need to worry about incrementing <code>v</code> somewhere else.</p>
+							<p>Of course you could instead increment <code>v</code> in the same place as the loop iterators. Nothing wrong with that, as long as you are consistent. I'm just demonstrating a different approach.</p>
+						</div>
+					</aside>
+
+					<p>Then it gets more interesting. Let's continue with the first row of the second face, and so on, creating a square ring of vertices. This is done by looping four times, using different ranges and positions.</p>
+					
+					<pre translate="no">		for (int x = 0; x &lt;= xSize; x++) {
+			vertices[v++] = new Vector3(x, 0, 0);
+			yield return wait;
+		}
+		<ins>for (int z = 1; z &lt;= zSize; z++) {</ins>
+			<ins>vertices[v++] = new Vector3(xSize, 0, z);</ins>
+			<ins>yield return wait;</ins>
+		<ins>}</ins>
+		<ins>for (int x = xSize - 1; x >= 0; x--) {</ins>
+			<ins>vertices[v++] = new Vector3(x, 0, zSize);</ins>
+			<ins>yield return wait;</ins>
+		<ins>}</ins>
+		<ins>for (int z = zSize - 1; z > 0; z--) {</ins>
+			<ins>vertices[v++] = new Vector3(0, 0, z);</ins>
+			<ins>yield return wait;</ins>
+		<ins>}</ins></pre>
+					
+					<figure>
+						<video width="300" height="200" controls loop muted>
+							<source src="02-bottom-vertex-ring.mp4" type="video/mp4">
+						</video>
+						<figcaption>The bottom vertex ring appears.</figcaption>
+					</figure>
+					
+					<p>We can turn this into a complete wrap around the cube's height by repeating the ring placement along Y.</p>
+					
+					<pre translate="no">		int v = 0;
+		<ins>for (int y = 0; y &lt;= ySize; y++) {</ins>
+			for (int x = 0; x &lt;= xSize; x++) {
+				vertices[v++] = new Vector3(x, <ins>y</ins>, 0);
+				yield return wait;
+			}
+			for (int z = 1; z &lt;= zSize; z++) {
+				vertices[v++] = new Vector3(xSize, <ins>y</ins>, z);
+				yield return wait;
+			}
+			for (int x = xSize - 1; x >= 0; x--) {
+				vertices[v++] = new Vector3(x, <ins>y</ins>, zSize);
+				yield return wait;
+			}
+			for (int z = zSize - 1; z > 0; z--) {
+				vertices[v++] = new Vector3(0, <ins>y</ins>, z);
+				yield return wait;
+			}
+		<ins>}</ins></pre>
+					
+					<figure>
+						<video width="300" height="250" controls loop muted>
+							<source src="02-wrapping-cube.mp4" type="video/mp4">
+						</video>
+						<figcaption>Wrapping the cube.</figcaption>
+					</figure>
+					
+					<p>After that we have to cap the top and bottom. I just fill the holes like a regular grid.</p>
+					
+					<pre translate="no">		<ins>for (int z = 1; z &lt; zSize; z++) {</ins>
+			<ins>for (int x = 1; x &lt; xSize; x++) {</ins>
+				<ins>vertices[v++] = new Vector3(x, ySize, z);</ins>
+				<ins>yield return wait;</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>for (int z = 1; z &lt; zSize; z++) {</ins>
+			<ins>for (int x = 1; x &lt; xSize; x++) {</ins>
+				<ins>vertices[v++] = new Vector3(x, 0, z);</ins>
+				<ins>yield return wait;</ins>
+			<ins>}</ins>
+		<ins>}</ins></pre>
+					
+					<figure>
+						<img src="02-vertices.png" width="300" height="250">
+						<figcaption>All cube vertices, no duplicates.</figcaption>
+					</figure>
+					
+					<a href="rc-02-Creating-Cube-Vertices.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Adding the Triangles</h2>
+					
+					<p>Now that the vertices are correctly positions and we're familiar with the order in which they are placed, we can move on to the triangles. To prepare for that, I have removed the coroutine stuff, and added separate methods for the creation of vertices and triangles. And of course the vertices need to be assigned to the mesh.</p>
+					
+					<p>Prepare. Remove yield statements for vertices.</p>
+					
+					<pre translate="no">	private void Awake () {
+		<ins>Generate();</ins>
+	}
+
+	private <ins>void</ins> Generate () {
+		GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();
+		mesh.name = "Procedural Cube";
+		<ins>CreateVertices();</ins>
+		<ins>CreateTriangles();</ins>
+	}
+
+	<ins>private void CreateVertices () {</ins>
+		&hellip;
+		
+		<ins>mesh.vertices = vertices;</ins>
+	<ins>}</ins>
+
+	<ins>private void CreateTriangles () {</ins>
+	<ins>}</ins></pre>
+					
+					<p>The creation of a single quad is exactly the same as for the grid. As we'll end up creating quads in multiple places, it's a good idea to create a method for it.</p>
+					
+					<pre translate="no">	<ins>private static int</ins>
+	<ins>SetQuad (int[] triangles, int i, int v00, int v10, int v01, int v11) {</ins>
+		<ins>triangles[i] = v00;</ins>
+		<ins>triangles[i + 1] = triangles[i + 4] = v01;</ins>
+		<ins>triangles[i + 2] = triangles[i + 3] = v10;</ins>
+		<ins>triangles[i + 5] = v11;</ins>
+		<ins>return i + 6;</ins>
+	<ins>}</ins></pre>
+					
+					<figure>
+						<img src="03-quad.png" width="175" height="175">
+						<figcaption>Anatomy of a quad.</figcaption>
+					</figure>
+					
+					<aside>
+						<h3>Why a triangles parameter?</h3>
+						<div>
+							<p>While we gave our cube object a <code>vertices</code> field, we won't do so for the triangles. So we have to pass it to the <code>SetQuad</code> method as an argument. That's why the method can be static.</p>
+							<p>Of course you could store the triangles at the object level as well, but be aware that we'll take advantage of the parameter approach later on.</p>
+						</div>
+					</aside>
+					
+					<aside>
+						<h3>Why return the triangle index?</h3>
+						<div>
+							<p>For the same reason that I increment the vertex index when accessing the array. This way each time you set a quad you just assign the result back to the index and you're done.</p>
+						</div>
+					</aside>
+					
+					<p>Unlike vertices, the number of triangles is simply equal to that of the six faces combined. It doesn't matter whether they use shared vertices or not.</p>
+					
+					<pre translate="no">	private void CreateTriangles () {
+		<ins>int quads = (xSize * ySize + xSize * zSize + ySize * zSize) * 2;</ins>
+		<ins>int[] triangles = new int[quads * 6];</ins>
+		<ins>mesh.triangles = triangles;</ins>
+	}
+</pre>
+					
+					<p>Creating the first triangle row is once again the same as for a grid. The only difference so far is that the offset for the vertices in the next row is equal to an entire ring of vertices.</p>
+					
+					<pre translate="no">	private void CreateTriangles () {
+		int quads = (xSize * ySize + xSize * zSize + ySize * zSize) * 2;
+		int[] triangles = new int[quads * 6];
+		<ins>int ring = (xSize + zSize) * 2;</ins>
+		<ins>int t = 0, v = 0;</ins>
+
+		<ins>for (int q = 0; q &lt; xSize; q++, v++) {</ins>
+			<ins>t = SetQuad(triangles, t, v, v + 1, v + ring, v + ring + 1);</ins>
+		<ins>}</ins>
+		
+		mesh.triangles = triangles;
+	}</pre>
+					
+					<figure>
+						<img src="03-row.png" width="300" height="250">
+						<figcaption>First triangle row.</figcaption>
+					</figure>
+					
+					<p>To triangulate an entire ring, let's just be naive and lengthen the loop to go all the way around.</p>
+					
+					<pre translate="no">		for (int q = 0; q &lt; <ins>ring</ins>; q++, v++) {
+			t = SetQuad(triangles, t, v, v + 1, v + ring, v + ring + 1);
+		}</pre>
+					
+					<figure>
+						<img src="03-ring-wrong.png" width="275" height="225">
+						<figcaption>Incorrect ring.</figcaption>
+					</figure>
+					
+					<p>This works, except for the last quad. Its second and fourth vertex need to rewind to the start of the ring. So extract it from the loop.</p>
+					
+					<pre translate="no">		for (int q = 0; q &lt; ring <ins>- 1</ins>; q++, v++) {
+			t = SetQuad(triangles, t, v, v + 1, v + ring, v + ring + 1);
+		}
+		<ins>t = SetQuad(triangles, t, v, v - ring + 1, v + ring, v + 1);</ins></pre>
+					
+					<figure>
+						<img src="03-ring-correct.png" width="275" height="225">
+						<figcaption>Complete ring.</figcaption>
+					</figure>
+					
+					<p>To triangulate all rings, once again simply repeat the process along Y. Notice that the vertex index needs to be increased after each ring, because our ring loops are one step shorter.</p>
+					
+					<pre translate="no">		<ins>for (int y = 0; y &lt; ySize; y++, v++) {</ins>
+			for (int q = 0; q &lt; ring - 1; q++, v++) {
+				t = SetQuad(triangles, t, v, v + 1, v + ring, v + ring + 1);
+			}
+			t = SetQuad(triangles, t, v, v - ring + 1, v + ring, v + 1);
+		<ins>}</ins></pre>
+					
+					<figure>
+						<img src="03-wrap.png" width="275" height="225">
+						<figcaption>Fully wrapped.</figcaption>
+					</figure>
+					
+					<p>Unfortunately the top and bottom faces are not as straightforward. Their vertex layout is like a grid surrounded by a ring.</p>
+					
+					<figure>
+						<img src="03-cap.png" width="250" height="250">
+						<figcaption>Caps have a grid inside a ring.</figcaption>
+					</figure>
+					
+					<p>Let's start with the top face, giving it its own method.</p>
+					
+					<pre translate="no">	private void CreateTriangles () {
+		&hellip;
+
+		<ins>t = CreateTopFace(triangles, t, ring);</ins>
+		mesh.triangles = triangles;
+	}</pre>
+					
+					<p>The first row follows the familiar pattern. This works because the first row of the inner grid was added directly after the spiral ended. The final quad's fourth vertex is different though, as that's where the ring bends upwards.</p>
+
+					<pre translate="no">	<ins>private int CreateTopFace (int[] triangles, int t, int ring) {</ins>
+		<ins>int v = ring * ySize;</ins>
+		<ins>for (int x = 0; x &lt; xSize - 1; x++, v++) {</ins>
+			<ins>t = SetQuad(triangles, t, v, v + 1, v + ring - 1, v + ring);</ins>
+		<ins>}</ins>
+		<ins>t = SetQuad(triangles, t, v, v + 1, v + ring - 1, v + 2);</ins>
+		
+		<ins>return t;</ins>
+	<ins>}</ins></pre>
+					
+					<figure>
+						<img src="03-top-row.png" width="325" height="275">
+						<figcaption>First row of top face.</figcaption>
+					</figure>
+					
+					<p>It gets more complicated for the next row. It is useful to keep track of the row's minimum vertex index, which lies on the ring. The other index to track is for the middle part, which is the grid.</p>
+					
+					<pre translate="no">		&hellip;
+		
+		<ins>int vMin = ring * (ySize + 1) - 1;</ins>
+		<ins>int vMid = vMin + 1;</ins>
+
+		<ins>t = SetQuad(triangles, t, vMin, vMid, vMin - 1, vMid + xSize - 1);</ins>
+		
+		return t;</pre>
+					
+					<figure>
+						<img src="03-fist-next-row.png" width="325" height="275">
+						<figcaption>First quad of next row.</figcaption>
+					</figure>
+					
+					<p>The middle part of the row is quite like a regular grid.</p>
+					
+					<pre translate="no">		t = SetQuad(triangles, t, vMin, vMid, vMin - 1, vMid + xSize - 1);
+		<ins>for (int x = 1; x &lt; xSize - 1; x++, vMid++) {</ins>
+			<ins>t = SetQuad(</ins>
+				<ins>triangles, t,</ins>
+				<ins>vMid, vMid + 1, vMid + xSize - 1, vMid + xSize);</ins>
+		<ins>}</ins></pre>
+					
+					<p>The last quad of the row once again has to deal with the outer ring, so let's track the maximum vertex as well.</p>
+					
+					<pre translate="no">		int vMin = ring * (ySize + 1) - 1;
+		int vMid = vMin + 1;
+		<ins>int vMax = v + 2;</ins>
+
+		t = SetQuad(triangles, t, vMin, vMid, vMin - 1, vMid + xSize - 1);
+		for (int x = 1; x &lt; xSize - 1; x++, vMid++) {
+			t = SetQuad(
+				triangles, t,
+				vMid, vMid + 1, vMid + xSize - 1, vMid + xSize);
+		}
+		<ins>t = SetQuad(triangles, t, vMid, vMax, vMid + xSize - 1, vMax + 1);</ins></pre>
+					
+					<p>This can be turned into a loop to take care of all but the last row. Each iteration the middle and maximum vertex index needs to be incremented. The minimum vertex index decreases instead, because of the orientation of the ring.</p>
+					
+					<pre translate="no">		<ins>for (int z = 1; z &lt; zSize - 1; z++, vMin--, vMid++, vMax++) {</ins>
+			t = SetQuad(triangles, t, vMin, vMid, vMin - 1, vMid + xSize - 1);
+			for (int x = 1; x &lt; xSize - 1; x++, vMid++) {
+				t = SetQuad(
+					triangles, t,
+					vMid, vMid + 1, vMid + xSize - 1, vMid + xSize);
+			}
+			t = SetQuad(triangles, t, vMid, vMax, vMid + xSize - 1, vMax + 1);
+		<ins>}</ins></pre>
+					
+					<figure>
+						<img src="03-middle-rows.png" width="325" height="275">
+						<figcaption>All but the last row.</figcaption>
+					</figure>
+					
+					<p>Let's introduce the top vertex index, then use it to set the first quad of the last row.</p>
+					
+					<pre translate="no">		<ins>int vTop = vMin - 2;</ins>
+		<ins>t = SetQuad(triangles, t, vMin, vMid, vTop + 1, vTop);</ins></pre>
+					
+					<p>Then loop through the middle of the row.</p>
+					
+					<pre translate="no">		int vTop = vMin - 2;
+		t = SetQuad(triangles, t, vMin, vMid, vTop + 1, vTop);
+		<ins>for (int x = 1; x &lt; xSize - 1; x++, vTop--, vMid++) {</ins>
+			<ins>t = SetQuad(triangles, t, vMid, vMid + 1, vTop, vTop - 1);</ins>
+		<ins>}</ins></pre>
+					
+					<p>And finally the last quad.</p>
+					
+					<pre translate="no">		int vTop = vMin - 2;
+		t = SetQuad(triangles, t, vMin, vMid, vTop + 1, vTop);
+		for (int x = 1; x &lt; xSize - 1; x++, vTop--, vMid++) {
+			t = SetQuad(triangles, t, vMid, vMid + 1, vTop, vTop - 1);
+		}
+		<ins>t = SetQuad(triangles, t, vMid, vTop - 2, vTop, vTop - 1);</ins></pre>
+					
+					<figure>
+						<img src="03-top-face.png" width="325" height="275">
+						<figcaption>Complete top face.</figcaption>
+					</figure>
+					
+					<p>The bottom face uses the same approach with a slightly different setup, so it gets its own method too.</p>
+					
+					<pre translate="no">	private void CreateTriangles () {
+		&hellip;
+
+		t = CreateTopFace(triangles, t, ring);
+		<ins>t = CreateBottomFace(triangles, t, ring);</ins>
+		mesh.triangles = triangles;
+	}</pre>
+					
+					<p>There are a few differences with the top face. The vertex indices are different, making the first row slightly more complex. We also have to change the orientation of the quad vertices so they face down instead of up. I also made sure that the triangle diagonals point in the opposite direction of those from the top face, so this is the case for all opposite faces.</p>
+					
+					<pre translate="no">	private int <ins>CreateBottomFace</ins> (int[] triangles, int t, int ring) {
+		int v = <ins>1</ins>;
+		<ins>int vMid = vertices.Length - (xSize - 1) * (zSize - 1);</ins>
+		<ins>t = SetQuad(triangles, t, ring - 1, vMid, 0, 1);</ins>
+		for (int x = <ins>1</ins>; x &lt; xSize - 1; x++, v++<ins>, vMid++</ins>) {
+			t = SetQuad(triangles, t, <ins>vMid, vMid + 1, v, v + 1</ins>);
+		}
+		t = SetQuad(triangles, t, <ins>vMid, v + 2, v, v + 1</ins>);
+
+		int vMin = <ins>ring - 2;</ins>
+		<ins>vMid -= xSize - 2;</ins>
+		int vMax = v + 2;
+
+		for (int z = 1; z &lt; zSize - 1; z++, vMin--, vMid++, vMax++) {
+			t = SetQuad(triangles, t, <ins>vMin, vMid + xSize - 1, vMin + 1, vMid</ins>);
+			for (int x = 1; x &lt; xSize - 1; x++, vMid++) {
+				t = SetQuad(
+					triangles, t,
+					<ins>vMid + xSize - 1, vMid + xSize, vMid, vMid + 1</ins>);
+			}
+			t = SetQuad(triangles, t, <ins>vMid + xSize - 1, vMax + 1, vMid, vMax</ins>);
+		}
+
+		int vTop = <ins>vMin - 1</ins>;
+		t = SetQuad(triangles, t, <ins>vTop + 1, vTop, vTop + 2, vMid</ins>);
+		for (int x = 1; x &lt; xSize - 1; x++, vTop--, vMid++) {
+			t = SetQuad(triangles, t, <ins>vTop, vTop - 1, vMid, vMid + 1</ins>);
+		}
+		t = SetQuad(triangles, t, <ins>vTop, vTop - 1, vMid, vTop - 2</ins>);
+		
+		return t;
+	}</pre>
+					
+					<a href="rc-03-Adding-the-Triangles.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Rounding the Cube</h2>
+					
+					<p>A vanilla cube is not that special. Let's turn it into a rounded cube! Rename the script file and the class name so it becomes <code>RoundedCube</code>. Unity should keep track of the component, but if the connection goes missing just drag the script onto it again.</p>
+					
+					<p>We also need to control how much of the cube becomes rounded, so add a <code>roundness</code> field for that. It should be set to a value between one and half the smallest dimension of the cube.</p>
+					
+					<pre translate="no">public class <ins>RoundedCube</ins> : MonoBehaviour {
+
+	public int xSize, ySize, zSize;
+	<ins>public int roundness;</ins>
+	
+	&hellip;
+}</pre>
+					
+					<figure>
+						<img src="04-roundness.png" width="320" height="116">
+						<figcaption>Configurable roundness.</figcaption>
+					</figure>
+					
+					<p>While we could let Unity calculate the normals again, let's do it ourselves this time. As we'll compute the desired roundness of the cube instead of averaging adjacent triangles, our approach will be better. So add a <code>normals</code> array field.</p>
+					
+					<p>Do normals manually this time.</p>
+					
+					<pre translate="no">	<ins>private Vector3[] normals;</ins>
+
+	private void CreateVertices () {
+		&hellip;
+		vertices = new Vector3[cornerVertices + edgeVertices + faceVertices];
+		<ins>normals = new Vector3[vertices.Length];</ins>
+
+		&hellip;
+
+		mesh.vertices = vertices;
+		<ins>mesh.normals = normals;</ins>
+	}</pre>
+					
+					<p>This allows use to draw gizmos for the normals as well, so we can verify that we do a good job.</p>
+					
+					<pre translate="no">	private void OnDrawGizmos () {
+		if (vertices == null) {
+			return;
+		}
+		for (int i = 0; i &lt; vertices.Length; i++) {
+			<ins>Gizmos.color = Color.black;</ins>
+			Gizmos.DrawSphere(vertices[i], 0.1f);
+			<ins>Gizmos.color = Color.yellow;</ins>
+			<ins>Gizmos.DrawRay(vertices[i], normals[i]);</ins>
+		}
+	}</pre>
+					
+					<figure>
+						<img src="04-no-normals.png" width="300" height="275">
+						<figcaption>No normals yet.</figcaption>
+					</figure>
+					
+					<p>So how do we position the vertices of the rounded cubes and compute their normals? Let's invent a dedicated method for that.</p>
+					
+					<pre translate="no">	private void CreateVertices () {
+		&hellip;
+
+		int v = 0;
+		for (int y = 0; y &lt;= ySize; y++) {
+			for (int x = 0; x &lt;= xSize; x++) {
+				<ins>SetVertex(v++,</ins> x, y, 0);
+			}
+			for (int z = 1; z &lt;= zSize; z++) {
+				<ins>SetVertex(v++,</ins> xSize, y, z);
+			}
+			for (int x = xSize - 1; x >= 0; x--) {
+				<ins>SetVertex(v++,</ins> x, y, zSize);
+			}
+			for (int z = zSize - 1; z > 0; z--) {
+				<ins>SetVertex(v++,</ins> 0, y, z);
+			}
+		}
+		for (int z = 1; z &lt; zSize; z++) {
+			for (int x = 1; x &lt; xSize; x++) {
+				<ins>SetVertex(v++,</ins> x, ySize, z);
+			}
+		}
+		for (int z = 1; z &lt; zSize; z++) {
+			for (int x = 1; x &lt; xSize; x++) {
+				<ins>SetVertex(v++,</ins> x, 0, z);
+			}
+		}
+
+		mesh.vertices = vertices;
+		mesh.normals = normals;
+	}
+
+	<ins>private void SetVertex (int i, int x, int y, int z) {</ins>
+		<ins>vertices[i] = new Vector3(x, y, z);</ins>
+	<ins>}</ins></pre>
+					
+					<p>So how do we position the vertices? Consider a smaller cube floating inside our original cube. The distance between the faces of these two cubes is equal to the roundness. You could imagine spheres stuck on the corners of this smaller cube, their radius equal to the roundness, so the inner cube is firmly held in place.</p>
+					
+					<p>For any point on the outer cube there's a point closest to it on the inner cube. We can use this to determine the normal vectors for the rounded cube.</p>
+					
+					<figure>
+						<img src="04-inner-cube.png" width="250" height="250">
+						<figcaption>There's another cube hiding inside.</figcaption>
+					</figure>
+					
+					<p>The surface points of the rounded cube can then be found by starting at the inner point and moving along the normal by an amount equal to the roundness. Here's the code to do that, except that it doesn't locate the inner point yet.</p>
+					
+					<pre translate="no">	private void SetVertex (int i, int x, int y, int z) {
+		<ins>Vector3 inner =</ins> vertices[i] = new Vector3(x, y, z);
+
+		<ins>normals[i] = (vertices[i] - inner).normalized;</ins>
+		<ins>vertices[i] = inner + normals[i] * roundness;</ins>
+	}</pre>
+					
+					<p>Now to find the inner point. Start by checking the X coordinate. If it's less than the roundness, then we're on the left of the inner cube and the inner X coordinate is simply the roundness value. And if we're beyond the X size of the cube minus the roundness, then we're on the right side. In all other cases we're in range of the inner cube and both points share the same X coordinate.</p>
+					
+					<pre translate="no">	private void SetVertex (int i, int x, int y, int z) {
+		Vector3 inner = vertices[i] = new Vector3(x, y, z);
+
+		<ins>if (x &lt; roundness) {</ins>
+			<ins>inner.x = roundness;</ins>
+		<ins>}</ins>
+		<ins>else if (x > xSize - roundness) {</ins>
+			<ins>inner.x = xSize - roundness;</ins>
+		<ins>}</ins>
+
+		normals[i] = (vertices[i] - inner).normalized;
+		vertices[i] = inner + normals[i] * roundness;
+	}</pre>
+					
+					<figure>
+						<img src="04-rounded-x.png" width="325" height="275">
+						<figcaption>One-dimensional rounding is rather flat.</figcaption>
+					</figure>
+					
+					<p>So far the result doesn't look rounded at all, but we are already getting normals in the positive and negative X directions. Throw in the same check for the Y coordinate.</p>
+					
+					<pre translate="no">		if (x &lt; roundness) {
+			inner.x = roundness;
+		}
+		else if (x > xSize - roundness) {
+			inner.x = xSize - roundness;
+		}
+		<ins>if (y &lt; roundness) {</ins>
+			<ins>inner.y = roundness;</ins>
+		<ins>}</ins>
+		<ins>else if (y > ySize - roundness) {</ins>
+			<ins>inner.y = ySize - roundness;</ins>
+		<ins>}</ins></pre>
+					
+					<figure>
+						<img src="04-rounded-xy.png" width="325" height="275">
+						<figcaption>Rounding in two dimensions.</figcaption>
+					</figure>
+					
+					<p>It's starting to look better! The rounding and normals work in the XY plane. All that's left is to check the Z coordinate as well.</p>
+					
+					<pre translate="no">		if (x &lt; roundness) {
+			inner.x = roundness;
+		}
+		else if (x > xSize - roundness) {
+			inner.x = xSize - roundness;
+		}
+		if (y &lt; roundness) {
+			inner.y = roundness;
+		}
+		else if (y > ySize - roundness) {
+			inner.y = ySize - roundness;
+		}
+		<ins>if (z &lt; roundness) {</ins>
+			<ins>inner.z = roundness;</ins>
+		<ins>}</ins>
+		<ins>else if (z > zSize - roundness) {</ins>
+			<ins>inner.z = zSize - roundness;</ins>
+		<ins>}</ins></pre>
+					
+					<figure>
+						<img src="04-rounded-xyz.png" width="325" height="275">
+						<figcaption>Fully rounded.</figcaption>
+					</figure>
+					
+					<p>And we finally have a fully rounded cube.</p>
+					
+					<a href="rc-04-Rounding-the-Cube.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Splitting the Mesh</h2>
+					
+					<p>We have a nice rounded cube, created with a single mesh without any duplicate vertices. How do we texture this thing? We need UV coordinates for that, but there's no way to create a seamless wrapping. And seams require duplicate vertices&hellip;</p>
+					
+					<p>We can switch to using duplicate vertices, but there is another way. We can use multiple sub-meshes to create separate triangle lists that use the same vertices. This allows us to use a different material for each set of triangles.</p>
+					
+					<p>Let's split our mesh into three pairs of opposite face. This means that we'll need three array and three triangle indices.</p>
+					
+					<pre translate="no">	private void CreateTriangles () {
+		<ins>int[] trianglesZ = new int[(xSize * ySize) * 12];</ins>
+		<ins>int[] trianglesX = new int[(ySize * zSize) * 12];</ins>
+		<ins>int[] trianglesY = new int[(xSize * zSize) * 12];</ins>
+		int ring = (xSize + zSize) * 2;
+		int <ins>tZ = 0, tX = 0, tY = 0</ins>, v = 0;
+		
+		&hellip;
+	}</pre>
+					
+					<p>Now we have to split the ring loop into four segments, alternating between the arrays for Z and X.</p>
+					
+					<pre translate="no">		for (int y = 0; y &lt; ySize; y++, v++) {
+			for (int q = 0; q &lt; <ins>xSize</ins>; q++, v++) {
+				<ins>tZ</ins> = SetQuad(<ins>trianglesZ</ins>, <ins>tZ</ins>, v, v + 1, v + ring, v + ring + 1);
+			}
+			<ins>for (int q = 0; q &lt; zSize; q++, v++) {</ins>
+				<ins>tX = SetQuad(trianglesX, tX, v, v + 1, v + ring, v + ring + 1);</ins>
+			<ins>}</ins>
+			<ins>for (int q = 0; q &lt; xSize; q++, v++) {</ins>
+				<ins>tZ = SetQuad(trianglesZ, tZ, v, v + 1, v + ring, v + ring + 1);</ins>
+			<ins>}</ins>
+			<ins>for (int q = 0; q &lt; zSize - 1; q++, v++) {</ins>
+				<ins>tX = SetQuad(trianglesX, tX, v, v + 1, v + ring, v + ring + 1);</ins>
+			<ins>}</ins>
+			<ins>tX</ins> = SetQuad(<ins>trianglesX</ins>, <ins>tX</ins>, v, v - ring + 1, v + ring, v + 1);
+		}</pre>
+					
+					<p>The top and bottom faces simply use the Y array.</p>
+					
+					<pre translate="no">		<ins>tY</ins> = CreateTopFace(<ins>trianglesY</ins>, <ins>tY</ins>, ring);
+		<ins>tY</ins> = CreateBottomFace(<ins>trianglesY</ins>, <ins>tY</ins>, ring);</pre>
+					
+					<p>And instead of assigning to <code>mesh.triangles</code> we create three sub-meshes.</p>
+					
+					<pre translate="no">		<ins>mesh.subMeshCount = 3;</ins>
+		<ins>mesh.SetTriangles(trianglesZ, 0);</ins>
+		<ins>mesh.SetTriangles(trianglesX, 1);</ins>
+		<ins>mesh.SetTriangles(trianglesY, 2);</ins></pre>
+					
+					<figure>
+						<img src="05-only-z.png" width="225" height="200">
+						<figcaption>Only two faces show up.</figcaption>
+					</figure>
+					
+					<p>Our mesh is now cut into three pieces and only the first is actually rendered. We have to assign additional materials to the mesh renderer, one per sub-mesh. That's why there's a material array.</p>
+					
+					<figure>
+						<img alt="scene" src="05-colored-faces.png" width="250" height="225">
+						<img alt="inspector" src="05-materials.png" width="320" height="202">
+						<figcaption>Three sub-meshes, three materials.</figcaption>
+					</figure>
+					
+					<aside>
+						<h3>Doesn't this require more draw calls?</h3>
+						<div>
+							<p>Indeed it does, three instead of one. So what is more important to you, less vertices or less draw calls? It's useful to have a choice.</p>
+							
+							<p>You typically want as few draw calls as possible. But it only matters if draw calls are the bottleneck. Dynamic batching can help you out as well.</p>
+							
+							<p>Not having any duplicate vertices can be an advantage when you use them in expensive calculations, in which case less is better. Not having to deal with duplicates and seams makes algorithms a lot easier too.</p>
+						</div>
+					</aside>
+					
+					<a href="rc-05-Splitting-the-Mesh.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Rendering a Grid</h2>
+					
+					<p>While we can now differentiate faces, we still have no texture coordinates. Suppose we want to display a grid pattern across the entire cube, so that we can see the individual quads. How can we accomplish that?</p>
+					
+					<figure>
+						<img src="06-grid-texture.png" width="128" height="128">
+						<figcaption>Texture to cover one quad.</figcaption>
+					</figure>
+					
+					<p>Instead of storing the UV coordinates in the mesh, maybe we can use a custom shader to figure out how to apply the texture. Here is a newly created shader.</p>
+					
+					<pre translate="no" class="shader">Shader "Custom/Rounded Cube Grid" {
+	Properties {
+		_Color ("Color", Color) = (1,1,1,1)
+		_MainTex ("Albedo (RGB)", 2D) = "white" {}
+		_Glossiness ("Smoothness", Range(0,1)) = 0.5
+		_Metallic ("Metallic", Range(0,1)) = 0.0
+	}
+	SubShader {
+		Tags { "RenderType"="Opaque" }
+		LOD 200
+		
+		CGPROGRAM
+		#pragma surface surf Standard fullforwardshadows
+		#pragma target 3.0
+
+		sampler2D _MainTex;
+
+		struct Input {
+			float2 uv_MainTex;
+		};
+
+		half _Glossiness;
+		half _Metallic;
+		fixed4 _Color;
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			fixed4 c = tex2D(_MainTex, IN.uv_MainTex) * _Color;
+			o.Albedo = c.rgb;
+			o.Metallic = _Metallic;
+			o.Smoothness = _Glossiness;
+			o.Alpha = c.a;
+		}
+		ENDCG
+	} 
+	FallBack "Diffuse"
+}</pre>
+					
+					<p>This is a default surface shader. The important bit is that it defines an input structure which expects coordinates for the main texture. These coordinates are used in the <code>surf</code> function, which is invoked for each fragment that is rendered. As we don't have such coordinates, we have to replace <code>uv_MainTex</code> with something else.</p>
+					
+					<pre translate="no" class="shader">		struct Input {
+			float2 <ins>cubeUV</ins>;
+		};
+
+		&hellip;
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			fixed4 c = tex2D(_MainTex, IN.<ins>cubeUV</ins>) * _Color;
+			o.Albedo = c.rgb;
+			o.Metallic = _Metallic;
+			o.Smoothness = _Glossiness;
+			o.Alpha = c.a;
+		}</pre>
+					
+					<p>As the UV are defined per vertex, we have to add a function that is invoked per vertex.</p>
+					
+					<pre translate="no" class="shader">		CGPROGRAM
+		#pragma surface surf Standard fullforwardshadows <ins>vertex:vert</ins>
+		#pragma target 3.0
+
+		sampler2D _MainTex;
+
+		struct Input {
+			float2 cubeUV;
+		};
+
+		half _Glossiness;
+		half _Metallic;
+		fixed4 _Color;
+		
+		<ins>void vert (inout appdata_full v, out Input o) {</ins>
+			<ins>UNITY_INITIALIZE_OUTPUT(Input, o);</ins>
+		<ins>}</ins>
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			fixed4 c = tex2D(_MainTex, IN.cubeUV) * _Color;
+			o.Albedo = c.rgb;
+			o.Metallic = _Metallic;
+			o.Smoothness = _Glossiness;
+			o.Alpha = c.a;
+		}
+		ENDCG</pre>
+					
+					<p>To check that our shader works, start with directly using the XY coordinates of the vertex position as UV.</p>
+					
+					<pre translate="no" class="shader">		void vert (inout appdata_full v, out Input o) {
+			UNITY_INITIALIZE_OUTPUT(Input, o);
+			<ins>o.cubeUV = v.vertex.xy;</ins>
+		}</pre>
+					
+					<figure>
+						<img alt="scene" src="06-grid-xy.png" width="275" height="250">
+						<img alt="inspector" src="06-material-x.png" width="320" height="180">
+						<figcaption>Using XY as UV.</figcaption>
+					</figure>
+					
+					<p>This works reasonably for the Z faces, but the others are a mess. We need to use different vertex coordinates for them. So we have a choice to make, which we can support by adding a keyword enumeration shader property.</p>
+					
+					<pre translate="no" class="shader">	Properties {
+		_Color ("Color", Color) = (1,1,1,1)
+		_MainTex ("Albedo (RGB)", 2D) = "white" {}
+		_Glossiness ("Smoothness", Range(0,1)) = 0.5
+		_Metallic ("Metallic", Range(0,1)) = 0.0
+		<ins>[KeywordEnum(X, Y, Z)] _Faces ("Faces", Float) = 0</ins>
+	}</pre>
+					
+					<figure>
+						<img src="06-material-faces.png" width="320" height="196">
+						<figcaption>Choose your faces.</figcaption>
+					</figure>
+					
+					<p>Depending on which option you select, Unity will enable a custom shader keyword for the material. We have to tell the shader to create versions of itself for each keyword that we wish to support.</p>
+					
+					<pre translate="no" class="shader">	CGPROGRAM
+		<ins>#pragma shader_feature _FACES_X _FACES_Y _FACES_Z</ins>
+		#pragma surface surf Standard fullforwardshadows vertex:vert
+		#pragma target 3.0</pre>
+					
+					<p>It is possible to check which keyword is defined, which enables us to write different code for each option.</p>
+
+					<pre translate="no" class="shader">		void vert (inout appdata_full v, out Input o) {
+			UNITY_INITIALIZE_OUTPUT(Input, o);
+			<ins>#if defined(_FACES_X)</ins>
+				<ins>o.cubeUV = v.vertex.yz;</ins>
+			<ins>#elif defined(_FACES_Y)</ins>
+				<ins>o.cubeUV = v.vertex.xz;</ins>
+			<ins>#elif defined(_FACES_Z)</ins>
+				o.cubeUV = v.vertex.xy;
+			<ins>#endif</ins>
+		}</pre>
+					
+					<figure>
+						<img src="06-grid-faces.png" width="275" height="250">
+						<figcaption>Using different coordinates per material.</figcaption>
+					</figure>
+					
+					<p>This is starting to look nice, but the grid lines don't fit the actual quads. Worse, as we're using the world-space vertex position things get weird when you move or rotate the cube.</p>
+					
+					<p>We need the vertex positions of the original cube, before it was rounded. If we can store these in the mesh somehow we could pass them to the shader. As we're not using vertex colors, we can use the vertex color channel for this purpose.</p>
+					
+					<aside>
+						<h3>Why use the vertex colors?</h3>
+						<div>
+							<p>Using UV channels might make more sense, but we can only put 2D vectors in them while we need to store a 3D vector. We could use both the first and second UV channels, but then we have to split our data between two channels, which we rather avoid.</p>
+							
+							<p>But tangent vectors are 4D and we're not using those anyway. Why not put the data in the tangent channel? The problem is that tangents &ndash; like positions and normals &ndash; are defined in object space. This means that they are almost guaranteed to be changed by Unity when any form of batching is used, because batching combines multiple objects into a single one. It might appear to work at first, but strange things will happen once you have more than one rounded cube in your scene.</p>
+						</div>
+					</aside>
+					
+					<pre translate="no">	<ins>private Color32[] cubeUV;</ins>
+
+	private void CreateVertices () {
+		int cornerVertices = 8;
+		int edgeVertices = (xSize + ySize + zSize - 3) * 4;
+		int faceVertices = (
+			(xSize - 1) * (ySize - 1) +
+			(xSize - 1) * (zSize - 1) +
+			(ySize - 1) * (zSize - 1)) * 2;
+		vertices = new Vector3[cornerVertices + edgeVertices + faceVertices];
+		normals = new Vector3[vertices.Length];
+		<ins>cubeUV = new Color32[vertices.Length];</ins>
+
+		&hellip;
+
+		mesh.vertices = vertices;
+		mesh.normals = normals;
+		<ins>mesh.colors32 = cubeUV;</ins>
+	}
+
+	private void SetVertex (int i, int x, int y, int z) {
+		&hellip;
+
+		normals[i] = (vertices[i] - inner).normalized;
+		vertices[i] = inner + normals[i] * roundness;
+		<ins>cubeUV[i] = new Color32((byte)x, (byte)y, (byte)z, 0);</ins>
+	}</pre>
+					
+					<p>We have to use <code>Color32</code> instead of the usual <code>Color</code> type here, because vertex color components are stored as a single byte. An entire color is four bytes, the same size as a single float.</p>
+					
+					<p>If we used regular colors, then Unity would convert from 0&ndash;1 floats to 0&ndash;255 bytes, truncating everything outside that range. By directly converting to bytes ourselves, we can deal with cube sizes up to 255, which should be enough.</p>
+					
+					<p>On the shader side, we can now use the vertex color instead of its position. As the shader interprets vertex color channels as values in the 0&ndash;1 range, we have to undo this conversion by multiplying with 255.</p>
+					
+					<pre translate="no" class="shader">		void vert (inout appdata_full v, out Input o) {
+			UNITY_INITIALIZE_OUTPUT(Input, o);
+			#if defined(_FACES_X)
+				o.cubeUV = v.<ins>color</ins>.yz <ins>* 255</ins>;
+			#elif defined(_FACES_Y)
+				o.cubeUV = v.<ins>color</ins>.xz <ins>* 255</ins>;
+			#elif defined(_FACES_Z)
+				o.cubeUV = v.<ins>color</ins>.xy <ins>* 255</ins>;
+			#endif
+		}</pre>
+					
+					<figure>
+						<img src="06-grid-cube.png" width="275" height="250">
+						<figcaption>Grid using original cube positions.</figcaption>
+					</figure>
+					
+					<p>And we finally have a functional grid texture. Note that the UV coordinates of one of each pair of faces is mirrored, but this isn't a problem because we're using a symmetrical texture.</p>
+					
+					<a href="rc-06-Rendering-a-Grid.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Adding Colliders</h2>
+					
+					<p>Cubes are only fun when you can toss them around, which requires physics and colliders. Unfortunately mesh collider don't really work, because you'll quickly run into the polygon count limitation of convex colliders. But don't worry, we can use primitive colliders to create a perfect rounded cube. Let's add a method for that.</p>
+					
+					<pre translate="no">	private void Generate () {
+		GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();
+		mesh.name = "Procedural Cube";
+		CreateVertices();
+		CreateTriangles();
+		<ins>CreateColliders();</ins>
+	}
+	
+	<ins>private void CreateColliders () {</ins>
+	<ins>}</ins></pre>
+					
+					<p>As a first step, add a single box collider.</p>
+					
+					<pre translate="no">	private void CreateColliders () {
+		<ins>gameObject.AddComponent&lt;BoxCollider>();</ins>
+	}</pre>
+					
+					<figure>
+						<img src="07-one-collider.png" width="300" height="275">
+						<figcaption>A single box collider.</figcaption>
+					</figure>
+					
+					<p>It turns out that Unity is smart enough to position and scale the collider such that it matches the bounding box of our mesh. Now we have to scale the collider so that it matches the flat sides of two opposite faces. As that needs to be done for all three face pairs, we end up with three intersecting blocks.</p>
+					
+					<pre translate="no">	private void CreateColliders () {
+		<ins>AddBoxCollider(xSize, ySize - roundness * 2, zSize - roundness * 2);</ins>
+		<ins>AddBoxCollider(xSize - roundness * 2, ySize, zSize - roundness * 2);</ins>
+		<ins>AddBoxCollider(xSize - roundness * 2, ySize - roundness * 2, zSize);</ins>
+	}
+	
+	<ins>private void AddBoxCollider (float x, float y, float z) {</ins>
+		<ins>BoxCollider c =</ins> gameObject.AddComponent&lt;BoxCollider>();
+		<ins>c.size = new Vector3(x, y, z);</ins>
+	<ins>}</ins></pre>
+					
+					<figure>
+						<img src="07-box-colliders.png" width="300" height="275">
+						<figcaption>Box colliders for the flat areas.</figcaption>
+					</figure>
+					
+					<p>We can use capsules to fill the edges and corners. We need to give them the right orientation and position them at the center of each edge.</p>
+					
+					<pre translate="no">	<ins>private void AddCapsuleCollider (int direction, float x, float y, float z) {</ins>
+		<ins>CapsuleCollider c = gameObject.AddComponent&lt;CapsuleCollider>();</ins>
+		<ins>c.center = new Vector3(x, y, z);</ins>
+		<ins>c.direction = direction;</ins>
+		<ins>c.radius = roundness;</ins>
+		<ins>c.height = c.center[direction] * 2f;</ins>
+	<ins>}</ins></pre>
+					
+					<p>We need one capsule per edge, so twelve in total. I created min, half, and max vectors to make the placement easier.</p>
+					
+					<pre translate="no">	private void CreateColliders () {
+		AddBoxCollider(xSize, ySize - roundness * 2, zSize - roundness * 2);
+		AddBoxCollider(xSize - roundness * 2, ySize, zSize - roundness * 2);
+		AddBoxCollider(xSize - roundness * 2, ySize - roundness * 2, zSize);
+
+		<ins>Vector3 min = Vector3.one * roundness;</ins>
+		<ins>Vector3 half = new Vector3(xSize, ySize, zSize) * 0.5f; </ins>
+		<ins>Vector3 max = new Vector3(xSize, ySize, zSize) - min;</ins>
+
+		<ins>AddCapsuleCollider(0, half.x, min.y, min.z);</ins>
+		<ins>AddCapsuleCollider(0, half.x, min.y, max.z);</ins>
+		<ins>AddCapsuleCollider(0, half.x, max.y, min.z);</ins>
+		<ins>AddCapsuleCollider(0, half.x, max.y, max.z);</ins>
+		
+		<ins>AddCapsuleCollider(1, min.x, half.y, min.z);</ins>
+		<ins>AddCapsuleCollider(1, min.x, half.y, max.z);</ins>
+		<ins>AddCapsuleCollider(1, max.x, half.y, min.z);</ins>
+		<ins>AddCapsuleCollider(1, max.x, half.y, max.z);</ins>
+		
+		<ins>AddCapsuleCollider(2, min.x, min.y, half.z);</ins>
+		<ins>AddCapsuleCollider(2, min.x, max.y, half.z);</ins>
+		<ins>AddCapsuleCollider(2, max.x, min.y, half.z);</ins>
+		<ins>AddCapsuleCollider(2, max.x, max.y, half.z);</ins>
+	}</pre>
+					
+					<figure>
+						<img src="07-all-colliders.png" width="300" height="275">
+						<figcaption>Ready for action.</figcaption>
+					</figure>
+					
+					<p>All that's left to do is add a rigidbody to the rounded cube, give it some friends, and go nuts! And once you're done with the cubes, have a look at the <a href="../cube-sphere/index.html">Cube Sphere</a> tutorial.</p>
+					
+					<figure>
+						<video width="500" height="200" controls loop muted>
+							<source src="07-rigidbodies.mp4" type="video/mp4">
+						</video>
+						<figcaption>Rigidbodies bouncing around.</figcaption>
+					</figure>
+					
+					<a href="rc-07-Adding-Colliders.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Rounded-Cube.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../tutorials.js"></script>
+	</body>
+</html>

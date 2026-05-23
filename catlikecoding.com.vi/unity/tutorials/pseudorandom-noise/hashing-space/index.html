@@ -1,0 +1,1457 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/pseudorandom-noise/hashing-space/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/pseudorandom-noise/hashing-space/tutorial-image.jpg">
+		<meta property="og:title" content="Hashing Space">
+		<meta property="og:description" content="A Unity C# Pseudorandom Noise tutorial about hashing using an abitrary regular grid.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hashing Space</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/pseudorandom-noise/hashing-space/#article",
+				"headline": "Hashing Space",
+				"alternativeHeadline": "Hashing in an Arbitrary Grid",
+				"datePublished": "2021-04-30",
+				"dateModified": "2021-07-15",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity C# Pseudorandom Noise tutorial about hashing using an abitrary regular grid.",
+				"image": "https://catlikecoding.com/unity/tutorials/pseudorandom-noise/hashing-space/tutorial-image.jpg",
+				"dependencies": "Unity 2020.3.6f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/pseudorandom-noise/", "name": "Pseudorandom Noise" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				HashJob: 1,
+				HashVisualization: 1,
+				IShape: 1,
+				Job: 1,
+				Plane : 1,
+				Point4: 1,
+				S: 1,
+				ScheduleDelegate: 1,
+				Shape: 1,
+				Shapes: 1,
+				SmallXXHash: 1,
+				SmallXXHash4: 1,
+				SpaceTRS: 1,
+				Sphere: 1,
+				Torus: 1
+			};
+			
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Pseudorandom Noise</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hashing Space</h1>
+					<p>Hashing in an Arbitrary Grid</p>
+					<ul>
+						<li>Hash transformed 3D space.</li>
+						<li>Sample space with different shapes.</li>
+						<li>Manually vectorize jobs.</li>
+						<li>Create a shape job template.</li>
+					</ul>
+				</header>
+				
+				<p>This is the second tutorial in a series about <a href="../index.html">pseudorandom noise</a>. In it we'll adjust our hashing so it works with arbitrary grids and shapes.</p>
+				
+				<p>This tutorial is made with Unity 2020.3.6f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Sampling rotated hashed space with a deformed torus.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Grid Transformation</h2>
+					
+					<p>In the <a href="../hashing/index.html">previous tutorial</a> we colored and displaced sample points on a plane by hashing integer UV coordinates, so each point got its own hash value. In this tutorial we will instead hash space itself, then sample it. We'll do this based on the integer grid defined by the space. This decouples the hash from the sample points, which makes it independent of the shape and resolution of the visualization.</p>
+					
+					<section>
+						<h3>Changing Scale</h3>
+						
+						<p>To illustrate that the hash pattern and resolution can be decoupled, let's start by doubling the effective resolution of the hash pattern. We can do this by doubling the UV coordinates in <code>HashJob.Execute</code> before feeding then to the hash.</p>
+						
+						<pre translate="no">		public void Execute(int i) {
+			int v = (int)floor(invResolution * i + 0.00001f);
+			int u = i - resolution * v - resolution / 2;
+			v -= resolution / 2;
+
+			<ins>u *= 2;</ins>
+			<ins>v *= 2;</ins>
+
+			hashes[i] = hash.Eat(u).Eat(v);
+		}</pre>
+						
+						<figure>
+							<img src="grid-transformation/scale-normal.png" width="260" height="260" alt="normal">
+							<img src="grid-transformation/scale-double.png" width="260" height="260" alt="double">
+							<figcaption>Normal and double scale; resolution 32 and seed 0.</figcaption>
+						</figure>
+						
+						<p>Doubling the scale of the UV produces a different pattern, but doesn't appear fundamentally different. We've just scaled the domain of the hash function, moving through it twice as fast as before. We can also scale down instead, for example by dividing the UV by four.</p>
+						
+						<pre translate="no">			u <ins>/= 4</ins>;
+			v <ins>/= 4</ins>;</pre>
+						
+						<figure>
+							<img src="grid-transformation/scale-quarter-misalinged.png" width="260" height="260">
+							<figcaption>Quarter scale, misaligned.</figcaption>
+						</figure>
+						
+						<p>Now groups of 4&times;4 sample points end up with the same hash, so it appears as if we reduced the resolution of the visualization. However, we get a misalignment and repetition around zeros, because the integer divisions effectively round towards zero.</p>
+						
+						<p>Both problems are solved by initially calculating the UV coordinates as floating-point values in the &minus;0.5&ndash;0.5 range, instead of as integers. Then derive the integer coordinates from that by rounding down, via the <code>floor</code> method.</p>
+						
+						<pre translate="no">			<ins>float vf</ins> = floor(invResolution * i + 0.00001f);
+			<ins>float uf</ins> = <ins>invResolution * (</ins>i - resolution * <ins>vf + 0.5f) - 0.5f</ins>;
+			<ins>vf = invResolution * (vf + 0.5f) - 0.5f;</ins>
+
+			<ins>int u = (int)floor(uf);</ins>
+			<ins>int v = (int)floor(vf);</ins>
+
+			hashes[i] = hash.Eat(u).Eat(v);
+		}</pre>
+						
+						<p>To transform the hash pattern back to the previous scale, before rounding down multiply the UV with the visualization resolution that we used&mdash;which is 32&mdash;divided by four.</p>
+						
+						<pre translate="no">			int u = (int)floor(uf <ins>* 32f / 4f</ins>);
+			int v = (int)floor(vf <ins>* 32f / 4f</ins>);</pre>
+						
+						<figure>
+							<img src="grid-transformation/scale-quarter-aligned.png" width="260" height="260">
+							<figcaption>Quarter scale, aligned.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Domain Transformation</h3>
+						
+						<p>Instead of using a fixed domain scale we'll make it configurable. And we don't have to limit ourselves to just scaling the domain, we can treat it as a regular 3D space. We can apply any translation, rotation, and scale to it, just like we can transform game objects. However, we cannot use a <code>Transform</code> component in isolation, so let's define a custom <code>SpaceTRS</code> struct in a new file, with three public <code>float3</code> fields for the transformation.</p>
+						
+						<pre translate="no"><ins>using Unity.Mathematics;</ins>
+
+<ins>public struct SpaceTRS {</ins>
+
+	<ins>public float3 translation, rotation, scale;</ins>
+<ins>}</ins></pre>
+						
+						<p>Add a field of this type to <code>HashVisualization</code> to support a configurable space transformation. Set its scale to 8 by default, matching our current hard-coded visualization.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>SpaceTRS domain = new SpaceTRS {</ins>
+		<ins>scale = 8f</ins>
+	<ins>};</ins></pre>
+						
+						<p>This only works if our custom <code>SpaceTRS</code> can be serialized. We make this possible by attaching the <code>System.Serializable</code> attribute to it.</p>
+						
+						<pre translate="no"><ins>[System.Serializable]</ins>
+public struct SpaceTRS { &hellip; }</pre>
+						
+						<figure>
+							<img src="grid-transformation/domain-configuration.png" width="320" height="164">
+							<figcaption>Domain configuration.</figcaption>
+						</figure>
+						
+						<p>Applying 3D space transformations to a position or direction can be performed via multiplication with a 4&times;4 matrix and a vector. Add a public <code>float4x4 Matrix</code> getter property to <code>SpaceTRS</code> that returns such a matrix. It can be created by invoking <code>float4x4.TRS</code> with the translation, rotation, and scale vectors as parameters. The rotation must be a quaternion. We can create the rotation  using Unity's convention by invoking <code>quaternion.EulerZXY</code>, passing it the rotation vector converted to radians via the <code>radians</code> method.</p>
+						
+						<pre translate="no">	<ins>public float4x4 Matrix {</ins>
+		<ins>get {</ins>
+			<ins>return float4x4.TRS(</ins>
+				<ins>translation, quaternion.EulerZXY(math.radians(rotation)), scale</ins>
+			<ins>);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>However, because we limit ourselves to a translation-rotation-scale transformation the fourth row of the matrix will always be 0,0,0,1. So we can omit it to reduce the size of the data, returning a <code>float3x4</code> matrix instead. There is no direct conversion between those matrix types, so we have to invoke the <code>math.float3x4€</code> method with the four column vectors of the matrix as arguments. These columns are named <code>c0</code>, <code>c1</code>, <code>c2</code>, and <code>c3</code>. We only need the first three components of each column, which we can extract by accessing their <code>xyz</code> properties.</p>
+						
+						<pre translate="no">	public <ins>float3x4</ins> Matrix {
+		get {
+			<ins>float4x4 m =</ins> float4x4.TRS(
+				translation, quaternion.EulerZXY(math.radians(rotation)), scale
+			);
+			<ins>return math.float3x4€(m.c0.xyz, m.c1.xyz, m.c2.xyz, m.c3.xyz);</ins>
+		}
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Applying the Matrix</h3>
+						
+						<p>To apply the matrix in <code>HashJob.Execute</code> we must first have a <code>float3</code> position. Use the &minus;0.5&ndash;0.5 UV coordinates to create the point on the XZ plane, then use its XZ components for the integer UV coordinates.</p>
+						
+						<pre translate="no">		public void Execute(int i) {
+			float vf = floor(invResolution * i + 0.00001f);
+			float uf = invResolution * (i - resolution * vf + 0.5f) - 0.5f;
+			vf = invResolution * (vf + 0.5f) - 0.5f;
+
+			<ins>float3 p = float3€(uf, 0f, vf);</ins>
+
+			int u = (int)floor(<ins>p.x</ins>);
+			int v = (int)floor(<ins>p.z</ins>);
+
+			hashes[i] = hash.Eat(u).Eat(v);
+		}</pre>
+						
+						<p>Then add a <code>float3x4 domainTRS</code> field to the job and multiply that matrix and the point via the <code>mul</code> method. This operation requires a <code>float4</code> instead of a <code>float3</code>, with its fourth component set to 1. This last component is multiplied with the fourth column of the matrix&mdash;the translation vector&mdash;so it ends up getting applied without change. Burst will optimize away the multiplication with 1.</p>
+						
+						<pre translate="no">		<ins>public float3x4 domainTRS;</ins>
+
+		public void Execute(int i) {
+			&hellip;
+
+			float3 p = <ins>mul(domainTRS, float4€(</ins>uf, 0f, vf<ins>, 1f))</ins>;
+
+			&hellip;
+		}</pre>
+						
+						<p>If at this point you check the Burst inspector you'll notice that our job no longer gets vectorized. This happens because we're now working with vector types instead of individual values. We'll ignore this limitation for now, but will take care of it later.</p>
+						
+						<p>To apply the domain transformation, pass the domain matrix to the job when scheduling it.</p>
+						
+						<pre translate="no">		new HashJob {
+			hashes = hashes,
+			resolution = resolution,
+			invResolution = 1f / resolution,
+			hash = SmallXXHash.Seed(seed)<ins>,</ins>
+			<ins>domainTRS = domain.Matrix</ins>
+		}.ScheduleParallel(hashes.Length, resolution, default).Complete();</pre>
+						
+						<figure>
+							<img src="grid-transformation/domain-rotation-y30.png" width="260" height="260">
+							<figcaption>Domain rotated 30&deg; around Y.</figcaption>
+						</figure>
+						
+						<p>We can now move, rotate, and scale the domain used for generating the hashes. We see the results that we would get as if we had moved, rotated, or scaled the plane that we're using for sampling the hash function. Thus when moving the domain to the right it appears as if the hashes move to the left, because the plane itself remains stationary. Likewise, rotation appears to go in the opposite direction and scaling up makes the pattern appear smaller.</p>
+					</section>
+					
+					<section>
+						<h3>3D Hashing</h3>
+						
+						<p>The space transformation can be in 3D, for example we could move along Y, but this wouldn't make a difference because the hash currently only depends on X and Z. Likewise, if you'd for example rotate around the X axis the hash squares would elongate until they stretch all the way from the center to the edges of the plane.
+						
+						<figure>
+							<img src="grid-transformation/domain-rotation-x90.png" width="260" height="260">
+							<figcaption>Domain rotated 90&deg; around X.</figcaption>
+						</figure>
+						
+						<p>To partition the pattern into hash cubes all we have to do is feed all three coordinates to the hash in <code>Execute</code>.</p>
+						
+						<pre translate="no">			int u = (int)floor(p.x);
+			int v = (int)floor(<ins>p.y</ins>);
+			<ins>int w = (int)floor(p.z);</ins>
+
+			hashes[i] = hash.Eat(u).Eat(v)<ins>.Eat(w)</ins>;</pre>
+						
+						<p>Now moving along Y also affects the hash and a 90&deg; rotation around one axis will produce a square pattern, displaying a different slice of the hash volume.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Sample Shapes</h2>
+					
+					<p>Given that we have a 3D hash volume, we don't need to limit ourselves to sampling it with a planar shape. We could create other jobs that samples the hash with different shapes.</p>
+					
+					<section>
+						<h3>Shapes Job</h3>
+						
+						<p>Instead of creating different variants of <code>HashJob</code>, we'll separate the jobs of creating the shape and sampling the hash volume. Create a static <code>Shapes</code> class in a new file for this, initially containing a single <code>Job</code> struct that generates <code>float3</code> positions for our plane and stores them in a native array. The domain transformation applies to hashing and thus isn't part of the shapes job. So it only needs the resolution and inverse resolution and input.</p>
+						
+						<pre translate="no"><ins>using Unity.Burst;</ins>
+<ins>using Unity.Collections;</ins>
+<ins>using Unity.Jobs;</ins>
+<ins>using Unity.Mathematics;</ins>
+
+<ins>using static Unity.Mathematics.math;</ins>
+
+<ins>public static class Shapes {</ins>
+
+	<ins>[BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = true)]</ins>
+	<ins>public struct Job : IJobFor {</ins>
+
+		<ins>[WriteOnly]</ins>
+		<ins>NativeArray&lt;float3> positions;</ins>
+
+		<ins>public float resolution, invResolution;</ins>
+
+		<ins>public void Execute (int i) {</ins>
+			<ins>float2 uv;</ins>
+			<ins>uv.y = floor(invResolution * i + 0.00001f);</ins>
+			<ins>uv.x = invResolution * (i - resolution * uv.y + 0.5f) - 0.5f;</ins>
+			<ins>uv.y = invResolution * (uv.y + 0.5f) - 0.5f;</ins>
+
+			<ins>positions[i] = float3€(uv.x, 0f, uv.y);</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Also give the job a static <code>ScheduleParallel</code> method that encapsulates the creation of the job and its scheduling, taking and returning a job handle. This method doesn't require the inverse resolution as a parameter because it can calculate the inverse itself.</p>
+						
+						<pre translate="no">	public struct Job : IJobFor {
+		
+		&hellip;
+		
+		<ins>public static JobHandle ScheduleParallel (</ins>
+			<ins>NativeArray&lt;float3> positions, int resolution, JobHandle dependency</ins>
+		<ins>) {</ins>
+			<ins>return new Job {</ins>
+				<ins>positions = positions,</ins>
+				<ins>resolution = resolution,</ins>
+				<ins>invResolution = 1f / resolution</ins>
+			<ins>}.ScheduleParallel(positions.Length, resolution, dependency);</ins>
+		<ins>}</ins>
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Generating Positions</h3>
+						
+						<p>We'll feed the positions to <code>HashJob</code> and will also use them when drawing the instances. So add a shader identifier, native array, and buffer for the positions to <code>HashVisualization</code>. Create and dispose them when needed.</p>
+						
+						<pre translate="no">	static int
+		hashesId = Shader.PropertyToID("_Hashes"),
+		<ins>positionsId = Shader.PropertyToID("_Positions"),</ins>
+		configId = Shader.PropertyToID("_Config");
+	
+	&hellip;
+	
+	NativeArray&lt;uint> hashes;
+
+	<ins>NativeArray&lt;float3> positions;</ins>
+
+	ComputeBuffer hashesBuffer<ins>, positionsBuffer</ins>;
+
+	MaterialPropertyBlock propertyBlock;
+
+	void OnEnable () {
+		int length = resolution * resolution;
+		hashes = new NativeArray&lt;uint>(length, Allocator.Persistent);
+		<ins>positions = new NativeArray&lt;float3>(length, Allocator.Persistent);</ins>
+		hashesBuffer = new ComputeBuffer(length, 4);
+		<ins>positionsBuffer = new ComputeBuffer(length, 3 * 4);</ins>
+
+		&hellip;
+	}
+
+	void OnDisable () {
+		hashes.Dispose();
+		<ins>positions.Dispose();</ins>
+		hashesBuffer.Release();
+		<ins>positionsBuffer.Release();</ins>
+		hashesBuffer = null;
+		<ins>positionsBuffer = null;</ins>
+	}</pre>
+						
+						<p>In <code>OnEnable</code>, schedule the shape job before the hash job, passing along the handle to the latter because the positions must be generated before hashing can take place. Also send the positions to the GPU afterwards.</p>
+						
+						<pre translate="no">		<ins>JobHandle handle = Shapes.Job.ScheduleParallel(positions, resolution, default);</ins>
+
+		new HashJob {
+			&hellip;
+		}.ScheduleParallel(hashes.Length, resolution, <ins>handle</ins>).Complete();
+
+		hashesBuffer.SetData(hashes);
+		<ins>positionsBuffer.SetData(positions);</ins>
+
+		propertyBlock ??= new MaterialPropertyBlock();
+		propertyBlock.SetBuffer(hashesId, hashesBuffer);
+		<ins>propertyBlock.SetBuffer(positionsId, positionsBuffer);</ins></pre>
+						
+						<p>Adjust <em translate="no">HashGPU</em> so it uses the provided positions instead of generating a plane itself. Apply the vertical offset on top of that.</p>
+						
+						<pre class="shader">#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)
+	StructuredBuffer&lt;uint> _Hashes;
+	<ins>StructuredBuffer&lt;float3> _Positions;</ins>
+#endif
+
+float4 _Config;
+
+void ConfigureProcedural () {
+	#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)
+		<del>//float v = floor(_Config.y * unity_InstanceID + 0.00001);</del>
+		<del>//float u = unity_InstanceID - _Config.x * v;</del>
+		
+		unity_ObjectToWorld = 0.0;
+		unity_ObjectToWorld._m03_m13_m23_m33 = float4(
+			<ins>_Positions[unity_InstanceID],</ins>
+			1.0
+		);
+		<ins>unity_ObjectToWorld._m13 +=</ins>
+			<ins>_Config.z * ((1.0 / 255.0) * (_Hashes[unity_InstanceID] >> 24) - 0.5);</ins>
+		unity_ObjectToWorld._m00_m11_m22 = _Config.y;
+	#endif
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Using Positions as Input</h3>
+						
+						<p>Add the positions as input to <code>HashJob</code>, then have it retrieve the pre-generated position instead of calculating one itself. Then apply the domain transformation to it. From now on hashing no longer relies on the sample resolution, so those inputs can be removed.</p>
+						
+						<pre translate="no">		<ins>[ReadOnly]</ins>
+		<ins>public NativeArray&lt;float3> positions;</ins>
+		
+		[WriteOnly]
+		public NativeArray&lt;uint> hashes;
+
+		<del>//public int resolution;</del>
+
+		<del>//public float invResolution;</del>
+		
+		public SmallXXHash hash;
+
+		public float3x4 domainTRS;
+		
+		public void Execute(int i) {
+			<del>//float vf = floor(invResolution * i + 0.00001f);</del>
+			<del>//float uf = invResolution * (i - resolution * vf + 0.5f) - 0.5f;</del>
+			<del>//vf = invResolution * (vf + 0.5f) - 0.5f;</del>
+
+			float3 p = mul(domainTRS, float4€(<ins>positions[i]</ins>, 1f));
+
+			&hellip;
+		}</pre>
+						
+						<p>Adjust the creation of <code>HashJob</code> in <code>OnEnable</code> to match.</p>
+						
+						<pre translate="no">		new HashJob {
+			<ins>positions = positions,</ins>
+			hashes = hashes,
+			<del>//resolution = resolution,</del>
+			<del>//invResolution = 1f / resolution,</del>
+			hash = SmallXXHash.Seed(seed),
+			domainTRS = domain.Matrix
+		}.ScheduleParallel(hashes.Length, resolution, handle).Complete();</pre>
+						
+						<p>At this point we can visualize the hash as before, but now with two jobs running in sequence instead of a single job.</p>
+					</section>
+					
+					<section>
+						<h3>Shape Transformation</h3>
+						
+						<p>We apply a transformation to the domain when sampling and we can also apply a transformation when generating the shape. Add a <code>float3x4</code> position transformation to <code>Shapes.Job</code> for this and use it to modify the final position in <code>Execute</code>.</p>
+						
+						<pre translate="no">		<ins>public float3x4 positionTRS;</ins>
+
+		public void Execute (int i) {
+			&hellip;
+
+			positions[i] = <ins>mul(positionTRS, float4€</ins>(uv.x, 0f, uv.y<ins>, 1f)</ins>);
+		}</pre>
+						
+						<p>In this case we can directly use the matrix from the <code>Transform</code> component of the visualization game object, so the shape would transform as expected instead of remaining fixed at the origin. To make this easy, add a <code>float4x4</code> parameter to <code>ScheduleParallel</code> and pass the relevant 3&times;4 portion of it to the job.</p>
+						
+						<pre translate="no">		public static JobHandle ScheduleParallel (
+			NativeArray&lt;float3> positions, int resolution,
+			<ins>float4x4 trs,</ins> JobHandle dependency
+		) {
+			return new Job {
+				positions = positions,
+				resolution = resolution,
+				invResolution = 1f / resolution<ins>,</ins>
+				<ins>positionTRS = float3x4€(trs.c0.xyz, trs.c1.xyz, trs.c2.xyz, trs.c3.xyz)</ins>
+			}.ScheduleParallel(positions.Length, resolution, dependency);
+		}</pre>
+						
+						<p>When scheduling the job in <code>HashVisualization.OnEnable</code>, pass the local-to-world transformation matrix to it.</p>
+						
+						<pre translate="no">		JobHandle handle = Shapes.Job.ScheduleParallel(
+			positions, resolution, <ins>transform.localToWorldMatrix,</ins> default
+		);</pre>
+						
+						<figure>
+							<img src="sample-shapes/shape-rotated-y30.png" width="260" height="260">
+							<figcaption>Shape rotated 30&deg; around Y.</figcaption>
+						</figure>
+						
+						<p>Now the shape responds appropriately to the transformation of the game object, at least the initial one when play mode is entered. Note that the individual instances remain axis-aligned and unscaled.</p>
+						
+						<aside>
+							<h3>Could we also rotate and scale the instance meshes?</h3>
+							<div>
+								<p>Yes, by passing an appropriate matrix to the GPU and having <em translate="no">HashGPU</em> incorporate it in the final matrices. However, this can cause issues when nonuniform scales are used, because we assume that the scale is uniform. I leave the instances as they are.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Updating Positions</h3>
+						
+						<p>To respond to changes of the transformation while in play mode we'll have to run the jobs in <code>Update</code> instead of <code>OnEnable</code>. But we only need to run them after something changed, not all the time. We'll indicate this by adding a <code>bool isDirty</code> field to <code>HashVisualization</code>. Our visualization is considered dirty and in need of a refresh when something relevant has changed. This is always the case when <code>OnEnable</code> is invoked, so set <code>isDirty</code> to <code>true</code> there.</p>
+						
+						<pre translate="no">	<ins>bool isDirty;</ins>
+
+	void OnEnable () {
+		<ins>isDirty = true;</ins>
+
+		&hellip;
+	}</pre>
+						
+						<p>Check whether the visualization is dirty before drawing in <code>Update</code>. If so, set <code>isDirty</code> to <code>false</code>, run the jobs, and fill the buffers with fresh data.</p>
+						
+						<pre translate="no">	void Update () {
+		<ins>if (isDirty) {</ins>
+			<ins>isDirty = false;</ins>
+
+			<ins>JobHandle handle = Shapes.Job.ScheduleParallel(</ins>
+				<ins>positions, resolution, transform.localToWorldMatrix, default</ins>
+			<ins>);</ins>
+
+			<ins>new HashJob {</ins>
+				<ins>positions = positions,</ins>
+				<ins>hashes = hashes,</ins>
+				<ins>hash = SmallXXHash.Seed(seed),</ins>
+				<ins>domainTRS = domain.Matrix</ins>
+			<ins>}.ScheduleParallel(hashes.Length, resolution, handle).Complete();</ins>
+
+			<ins>hashesBuffer.SetData(hashes);</ins>
+			<ins>positionsBuffer.SetData(positions);</ins>
+		<ins>}</ins>
+
+		Graphics.DrawMeshInstancedProcedural(&hellip;);
+	}</pre>
+						
+						<p>This means that we no longer need to perform that work in <code>OnEnable</code>.</p>
+						
+						<pre translate="no">	void OnEnable () {
+		&hellip;
+
+		<del>//JobHandle handle = Shapes.Job.ScheduleParallel(</del>
+		<del>//	positions, resolution, transform.localToWorldMatrix, default</del>
+		<del>//);</del>
+
+		<del>//new HashJob {</del>
+		<del>//	&hellip;</del>
+		<del>//}.ScheduleParallel(hashes.Length, resolution, handle).Complete();</del>
+
+		<del>//hashesBuffer.SetData(hashes);</del>
+		<del>//positionsBuffer.SetData(positions);</del>
+
+		propertyBlock ??= new MaterialPropertyBlock();
+		&hellip;
+	}</pre>
+						
+						<p>Finally, also refresh the visualization in <code>Update</code> after a transformation change happened. This is indicated by the <code>Transform.hasChanged</code> property, which is set to <code>true</code> after each change. It doesn't get set back to <code>false</code>, we have to do that manually after detecting a change.</p>
+						
+						<pre translate="no">		if (isDirty <ins>|| transform.hasChanged</ins>) {
+			isDirty = false;
+			<ins>transform.hasChanged = false;</ins>
+
+			&hellip;
+		}</pre>
+						
+						<p>From now on the shape immediately responds to transformation adjustments while in play mode. This makes it possible to explore the hash volume by moving the shape through it.</p>
+						
+						<figure>
+							<img src="sample-shapes/shape-transformed.png" width="440" height="350">
+							<figcaption>Rotated shape with nonuniform scale.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Displacement</h3>
+						
+						<p>If the plane can have an arbitrary orientation then it makes sense that the offset that we apply based on the hash should be along the plane's normal vector instead of always along the world Y axis. In general the direction of displacement depends on the shape, which might not be a flat plane at all, in which case each sample point would have its own displacement direction. To indicate this replace the <code>verticalOffset</code> field with a <code>displacement</code> field, which from now on will be expressed as units in world space instead of relative to the resolution.</p>
+						
+						<pre translate="no">	<del>//[SerializeField, Range(-2f, 2f)]</del>
+	<del>//float verticalOffset = 1f;</del>
+
+	<ins>[SerializeField, Range(-0.5f, 0.5f)]</ins>
+	<ins>float displacement = 0.1f;</ins>
+
+	&hellip;
+
+	void OnEnable () {
+		&hellip;
+		
+		propertyBlock ??= new MaterialPropertyBlock();
+		propertyBlock.SetVector(configId, new Vector4(
+			resolution, 1f / resolution, <ins>displacement</ins>
+		));
+	}</pre>
+						
+						<figure>
+							<img src="sample-shapes/displacement-inspector.png" width="320" height="62">
+							<figcaption>Displacement instead of vertical offset.</figcaption>
+						</figure>
+						
+						<p>Displacement along the surface normal vector&mdash;away from the shape's surface&mdash;requires that <code>Shapes.Job</code> also outputs normal vectors. In case of our XZ plane the normal vector always points straight up, though the transformation should also be applied to it. Adjust it and the <code>ScheduleParallel</code> method as needed.</p>
+						
+						<pre translate="no">	public struct Job : IJobFor {
+
+		[WriteOnly]
+		NativeArray&lt;float3> positions<ins>, normals</ins>;
+
+		public float resolution, invResolution;
+
+		public float3x4 positionTRS;
+
+		public void Execute (int i) {
+			&hellip;
+
+			positions[i] = mul(positionTRS, float4€(uv.x, 0f, uv.y, 1f));
+			<ins>normals[i] = normalize(mul(positionTRS, float4€(0f, 1f, 0f, 1f)));</ins>
+		}
+
+		public static JobHandle ScheduleParallel (
+			NativeArray&lt;float3> positions, <ins>NativeArray&lt;float3> normals,</ins> int resolution,
+			float4x4 trs, JobHandle dependency
+		) {
+			return new Job {
+				positions = positions,
+				<ins>normals = normals,</ins>
+				&hellip;
+			}.ScheduleParallel(positions.Length, resolution, dependency);
+		}
+	}</pre>
+						
+						<p>As displacement is done on the GPU <code>HashVisualization</code> has to send the normal vectors to the GPU, just like the positions. Add a shader identifier, array, and buffer for this purpose.</p>
+						
+						<pre translate="no">	static int
+		hashesId = Shader.PropertyToID("_Hashes"),
+		positionsId = Shader.PropertyToID("_Positions"),
+		<ins>normalsId = Shader.PropertyToID("_Normals"),</ins>
+		configId = Shader.PropertyToID("_Config");
+	
+	&hellip;
+	
+	NativeArray&lt;float3> positions<ins>, normals</ins>;
+
+	ComputeBuffer hashesBuffer, positionsBuffer<ins>, normalsBuffer</ins>;
+
+	&hellip;
+
+	void OnEnable () {
+		isDirty = true;
+
+		int length = resolution * resolution;
+		hashes = new NativeArray&lt;uint>(length, Allocator.Persistent);
+		positions = new NativeArray&lt;float3>(length, Allocator.Persistent);
+		<ins>normals = new NativeArray&lt;float3>(length, Allocator.Persistent);</ins>
+		hashesBuffer = new ComputeBuffer(length, 4);
+		positionsBuffer = new ComputeBuffer(length, 3 * 4);
+		<ins>normalsBuffer = new ComputeBuffer(length, 3 * 4);</ins>
+
+		propertyBlock ??= new MaterialPropertyBlock();
+		propertyBlock.SetBuffer(hashesId, hashesBuffer);
+		propertyBlock.SetBuffer(positionsId, positionsBuffer);
+		<ins>propertyBlock.SetBuffer(normalsId, normalsBuffer);</ins>
+		&hellip;
+	}
+
+	void OnDisable () {
+		hashes.Dispose();
+		positions.Dispose();
+		<ins>normals.Dispose();</ins>
+		hashesBuffer.Release();
+		positionsBuffer.Release();
+		<ins>normalsBuffer.Release();</ins>
+		hashesBuffer = null;
+		positionsBuffer = null;
+		<ins>normalsBuffer = null;</ins>
+	}</pre>
+						
+						<p>Pass the normal array to the job and copy it to the buffer in <code>Update</code>.</p>
+						
+						<pre translate="no">			JobHandle handle = Shapes.Job.ScheduleParallel(
+				positions, <ins>normals,</ins> resolution, transform.localToWorldMatrix, default
+			);
+			
+			new HashJob {
+				&hellip;
+			}.ScheduleParallel(hashes.Length, resolution, handle).Complete();
+
+			hashesBuffer.SetData(hashes);
+			positionsBuffer.SetData(positions);
+			<ins>normalsBuffer.SetData(normals);</ins></pre>
+						
+						<p>Then adjust <em translate="no">HashGPU</em> so it displaces along the normal instead of always vertically.</p>
+						
+						<pre class="shader">#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)
+	StructuredBuffer&lt;uint> _Hashes;
+	StructuredBuffer&lt;float3> _Positions<ins>, _Normals</ins>;
+#endif
+
+float4 _Config;
+
+void ConfigureProcedural () {
+	#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)
+		unity_ObjectToWorld = 0.0;
+		unity_ObjectToWorld._m03_m13_m23_m33 = float4(
+			_Positions[unity_InstanceID],
+			1.0
+		);
+		unity_ObjectToWorld.<ins>_m03_m13_m23</ins> +=
+			<ins>(</ins>_Config.z * ((1.0 / 255.0) * (_Hashes[unity_InstanceID] >> 24) - 0.5)<ins>) *</ins>
+			<ins>_Normals[unity_InstanceID]</ins>;
+		unity_ObjectToWorld._m00_m11_m22 = _Config.y;
+	#endif
+}</pre>
+						
+						<figure>
+							<img src="sample-shapes/displacement-game.png" width="160" height="310">
+							<figcaption>Rotated displacement.</figcaption>
+						</figure>
+						
+					</section>
+					
+					<section>
+						<h3>Bounds</h3>
+						
+						<p>The transformation of the game object should also affect the bounds that we specify when drawing the visualization. We have to use the transformed position for the bound's center. Its size is a bit more complicated, because the bounds define an axis-aligned box while our shape can both rotate and scale, which can get even more complicated if the visualization is a child of another game object. So we'll take the transform's <code>lossyScale</code>, grab its largest absolute component via the <code>cmax</code> method, double that, add the displacement, and use that for the final scale in all three dimensions. This isn't the tightest possible fit, but it's easy to calculate and good enough for our purposes.</p>
+						
+						<pre translate="no">		Graphics.DrawMeshInstancedProcedural(
+			instanceMesh, 0, material,
+			new Bounds(
+				<ins>transform.position</ins>,
+				<ins>float3€(2f * cmax(abs(transform.lossyScale)) + displacement)</ins>
+			),
+			hashes.Length, propertyBlock
+		);</pre>
+						
+						<p>We don't have to recalculate the bounds every frame, only when the visualization is dirty. So we can store it in a field and reuse it.</p>
+						
+						<pre translate="no">	<ins>Bounds bounds;</ins>
+
+	&hellip;
+
+	void Update () {
+		if (isDirty || transform.hasChanged) {
+			&hellip;
+
+			<ins>bounds = new Bounds(</ins>
+				<ins>transform.position,</ins>
+				<ins>float3€(2f * cmax(abs(transform.lossyScale)) + displacement)</ins>
+			<ins>);</ins>
+		}
+
+		Graphics.DrawMeshInstancedProcedural(
+			instanceMesh, 0, material, <ins>bounds</ins>, hashes.Length, propertyBlock
+		);
+	}</pre>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Manual Vectorization</h2>
+					
+					<p>As noted earlier, automatic vectorization of our jobs failed after we introduced vector types. Typical automatic vectorization works by replacing operations performed on <code>float</code>, <code>int</code> and other such primitive values with the same operations performed on <code>float4</code>, <code>int4</code> and such. The job then executes four iterations in parallel, taking advantage of SIMD instructions. Unfortunately this is no longer possible for our jobs because we use <code>float3</code> values for positions and normal vectors. But with some work manual vectorization is possible.</p>
+					
+					<section>
+						<h3>Vectorized Hash</h3>
+						
+						<p>Our <code>SmallXXHash</code> struct is designed with automatic vectorization in mind. To support manual vectorization we need to create a new <code>SmallXXHash4</code> variant that operates on vectors of four values in parallel. Copy and rename the struct, keeping both in the same file. We also need to use the Mathematics library here from now on.</p>
+						
+						<pre translate="no"><ins>using Unity.Mathematics;</ins>
+
+public readonly struct SmallXXHash { &hellip; }
+
+<ins>public readonly struct SmallXXHash4 { &hellip; }</pre>
+						
+						<p>Make sure that all references to its own type inside <code>SmallXXHash4</code> refer to the vector version and not to the single-value version. Also, as there is no vector type for <code>byte</code> so remove that method from it, along with the <code>primeA</code> constant as no other method uses that value.</p>
+						
+						<pre translate="no">public readonly struct SmallXXHash4 {
+
+	<del>//const uint primeA = 0b10011110001101110111100110110001;</del>
+	const uint primeB = 0b10000101111010111100101001110111;
+	const uint primeC = 0b11000010101100101010111000111101;
+	const uint primeD = 0b00100111110101001110101100101111;
+	const uint primeE = 0b00010110010101100110011110110001;
+
+	readonly uint accumulator;
+
+	public <ins>SmallXXHash4</ins> (uint accumulator) {
+		this.accumulator = accumulator;
+	}
+
+	public static implicit operator <ins>SmallXXHash4</ins> (uint accumulator) =>
+		new <ins>SmallXXHash4</ins>(accumulator);
+
+	public static <ins>SmallXXHash4</ins> Seed (int seed) => (uint)seed + primeE;
+
+	static uint RotateLeft (uint data, int steps) =>
+		(data &lt;&lt; steps) | (data >> 32 - steps);
+
+	public <ins>SmallXXHash4</ins> Eat (int data) =>
+		RotateLeft(accumulator + (uint)data * primeC, 17) * primeD;
+
+	<del>//public SmallXXHash Eat (byte data) =></del>
+	<del>//	RotateLeft(accumulator + data * primeE, 11) * primeA;</del>
+
+	public static implicit operator uint (<ins>SmallXXHash4</ins> hash) { &hellip; }
+}</pre>
+						
+						<p>Next, replace all occurrences of the <code>int</code> and <code>uint</code> types with <code>int4</code> and <code>uint4</code>. The only exception is the <code>steps</code> parameter of <code>RotateLeft</code>, which must remain a single <code>int</code>.</p>
+						
+						<pre translate="no">	readonly <ins>uint4</ins> accumulator;
+
+	public SmallXXHash4 (<ins>uint4</ins> accumulator) {
+		this.accumulator = accumulator;
+	}
+
+	public static implicit operator SmallXXHash4 (<ins>uint4</ins> accumulator) =>
+		new SmallXXHash4(accumulator);
+
+	public static SmallXXHash4 Seed (<ins>int4</ins> seed) => (<ins>uint4</ins>)seed + primeE;
+	
+	static <ins>uint4</ins> RotateLeft (<ins>uint4</ins> data, int steps) =>
+		(data &lt;&lt; steps) | (data >> 32 - steps);
+
+	public SmallXXHash4 Eat (<ins>int4</ins> data) =>
+		RotateLeft(accumulator + (<ins>uint4</ins>)data * primeC, 17) * primeD;
+
+	public static implicit operator <ins>uint4</ins> (SmallXXHash4 hash) {
+		<ins>uint4</ins> avalanche = hash.accumulator;
+		&hellip;
+	}</pre>
+						
+						<p>This is enough to vectorize <code>SmallXXHash4</code>. Let's also make conversion from the single-value version to the vectorized version implicit by adding an operator for it to <code>SmallXXHash</code>.</p>
+						
+						<pre translate="no">public readonly struct SmallXXHash {
+
+	&hellip;
+
+	<ins>public static implicit operator SmallXXHash4 (SmallXXHash hash) =></ins>
+		<ins>new SmallXXHash4(hash.accumulator);</ins>
+}</pre>
+						
+						<aside>
+							<h3>Can we also make a conversion in the other direction?</h3>
+							<div>
+								<p>Conversion from one hash to a vector hash is simply a matter of duplicating the single value. But when going the other way we'd have to somehow reduce four independent hashes to a single hash. There is no straightforward way to do this, so we won't add a conversion for it.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Vectorized Hash Job</h3>
+						
+						<p>Next, we'll vectorize <code>HashJob</code>. Begin by replacing its <code>hashes</code> output and <code>hash</code> input with their four-component variants.</p>
+						
+						<pre translate="no">		[WriteOnly]
+		public NativeArray&lt;<ins>uint4</ins>> hashes;
+
+		public <ins>SmallXXHash4</ins> hash;</pre>
+						
+						<p>We'll also need to work with four positions in parallel. A sequence of four positions can be stored in a single <code>float3x4</code> matrix value, each of its columns containing a position.</p>
+						
+						<pre translate="no">		[ReadOnly]
+		public NativeArray&lt;<ins>float3x4</ins>> positions;</pre>
+						
+						<p>However, to vectorize our calculations <code>Execute</code> needs separate vectors for the x, y, and z components, not one vector per position. We can get this by transposing the positions matrix&mdash;via the <code>transpose</code> method&mdash;which gives us a <code>float4x3</code> matrix with the desired layout. Then we can vectorize the u, v, and w extraction as well, omitting the domain transformation for now.</p>
+						
+						<figure>
+							<img src="manual-vectorization/transposing-matrix.png" width="360" height="170">
+							<figcaption>Transposing 3&times;4 to 4&times;3.</figcaption>
+						</figure>
+						
+						<pre translate="no">		public void Execute(int i) {
+			<ins>float4x3</ins> p = <ins>transpose(positions[i])</ins>;
+
+			<ins>int4</ins> u = (<ins>int4</ins>)floor(p.c0);
+			<ins>int4</ins> v = (<ins>int4</ins>)floor(p.c1);
+			<ins>int4</ins> w = (<ins>int4</ins>)floor(p.c2);
+
+			hashes[i] = hash.Eat(u).Eat(v).Eat(w);
+		}</pre>
+						
+						<p>Now we need to pass vectorized arrays to the job in <code>Update</code>. We already have the required arrays, all we have to do is reinterpret them as if each element contained four <code>float3</code> values. <code>NativeArray</code> allows us to do this, by invoking the generic <code>Reinterpret</code> method for the desired type on it, with the original element size as an argument. As this reduces the effective array length for the job to a quarter, we have to divide the scheduled job length by four as well.</p>
+						
+						<pre translate="no">			new HashJob {
+				positions = positions<ins>.Reinterpret&lt;float3x4>(3 * 4)</ins>,
+				hashes = hashes<ins>.Reinterpret&lt;uint4>(4)</ins>,
+				hash = SmallXXHash.Seed(seed),
+				domainTRS = domain.Matrix
+			}.ScheduleParallel(hashes.Length <ins>/ 4</ins>, resolution, handle).Complete();</pre>
+						
+						<p>Note that this requires that the array lengths are divisible by four, otherwise reinterpretation will fail. So make sure that the resolution is even.</p>
+					</section>
+					
+					<section>
+						<h3>Vectorized Transformation</h3>
+						
+						<p>There is no existing <code>math</code> method that can multiply a 3&times;4 TRS matrix and a 4&times;3 XYZ-column matrix. Add a <code>TransformPositions</code> method to <code>HashJob</code> that does this for us, with the mentioned matrices as parameters, returning a transformed 4&times;3 XYZ-column matrix. Initially it can return the untransformed positions. Then use it in <code>Execute</code>.</p>
+						
+						<pre translate="no">		<ins>float4x3 TransformPositions (float3x4 trs, float4x3 p) => p;</ins>
+
+		public void Execute(int i) {
+			float4x3 p = <ins>TransformPositions(domainTRS, </ins>transpose(positions[i])<ins>)</ins>;
+
+			&hellip;
+		}</pre>
+						
+						<p>The transformation is a regular matrix multiplication, except that the fourth TRS column&mdash;containing the translation&mdash;is simply added. In the previous matrix multiplication the last part was multiplied with the constant 1, but we can omit that.</p>
+						
+						<p>Because the position components are vectorized the multiplication steps are performed on entire columns of the position matrix, instead of on single components.</p>
+						
+						<pre translate="no">		float4x3 TransformPositions (float3x4 trs, float4x3 p) => <ins>float4x3(</ins>
+			<ins>trs.c0.x * p.c0 + trs.c1.x * p.c1 + trs.c2.x * p.c2 + trs.c3.x,</ins>
+			<ins>trs.c0.y * p.c0 + trs.c1.y * p.c1 + trs.c2.y * p.c2 + trs.c3.y,</ins>
+			<ins>trs.c0.z * p.c0 + trs.c1.z * p.c1 + trs.c2.z * p.c2 + trs.c3.z</ins>
+		<ins>);</ins></pre>
+						
+						<p>At this point our visualization works as before, except that <code>HashJob</code> is now vectorized. The Burst inspector's diagnostics view still indicates that the job is not vectorized, because Burst doesn't know that we have done this manually. Inspecting the assembly will show that the job does use SIMD instructions and generates four hashes in parallel.</p>
+					</section>
+					
+					<section>
+						<h3>Vectorized Shapes Job</h3>
+						
+						<p>Finally, we vectorize <code>Shapes.Job</code> using the same approach. Begin by changing the element type of the position and normal arrays to <code>float3x4</code>.</p>
+						
+						<pre translate="no">		[WriteOnly]
+		NativeArray&lt;<ins>float3x4</ins>> positions, normals;
+		
+		&hellip;
+		
+		public static JobHandle ScheduleParallel (
+			NativeArray&lt;<ins>float3x4</ins>> positions, NativeArray&lt;<ins>float3x4</ins>> normals,
+			int resolution, float4x4 trs, JobHandle dependency
+		) { &hellip; }</pre>
+						
+						<p>In <code>Execute</code>, vectorize the calculation of the UV coordinates by using a  4&times;2 UV-column matrix.</p>
+						
+						<pre translate="no">			<ins>float4x2</ins> uv;
+			uv.<ins>c1</ins> = floor(invResolution * i + 0.00001f);
+			uv.<ins>c0</ins> = invResolution * (i - resolution * uv.<ins>c1</ins> + 0.5f) - 0.5f;
+			uv.<ins>c1</ins> = invResolution * (uv.<ins>c1</ins> + 0.5f) - 0.5f;</pre>
+						
+						<p>We have to replace the single index parameter with the corresponding four vectorized indices, which is done by multiplying the original by four and then adding zero, 1, 2, and 3 to the individual indices.</p>
+						
+						<pre translate="no">			<ins>float4 i4 = 4f * i + float4€(0f, 1f, 2f, 3f);</ins>
+			uv.c1 = floor(invResolution * <ins>i4</ins> + 0.00001f);
+			uv.c0 = invResolution * (<ins>i4</ins> - resolution * uv.c1 + 0.5f) - 0.5f;</pre>
+						
+						<p>Next, we also need to apply a TRS transformation, but now for both positions and for normal vectors. To support both with a single method copy <code>TransformPositions</code> from <code>HashJob</code> to <code>Shapes.Job</code>, rename it to <code>TransformVectors</code>, and add a <code>float w</code> parameter set to 1 by default. Multiply the translation portion by this value.</p>
+						
+						<pre translate="no">		<ins>float4x3 TransformVectors (float3x4 trs, float4x3 p, float w = 1f) => float4x3(</ins>
+			<ins>trs.c0.x * p.c0 + trs.c1.x * p.c1 + trs.c2.x * p.c2 + trs.c3.x * w,</ins>
+			<ins>trs.c0.y * p.c0 + trs.c1.y * p.c1 + trs.c2.y * p.c2 + trs.c3.y * w,</ins>
+			<ins>trs.c0.z * p.c0 + trs.c1.z * p.c1 + trs.c2.z * p.c2 + trs.c3.z * w</ins>
+		<ins>);</ins></pre>
+						
+						<p>In <code>Execute</code>, generate the 4&times;3 XYZ-column matrix with planar positions, apply the position TRS, then transpose it so it can be assigned to the positions output element.</p>
+						
+						<pre translate="no">			positions[i] =
+				<ins>transpose(TransformVectors(positionTRS, float4x3€(uv.c0, 0f, uv.c1)))</ins>;</pre>
+						
+						<p>Do the same for the normal vectors, but this time with zero passed as the third argument to <code>TransformVectors</code> so the translation is ignored. Burst will eliminate anything multiplied with constant zero. Then normalize the vectors stored in the columns of the 3&times;4 matrix.</p>
+						
+						<pre translate="no">			<ins>float3x4 n =</ins>
+				<ins>transpose(TransformVectors(positionTRS, float4x3€(0f, 1f, 0f), 0f));</ins>
+			normals[i] = <ins>float3x4€(</ins>
+				<ins>normalize(n.c0), normalize(n.c1), normalize(n.c2), normalize(n.c3)</ins>
+			<ins>)</ins>;</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Vectorized Arrays</h3>
+						
+						<p>Because both jobs now require vectorized arrays, let's directly define the arrays as such in <code>HashVisualization</code> instead of reinterpreting them.</p>
+						
+						<pre translate="no">	NativeArray&lt;<ins>uint4</ins>> hashes;
+
+	NativeArray&lt;<ins>float3x4</ins>> positions, normals;</pre>
+						
+						<p>In <code>OnEnable</code>, divide the calculated length by four before creating the arrays and buffers.</p>
+						
+						<pre translate="no">	void OnEnable () {
+		isDirty = true;
+
+		int length = resolution * resolution;
+		<ins>length /= 4;</ins>
+		hashes = new NativeArray&lt;<ins>uint4</ins>>(length, Allocator.Persistent);
+		positions = new NativeArray&lt;<ins>float3x4</ins>>(length, Allocator.Persistent);
+		normals = new NativeArray&lt;<ins>float3x4</ins>>(length, Allocator.Persistent);
+		&hellip;
+	}</pre>
+						
+						<p>To keep the compute buffers at the same size we now have to quadruple the length for them.</p>
+						
+						<pre translate="no">		hashesBuffer = new ComputeBuffer(length <ins>* 4</ins>, 4);
+		positionsBuffer = new ComputeBuffer(length <ins>* 4</ins>, 3 * 4);
+		normalsBuffer = new ComputeBuffer(length <ins>* 4</ins>, 3 * 4);</pre>
+						
+						<p>This requires us to still reinterpret once, when copying the data to the buffers in <code>Update</code>.</p>
+						
+						<pre translate="no">			hashesBuffer.SetData(hashes<ins>.Reinterpret&lt;uint>(4 * 4)</ins>);
+			positionsBuffer.SetData(positions<ins>.Reinterpret&lt;float3>(3 * 4 * 4)</ins>);
+			normalsBuffer.SetData(normals<ins>.Reinterpret&lt;float3>(3 * 4 * 4)</ins>);</pre>
+						
+						<aside>
+							<h3>Can't we directly copy the vectorized data to the compute buffers?</h3>
+							<div>
+								<p>Although the CPU and GPU both interpret the compute buffer data in their own way, it turns out that in some situations data misalignment can happen. So we have to make sure that the compute buffers explicitly use the un-vectorized data.</p>
+							</div>
+						</aside>
+						
+						<p>At this point we can also support odd resolutions again. For example, if the resolution is 3 then the initial length is 9 and the vectorized length would become 2, which only support 8 elements. We can fit the ninth element by adding 1 to the final length. This means that we'll add four values, three of which are superfluous, but that's insignificant overhead. We can make this work for all resolutions by adding the least-significant bit of the initial length to the vectorized length in <code>OnEnable</code>, because it's zero for even and 1 for odd values.</p>
+						
+						<pre translate="no">		int length = resolution * resolution;
+		length <ins>= length / 4 + (length &amp; 1)</ins>;</pre>
+						
+						<p>We no longer need to reinterpret the arrays for <code>HashJob</code> in <code>Update</code>. We also have to again use the array's length while scheduling, as it has already been reduced by vectorization.</p>
+						
+						<pre translate="no">			new HashJob {
+				positions = <ins>positions</ins>,
+				hashes = <ins>hashes</ins>,
+				hash = SmallXXHash.Seed(seed),
+				domainTRS = domain.Matrix
+			}.ScheduleParallel(<ins>hashes.Length</ins>, resolution, handle).Complete();</pre>
+						
+						<p>Finally, to draw the correct amount of instances pass the square resolution to <code>Graphics.DrawMeshInstancedProcedural</code>.</p>
+						
+						<pre translate="no">		Graphics.DrawMeshInstancedProcedural(
+			instanceMesh, 0, material, bounds, <ins>resolution * resolution</ins>, propertyBlock
+		);</pre>
+					</section>
+				</section>
+				
+				<section>
+					<h2>More Shapes</h2>
+					
+					<p>Now that both our jobs are vectorized we're going to add two alternative sample shapes. We could do this by creating extra jobs, but most of the code of those jobs would be identical. So we'll instead go for a template-based approach.</p>
+					
+					<section>
+						<h3>Plane Struct</h3>
+						
+						<p>To support multiple shapes we'll hoist the code for generating positions and normals out of <code>Shapes.Job</code> up into the <code>Shapes</code> class. Each shape could be generated in its own unique way, but we'll base them all on a UV grid. To avoid code repetition copy the UV code from <code>Job.Execute</code> to a new static <code>IndexTo4UV</code> method inside <code>Shapes</code>. Adjust it so the UV range becomes 0&ndash;1 instead of &minus;0.5&ndash;0.5, by omitting the subtractions of 0.5.</p>
+						
+						<pre translate="no">public static class Shapes {
+	
+	<ins>public static float4x2 IndexTo4UV (int i, float resolution, float invResolution) {</ins>
+		<ins>float4x2 uv;</ins>
+		<ins>float4 i4 = 4f * i + float4€(0f, 1f, 2f, 3f);</ins>
+		<ins>uv.c1 = floor(invResolution * i4 + 0.00001f);</ins>
+		<ins>uv.c0 = invResolution * (i4 - resolution * uv.c1 + 0.5f);</ins>
+		<ins>uv.c1 = invResolution * (uv.c1 + 0.5f);</ins>
+		<ins>return uv;</ins>
+	<ins>}</ins>
+	
+	&hellip;
+}</pre>
+						
+						<p>The only unique portion of each shape job will be how it sets the positions and normals. To pass this data around introduce a <code>Point4</code> struct into <code>Shapes</code> that is a simple container for vectorized positions and normals.</p>
+						
+						<pre translate="no">public static class Shapes {
+
+	<ins>public struct Point4 {</ins>
+		<ins>public float4x3 positions, normals;</ins>
+	<ins>}</ins>
+
+	&hellip;
+}</pre>
+						
+						<p>To extract the code for generating a plane from <code>Job.Execute</code>, add a <code>Plane</code> struct type to <code>Shapes</code> that contains a <code>GetPoint4</code> method that uses an index, resolution, and inverse resolution to produce a <code>Point4</code> value. Because we changed the range of the UV we now have to subtract 0.5 from the UV here to keep the plane centered on the origin.</p>
+						
+						<pre translate="no">	<ins>public struct Plane {</ins>
+
+		<ins>public Point4 GetPoint4 (int i, float resolution, float invResolution) {</ins>
+			<ins>float4x2 uv = IndexTo4UV(i, resolution, invResolution);</ins>
+			<ins>return new Point4 {</ins>
+				<ins>positions = float4x3(uv.c0 - 0.5f, 0f, uv.c1 - 0.5f),</ins>
+				<ins>normals = float4x3(0f, 1f, 0f)</ins>
+			<ins>};</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>The <code>Plane</code> struct doesn't contain any fields, its only purpose it to provide the <code>GetPoint4</code> method. We can access this method in <code>Job.Execute</code> by invoking it on the default <code>Plane</code> value, via <code>default(Plane)</code>. This replaces the explicit plane-related code.</p>
+						
+						<pre translate="no">		public void Execute (int i) {
+			<del>//float4x2 uv;</del>
+			<del>//float4 i4 = 4f * i + float4(0f, 1f, 2f, 3f);</del>
+			<del>//uv.c1 = floor(invResolution * i4 + 0.00001f);</del>
+			<del>//uv.c0 = invResolution * (i4 - resolution * uv.c1 + 0.5f) - 0.5f;</del>
+			<del>//uv.c1 = invResolution * (uv.c1 + 0.5f) - 0.5f;</del>
+			
+			<ins>Point4 p = default(Plane).GetPoint4(i, resolution, invResolution);</ins>
+
+			positions[i] = transpose(TransformVectors(positionTRS, <ins>p.positions</ins>));
+
+			float3x4 n = transpose(TransformVectors(positionTRS, <ins>p.normals</ins>, 0f));
+			normals[i] = float3x4€(
+				normalize(n.c0), normalize(n.c1), normalize(n.c2), normalize(n.c3)
+			);
+		}</pre>
+					</section>
+					
+					<section>
+						<h3>Shape Interface</h3>
+						
+						<p>The idea is that we should be able to replace <code>Plane</code> with a different struct type to generate different shapes. To make this work for generic shapes we'll introduce an interface type, which acts like a contract for classes or structs, mandating what public methods or properties they must have.</p>
+						
+						<p>An interface is declared with the <code>interface</code> keyword and the convention is to prefix its type name with an I, so we'll name it <code>IShape</code>. Define the <cod>GetPoint4</cod> method signature inside it, so without a code body but terminated with a semicolon. Interface members are public by definition, so it has no explicit access modifier. <code>Plane</code> can then implement the interface, by extending it.</p>
+						
+						<pre translate="no">	<ins>public interface IShape {</ins>
+		<ins>Point4 GetPoint4 (int i, float resolution, float invResolution);</ins>
+	<ins>}</ins>
+
+	public struct Plane <ins>: IShape</ins> {
+
+		public Point4 GetPoint4 (int i, float resolution, float invResolution) { &hellip; }
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Generic Job</h3>
+						
+						<p>The next step is to make our job generic, turning it into a template for jobs. We do this by appending a generic type parameter within angle brackets to the type declaration of <code>Job</code>. Type parameter names are a single letter by conventions. As this parameter will represent a shape type let's name it <code>S</code>.</p>
+						
+						<pre translate="no">	public struct Job<ins>&lt;S></ins> : IJobFor { &hellip; }</pre>
+						
+						<p>We want to limit what <code>S</code> can be in two ways. First, we expect it to be a struct type. Second, it must implement the <code>IShape</code> interface. We can declare this by appending <code>where S : struct, IShape</code> to the type declaration of <code>Job</code>.</p>
+						
+						<pre translate="no">	public struct Job&lt;S> : IJobFor <ins>where S : struct, IShape</ins> { &hellip; }</pre>
+						
+						<p>Now we can use the generic type in <code>Execute</code> instead of an explicit type.</p>
+						
+						<pre translate="no">		public void Execute (int i) {
+			Point4 p = <ins>default(S)</ins>.GetPoint4(i, resolution, invResolution);
+
+			&hellip;
+		}</pre>
+						
+						<p>We also have to specify what kind of job we're creating in our <code>ScheduleParallel</code> method, just like when we create a <code>NativeArray</code> or other generic type value. It should be the same job type, so we pass <code>S</code> as the generic parameter.</p>
+						
+						<pre translate="no">			return new Job<ins>&lt;S></ins> {
+				&hellip;
+			}.ScheduleParallel(positions.Length, resolution, dependency);</pre>
+						
+						<p>Finally, to make this work we have to be explicit about what shape job we're scheduling in <code>HashVisualization.Update</code>.</p>
+						
+						<pre translate="no">			JobHandle handle = Shapes.Job<ins>&lt;Shapes.Plane></ins>.ScheduleParallel(
+				positions, normals, resolution, transform.localToWorldMatrix, default
+			);</pre>
+						
+						<p>Note that our plane job is now listed as <em translate="no">Shapes.Job`1[Shapes.Plane]</em> in the Burst inspector instead of just <em translate="no">Shapes.Job</em>. Besides that the generated assembly code is the same as before.</p>
+					</section>
+					
+					<section>
+						<h3>Sphere and Torus</h3>
+						
+						<p>It is now possible to easily add more shape jobs. We'll add two more, beginning with a sphere. We can copy and adapt the code from the <a href="../../basics/mathematical-surfaces/index.html">Mathematical Surfaces</a> tutorial for this. The only differences are that due to the different UV range we have to double all arguments of the <code>sin</code> and <code>cos</code> methods and have to swap <code>sin</code> and <code>cos</code> for the calculation of <code>s</code> and <code>c1</code>. We set its radius to 0.5 so it fits inside a unit cube.</p>
+						
+						<p>Because it's a sphere we can directly use the positions for the normal vectors. The length of these vectors is 0.5 but that's not a problem because the job normalizes them later, after applying the space transformation.</p>
+						
+						<pre translate="no">	public struct Plane : IShape { &hellip; }
+	
+	<ins>public struct Sphere : IShape {</ins>
+
+		<ins>public Point4 GetPoint4 (int i, float resolution, float invResolution) {</ins>
+			<ins>float4x2 uv = IndexTo4UV(i, resolution, invResolution);</ins>
+
+			<ins>float r = 0.5f;</ins>
+			<ins>float4 s = r * sin(PI * uv.c1);</ins>
+
+			<ins>Point4 p;</ins>
+			<ins>p.positions.c0 = s * sin(2f * PI * uv.c0);</ins>
+			<ins>p.positions.c1 = r * cos(PI * uv.c1);</ins>
+			<ins>p.positions.c2 = s * cos(2f * PI * uv.c0);</ins>
+			<ins>p.normals = p.positions;</ins>
+			<ins>return p;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>To use the sphere shape all we have to do is change the generic type argument of <code>Shapes.Job</code> in <code>HashVisualization.Update</code>.</p>
+						
+						<pre translate="no">			JobHandle handle = Shapes.Job&lt;Shapes.<ins>Sphere</ins>>.ScheduleParallel(
+				positions, normals, resolution, transform.localToWorldMatrix, default
+			);</pre>
+						
+						<figure>
+							<img src="more-shapes/uv-sphere.png" width="260" height="260">
+							<figcaption>Sphere shape, zero displacement.</figcaption>
+						</figure>
+						
+						<p>The second shape that we add is the torus, also copied from <a href="../../basics/mathematical-surfaces/index.html">Mathematical Surfaces</a>, once again doubling the arguments for the <code>sin</code> and <code>cos</code> methods. Use 0.375 for <code>r1</code> and 0.125 for <code>r2</code>.</p>
+						
+						<pre translate="no">	<ins>public struct Torus : IShape {</ins>
+
+		<ins>public Point4 GetPoint4 (int i, float resolution, float invResolution) {</ins>
+			<ins>float4x2 uv = IndexTo4UV(i, resolution, invResolution);</ins>
+
+			<ins>float r1 = 0.375f;</ins>
+			<ins>float r2 = 0.125f;</ins>
+			<ins>float4 s = r1 + r2 * cos(2f * PI * uv.c1);</ins>
+
+			<ins>Point4 p;</ins>
+			<ins>p.positions.c0 = s * sin(2f * PI * uv.c0);</ins>
+			<ins>p.positions.c1 = r2 * sin(2f * PI * uv.c1);</ins>
+			<ins>p.positions.c2 = s * cos(2f * PI * uv.c0);</ins>
+			<ins>p.normals = p.positions;</ins>
+			<ins>return p;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>The surface normals for a torus are a bit more complicated than for a sphere. Instead of all pointing away from the center they have to point away from the ring inside the torus. We don't need to worry about avoiding duplicate calculations here because Burst eliminates those.</p>
+						
+						<pre translate="no">			p.normals = p.positions;
+			<ins>p.normals.c0 -= r1 * sin(2f * PI * uv.c0);</ins>
+			<ins>p.normals.c2 -= r1 * cos(2f * PI * uv.c0);</ins></pre>
+						
+						<p>Now we can switch to sampling with a torus shape.</p>
+						
+						<pre translate="no">			JobHandle handle = Shapes.Job&lt;Shapes.<ins>Torus</ins>>.ScheduleParallel(
+				positions, normals, resolution, transform.localToWorldMatrix, default
+			);</pre>
+						
+						<figure>
+							<img src="more-shapes/torus.png" width="260" height="260">
+							<figcaption>Torus shape, zero displacement.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Selecting Shapes</h3>
+						
+						<p>To make it possible to switch shapes via the inspector we'll have to add code to invoke <code>ScheduleParallel</code> on the correct job type. Again we'll base our approach on <a href="../../basics/mathematical-surfaces/index.html">Mathematical Surfaces</a>, using a selection enum and a static delegate array.</p>
+						
+						<p>Add a <code>ScheduleDelegate</code> delegate type to <code>Shapes</code> that matches the signature of <code>ScheduleParallel</code>.</p>
+						
+						<pre translate="no">	<ins>public delegate JobHandle ScheduleDelegate (</ins>
+		<ins>NativeArray&lt;float3x4> positions, NativeArray&lt;float3x4> normals,</ins>
+		<ins>int resolution, float4x4 trs, JobHandle dependency</ins>
+	<ins>);</ins></pre>
+						
+						<p>Which shapes are available is up to <code>HashVisualization</code>, so we'll add the selection enum and delegate array there, along with a shape configuration field.</p>
+						
+						<pre translate="no">	<ins>public enum Shape { Plane€, Sphere€, Torus€ }</ins>
+
+	<ins>static Shapes.ScheduleDelegate[] shapeJobs = {</ins>
+		<ins>Shapes.Job&lt;Shapes.Plane>.ScheduleParallel,</ins>
+		<ins>Shapes.Job&lt;Shapes.Sphere>.ScheduleParallel,</ins>
+		<ins>Shapes.Job&lt;Shapes.Torus>.ScheduleParallel</ins>
+	<ins>};</ins>
+	
+	&hellip;
+	
+	<ins>[SerializeField]</ins>
+	<ins>Shape shape;</ins></pre>
+						
+						<figure>
+							<img src="more-shapes/shape-inspector.png" width="320" height="82">
+							<figcaption>Shape dropdown selection menu.</figcaption>
+						</figure>
+						
+						<p>Then adjust <code>Update</code> so the selected shape is generated.</p>
+						
+						<pre translate="no">			JobHandle handle = <ins>shapeJobs[(int)shape]</ins>(
+				positions, normals, resolution, transform.localToWorldMatrix, default
+			);</pre>
+					</section>
+					
+					<section>
+						<h3>Transformed Normals</h3>
+						
+						<p>Everything appears to work as expected at this point, except when using a nonuniform scale for the sphere or torus. For example, when almost flattening the sphere the displacement is still away from its center, instead of directly away from its implied surface. The result is that the displacement is too flat.</p>
+						
+						<figure>
+							<img src="more-shapes/scaled-normals-incorrect.png" width="320" height="120">
+							<figcaption>Sphere with Y scale 0.01 and 0.5 displacement.</figcaption>
+						</figure>
+						
+						<p>This happens because nonuniform scaling messes up normal vectors. They have to be multiplied with a different transformation matrix. To fix this, add input for a separate normal transformation to <code>Shapes.Job</code> and use it to transform the normals.</p>
+						
+						<pre translate="no">		public float3x4 positionTRS<ins>, normalTRS</ins>;
+
+		&hellip;
+
+		public void Execute (int i) {
+			&hellip;
+
+			float3x4 n = transpose(TransformVectors(<ins>normalTRS</ins>, p.normals, 0f));
+			&hellip;
+		}</pre>
+						
+						<p>To produce correct surface normal vectors we have to transform them with the transpose of the inverse 4&times;4 TRS matrix, which we can get via <code>transpose(inverse(trs))</code> in <code>ScheduleParallel</code>.</p>
+						
+						<pre translate="no">		public static JobHandle ScheduleParallel (
+			NativeArray&lt;float3x4> positions, NativeArray&lt;float3x4> normals,
+			int resolution,	float4x4 trs, JobHandle dependency
+		) {
+			<ins>float4x4 tim = transpose(inverse(trs));</ins>
+			return new Job&lt;S> {
+				&hellip;
+				positionTRS = float3x4(trs.c0.xyz, trs.c1.xyz, trs.c2.xyz, trs.c3.xyz)<ins>,</ins>
+				<ins>normalTRS = float3x4(tim.c0.xyz, tim.c1.xyz, tim.c2.xyz, tim.c3.xyz)</ins>
+			}.ScheduleParallel(positions.Length, resolution, dependency);
+		}</pre>
+						
+						<figure>
+							<img src="more-shapes/scaled-normals-correct.png" width="320" height="140">
+							<figcaption>Correct displacement.</figcaption>
+						</figure>
+						
+					</section>
+					
+					<section>
+						<h3>Octahedron Sphere</h3>
+						
+						<p>The sphere that we currently generate is known as a UV sphere. It consists of rings that degenerate into points at its two poles. The distribution of points is obviously not uniform. Near the poles the points are too close together and near the equator the points are too far apart. So let's switch to a different approach, generating an octahedron sphere instead.</p>
+						
+						<p>An octahedron sphere is made by first generating an octahedron at the origin and then normalizing all its position vectors. It is possible to generate an octahedron from 0&ndash;1 UV coordinates in a few steps. We begin with an XY plane centered at the origin.</p>
+						
+						<pre translate="no">	public struct Sphere : IShape {
+
+		public Point4 GetPoint4 (int i, float resolution, float invResolution) {
+			float4x2 uv = IndexTo4UV(i, resolution, invResolution);
+
+			<del>//float r = 0.5f;</del>
+			<del>//float4 s = r * sin(PI * uv.c1);</del>
+
+			Point4 p;
+			p.positions.c0 = <ins>uv.c0 - 0.5f</ins>;
+			p.positions.c1 = <ins>uv.c1 - 0.5f</ins>;
+			p.positions.c2 = <ins>0f</ins>;
+			p.normals = p.positions;
+			return p;
+		}
+	}</pre>
+						
+						<figure>
+							<img src="more-shapes/octahedron-plane.png" width="240" height="240">
+							<figcaption>XY plane, zero displacement.</figcaption>
+						</figure>
+						
+						<p>The second step is to displace the plane along Z to create facets, by making Z equal to 0.5 minus absolute X and absolute Z. This produces something that looks like an octahedron that's folded open on one side.</p>
+						
+						<pre translate="no">			p.positions.c2 = <ins>0.5f - abs(p.positions.c0) - abs(p.positions.c1)</ins>;</pre>
+						
+						<figure>
+							<img src="more-shapes/octahedron-folded-open.png" width="270" height="270">
+							<figcaption>Octahedron folded open.</figcaption>
+						</figure>
+						
+						<p>On the positive Z side the octahedron is already complete. To close the octahedron on the negative Z side, we need an offset equal to negative Z, with a minimum of zero to leave the positive side unaffected.</p>
+						
+						<pre translate="no">			p.positions.c2 = 0.5f - abs(p.positions.c0) - abs(p.positions.c1);
+			<ins>float4 offset = max(-p.positions.c2, 0f);</ins></pre>
+						
+						<p>We have to either add or subtract this offset to or from X and Y independently. If X is negative then add, otherwise subtract. The same goes for Y. To make this choice for vector data we have to use the <code>select</code> method. Its signature is <code>select(valueIfFalse, valueIfTrue, condition)</code>.</p>
+						
+						<pre translate="no">			float4 offset = max(-p.positions.c2, 0f);
+			<ins>p.positions.c0 += select(-offset, offset, p.positions.c0 &lt; 0f);</ins>
+			<ins>p.positions.c1 += select(-offset, offset, p.positions.c1 &lt; 0f);</ins></pre>
+						
+						<figure>
+							<img src="more-shapes/octahedron-closed.png" width="190" height="190">
+							<figcaption>Octahedron closed.</figcaption>
+						</figure>
+						
+						<p>Finally, to turn the octahedron into a sphere with radius 0.5 we have to scale by 0.5 divided by the vector length, for which we can use the Pythagorean theorem and the <code>rsqrt</code> method.</p>
+						
+						<pre translate="no">			p.positions.c1 += select(-offset, offset, p.positions.c1 &lt; 0f);
+
+			<ins>float4 scale = 0.5f * rsqrt(</ins>
+				<ins>p.positions.c0 * p.positions.c0 +</ins>
+				<ins>p.positions.c1 * p.positions.c1 +</ins>
+				<ins>p.positions.c2 * p.positions.c2</ins>
+			<ins>);</ins>
+			<ins>p.positions.c0 *= scale;</ins>
+			<ins>p.positions.c1 *= scale;</ins>
+			<ins>p.positions.c2 *= scale;</ins>
+			p.normals = p.positions;</pre>
+						
+						<figure>
+							<img src="more-shapes/octahedron-sphere.png" width="260" height="260" alt="octahedron sphere">
+							<img src="more-shapes/uv-sphere.png" width="260" height="260" alt="uv sphere">
+							<figcaption>Octahedron sphere and UV sphere.</figcaption>
+						</figure>
+						
+						<p>Compared to the UV sphere, the octahedron sphere has six instead of two regions where points clump together, but its point distribution is more uniform.</p>
+					</section>
+					
+					<section>
+						<h3>Instance Scale</h3>
+						
+						<p>The sample points of the sphere and torus are further apart than those of the plane, which makes it harder to see their surfaces due to the empty space between the instances.</p>
+						
+						<figure>
+							<img src="more-shapes/instance-scale-1-sphere.png" width="270" height="270" alt="sphere">
+							<img src="more-shapes/instance-scale-1-torus.png" width="270" height="200" alt="torus">
+							<figcaption>Resolution 64 with 0.1 displacement.</figcaption>
+						</figure>
+						
+						<p>We wrap up this tutorial by adding a configurable instance scale to <code>HashVisualization</code>, which could be used to make the visualization more solid, or even more sparse.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Range(0.1f, 10f)]</ins>
+	<ins>float instanceScale = 2f;</ins></pre>
+						
+						<figure>
+							<img src="more-shapes/instance-scale-inspector.png" width="320" height="42">
+							<figcaption>Instance scale slider.</figcaption>
+						</figure>
+						
+						<p>The instance scale is applied by dividing it by the resolution in <code>OnEnable</code> and sending that to the GPU, instead of the inverse resolution.</p>
+						
+						<pre translate="no">		propertyBlock.SetVector(configId, new Vector4(
+			resolution, <ins>instanceScale</ins> / resolution, displacement
+		));</pre>
+						
+						<figure>
+							<img src="more-shapes/instance-scale-2-sphere.png" width="270" height="270" alt="sphere">
+							<img src="more-shapes/instance-scale-2-torus.png" width="270" height="200" alt="torus">
+							<figcaption>Instance scale 2.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../value-noise/index.html">Value Noise</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/pseudorandom-noise-02-hashing-space/" class="repository">repository</a>
+					<a href="Hashing-Space.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

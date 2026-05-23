@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/basics/compute-shaders/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/basics/compute-shaders/tutorial-image.jpg">
+		<meta property="og:title" content="Compute Shaders">
+		<meta property="og:description" content="A Unity C# Basics tutorial about using a compute shader to make it possible to show a million moving cubes.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Compute Shaders</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/basics/compute-shaders/#article",
+				"headline": "Compute Shaders",
+				"alternativeHeadline": "Rendering One Million Cubes",
+				"datePublished": "2020-11-06",
+				"dateModified": "2021-05-18",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity C# Basics tutorial about using a compute shader to make it possible to show a million moving cubes.",
+				"image": "https://catlikecoding.com/unity/tutorials/basics/compute-shaders/tutorial-image.jpg",
+				"dependencies": "Unity 2020.3.6f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/basics/", "name": "Basics" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				DisplayMode: 1,
+				FrameRateCounter: 1,
+				'Function': 1,
+				FunctionLibrary: 1,
+				FunctionName: 1,
+				GPUGraph: 1,
+				Graph: 1,
+				GraphFunction: 1,
+				GraphFunctionName: 1,
+				TransitionMode: 1
+			};
+			
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Basics</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Compute Shaders</h1>
+					<p>Rendering One Million Cubes</p>
+					<ul>
+						<li>Store positions in a compute buffer.</li>
+						<li>Let the GPU do most of the work.</li>
+						<li>Procedurally draw many cubes.</li>
+						<li>Copy the entire function library to the GPU.</li>
+					</ul>
+				</header>
+				
+				<p>This is the fifth tutorial in a series about learning the <a href="../index.html">basics</a> of working with Unity. This time we'll use a compute shader to significantly increase the resolution of our graph.</p>
+				
+				<p>This tutorial is made with Unity 2020.3.6f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A million moving cubes.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Moving Work to the GPU</h2>
+					
+					<p>The higher the resolution of our graph the more work the CPU and GPU have to do, calculating positions and rendering cubes. The amount of points is equal to the resolution squared, so doubling the resolution significantly increases the workload. We might be able to reach 60FPS at resolution 100, but how far can we push this? And if we hit a bottleneck can we push past it by using a different approach?</p>
+					
+					<section>
+						<h3>Resolution 200</h3>
+						
+						<p>Let's begin by doubling the maximum resolution of <code>Graph</code> from 100 to 200 and see what performance we get.</p>
+						
+						<pre translate="no">	[SerializeField, Range(10, <ins>200</ins>)]
+	int resolution = 10;</pre>
+						
+						<figure>
+							<img src="moving-work-to-the-gpu/resolution-200-inspector.png" width="320" height="172" alt="inspector"><br>
+							<img src="moving-work-to-the-gpu/resolution-200-game.png" width="250" height="250" alt="game">
+							<figcaption>Graph with resolution set to 200.</figcaption>
+						</figure>
+						
+						<p>We're now rendering 40,000 points. In my case the average frame rate dropped to 10FPS for a <abbr title="Built-in Render Pipeline">BRP</abbr> build and to 15FPS for a URP build. This is too low for a smooth experience.</p>
+						
+						<figure>
+							<img src="moving-work-to-the-gpu/resolution-200-profiler-drp.png" width="686" height="400" alt="BRP">
+							<img src="moving-work-to-the-gpu/resolution-200-profiler-urp.png" width="686" height="400" alt="URP">
+							<figcaption>Profiling a build at resolution 200, without VSync, <abbr title="Built-in Render Pipeline">BRP</abbr> and URP.</figcaption>
+						</figure>
+						
+						<p>Profiling a build reveals that everything takes about four times as long, which makes sense.</p>
+					</section>
+					
+					<section>
+						<h3>GPU Graph</h3>
+						
+						<p>Sorting, batching, and then sending transformation matrices for 40,000 points to the GPU takes a lot of time. A single matrix consists of sixteen <code>float</code> numbers, which are four bytes each, for a total of 64B per matrix. For 40,000 points that's 2.56 million bytes&mdash;roughly 2.44MiB&mdash;that has to be copied to the GPU every time the points are drawn. URP has to do this twice per frame, once for shadows and once for the regular geometry. <abbr title="Built-in Render Pipeline">BRP</abbr> has to do it at least three times, because of its extra depth-only pass, plus once more for every light besides the main directional one.</p>
+						
+						<aside>
+							<h3>What's a MiB?</h3>
+							<div>
+								<p>Because computer hardware uses binary numbers to address memory it's partitioned in powers of two, not powers of ten. MiB is the suffix for mebibyte, which is 2<sup>20</sup> = 1,024<sup>2</sup> = 1,048,576 bytes. This was originally known as a megabyte&mdash;indicated with MB&mdash;but that's now supposed to indicate 10<sup>6</sup> bytes, matching the official definition of a million. However, MB, GB, etc. are often still used instead of MiB, GiB, etc.</p>
+							</div>
+						</aside>
+						
+						<p>In general it is best to minimize the amount of communication and data transfer between CPU and GPU. As we only need the positions of the points to display them it would be ideal if that data only exists on the GPU side. That would eliminate a lot of data transfer. But then the CPU can no longer calcuate the positions, the GPU has to do it instead. Fortunately it is quite suited for the task.</p>
+						
+						<p>Having the GPU calculate the positions requires a different approach. We'll leave our current graph as it is for comparison and create a new one. Copy the <code>Graph</code> C# asset file and rename it to <code>GPUGraph</code>. Remove the <code>pointPrefab</code> and <code>points</code> fields from the new class. Then also remove its <code>Awake</code>, <code>UpdateFunction</code>, and <code>UpdateFunctionTransition</code> methods. I've only marked the deleted code for the new class, rather than mark everything as new code.</p>
+						
+						<pre translate="no">using UnityEngine;
+
+public class GPUGraph : MonoBehaviour {
+
+	<del>//[SerializeField]</del>
+	<del>//Transform pointPrefab;</del>
+
+	[SerializeField, Range(10, 200)]
+	int resolution = 10;
+
+	[SerializeField]
+	FunctionLibrary.FunctionName function;
+
+	public enum TransitionMode { Cycle, Random€ }
+
+	[SerializeField]
+	TransitionMode transitionMode = TransitionMode.Cycle;
+
+	[SerializeField, Min(0f)]
+	float functionDuration = 1f, transitionDuration = 1f;
+
+	<del>//Transform[] points;</del>
+
+	float duration;
+
+	bool transitioning;
+
+	FunctionLibrary.FunctionName transitionFunction;
+
+	<del>//void Awake () { &hellip; }</del>
+
+	void Update () { &hellip; }
+
+	void PickNextFunction () { &hellip; }
+
+	<del>//void UpdateFunction () { &hellip; }</del>
+
+	<del>//void UpdateFunctionTransition () { &hellip; }</del>
+}</pre>
+						
+						<p>Then remove the code that invokes the now missing methods at the end of <code>Update</code>.</p>
+						
+						<pre translate="no">	void Update () {
+		&hellip;
+
+		<del>//if (transitioning) {</del>
+		<del>//	UpdateFunctionTransition();</del>
+		<del>//}</del>
+		<del>//else {</del>
+		<del>//	UpdateFunction();</del>
+		<del>//}</del>
+	}</pre>
+						
+						<p>Our new <code>GPUGraph</code> component is a gutted version of <code>Graph</code> that exposes the same configuration options, minus the prefab. It contains the logic for transitioning from function to function, but doesn't do anything beyond that. Create a game object with this component, with resolution 200, set to cycle with instantaneous transitions. Deactivate the original graph object so only the GPU version remains active.</p>
+						
+						<figure>
+							<img src="moving-work-to-the-gpu/gpu-graph-component.png" width="320" height="152">
+							<figcaption>GPU graph component, set to instantaneous transitions.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Compute Buffer</h3>
+						
+						<p>To store the positions on the GPU we need to allocate space for them. We do this by creating a <code>ComputeBuffer</code> object. Add a field for a positions buffer to <code>GPUGraph</code> and create the object in a new <code>Awake</code> method, by invoking <code>new ComputeBuffer()</code>, which is known as a constructor method. It works like allocating a new array, but for an object or struct.</p>
+						
+						<pre translate="no">	<ins>ComputeBuffer positionsBuffer;</ins>
+
+	<ins>void Awake () {</ins>
+		<ins>positionsBuffer = new ComputeBuffer();</ins>
+	<ins>}</ins></pre>
+						
+						<p>We need to pass the amount of elements of the buffer as an argument, which is the resolution squared, just like for the positions array of <code>Graph</code>.</p>
+						
+						<pre translate="no">		positionsBuffer = new ComputeBuffer(<ins>resolution * resolution</ins>);</pre>
+						
+						<p>A compute buffer contains arbitrary untyped data. We have to specify the exact size of each element in bytes, via a second argument. We need to store 3D position vectors, which consist of three <code>float</code> numbers, so the element size is three times four bytes. Thus 40,000 positions would require 0.48MB or roughly 0.46MiB of GPU memory.</p>
+						
+						<pre translate="no">		positionsBuffer = new ComputeBuffer(resolution * resolution, <ins>3 * 4</ins>);</pre>
+						
+						<p>This gets us a compute buffer, but these objects do not survive hot reloads, which means that if we change code while in play mode it will disappear. We can deal with this by replacing the <code>Awake</code> method with an <code>OnEnable</code> method, which gets invoked each time the component is enabled. This happens right after it awakens&mdash;unless it's disabled&mdash;and also after a hot reload is completed.</p>
+						
+						<pre translate="no">	void <ins>OnEnable</ins> () {
+		positionsBuffer = new ComputeBuffer(resolution * resolution, 3 * 4);
+	}</pre>
+						
+						<p>Besides that we should also add a companion <code>OnDisable</code> method, which gets invoked when the component is disabled, which also happens if the graph is destroyed and right before a hot reload. Have it release the buffer, by invoking its <code>Release</code> method. This indicates that the GPU memory claimed by the buffer can be freed immediately.</p>
+						
+						<pre translate="no">	<ins>void OnDisable () {</ins>
+		<ins>positionsBuffer.Release();</ins>
+	<ins>}</ins></pre>
+						
+						<p>As we won't use this specific object instance after this point it's a good idea to explicitly set the field to reference <code>null</code>. This makes it possible for the object to be reclaimed by Unity's memory garbage collection process the next time it runs, if our graph gets disabled or destroyed while in play mode.</p>
+						
+						<pre translate="no">	void OnDisable () {
+		positionsBuffer.Release();
+		<ins>positionsBuffer = null;</ins>
+	}</pre>
+						
+						<aside>
+							<h3>What happens if we don't explicitly release the buffer?</h3>
+							<div>
+								<p>It will get released eventually if nothing holds a reference to the object, when the garbage collector reclaims it. But when this happens is arbitrary. It's best to release it explicitly as soon as possible, to avoid clogging memory.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Compute Shader</h3>
+						
+						<p>To calculate the positions on the GPU we have to write a script for it, specifically a compute shader. Create one via <em translate="no">Assets / Create / Shader / Compute Shader</em>. It'll become the GPU equivalent of our <code>FunctionLibrary</code> class, so name it <em translate="no">FunctionLibrary</em> as well. Although it's known as a shader and uses HLSL syntax it functions as a generic program, not a as regular shader used for rendering things. Thus I placed the asset in the <em translate="no">Scripts</em> folder.</p>
+						
+						<figure>
+							<img src="moving-work-to-the-gpu/compute-shader-asset.png" width="380" height="90">
+							<figcaption>Function library compute shader asset.</figcaption>
+						</figure>
+						
+						<p>Open the asset file and remove its default contents. A compute shader needs to contain a main function known as a kernel, indicated via the <code>#pragma kernel</code> directive followed by a name, like <code>#pragma surface</code> of our surface shader. Add this directive as the first and currently only line, using the name <code>FunctionKernel</code>.</p>
+						
+						<pre class="shader" translate="no"><ins>#pragma kernel FunctionKernel</ins></pre>
+						
+						<p>Define the function below the directive. It's a <code>void</code> function, initially without parameters.</p>
+						
+						<pre class="shader" translate="no">#pragma kernel FunctionKernel
+
+<ins>void FunctionKernel () {}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Compute Threads</h3>
+						
+						<p>When a GPU is instructed to execute a compute shader function it partitions its work into groups and then schedules them to run independently and in parallel. Each group in turn consists of a number of threads that perform the same calculations but with different input. We have to specify how many threads each group should have, by adding the <code class="shader">numthreads</code> attribute to our kernel function. It requires three integer arguments. The simplest options is to use 1 for all three arguments, which makes each group run only a single thread.</p>
+						
+						<pre class="shader" translate="no"><ins>[numthreads(1, 1, 1)]</ins>
+void FunctionKernel () {}</pre>
+						
+						<p>GPU hardware contains compute units that always run a specific fixed amount of threads in lockstep. These are known as warps or wavefronts. If the amount of threads of a group is less than the warp size some threads will run idle, wasting time. If the amount of threads instead exceeds the size then the GPU will use more warps per group. In general 64 threads is a good default, as that matches the warp size of AMD GPUs while it's 32 for NVidia GPUs, so the latter will use two warps per group. In reality the hardware is more complex and can do more with thread groups, but this isn't relevant for our simple graph.</p>
+						
+						<p>The three arguments of <code class="shader">numthreads</code> can be used to organize the threads in one, two, or three dimensions. For example, (64, 1, 1) gives us 64 threads in a single dimension while (8, 8, 1) gives us the same amount but presented as a 2D 8&times;8 square grid. As we define our points based on 2D UV coordinates let's use the latter option.</p>
+						
+						<pre class="shader" translate="no">[numthreads(<ins>8</ins>, <ins>8</ins>, 1)]</pre>
+						
+						<p>Each thread is identified by a vector of three unsigned integers, which we can access by adding a <code class="shader">uint3</code> parameter to our function.</p>
+						
+						<pre class="shader" translate="no">void FunctionKernel (<ins>uint3 id</ins>) {}</pre>
+						
+						<aside>
+							<h3>What's an unsigned integer?</h3>
+							<div>
+								<p>It's an integer without an indicator for the number's sign, hence it is unsigned. Unsigned integers are either zero or positive. Because unsigned integers don't need to use a bit to indicate the sign they can store larger values, but this is usually not important.</p>
+							</div>
+						</aside>
+						
+						<p>We have to explicitly indicate that this parameter is for the thread identifier. We do this by writing a colon after the parameter name followed by the <code class="shader">SV_DispatchThreadID</code> shader semantic keyword.</p>
+						
+						<pre class="shader" translate="no">void FunctionKernel (uint3 id<ins>: SV_DispatchThreadID</ins>) {}</pre>
+					</section>
+					
+					<section>
+						<h3>UV Coordinates</h3>
+						
+						<p>We can convert the thread identifier to UV coordinates, if we know the step size of the graph. Add a computer shader property named <em translate="no">_Step</em> for it, like we added <em translate="no">_Smoothness</em> to our surface shader.</p>
+						
+						<pre class="shader" translate="no"><ins>float _Step;</ins>
+
+[numthreads(8, 8, 1)]
+void FunctionKernel (uint3 id: SV_DispatchThreadID) {}</pre>
+						
+						<p>Then create a <code>GetUV</code> function that takes the thread identifier as a parameter and returns the UV coordinates as a <code class="shader">float2</code>. We can use the same logic that we applied in <code>Graph</code> when looping through the points. Take the XY components of the identifier, add 0.5, multiply that by the step size, then subtract one.</p>
+						
+						<pre class="shader" translate="no">float _Step;
+
+<ins>float2 GetUV (uint3 id) {</ins>
+	<ins>return (id.xy + 0.5) * _Step - 1.0;</ins>
+<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Setting Positions</h3>
+					
+						<p>To store a position we need access to the positions buffer. In HLSL a compute buffer is known as a structured buffer. Because we have to write to it we need the read-write enabled version, which is <code class="shader">RWStructuredBuffer</code>. Add a shader property for that named <em translate="no">_Positions</em>.</p>
+						
+						<pre class="shader" translate="no"><ins>RWStructuredBuffer _Positions;</ins>
+
+float _Step;</pre>
+						
+						<p>In this case we have to specify the element type of the buffer. The positions are <code class="shader">float3</code> values, which we write directly after <code class="shader">RWStructuredBuffer</code> between angle brackets.</p>
+						
+						<pre class="shader" translate="no">RWStructuredBuffer<ins>&lt;float3></ins> _Positions;</pre>
+						
+						<p>To store the position of a point we need to assign an index to it, based on the thread identifier. We need to know the graph's resolution for this. So add a <em translate="no">_Resolution</em> shader property, with the <code class="shader">uint</code> type to match the identifier's type.</p>
+						
+						<pre class="shader" translate="no">RWStructuredBuffer&lt;float3> _Positions;
+
+<ins>uint _Resolution;</ins>
+
+float _Step;</pre>
+						
+						<p>Then create a <code class="shader">SetPosition</code> function that sets a position, given an identifier and the position to set. For the index we'll use the identifier's X component plus it's Y component multiplied by the graph resolution. This way we store 2D data sequentially in a 1D array.</p>
+						
+						<pre class="shader" translate="no">float2 GetUV (uint3 id) {
+	return (id.xy + 0.5) * _Step - 1.0;
+}
+
+<ins>void SetPosition (uint3 id, float3 position) {</ins>
+	<ins>_Positions[id.x + id.y * _Resolution] = position;</ins>
+<ins>}</ins></pre>
+						
+						<figure>
+							<img src="moving-work-to-the-gpu/3x3-grid-indices.png" width="150" height="150">
+							<figcaption>Position indices for 3&times;3 grid.</figcaption>
+						</figure>
+						
+						<p>One thing that we have to be aware of is that our groups each calculate a grid of 8&times;8 points. If the graph's resolution isn't a multiple of 8 then we'll end up with one row and one column of groups that will calculate some points that are out of bounds. The indices for those points will either fall outside the buffer or clash with valid indices, which would corrupt our data.</p>
+						
+						<figure>
+							<img src="moving-work-to-the-gpu/3x3-grid-indices-out-of-bounds.png" width="185" height="185">
+							<figcaption>Going out of bounds.</figcaption>
+						</figure>
+						
+						<p>Invalid positions can be avoided by storing them only if both the X and Y identifier components are less than the resolution.</p>
+						
+						<pre class="shader" translate="no">void SetPosition (uint3 id, float3 position) {
+	<ins>if (id.x &lt; _Resolution &amp;&amp; id.y &lt; _Resolution) {</ins>
+		_Positions[id.x + id.y * _Resolution] = position;
+	<ins>}</ins>
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Wave Function</h3>
+						
+						<p>We can now get the UV coordinates in <code class="shader">FunctionKernel</code> and set a position using the functions that we created. Begin by using zero for the position.</p>
+						
+						<pre class="shader" translate="no">[numthreads(8, 8, 1)]
+void FunctionKernel (uint3 id: SV_DispatchThreadID) {
+	<ins>float2 uv = GetUV(id);</ins>
+	<ins>SetPosition(id, 0.0);</ins>
+}</pre>
+						
+						<p>We'll initially only support the <em translate="no">Wave</em> function, which is the simplest of our library. To make it animate we need to know the time, so add a <em translate="no">_Time</em> property.</p>
+						
+						<pre class="shader" translate="no">float _Step<ins>, _Time</ins>;</pre>
+						
+						<p>Then copy the <code>Wave</code> method from the <code>FunctionLibrary</code> class, inserting it above <code class="shader">FunctionKernel</code>. To turn it into an HLSL function remove the <code>public static</code> qualifiers, replace <code>Vector3</code> with <code class="shader">float3</code>, and <code>Sin</code> with <code class="shader">sin</code>.</p>
+						
+						<pre class="shader" translate="no"><ins>float3</ins> Wave (float u, float v, float t) {
+	<ins>float3</ins> p;
+	p.x = u;
+	p.y = <ins>sin</ins>(PI * (u + v + t));
+	p.z = v;
+	return p;
+}</pre>
+						
+						<p>The only thing still missing is the definition of <code class="shader">PI</code>. We'll add it by defining a macro for it. That's done by writing <code class="shader">#define PI</code> followed by the number, for which we'll use <code class="shader">3.14159265358979323846</code>. That's far more precise than a <code class="shader">float</code> value can represent, but we leave it to the shader compiler to use an appropriate approximation.</p>
+						
+						<pre class="shader" translate="no"><ins>#define PI 3.14159265358979323846</ins>
+
+float3 Wave (float u, float v, float t) { &hellip; }</pre>
+						
+						<p>Now use the <code class="shader">Wave</code> function to calculate the position in <code>FunctionKernel</code> instead of using zero.</p>
+						
+						<pre class="shader" translate="no">void FunctionKernel (uint3 id: SV_DispatchThreadID) {
+	float2 uv = GetUV(id);
+	SetPosition(id, <ins>Wave(uv.x, uv.y, _Time)</ins>);
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Dispatching a Compute Shader Kernel</h3>
+						
+						<p>We have a kernel function that calculates and stores positions for our graph's points. The next step is to run it on the GPU. <code>GPUGraph</code> needs access to the compute shader to do this, so add a serializable <code>ComputeShader</code> field to it and then hook our asset up to the component.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>ComputeShader computeShader;</ins></pre>
+						
+						<figure>
+							<img src="moving-work-to-the-gpu/compute-shader-assigned.png" width="320" height="64">
+							<figcaption>Compute shader assigned.</figcaption>
+						</figure>
+						
+						<p>We need to set a few properties of the compute shader. To do this we need to know the identifiers that Unity uses for them. These are integers that can be retrieved by invoking <code>Shader.PropertyToID</code> with a name string. These identifiers are claimed on demand and remain the same while the app or editor is running, so we can directly store the identifiers in static fields. Begin with the <em translate="no">_Positions</em> property.</p>
+						
+						<pre translate="no">	<ins>static int positionsId = Shader.PropertyToID("_Positions");</ins></pre>
+						
+						<p>We're never going to change these fields, which we can indicate by adding the <code>readonly</code> qualifier to them. Besides making the intent of the field clear, this instructs the compiler to produce an error if we do assign something to it somewhere else.</p>
+						
+						<pre translate="no">	static <ins>readonly</ins> int positionsId = Shader.PropertyToID("_Positions");</pre>
+						
+						<aside>
+							<h3>Shouldn't we mark <code>FunctionLibrary.functions</code> as <code>readonly</code> as well?</h3>
+							<div>
+								<p>Although that makes sense <code>readonly</code> doesn't work well for reference types, because it only enforces that the field value itself isn't changed. The object&mdash;in this case the array&mdash;itself can still be modified. So it would prevent assigning an entirely different array, but would not prevent changing its elements. I prefer to only use <code>readonly</code> for primitive types like <code>int</code>.</p>
+							</div>
+						</aside>
+						
+						<p>Store the identifiers for <em translate="no">_Resolution</em>, <em translate="no">_Step</em>, and <em translate="no">_Time</em> as well.</p>
+						
+						<pre translate="no">	static readonly int
+		positionsId = Shader.PropertyToID("_Positions")<ins>,</ins>
+		<ins>resolutionId = Shader.PropertyToID("_Resolution"),</ins>
+		<ins>stepId = Shader.PropertyToID("_Step"),</ins>
+		<ins>timeId = Shader.PropertyToID("_Time")</ins>;</pre>
+						
+						<p>Next, create an <code>UpdateFunctionOnGPU</code> method that calculates the step size and sets the resolution, step, and time properties of the compute shader. This is done by invoking <code>SetInt</code> on it for the resolution and <code>SetFloat</code> for the other two properties, with the identifier and value as arguments.</p>
+						
+						<pre translate="no">	<ins>void UpdateFunctionOnGPU () {</ins>
+		<ins>float step = 2f / resolution;</ins>
+		<ins>computeShader.SetInt(resolutionId, resolution);</ins>
+		<ins>computeShader.SetFloat(stepId, step);</ins>
+		<ins>computeShader.SetFloat(timeId, Time.time);</ins>
+	<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Isn't the shader's resolution property a <code class="shader">uint</code>?</h3>
+							<div>
+								<p>Yes, but there is only a method to set a regular integer, not an unsigned one. This is fine because positive <code class="shader">int</code> values are equivalent to <code class="shader">uint</code> values.</p>
+							</div>
+						</aside>
+						
+						<p>We also have to set the positions buffer, which doesn't copy any data but links the buffer to the kernel. This is done by invoking <code>SetBuffer</code>, which works like the other methods except that it requires an extra argument. Its first argument is the index of the kernel function,  because a compute shader can contain multiple kernels and buffers can be linked to specific ones. We could get the kernel index by invoking <code>FindKernel</code> on the compute shader, but our single kernel always has index zero so we can use that value directly.</p>
+						
+						<pre translate="no">		computeShader.SetFloat(timeId, Time.time);
+		
+		<ins>computeShader.SetBuffer(0, positionsId, positionsBuffer);</ins></pre>
+						
+						<p>After setting the buffer we can run our kernel, by invoking <code>Dispatch</code> on the compute shader with four integer parameters. The first is the kernel index and the other three are the amount of groups to run, again split per dimension. Using 1 for all dimensions would mean only the first group of 8&times;8 positions gets calculated.</p>
+						
+						<pre translate="no">		computeShader.SetBuffer(0, positionsId, positionsBuffer);
+		
+		<ins>computeShader.Dispatch(0, 1, 1, 1);</ins></pre>
+						
+						<p>Because of our fixed 8&times;8 group size the amount of groups we need in the X and Y dimensions is equal to the resolution divided by eight, rounded up. We can do this by performing a <code>float</code> division and passing the result to <code>Mathf.CeilToInt</code>.</p>
+						
+						<pre translate="no">		<ins>int groups = Mathf.CeilToInt(resolution / 8f);</ins>
+		computeShader.Dispatch(0, <ins>groups</ins>, <ins>groups</ins>, 1);</pre>
+						
+						<p>To finally run our kernel invoke <code>UpdateFunctionOnGPU</code> at the end of <code>Update</code>.</p>
+						
+						<pre translate="no">	void Update () {
+		&hellip;
+
+		<ins>UpdateFunctionOnGPU();</ins>
+	}</pre>
+						
+						<p>Now we're calculating all the graph's positions every frame while in play mode, even though we don't notice this and don't do anything with the data yet.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Procedural Drawing</h2>
+					
+					<p>With the positions available on the GPU the next step is to draw the points, without sending any transformation matrices from the CPU to the GPU. Thus the shader will have to retrieve the correct position from the buffer instead of relying on the standard matrices.</p>
+					
+					<section>
+						<h3>Drawing Many Meshes</h3>
+						
+						<p>Because the positions already exist on the GPU we don't need to keep track of them on the CPU side. We don't even need game objects for them. Instead we'll instruct the GPU to draw a specific mesh with a specific material many times, via a single command. To configure what to draw add serializable <code>Material</code> and <code>Mesh</code> fields to <code>GPUGraph</code>. We'll initially use our existing <em translate="no">Point Surface</em> material that we already have for drawing points with <abbr title="Built-in Render Pipeline">BRP</abbr>. For the mesh we'll use the default cube.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>Material material;</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>Mesh mesh;</ins></pre>
+						
+						<figure>
+							<img src="procedural-drawing/material-mesh.png" width="320" height="84">
+							<figcaption>Material and mesh configured.</figcaption>
+						</figure>
+						
+						<p>Procedural drawing is done by invoking <code>Graphics.DrawMeshInstancedProcedural</code> with a mesh, sub-mesh index, and material as arguments. The sub-mesh index is for when a mesh consists of multiple parts, which is not the case for us so we use index zero. Do this at the end of <code>UpdateFunctionOnGPU</code>.</p>
+						
+						<pre translate="no">	void UpdateFunctionOnGPU () {
+		&hellip;
+
+		<ins>Graphics.DrawMeshInstancedProcedural(mesh, 0, material);</ins>
+	}</pre>
+						
+						<aside>
+							<h3>Shouldn't we use <code>DrawMeshInstancedIndirect</code>?</h3>
+							<div>
+								<p>The <code>DrawMeshInstancedIndirect</code> method is useful for when you do not know how many instances to draw on the CPU side and instead provide that information with a compute shader via a buffer.</p>
+							</div>
+						</aside>
+						
+						<p>Because this way of drawing doesn't use game objects Unity doesn't know where in the scene the drawing happens. We have to indicate this by providing a bounding box as an additional argument. This is an axis-aligned box that indicates the spatial bounds of whatever we're drawing. Unity uses this to determine whether the drawing can be skipped, because it ends up outside the field of view of the camera. This is known as frustum culling. So instead of evaluating the bounds per point it now happens for the entire graph at once. This is fine for our graph, as the idea is that we view it in its entirety.</p>
+						
+						<p>Our graph sits at the origin and the points should remain inside a cube with size 2. We can create a bounds value for that by invoking the <code>Bounds</code> constructor method with <code>Vector3.zero</code> and <code>Vector3.one</code> scaled by two as arguments.</p>
+						
+						<pre translate="no">		<ins>var bounds = new Bounds(Vector3.zero, Vector3.one * 2f);</ins>
+		Graphics.DrawMeshInstancedProcedural(mesh, 0, material<ins>, bounds</ins>);</pre>
+						
+						<p>But points have a size as well, half of which could poke outside the bounds in all directions. So we should increase the bounds likewise.</p>
+						
+						<pre translate="no">		var bounds = new Bounds(Vector3.zero, Vector3.one * <ins>(2f + 2f / resolution)</ins>);</pre>
+						
+						<p>The final argument that we must provide to <code>DrawMeshInstancedProcedural</code> is how many instances should be drawn. This should match the amount of elements in the positions buffer, which we can retrieve via its <code>count</code> property.</p>
+						
+						<pre translate="no">		Graphics.DrawMeshInstancedProcedural(
+			mesh, 0, material, bounds<ins>, positionsBuffer.count</ins>
+		);</pre>
+						
+						<figure>
+							<img src="procedural-drawing/unit-cubes.png" width="190" height="190">
+							<figcaption>Overlapping unit cubes.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why does entering play mode now completely freezes Unity or doesn't show the cube?</h3>
+							<div>
+								<p>The behavior at this point depends on the Unity version. Keep going, it should work once everything is set up correctly and positions are used by the shader.</p>
+							</div>
+						</aside>
+						
+						<p>When entering play mode we'll now see a single colored unit cube sitting at the origin. It's the same cube getting rendered once per point, but with an identity transformation matrix so they all overlap. Performance is a lot better than before, because almost no data needs to be copied to the GPU and all points are drawn with a single draw call. Also, Unity doesn't have to do any culling per point. It also doesn't sort the points based on their view-space depth, which it normally does so that points nearest to the camera are drawn first. Depth sorting makes rendering of opaque geometry more efficient because it avoids overdraw, but our procedural draw command simply renders the points one after the other. However, the eliminated CPU work and data transfer plus the ability of the GPU to render all cubes at full speed more than make up for this.</p>
+					</section>
+					
+					<section>
+						<h3>Retrieving the Positions</h3>
+						
+						<p>To retrieve the point positions that we stored on the GPU we'll have to create a new shader, initially for <abbr title="Built-in Render Pipeline">BRP</abbr>. Duplicate the <em translate="no">Point Surface</em> shader and rename it to <em translate="no">Point Surface GPU</em>. Adjust its shader menu label to match. Also, as we now rely on a structured buffer filled by a compute shader increase the shader's target level to 4.5. This isn't strictly needed but indicates that we need compute shader support.</p>
+						
+						<pre class="shader" translate="no">Shader "Graph/Point Surface <ins>GPU</ins>" {
+
+	Properties {
+		_Smoothness ("Smoothness", Range(0,1)) = 0.5
+	}
+	
+	SubShader {
+		CGPROGRAM
+		#pragma surface ConfigureSurface Standard fullforwardshadows
+		#pragma target <ins>4.5</ins>
+
+		&hellip;
+		ENDCG
+	}
+
+	FallBack "Diffuse"
+}</pre>
+						
+						<aside>
+							<h3>What does target level 4.5 mean?</h3>
+							<div>
+								<p><a href="https://docs.unity3d.com/Manual/SL-ShaderCompileTargets.html">It indicates that we need at least the capabilities of OpenGL ES 3.1.</a> It won't work for old pre-DX11 GPUs and also not for OpenGL ES 2.0 nor 3.0. This also excludes WebGL. There is some experimental compute shader support for WebGL 2.0, but Unity doesn't support it at this moment.</p>
+								
+								<p>Running the GPU graph when support isn't sufficient would at best result in all points overlapping, like what happens right now. So if you target such platforms you'll have to stick to the old approach or include both and fall back to the CPU graph with a much lower resolution if needed.</p>
+							</div>
+						</aside>
+						
+						<p>Procedural rendering works like GPU instancing, but we need to specify an additional option, indicated by adding the <code class="shader">#pragma instancing_options</code> directive. In this case we have to follow it with the <code class="shader">procedural:ConfigureProcedural</code> option.</p>
+						
+						<pre class="shader" translate="no">		#pragma surface ConfigureSurface Standard fullforwardshadows
+		<ins>#pragma instancing_options procedural:ConfigureProcedural</ins></pre>
+						
+						<p>This indicates that the surface shader needs to invoke a <code class="shader">ConfigureProcedural</code> function per vertex. It's a <code class="shader">void</code> function without any parameters. Add it to our shader.</p>
+						
+						<pre class="shader" translate="no">		<ins>void ConfigureProcedural () {}</ins>
+
+		void ConfigureSurface (Input input, inout SurfaceOutputStandard surface) {
+			surface.Albedo = saturate(input.worldPos * 0.5 + 0.5);
+			surface.Smoothness = _Smoothness;
+		}</pre>
+						
+						<p>By default this function will only get invoked for the regular draw pass. To also apply it when rendering shadows we have to indicate that we need a custom shadow pass, by adding <code class="shader">addshadow</code> to the <code class="shader">#pragma surface</code> directive.</p>
+						
+						<pre class="shader" translate="no">		#pragma surface ConfigureSurface Standard fullforwardshadows <ins>addshadow</ins></pre>
+						
+						<p>Now add the same positions buffer field that we declared in our compute shader. This time we'll only read from it so give it the <code class="shader">StructuredBuffer</code> type instead of <code class="shader">RWStructuredBuffer</code>.</p>
+						
+						<pre class="shader" translate="no">		<ins>StructuredBuffer&lt;float3> _Positions;</ins>
+
+		void ConfigureProcedural () {}</pre>
+						
+						<p>But we should do this only for shader variants specifically compiled for procedural drawing. This is the case when the <code class="shader">UNITY_PROCEDURAL_INSTANCING_ENABLED</code> macro label is defined. We can check this by writing <code class="shader">#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)</code>. This is a preprocessor directive that instructs the compiler to only include the code on the following lines if the label is defined. This applies until a line that only contains the <code class="shader">#endif</code> directive. It works like a conditional block in C#, except that the code is included or omitted during compilation. No branch exists in the final code.</p>
+						
+						<pre class="shader" translate="no">		<ins>#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)</ins>
+			<ins>StructuredBuffer&lt;float3> _Positions;</ins>
+		<ins>#endif</ins></pre>
+						
+						<p>We have to do the same for the code that we'll put inside the <code class="shader">ConfigureProcedural</code> function.</p>
+						
+						<pre class="shader" translate="no">		void ConfigureProcedural () {
+			<ins>#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)</ins>
+			<ins>#endif</ins>
+		}</pre>
+						
+						<p>Now we can retrieve the position of the point by indexing the positions buffer with the identifier of the instance that's currently being drawn. We can access its identifier via <code class="shader">unity_InstanceID</code>, which is globally accessible.</p>
+						
+						<pre class="shader" translate="no">		void ConfigureProcedural () {
+			#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)
+				<ins>float3 position = _Positions[unity_InstanceID];</ins>
+			#endif
+		}</pre>
+						</section>
+					
+					<section>
+						<h3>Creating a Transformation Matrix</h3>
+						
+						<p>Once we have a position the next step is to create an object-to-world transformation matrix for the point. To keep things as simple as possible we fix our graph at the world origin, without any rotation nor scaling. Adjusting the <code>Transform</code> component of the <em translate="no">GPU Graph</em> game object will have no effect, as we don't use it for anything.</p>
+						
+						<p>We only have to apply the point's position and scale. The position is stored in the last column of the 4&times;4 transformation matrix, while the scale is stored in the matrix diagonal. The last component of the matrix is always set to 1. All other components are zero for us.</p>
+						
+						<figure>
+							<img src="procedural-drawing/transformation-matrix.png" width="170" height="170">
+							<figcaption>Transformation matrix with position and scale.</figcaption>
+						</figure>
+						
+						<p>The transformation matrix is used to convert vertices from object space to world space. It's provided globally via <code class="shader">unity_ObjectToWorld</code>. Because we're drawing procedurally it's an identity matrix, so we have to replace it. Intially set the entire matrix to zero.</p>
+						
+						<pre class="shader" translate="no">				float3 position = _Positions[unity_InstanceID];
+
+				<ins>unity_ObjectToWorld = 0.0;</ins></pre>
+						
+						<p>We can construct a column vector for the position offset via <code class="shader">float4(position, 1.0)</code>. We can set it as the fourth column by assigning it to <code class="shader">unity_ObjectToWorld._m03_m13_m23_m33</code>.</p>
+						
+						<pre class="shader" translate="no">				unity_ObjectToWorld = 0.0;
+				<ins>unity_ObjectToWorld._m03_m13_m23_m33 = float4(position, 1.0);</ins></pre>
+						
+						<p>Then add a <code class="shader">float _Step</code> shader property to our shader and assign it to <code class="shader">unity_ObjectToWorld._m00_m11_m22</code>. This correctly scales our points.</p>
+						
+						<pre class="shader" translate="no">		<ins>float _Step;</ins>
+
+		void ConfigureProcedural () {
+			#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)
+				float3 position = _Positions[unity_InstanceID];
+
+				unity_ObjectToWorld = 0.0;
+				unity_ObjectToWorld._m03_m13_m23_m33 = float4(position, 1.0);
+				<ins>unity_ObjectToWorld._m00_m11_m22 = _Step;</ins>
+			#endif
+		}</pre>
+						
+						<p>There is also a <code class="shader">unity_WorldToObject</code> matrix, which contains the inverse transformation, used for transforming normal vectors. It is needed to correctly transform direction vectors when a nonuniform deformation is applied. But as this doesn't apply to our graph we can ignore it. We should tell this to our shaders though, by adding <code class="shader">assumeuniformscaling</code> to the instancing options pragma.</p>
+						
+						<pre class="shader" translate="no">		#pragma instancing_options <ins>assumeuniformscaling</ins> procedural:ConfigureProcedural</pre>
+						
+						<p>Now create a new material that uses this shader, with GPU instancing enabled, and assign it to our GPU graph.</p>
+						
+						<figure>
+							<img src="procedural-drawing/using-point-surface-gpu-material.png" width="320" height="84">
+							<figcaption>Using GPU material.</figcaption>
+						</figure>
+						
+						<p>To make this work correctly we have to set the material's properties just like we set the compute shader's earlier. Invoke <code>SetBuffer</code> and <code>SetFloat</code> on the material in <code>UpdateFunctionOnGPU</code> before drawing. In this case we don't have to provide a kernel index for the buffer.</p>
+						
+						<pre translate="no">		<ins>material.SetBuffer(positionsId, positionsBuffer);</ins>
+		<ins>material.SetFloat(stepId, step);</ins>
+		var bounds = new Bounds(Vector3.zero, Vector3.one * (2f + 2f / resolution));
+		Graphics.DrawMeshInstancedProcedural(
+			mesh, 0, material, bounds, positionsBuffer.count
+		);</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="procedural-drawing/many-cubes.mp4" type="video/mp4">
+							</video>
+							<figcaption>40,000 shadowed cubes, drawn with <abbr title="Built-in Render Pipeline">BRP</abbr>.</figcaption>
+						</figure>
+						
+						<p>We once again see our graph when we enter play mode, but now its 40,000 points are rendered at a solid 60FPS. If I turn VSync off for the editor game window it shoots up to 245FPS. Our procedural approach is clearly much faster that using one game object per point.</p>
+						
+						<figure>
+							<img src="procedural-drawing/profiler-drp-vsync.png" width="686" height="400">
+							<figcaption>Profiling a <abbr title="Built-in Render Pipeline">BRP</abbr> build with VSync.</figcaption>
+						</figure>
+						
+						<p>Profiling a build reveals that our <code>GPUGraph</code> component has almost nothing to do. It only instructs the GPU to run a compute shader kernel and then tells Unity to procedurally draw a lot of points. This doesn't happen immediately. The compute shader is scheduled and will run as soon as the GPU is free. The procedural draw command is later send to the GPU by the <abbr title="Built-in Render Pipeline">BRP</abbr>. The command is send three times, once for the depth-only pass, once for shadows, and once for the final draw. The GPU will first run the compute shader and only when that is finished will it be available to draw the scene, after which it can run the next invocation of the compute shader. Unity has no trouble doing this for 40,000 points.</p>
+					</section>
+					
+					<section>
+						<h3>Going for a Million</h3>
+						
+						<p>As it can handle 40,000 points so well, let's see if our GPU graph can handle a million points. But before we do that we have to be aware of asynchronous shader compilation. This is a feature of the Unity editor, not builds. The editor only compiles shaders when needed, instead of ahead of time. This can save a lot of compilation time when editing shaders, but means that a shader isn't always immediately available. When this happens a uniform cyan dummy shader is temporarily used instead until the shader compilation process has finishes, which runs in parallel. This is usually fine, but the dummy shader doesn't work with procedural drawing. It will significantly slow down the drawing process. If this happens when trying to render a million points it will most likely freeze and then crash Unity, and possibly your entire machine along with it.</p>
+						
+						<p>We could turn off asynchronous shader compilation via the project settings, but it's only a problem for our <em translate="no">Point Surface GPU</em> shader. Fortunately we can tell Unity to use synchronous compilation for a specific shader by adding the <code class="shader">#pragma editor_sync_compilation</code> directive to it. This will force Unity to stall and immediately compile the shader right before it gets used the first time, avoiding the dummy shader.</p>
+						
+						<pre class="shader" translate="no">		#pragma surface ConfigureSurface Standard fullforwardshadows addshadow
+		#pragma instancing_options assumeuniformscaling procedural:ConfigureProcedural
+		<ins>#pragma editor_sync_compilation</ins>
+		#pragma target 4.5</pre>
+						
+						<p>Now it's safe to increase the resolution limit of <code>GPUGraph</code> to 1000.</p>
+						
+						<pre translate="no">	[SerializeField, Range(10, <ins>1000</ins>)]
+	int resolution = 10;</pre>
+						
+						<p>Let's give the maximum resolution a try.</p>
+						
+						<figure>
+							<img src="procedural-drawing/resolution-1000-inspector.png" width="320" height="42" alt="inspector"><br>
+							<img src="procedural-drawing/resolution-1000-scene.png" width="250" height="250" alt="scene">
+							<figcaption>Resolution set to 1,000.</figcaption>
+						</figure>
+						
+						<p>It doesn't look pretty when viewed in a small window&mdash;moiré patterns show up because the points are so small&mdash;but it runs. For me a million animating points are rendered at 24FPS. Performance is the same in the editor and a build. The editor overhead is insignificant at this point, the GPU is the bottleneck. Also, whether VSync is enabled or not doesn't make a noticeable difference in my case.</p>
+						
+						<figure>
+							<img src="procedural-drawing/profiler-drp-million-no-vsync.png" width="686" height="400">
+							<figcaption>Profiling a build rendering a million points, no VSync.</figcaption>
+						</figure>
+						
+						<p>When VSync is disabled it's clear that most time of the player loop is spent waiting for the GPU to finish. The GPU is indeed the bottleneck. We could add quite some workload to the CPU without affecting performance.</p>
+						
+						<p>Note that we're rendering a million points with shadows, which requires them to be drawn three times per frame for <abbr title="Built-in Render Pipeline">BRP</abbr>. Disabling shadows increases my average frame rate to around 65FPS with no VSync.</p>
+						
+						<p>Of course you don't need to increase the resolution all the way to 1,000 if you find the frame rate insufficient. Reducing it to 700 might already make it run at 60FPS with shadows enabled and will look mostly the same. But I'll use resolution 1,000 consistently from now on.</p>
+					</section>
+					
+					<section>
+						<h3>URP</h3>
+						
+						<p>To see how URP performs we need to also duplicate our <em translate="no">Point URP</em> shader graph, renaming it to <em translate="no">Point URP GPU</em>. Shader graph doesn't directly support procedural drawing, but we can make it work with a little custom code. To make this easy and also reuse some code we'll create an HLSL include file asset. Unity doesn't have a menu option for this, so just duplicate one of the surface shader assets and rename it to <em translate="no">PointGPU</em>. Then use your system's file browser to change the asset's file extension from <em translate="no">shader</em> to <em translate="no">hlsl</em>.</p>
+						
+						<figure>
+							<img src="procedural-drawing/point-gpu-hlsl-asset.png" width="130" height="90">
+							<figcaption>PointGPU HLSL script asset.</figcaption>
+						</figure>
+						
+						<p>Clear the file's contents, then copy the code for the positions buffer, the scale, and the <code class="shader">ConfigureProcedural</code> function from <em translate="no">Points Surface GPU</em> to it.</p>
+						
+						<pre class="shader" translate="no">#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)
+	StructuredBuffer&lt;float3> _Positions;
+#endif
+
+float _Step;
+
+void ConfigureProcedural () {
+	#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)
+		float3 position = _Positions[unity_InstanceID];
+
+		unity_ObjectToWorld = 0.0;
+		unity_ObjectToWorld._m03_m13_m23_m33 = float4(position, 1.0);
+		unity_ObjectToWorld._m00_m11_m22 = _Step;
+	#endif
+}</pre>
+						
+						<p>We can now include this file in the <em translate="no">Point Surface GPU</em> shader via the <code class="shader">#include "PointGPU.hlsl"</code> directive, after which the original code can be removed from it.
+						
+						<pre class="shader" translate="no">		<ins>#include "PointGPU.hlsl"</ins>
+
+		struct Input {
+			float3 worldPos;
+		};
+
+		float _Smoothness;
+
+		<del>//#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)</del>
+		<del>//	StructuredBuffer&lt;float3> _Positions;</del>
+		<del>//#endif</del>
+
+		<del>//float _Step;</del>
+
+		<del>//void ConfigureProcedural () { &hellip; }</del>
+		
+		void ConfigureSurface (Input input, inout SurfaceOutputStandard surface) { &hellip; }</pre>
+						
+						<aside>
+							<h3>Can we include an HLSL file in a <code class="shader">CGPROGRAM</code> shader?</h3>
+							<div>
+								<p>Yes. The only difference between a <code class="shader">CGPROGRAM</code> block and an <code class="shader">HLSLPROGRAM</code> block is that the former includes some files by default. This difference isn't relevant for us.</p>
+							</div>
+						</aside>
+						
+						<p>We'll use a <em translate="no">Custom Function</em> node to include the HLSL file in our shader graph. The idea is that the node invokes a function from the file. Although we don't need this functionality, the code won't be included unless we connect it to our graph. So we'll add a properly-formatted dummy function to <em translate="no">PointGPU</em> that simply passes through a <code class="shader">float3</code> value without changing it.</p>
+						
+						<p>Add a <code class="shader">void ShaderGraphFunction_float</code> function to <em translate="no">PointGPU</em> with two <code class="shader">float3</code> parameters named <code class="shader">In</code> and <code class="shader">Out</code>. The function simply assigns the input to the output. The parameter names are capitalized by convention because they'll correspond to input and output labels used in the shader graph.</p>
+						
+						<pre class="shader" translate="no"><ins>void ShaderGraphFunction_float (float3 In, float3 Out) {</ins>
+	<ins>Out = In;</ins>
+<ins>}</ins></pre>
+						
+						<p>This assumes that the <code class="shader">Out</code> parameter is an output parameter, which we have to declare by writing <code class="shader">out</code> in front of it.</p>
+						
+						<pre class="shader" translate="no">void ShaderGraphFunction_float (float3 In, <ins>out</ins> float3 Out) {
+	Out = In;
+}</pre>
+						
+						<p>The <code class="shader">_float</code> suffix of the function name is required because it indicates the precision of the function. Shader graph offers two precision modes, either <code class="shader">float</code> or <code class="shader">half</code>. The latter is half the size of the former, so two instead of four bytes. The precision used by nodes can by chosen explicitly or set to inherit, which is the default. To make sure that our graph will work for both precision modes also add a variant function that uses half precision instead.</p>
+						
+						<pre class="shader" translate="no">void ShaderGraphFunction_float (float3 In, out float3 Out) {
+	Out = In;
+}
+
+<ins>void ShaderGraphFunction_half (half3 In, out half3 Out) {</ins>
+	<ins>Out = In;</ins>
+<ins>}</ins></pre>
+						
+						<p>Now add a <em translate="no">Custom Function</em> node to our <em translate="no">Point URP GPU</em> graph. It's <em translate="no">Type</em> is set to <em translate="no">File</em> by default. Assign <em translate="no">PointGPU</em> to its <em translate="no">Source</em> property. Use <em translate="no">ShaderGraphFunction</em> for its <em translate="no">Name</em>, without the precision suffix. Then add <em translate="no">In</em>  to the <em translate="no">Inputs</em> list and <em translate="no">Out</em> to the <em translate="no">Outputs</em> list, both as a <em translate="no">Vector3</em>.</p>
+						
+						<figure>
+							<img src="procedural-drawing/custom-function-file.png" width="570" height="380">
+							<figcaption>Custom function via file.</figcaption>
+						</figure>
+						
+						<p>To integrate our code in the graph we have to connect the node to it. As it's needed for the vertex stage connect its output to the <em translate="no">Position</em> of the <em translate="no">Vertex</em> node. Then add a <em translate="no">Position</em> node set to object space and connect it to the input of our custom node.</p>
+						
+						<figure>
+							<img src="procedural-drawing/vertex-position.png" width="556" height="266">
+							<figcaption>Object-space vertex position passed through our function.</figcaption>
+						</figure>
+						
+						<p>Now the object space vertex position is passed through our dummy function and our code gets included in the generated shader. But to enable procedural rendering we also have to include the <code class="shader">#pragma instancing_options</code> and <code class="shader">#pragma editor_sync_compilation</code> compiler directives. These have to be injected in the generated shader source code directly, they cannot be included via a separate file. So add another <em translate="no">Custom Function</em> node with the same input and output as earlier, but this time with its <em translate="no">Type</em> set to <em translate="no">String</em>. Set its <em translate="no">Name</em> to something appropriate&mdash;like <em translate="no">InjectPragmas</em>&mdash;then put the directives in the <em translate="no">Body</em> text block. The body acts as the code block of a function, so we also have to assign the input to the ouput here.</p>
+						
+						<figure>
+							<img src="procedural-drawing/custom-function-string.png" width="460" height="412">
+							<figcaption>Custom function via string injecting pragmas.</figcaption>
+						</figure>
+						
+						<p>For clarity, this is the body's code:</p>
+						
+						<pre class="shader" translate="no"><ins>#pragma instancing_options assumeuniformscaling procedural:ConfigureProcedural</ins>
+<ins>#pragma editor_sync_compilation</ins>
+
+<ins>Out = In;</ins></pre>
+						
+						<p>Pass the vertex position through this node as well, either before or after the other custom function node.</p>
+						
+						<figure>
+							<img src="procedural-drawing/with-pragmas.png" width="556" height="344">
+							<figcaption>Shader graph with pragmas.</figcaption>
+						</figure>
+						
+						<p>Create a material with instancing enabled that uses the <em translate="no">Point URP GPU</em> shader, assign it to our graph, then enter play mode. I now get 36FPS both in the editor and a build, with shadows enabled. That's 50% faster than <abbr title="Built-in Render Pipeline">BRP</abbr>.</p>
+						
+						<figure>
+							<img src="procedural-drawing/profiler-urp-million-no-vsync.png" width="686" height="400">
+							<figcaption>Profiling URP build.</figcaption>
+						</figure>
+						
+						<p>Again VSync makes no difference for the average frame rate. Disabling shadows increases it to 69FPS, which is roughly the same as for <abbr title="Built-in Render Pipeline">BRP</abbr>, the player loop just takes a little less time.</p>
+					</section>
+					
+					<section>
+						<h3>Variable Resolution</h3>
+						
+						<p>Because we're currently always drawing a point for every position in the buffer decreasing the resolution while in play mode will fix some points in place. This happens because the compute shader only updates the points that fit in the graph.</p>
+						
+						<figure>
+							<img src="procedural-drawing/stuck-points.png" width="220" height="200">
+							<figcaption>Stuck points after lowering resolution.</figcaption>
+						</figure>
+						
+						<p>Compute buffers cannot be resized. We could create a new one each time the resolution is changed, but an alternative and simpler approach is to always allocate a buffer for the maximum resolution. That would make changing resolution while in play mode effortless.</p>
+						
+						<p>Begin by defining the max resolution as a constant, then use it in the <code>Range</code> attribute of the <code>resolution</code> field.</p>
+						
+						<pre translate="no">	<ins>const int maxResolution = 1000;</ins>
+
+	&hellip;
+
+	[SerializeField, Range(10, <ins>maxResolution</ins>)]
+	int resolution = 10;</pre>
+						
+						<p>Next, always use the square of the max resolution for the amount of elements of the buffer. This means that we'll always claim 12MB&mdash;roughly 11.44MiB&mdash;of GPU memory, no matter the graph resolution.</p>
+						
+						<pre translate="no">	void OnEnable () {
+		positionsBuffer = new ComputeBuffer(<ins>maxResolution</ins> * <ins>maxResolution</ins>, 3 * 4);
+	}
+</pre>
+						
+						<p>Finally, when drawing use the current resolution squared instead of the buffer element count.</p>
+						
+						<pre translate="no">	void UpdateFunctionOnGPU () {
+		&hellip;
+		Graphics.DrawMeshInstancedProcedural(
+			mesh, 0, material, bounds, <ins>resolution</ins> * <ins>resolution</ins>
+		);
+	}</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="procedural-drawing/changing-resolution.mp4" type="video/mp4">
+							</video>
+							<figcaption>Changing resolution between 10 and 1,000.</figcaption>
+						</figure>
+
+					</section>
+				</section>
+				
+				<section>
+					<h2>GPU Function Library</h2>
+					
+					<p>Now that our GPU-based approach is fully functional let's port our entire function library to our compute shader.</p>
+					
+					<section>
+						<h3>All Functions</h3>
+						
+						<p>We can copy the other functions just like we copied and adjusted <code>Wave</code>. The second one is <code>MultiWave</code>. The only significant difference with <code>Wave</code> is that it contains <code>float</code> values. The f suffix doesn't exist in HLSL so should be removed from all numbers. To indicate that they're all floating-point values I explicitly added a dot for all of them, for example <code>2f</code> becomes <code class="shader">2.0</code>.</p>
+						
+						<pre class="shader" translate="no"><ins>float3</ins> MultiWave (float u, float v, float t) {
+	<ins>float3</ins> p;
+	p.x = u;
+	p.y = <ins>sin</ins>(PI * (u + <ins>0.5</ins> * t));
+	p.y += <ins>0.5</ins> * <ins>sin</ins>(<ins>2.0</ins> * PI * (v + t));
+	p.y += <ins>sin</ins>(PI * (u + v + <ins>0.25</ins> * t));
+	p.y *= <ins>1.0</ins> / <ins>2.5</ins>;
+	p.z = v;
+	return p;
+}</pre>
+						
+						<p>Do the same for the remaining functions. <code>Sqrt</code> becomes <code class="shader">sqrt</code> and <code>Cos</code> becomes <code class="shader">cos</code>.</p>
+						
+						<pre class="shader" translate="no"><ins>float3</ins> Ripple (float u, float v, float t) {
+	float d = <ins>sqrt</ins>(u * u + v * v);
+	<ins>float3</ins> p;
+	p.x = u;
+	p.y = <ins>sin</ins>(PI * (<ins>4.0</ins> * d - t));
+	p.y /= <ins>1.0</ins> + <ins>10.0</ins> * d;
+	p.z = v;
+	return p;
+}
+
+<ins>float3</ins> Sphere (float u, float v, float t) {
+	float r = <ins>0.9</ins> + <ins>0.1</ins> * <ins>sin</ins>(PI * (<ins>6.0</ins> * u + <ins>4.0</ins> * v + t));
+	float s = r * <ins>cos</ins>(<ins>0.5</ins> * PI * v);
+	<ins>float3</ins> p;
+	p.x = s * <ins>sin</ins>(PI * u);
+	p.y = r * <ins>sin</ins>(<ins>0.5</ins> * PI * v);
+	p.z = s * <ins>cos</ins>(PI * u);
+	return p;
+}
+
+<ins>float3</ins> Torus (float u, float v, float t) {
+	float r1 = <ins>0.7</ins> + <ins>0.1</ins> * <ins>sin</ins>(PI * (<ins>6.0</ins> * u + <ins>0.5</ins> * t));
+	float r2 = <ins>0.15</ins> + <ins>0.05</ins> * <ins>sin</ins>(PI * (<ins>8.0</ins> * u + <ins>4.0</ins> * v + <ins>2.0</ins> * t));
+	float s = r2 * <ins>cos</ins>(PI * v) + r1;
+	<ins>float3</ins> p;
+	p.x = s * <ins>sin</ins>(PI * u);
+	p.y = r2 * <ins>sin</ins>(PI * v);
+	p.z = s * <ins>cos</ins>(PI * u);
+	return p;
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Macros</h3>
+						
+						<p>We now have to create a separate kernel function for each graph function, but that's a lot of repeated code. We can avoid that by creating a shader macro, like we defined <code class="shader">PI</code> earlier. Begin by writing <code class="shader">#define KERNEL_FUNCTION</code> on the line above the <code class="shader">FunctionKernel</code> function.</p>
+						
+						<pre class="shader" translate="no"><ins>#define KERNEL_FUNCTION</ins>
+	[numthreads(8, 8, 1)]
+	void FunctionKernel (uint3 id: SV_DispatchThreadID) { &hellip; }</pre>
+						
+						<p>These definitions normally only apply to whatever is written behind them on the same line, but we can extend it to multiple lines by adding a <code class="shader">\</code> backslash at the end of every line except the last.</p>
+						
+						<pre class="shader" translate="no">#define KERNEL_FUNCTION <ins>\</ins>
+	[numthreads(8, 8, 1)] <ins>\</ins>
+	void FunctionKernel (uint3 id: SV_DispatchThreadID) { <ins>\</ins>
+		float2 uv = GetUV(id); <ins>\</ins>
+		SetPosition(id, Wave(uv.x, uv.y, _Time)); <ins>\</ins>
+	}</pre>
+						
+						<p>Now when we write <code class="shader">KERNEL_FUNCTION</code> the compiler will replace it with the code for the <code class="shader">FunctionKernel</code> function. To make it work for an arbitrary function we add a parameter to the macro. This works like the parameter list for a function, but without types and the opening bracket must be attached to the macro name. Give it a single <code class="shader">function</code> parameter and use that instead of the explicit invocation of <code class="shader">Wave</code>.</p>
+						
+						<pre class="shader" translate="no">#define KERNEL_FUNCTION<ins>(function)</ins> \
+	[numthreads(8, 8, 1)] \
+	void FunctionKernel (uint3 id: SV_DispatchThreadID) { \
+		float2 uv = GetUV(id); \
+		SetPosition(id, <ins>function</ins>(uv.x, uv.y, _Time)); \
+	}</pre>
+						
+						<p>We also have to change the kernel function's name. We'll use the <code class="shader">function</code> parameter as a prefix, followed by <code class="shader">Kernel</code>. We have to keep the <code class="shader">function</code> label separate though, otherwise it won't be recognized as a shader parameter. To combine both words connect them with the <code class="shader">##</code> macro concatenation operator.</p>
+						
+						<pre class="shader" translate="no">	void <ins>function##Kernel</ins> (uint3 id: SV_DispatchThreadID) { \</pre>
+						
+						<p>All five kernel functions can now be defined by writing <code class="shader">KERNEL_FUNCTION</code> with the appropriate arguments.</p>
+						
+						<pre class="shader" translate="no">#define KERNEL_FUNCTION(function) \
+	&hellip;
+
+<ins>KERNEL_FUNCTION(Wave)</ins>
+<ins>KERNEL_FUNCTION(MultiWave)</ins>
+<ins>KERNEL_FUNCTION(Ripple)</ins>
+<ins>KERNEL_FUNCTION(Sphere)</ins>
+<ins>KERNEL_FUNCTION(Torus)</ins></pre>
+						
+						<p>We also have to replace our single kernel directive with one for each function, in the order matching <code>FunctionLibrary.FunctionName</code>.</p>
+						
+						<pre class="shader" translate="no">#pragma kernel <ins>WaveKernel</ins>
+<ins>#pragma kernel MultiWaveKernel</ins>
+<ins>#pragma kernel RippleKernel</ins>
+<ins>#pragma kernel SphereKernel</ins>
+<ins>#pragma kernel TorusKernel</ins></pre>
+						
+						<p>The last step is to use the current function as the kernel index in <code>GPUGraph.UpdateFunctionOnGPU</code> instead of always using zero.</p>
+						
+						<pre translate="no">		<ins>var kernelIndex = (int)function;</ins>
+		computeShader.SetBuffer(<ins>kernelIndex</ins>, positionsId, positionsBuffer);
+		
+		int groups = Mathf.CeilToInt(resolution / 8f);
+		computeShader.Dispatch(<ins>kernelIndex</ins>, groups, groups, 1);</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="gpu-function-library/all-resolution-1000.mp4" type="video/mp4">
+							</video>
+							<figcaption>All functions at resolution 1,000, with plane to show shadows.</figcaption>
+						</figure>
+						
+						<p>The compute shader runs so fast that it doesn't matter which function is displayed, the frame rate is the same for all of them.</p>
+					</section>
+					
+					<section>
+						<h3>Morphing Functions</h3>
+						
+						<p>Supporting morphing from one function to another is a bit more complex, because we need a separate kernel for every unique transition. Begin by adding a property for the transition progress to the compute shader, which we'll use to blend functions.</p>
+						
+						<pre class="shader" translate="no">float _Step, _Time<ins>, _TransitionProgress</ins>;</pre>
+						
+						<p>Then duplicate the kernel macro, rename it to <code class="shader">KERNEL_MORPH_FUNCTION</code>, and give it two parameters: <code class="shader">functionA</code> and <code class="shader">functionB</code>. Change the function's name to <code class="shader">functionA##To##functionB##Kernel</code> and use <code class="shader">lerp</code> to linearly interpolate between the positions they calculate based on the progress. We could also use <code class="shader">smoothstep</code> here, but we'll only calculate that once per frame on the CPU instead.</p>
+						
+						<pre class="shader" translate="no">#define <ins>KERNEL_MORPH_FUNCTION</ins>(<ins>functionA</ins>, <ins>functionB</ins>) \
+	[numthreads(8, 8, 1)] \
+	void <ins>functionA##To##functionB##Kernel</ins> (uint3 id: SV_DispatchThreadID) { \
+		float2 uv = GetUV(id); \
+		<ins>float3 position = lerp( \</ins>
+			<ins>functionA(uv.x, uv.y, _Time), functionB(uv.x, uv.y, _Time), \</ins>
+			<ins>_TransitionProgress \</ins>
+		<ins>); \</ins>
+		SetPosition(id, <ins>position</ins>); \
+	}</pre>
+						
+						<p>Each function can transition to all the others, so that's four transitions per function. Add kernel functions for all of these.</p>
+						
+						<pre class="shader" translate="no">KERNEL_FUNCTION(Wave)
+KERNEL_FUNCTION(MultiWave)
+KERNEL_FUNCTION(Ripple)
+KERNEL_FUNCTION(Sphere)
+KERNEL_FUNCTION(Torus)
+
+<ins>KERNEL_MORPH_FUNCTION(Wave, MultiWave);</ins>
+<ins>KERNEL_MORPH_FUNCTION(Wave, Ripple);</ins>
+<ins>KERNEL_MORPH_FUNCTION(Wave, Sphere);</ins>
+<ins>KERNEL_MORPH_FUNCTION(Wave, Torus);</ins>
+
+<ins>KERNEL_MORPH_FUNCTION(MultiWave, Wave);</ins>
+<ins>KERNEL_MORPH_FUNCTION(MultiWave, Ripple);</ins>
+<ins>KERNEL_MORPH_FUNCTION(MultiWave, Sphere);</ins>
+<ins>KERNEL_MORPH_FUNCTION(MultiWave, Torus);</ins>
+
+<ins>KERNEL_MORPH_FUNCTION(Ripple, Wave);</ins>
+<ins>KERNEL_MORPH_FUNCTION(Ripple, MultiWave);</ins>
+<ins>KERNEL_MORPH_FUNCTION(Ripple, Sphere);</ins>
+<ins>KERNEL_MORPH_FUNCTION(Ripple, Torus);</ins>
+
+<ins>KERNEL_MORPH_FUNCTION(Sphere, Wave);</ins>
+<ins>KERNEL_MORPH_FUNCTION(Sphere, MultiWave);</ins>
+<ins>KERNEL_MORPH_FUNCTION(Sphere, Ripple);</ins>
+<ins>KERNEL_MORPH_FUNCTION(Sphere, Torus);</ins>
+
+<ins>KERNEL_MORPH_FUNCTION(Torus, Wave);</ins>
+<ins>KERNEL_MORPH_FUNCTION(Torus, MultiWave);</ins>
+<ins>KERNEL_MORPH_FUNCTION(Torus, Ripple);</ins>
+<ins>KERNEL_MORPH_FUNCTION(Torus, Sphere);</ins></pre>
+						
+						<p>We'll define the kernels so that their index is equal to <code class="shader">functionB + functionA * 5</code>, treating kernels that don't transition as if they transition from and to the same function. So the first kernel is <em translate="no">Wave</em>, followed by the four kernels transitioning from <em translate="no">Wave</em> to the other functions. After that come the functions starting from <em translate="no">MultiWave</em>, of which the second is the non-transitioning kernel, and so on.</p>
+						
+						<pre class="shader" translate="no">#pragma kernel WaveKernel
+<ins>#pragma kernel WaveToMultiWaveKernel</ins>
+<ins>#pragma kernel WaveToRippleKernel</ins>
+<ins>#pragma kernel WaveToSphereKernel</ins>
+<ins>#pragma kernel WaveToTorusKernel</ins>
+
+<ins>#pragma kernel MultiWaveToWaveKernel</ins>
+#pragma kernel MultiWaveKernel
+<ins>#pragma kernel MultiWaveToRippleKernel</ins>
+<ins>#pragma kernel MultiWaveToSphereKernel</ins>
+<ins>#pragma kernel MultiWaveToTorusKernel</ins>
+
+<ins>#pragma kernel RippleToWaveKernel</ins>
+<ins>#pragma kernel RippleToMultiWaveKernel</ins>
+#pragma kernel RippleKernel
+<ins>#pragma kernel RippleToSphereKernel</ins>
+<ins>#pragma kernel RippleToTorusKernel</ins>
+
+<ins>#pragma kernel SphereToWaveKernel</ins>
+<ins>#pragma kernel SphereToMultiWaveKernel</ins>
+<ins>#pragma kernel SphereToRippleKernel</ins>
+#pragma kernel SphereKernel
+<ins>#pragma kernel SphereToTorusKernel</ins>
+
+<ins>#pragma kernel TorusToWaveKernel</ins>
+<ins>#pragma kernel TorusToMultiWaveKernel</ins>
+<ins>#pragma kernel TorusToRippleKernel</ins>
+<ins>#pragma kernel TorusToSphereKernel</ins>
+#pragma kernel TorusKernel</pre>
+						
+						<p>Back to <code>GPUGraph</code>, add the identifier for the transition progress shader property.</p>
+						
+						<pre translate="no">	static readonly int
+		&hellip;
+		timeId = Shader.PropertyToID("_Time")<ins>,</ins>
+		<ins>transitionProgressId = Shader.PropertyToID("_TransitionProgress")</ins>;</pre>
+						
+						<p>Set it in <code>UpdateFunctionOnGPU</code> if we're transitioning, otherwise don't bother. It's here that we apply the smoothstep function, so we don't have to do it for every point on the GPU. It's a small optimization, but it comes for free and avoids a lot of work.</p>
+						
+						<pre translate="no">		computeShader.SetFloat(timeId, Time.time);
+		<ins>if (transitioning) {</ins>
+			<ins>computeShader.SetFloat(</ins>
+				<ins>transitionProgressId,</ins>
+				<ins>Mathf.SmoothStep(0f, 1f, duration / transitionDuration)</ins>
+			<ins>);</ins>
+		<ins>}</ins></pre>
+						
+						<p>To select the correct kernel index add five times the transition function to it, or five times the same function if we're not transitioning.</p>
+						
+						<pre translate="no">		var kernelIndex =
+			(int)function <ins>+ (int)(transitioning ? transitionFunction : function) * 5</ins>;</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="gpu-function-library/continuous-morphing.mp4" type="video/mp4">
+							</video>
+							<figcaption>Continuous random morphing.</figcaption>
+						</figure>
+						
+						<p>The added transitions still don't affect the frame rate for me. It's clearly rendering that's the bottleneck, not the calculation of the positions.</p>
+					</section>
+					
+					<section>
+						<h3>Function Count Property</h3>
+						
+						<p>To calculate the kernel index <code>GPUGraph</code> needs to know how many functions there are. We can add a <code>GetFunctionCount</code> method to the <code>FunctionLibrary</code> that returns it, instead of hard-coding it in <code>GPUGraph</code>. The benefit of this is that we only have to change the two <em translate="no">FunctionLibrary</em> files&mdash;the class and the compute shader&mdash;if we were to add or remove a function.</p>
+						
+						<pre translate="no">	<ins>public static int GetFunctionCount () {</ins>
+		<ins>return 5;</ins>
+	<ins>}</ins></pre>
+						
+						<p>We can even remove the constant value and return the length of the <code>functions</code> array, further reducing the code we'd have to change later.</p>
+						
+						<pre translate="no">	public static int GetFunctionCount () {
+		return <ins>functions.Length</ins>;
+	}</pre>
+						
+						<p>The function count is a good candidate to turn into a property. To create one ourselves remove the <code>Get</code> prefix from <code>GetFunctionCount</code> and also remove its empty parameter list. Then wrap the return statement in a nested <code>get</code> code block.</p>
+						
+						<pre translate="no">	public static int <ins>FunctionCount</ins> {
+		<ins>get {</ins>
+			return functions.Length;
+		<ins>}</ins>
+	}</pre>
+						
+						<p>This defines a getter property. As the only thing it does is return a value we can simplify it by reducing the <code>get</code> block to an expression body, which is done by replacing it with <code>get => functions.Length;</code>.</p>
+						
+						<pre translate="no">	public static int FunctionCount {
+		<ins>get => functions.Length;</ins>
+	}</pre>
+						
+						<p>Because there is no <code>set</code> block we can further simplify the property by omitting <code>get</code>. This reduces the property to a single line.</p>
+						
+						<pre translate="no">	public static int FunctionCount <ins>=> functions.Length;</ins></pre>
+						
+						<p>This also works for applicable methods, in this case <code>GetFunction</code> and <code>GetNextFunctionName</code>.</p>
+						
+						<pre translate="no">	public static Function GetFunction (FunctionName name) <ins>=> functions[(int)name];</ins>
+
+	public static FunctionName GetNextFunctionName (FunctionName name) <ins>=></ins>
+		<ins>(int)name &lt; functions.Length - 1 ? name + 1 : 0;</ins></pre>
+												
+						<p>Use the new property instead of a constant value in <code>GPUGraph.UpdateFunctionOnGPU</code>.</p>
+						
+						<pre translate="no">		var kernelIndex =
+			(int)function +
+			(int)(transitioning ? transitionFunction : function) *
+			<ins>FunctionLibrary.FunctionCount</ins>;</pre>
+						
+					</section>
+					
+					<section>
+						<h3>More Details</h3>
+						
+						<p>To wrap up, because of the increased resolution our functions can become more detailed. For example, we could double the frequency of the twists of <em translate="no">Sphere</em>.</p>
+						
+						<pre class="shader" translate="no">float3 Sphere (float u, float v, float t) {
+	float r = 0.9 + 0.1 * sin(PI * (<ins>12.0</ins> * u + <ins>8.0</ins> * v + t));
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="procedural-drawing/detailed-sphere.png" width="310" height="310">
+							<figcaption>More detailed sphere.</figcaption>
+						</figure>
+						
+						<p>And likewise for the star pattern and the twisting of <em translate="no">Torus</em>. This will make the twists appear to move slower relative to the main pattern, so also scale up their time factor a bit.</p>
+						
+						<pre class="shader" translate="no">float3 Torus (float u, float v, float t) {
+	float r1 = 0.7 + 0.1 * sin(PI * (<ins>8.0</ins> * u + 0.5 * t));
+	float r2 = 0.15 + 0.05 * sin(PI * (<ins>16.0</ins> * u + <ins>8.0</ins> * v + <ins>3.0</ins> * t));
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="procedural-drawing/detailed-torus.png" width="310" height="220">
+							<figcaption>More detailed torus.</figcaption>
+						</figure>
+						
+						<p>To keep both function libraries synchronized adjust the functions in the <code>FunctionLibrary</code> class as well. This allows a more honest comparison between the game object CPU-based and the procedural GPU-based approaches.</p>
+						
+						<p>The next tutorial is <a href="../jobs/index.html">Jobs</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/basics-05-compute-shaders/" class="repository">repository</a>
+					<a href="Compute-Shaders.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

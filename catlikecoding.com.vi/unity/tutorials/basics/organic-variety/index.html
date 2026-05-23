@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/basics/organic-variety/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/basics/organic-variety/tutorial-image.jpg">
+		<meta property="og:title" content="Organic Variety">
+		<meta property="og:description" content="A Unity C# Basics tutorial about making a fractal appear more organic.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Organic Variety</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/basics/organic-variety/#article",
+				"headline": "Organic Variety",
+				"alternativeHeadline": "Making the Artificial Look Natural",
+				"datePublished": "2021-01-20",
+				"dateModified": "2021-05-18",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity C# Basics tutorial about making a fractal appear more organic.",
+				"image": "https://catlikecoding.com/unity/tutorials/basics/organic-variety/tutorial-image.jpg",
+				"dependencies": "Unity 2020.3.6f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/basics/", "name": "Basics" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				DisplayMode: 1,
+				Fractal: 1,
+				FractalPart: 1,
+				FrameRateCounter: 1,
+				'Function': 1,
+				FunctionLibrary: 1,
+				FunctionName: 1,
+				GPUGraph: 1,
+				Graph: 1,
+				GraphFunction: 1,
+				GraphFunctionName: 1,
+				TransitionMode: 1,
+				UpdateFractalLevelJob: 1
+			};
+			
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Basics</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Organic Variety</h1>
+					<p>Making the Artificial Look Natural</p>
+					<ul>
+						<li>Color the fractal based on depth.</li>
+						<li>Apply random sequence-based variety.</li>
+						<li>Introduce leaves that look different.</li>
+						<li>Make the fractal sag as if by gravity.</li>
+						<li>Add variety to spin and sometimes reverse it.</li>
+					</ul>
+				</header>
+				
+				<p>This is the seventh tutorial in a series about learning the <a href="../index.html">basics</a> of working with Unity. In it we'll adjust our fractal so it ends up looking more organic than mathematical.</p>
+				
+				<p>This tutorial is made with Unity 2020.3.6f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A fractal modified to look organic.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Color Gradient</h2>
+					
+					<p>The fractal that we created in the <a href="../jobs/index.html">previous tutorial</a> is obviously a result of applied mathematics. It looks rigid, precise, formal, and uniform. It doesn't look organic, nor alive. However, with a few changes we can make the mathematical appear organic, up to a point. We do this by introducing variety and apparent randomness, along with simulating somewhat organic behavior.</p>
+					
+					<p>The most straightforward way to make our fractal more varied is by replacing its uniform color with a range of colors, and the simplest approach is to base this on the level of each drawn instance.</p>
+					
+					<section>
+						<h3>Overriding Color</h3>
+						
+						<p>We previously gave both our <abbr title="Built-in Render Pipeline">BRP</abbr> surface shader and URP our shader graph have a <em translate="no">Base Color</em> property that we currently configure by adjusting the material, but we can override it via code. To do this keep track of its identifier in <code>Fractal</code>.</p>
+						
+						<pre translate="no">	static readonly int
+		<ins>baseColorId = Shader.PropertyToID("_BaseColor"),</ins>
+		matricesId = Shader.PropertyToID("_Matrices");</pre>
+						
+						<p>Then invoke <code>SetColor</code> on the property block in the draw loop inside <code>Update</code>. We start by setting the color to white, multiplied with the current loop iterator value divided by the buffer length minus one. This will make the first level black and the last level white.</p>
+						
+						<pre translate="no">		for (int i = 0; i &lt; matricesBuffers.Length; i++) {
+			ComputeBuffer buffer = matricesBuffers[i];
+			buffer.SetData(matrices[i]);
+			<ins>propertyBlock.SetColor(</ins>
+				<ins>baseColorId, Color.white * (i / (matricesBuffers.Length - 1))</ins>
+			<ins>);</ins>
+			propertyBlock.SetBuffer(matricesId, buffer);
+			Graphics.DrawMeshInstancedProcedural(
+				mesh, 0, material, bounds, buffer.count, propertyBlock
+			);
+		}</pre>
+						
+						<p>To give all intermediate levels a shade of gray this has to be a floating-point division, not an integer division which has no fractional part. We can ensure this by making the subtraction by one in the divisor a floating-point subtraction. The rest of the calculation then becomes floating-point as well.</p>
+						
+						<pre translate="no">			propertyBlock.SetColor(
+				baseColorId, Color.white * (i / (matricesBuffers.Length - <ins>1f</ins>))
+			);</pre>
+						
+						<p>If using URP, make sure that the reference of the color is set to <em translate="no">_BaseColor</em>.</p>
+						
+						<figure>
+							<img src="color-gradient/shader-graph-property-reference.png" width="254" height="170">
+							<figcaption>Shader graph with <em translate="no">_BaseColor</em>.</figcaption>
+						</figure>
+						
+						<p>The result is a grayscale fractal, going from black at its root instance to white at its leaf instances, both in <abbr title="Built-in Render Pipeline">BRP</abbr> and URP.</p>
+						
+						<figure>
+							<img src="color-gradient/gradient-fractal-grayscale.png" width="370" height="320">
+							<figcaption>Grayscale gradient fractal.</figcaption>
+						</figure>
+						
+						<p>Note that the subtraction by one in the divisor is needed to reach white at the deepest level. But if the fractal's depth is set to 1 this would result in a division by zero and thus an invalid color. To avoid this we should increase the minimum depth to 2.</p>
+						
+						<pre translate="no">	[SerializeField, Range(<ins>2</ins>, 8)]
+	int depth = 4;</pre>
+					</section>
+					
+					<section>
+						<h3>Interpolating Between Colors</h3>
+						
+						<p>We're not limited to only grayscale or monochrome gradients. We could interpolate between any two colors, by invoking the static <code>Color.Lerp</code> method with two colors and the factor that we used earlier as its interpolator. This way we can create any two-color gradient in <code>Update</code>, for example from yellow to red.</p>
+						
+						<pre translate="no">			propertyBlock.SetColor(
+				baseColorId, <ins>Color.Lerp(</ins>
+					<ins>Color.yellow, Color.red, i / (matricesBuffers.Length - 1f)</ins>
+				<ins>)</ins>
+			);</pre>
+						
+						<figure>
+							<img src="color-gradient/gradient-fractal-yellow-green.png" width="370" height="320">
+							<figcaption>Yellow-red gradient fractal.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Configurable Gradient</h3>
+						
+						<p>We can go a step further and support arbitrary gradients that could have more than two configured colors and also an uneven distribution. This is done by relying on Unity's <code>Gradient</code> type. Use it to add a configurable gradient to <code>Fractal</code>.</p>
+						
+						<pre translate="no">	[SerializeField]
+	Material material;
+
+	<ins>[SerializeField]</ins>
+	<ins>Gradient gradient;</ins></pre>
+						
+						<figure>
+							<img src="color-gradient/gradient-property.png" width="320" height="42">
+							<figcaption>Gradient property, set to white-red-black.</figcaption>
+						</figure>
+						
+						<p>To use the gradient replace the invocation of <code>Color.Lerp</code> in <code>Update</code> with an invocation of <code>Evaluate</code> on the gradient, again with the same interpolator value.</p>
+						
+						<pre translate="no">			propertyBlock.SetColor(
+				baseColorId, <ins>gradient.Evaluate(i / (matricesBuffers.Length - 1f))</ins>
+			);</pre>
+						
+						<figure>
+							<img src="color-gradient/gradient-fractal-configurable.png" width="370" height="320">
+							<figcaption>White-red-black configurable gradient fractal.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Arbitrary Colors</h2>
+					
+					<p>A fractal colored with a gradient looks more interesting than one with a uniform color, but its coloration is obviously formulaic. Organic things usually have some variety in coloration that is&mdash;or appears to be&mdash;random. For our fractal this would mean that individual mesh instances should exhibit variety of color.</p>
+					
+					<section>
+						<h3>Color Shader Function</h3>
+						
+						<p>To do the work for both our surface shader and shader graph at the same time, we will provide the instance color via our <em translate="no">FractalGPU</em> HLSL file. Start by declaring the <em translate="no">_BaseColor</em> property field in there, followed by a <code>GetFractalColor</code> function that simply returns the field. Place it above the shader graph functions.</p>
+						
+						<pre class="shader" translate="no"><ins>float4 _BaseColor;</ins>
+
+<ins>float4 GetFractalColor () {</ins>
+	<ins>return _BaseColor;</ins>
+<ins>}</ins>
+
+void ShaderGraphFunction_float (float3 In, out float3 Out) {
+	Out = In;
+}</pre>
+						
+						<p>Then remove the now redundant property from the surface shader and invoke <code class="shader">GetFractalColor</code> inside <code class="shader">ConfigureSurface</code> instead of directly accessing the field.</p>
+						
+						<pre class="shader" translate="no">		<del>//float4 _BaseColor;</del>
+		float _Smoothness;
+
+		void ConfigureSurface (Input input, inout SurfaceOutputStandard surface) {
+			surface.Albedo = <ins>GetFractalColor()</ins>.rgb;
+			surface.Smoothness = _Smoothness;
+		}</pre>
+						
+						<p>As we're no longer relying on the material inspector to configure the color we can also remove it from the <code class="shader">Properties</code> block.</p>
+						
+						<pre class="shader" translate="no">	Properties {
+		<del>//_BaseColor ("Albedo", Base Color) = (1.0, 1.0, 1.0, 1.0)</del>
+		_Smoothness ("Smoothness", Range(0,1)) = 0.5
+	}</pre>
+						
+						<p>We'll expose the fractal color to our shader graph by adding an output parameter to the shader graph functions that we created for it.</p>
+						
+						<pre class="shader" translate="no">void ShaderGraphFunction_float (float3 In, out float3 Out<ins>, out float4 FractalColor</ins>) {
+	Out = In;
+	<ins>FractalColor = GetFractalColor();</ins>
+}
+
+void ShaderGraphFunction_half (half3 In, out half3 Out<ins>, out half4 FractalColor</ins>) {
+	Out = In;
+	<ins>FractalColor = GetFractalColor();</ins>
+}</pre>
+						
+						<p>In the shader graph itself we first have to remove the <em translate="no">Base Color</em> property. It can be deleted via its context menu, opened by right-clicking on its label in the blackboard.</p>
+						
+						<figure>
+							<img src="arbitrary-colors/shader-graph-only-smoothness.png" width="180" height="140">
+							<figcaption>Only smoothness property.</figcaption>
+						</figure>
+						
+						<p>Then add the output to our custom function node.</p>
+						
+						<figure>
+							<img src="arbitrary-colors/shader-graph-fractalcolor-output.png" width="260" height="104">
+							<figcaption>Extra <em translate="no">FractalColor</em> output of custom function.</figcaption>
+						</figure>
+						
+						<p>And finally connect the new output to the <em translate="no">Base Color</em> of the <em translate="no">Fragment</em> node.</p>
+						
+						<figure>
+							<img src="arbitrary-colors/shader-graph-fractal-color.png" width="650" height="260">
+							<figcaption>Using <em translate="no">FractalColor</em> to color the fragment.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Basing Color on Instance Identifier</h3>
+						
+						<p>To introduce variety per instance we have to somehow make <code class="shader">GetFractalColor</code> depend on the instance identifier of what's being drawn. As this is an integer that increases from zero, the simplest test would be something like returning the instance identifier scaled down by three orders of magnitude, resulting in a grayscale gradient.</p>
+						
+						<pre class="shader" translate="no">float4 GetFractalColor () {
+	return <ins>unity_InstanceID * 0.001</ins>;
+}</pre>
+						
+						<p>But now we also have to make sure that we access the instance identifier only for shader variants that have procedural instancing enabled, like we did in <code class="shader">ConfigureProcedural</code>.</p>
+						
+						<pre class="shader" translate="no">float4 GetFractalColor () {
+	<ins>#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)</ins>
+		return unity_InstanceID * 0.001;
+	<ins>#endif</ins>
+}</pre>
+						
+						<p>The difference in this case is that we always have to return something, even though that might not make much sense. So we'll simply return the configured color for non-instanced shader variants. This is done by inserting an <code class="shader">#else</code> directive before <code class="shader">#endif</code> and returning the color in between.</p>
+						
+						<pre class="shader" translate="no">	#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)
+		return unity_InstanceID * 0.001;
+	<ins>#else</ins>
+		<ins>return _BaseColor;</ins>
+	#endif</pre>
+						
+						<figure>
+							<img src="arbitrary-colors/colored-by-instance-id.png" width="370" height="320">
+							<figcaption>Colored by instance identifier.</figcaption>
+						</figure>
+						
+						<p>This illustrates that the approach works, even though it looks terrible. We can make the gradient sensible by&mdash;for example&mdash;repeating it every five instances. To do this we'll use the instance identifier modulo five, via the <code class="shader">%</code> operator. That turns the identifier sequence into the repeating sequence 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, etc. Then we scale that down to a quarter so the range changes from 0&ndash;4 to 0&ndash;1.</p>
+						
+						<pre class="shader" translate="no">		return <ins>(</ins>unity_InstanceID <ins>% 5.0) / 4.0</ins>;</pre>
+						
+						<figure>
+							<img src="arbitrary-colors/colored-modulo-5.png" width="370" height="320">
+							<figcaption>Colored modulo 5.</figcaption>
+						</figure>
+						
+						<p>The resulting coloration already appears arbitrary on first casual inspection, even though the gradient loops regularly, because it doesn't exactly match the geometric structure of the fractal. The only really obvious pattern is that the central column is always black, because it consists of the first instance of each level. This phenomenon also manifests itself at deeper levels when the sequence aligns with geometry.</p>
+						
+						<p>We can change the pattern by adjusting the length of the sequence, for example increasing it to ten. This adds more color variation and makes the black columns occur less often, although this does make them stand out more.</p>
+						
+						<pre class="shader" translate="no">		return (unity_InstanceID % <ins>10.0</ins>) / <ins>9.0</ins>;</pre>
+						
+						<figure>
+							<img src="arbitrary-colors/colored-modulo-10.png" width="370" height="320">
+							<figcaption>Colored modulo 10.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Weyl Sequences</h3>
+						
+						<p>A slightly different way to create a repeating gradient is to use a Weyl sequence. Simply put these are sequences of the form 0X modulo 1, 1X modulo 1, 2X modulo 1, 3X modulo 1, and so on. Thus we only get fractional values, which fall in the 0&ndash;1 range, exluding 1. If X is an irrational number then this sequence will be uniformly distributed in that range.</p>
+						
+						<p>We don't really need a perfect distribution, only enough variety. A random value in the 0&ndash;1 range will do for X. For example, let's consider 0.381:</p>
+						
+						<p>0.000, 0.381, 0.762, 0.143, 0.524, 0.905, 0.286, 0.667, 0.048, 0.429, 0.810, 0.191, 0.572, 0.953, 0.334, 0.715, 0.096, 0.477, 0.858, 0.239, 0.620, 0.001, 0.382, 0.763, 0.144, 0.525.</p>
+						
+						<p>What we get is repetitions of mostly three-step but sometimes two-step increasing gradients that are all a bit different. The pattern repeats after 21 steps, but shifted by 0.001. Other values will produce different patterns, with different gradients that can be longer, shorter, and reversed.</p>
+						
+						<p>In the shader we can create this sequence with a single multiplication and feeding the result to the <code class="shader">frac</code> function.</p>
+						
+						<pre class="shader" translate="no">		return <ins>frac(unity_InstanceID * 0.381)</ins>;</pre>
+						
+						<figure>
+							<img src="arbitrary-colors/colored-sequence-381.png" width="370" height="320">
+							<figcaption>Colored sequence based on 0.381.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Random Factor and Offset</h3>
+						
+						<p>The result of using a fractional sequence looks acceptable, except that we still get those black columns. We can get rid of those by adding a different offset per level to the sequence, and can even use a different sequence per level. To support this, add a shader property vector for two sequence numbers, the first being a multiplier and the second being an offset, then use those in <code class="shader">GetFractalColor</code>. The offset must be added before isolating the fractional part of the value, so it applies a wrapped shift to the sequence.</p>
+						
+						<pre class="shader" translate="no"><ins>float2 _SequenceNumbers;</ins>
+
+float4 GetFractalColor () {
+	#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)
+		return frac(unity_InstanceID * <ins>_SequenceNumbers.x + _SequenceNumbers.y</ins>);
+	#else
+		return _BaseColor;
+	#endif
+}</pre>
+						
+						<p>Keep track of the shader property's identifier in <code>Fractal</code>.</p>
+						
+						<pre translate="no">	static readonly int
+		baseColorId = Shader.PropertyToID("_BaseColor"),
+		matricesId = Shader.PropertyToID("_Matrices")<ins>,</ins>
+		<ins>sequenceNumbersId = Shader.PropertyToID("_SequenceNumbers")</ins>;</pre>
+						
+						<p>Then add an array of sequence numbers per level, initially set equal to our current configuration, which is 0.381 and 0. We use the <code>Vector4</code> type for this, because only four-component vectors can be send to the GPU, even though we use fewer components.</p>
+						
+						<pre translate="no">	<ins>Vector4[] sequenceNumbers;</ins>
+
+	void OnEnable () {
+		&hellip;
+		<ins>sequenceNumbers = new Vector4[depth];</ins>
+		int stride = 12 * 4;
+		for (int i = 0, length = 1; i &lt; parts.Length; i++, length *= 5) {
+			&hellip;
+			<ins>sequenceNumbers[i] = new Vector4(0.381f, 0f);</ins>
+		}
+
+		&hellip;
+	}
+
+	void OnDisable () {
+		&hellip;
+		<ins>sequenceNumbers = null;</ins>
+	}</pre>
+						
+						<p>Set the sequence number in the draw loop in <code>Update</code> for each level, by invoking <code>SetVector</code> on the property block.</p>
+						
+						<pre translate="no">			propertyBlock.SetBuffer(matricesId, buffer);
+			<ins>propertyBlock.SetVector(sequenceNumbersId, sequenceNumbers[i]);</ins></pre>
+						
+						<p>Finally, to make the sequences arbitrary and different per level, we replace the fixed configured sequence numbers with random values. We'll use <code>UnityEngine.Random</code> for this, but this type clashes with <code>Unity.Mathematics.Random</code>, so we'll use the appropriate type explicitly.</p>
+						
+						<pre translate="no">using quaternion = Unity.Mathematics.quaternion;
+<ins>using Random = UnityEngine.Random;</ins></pre>
+						
+						<p>Then to get a random value simply replace the two constants with <code>Random.value</code>, which produces a value in the 0&ndash;1 range.</p>
+						
+						<pre translate="no">			sequenceNumbers[i] = new Vector4(<ins>Random.value</ins>, <ins>Random.value</ins>);</pre>
+						
+						<figure>
+							<img src="arbitrary-colors/colored-sequence-random.png" width="370" height="320">
+							<figcaption>Colored sequences with random factors and offsets.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Two Gradients</h3>
+						
+						<p>To combine the random sequence with our existing gradient we'll introduce a second gradient and send colors for both to the GPU. So replace the single color property with properties for an A and a B color.</p>
+						
+						<pre translate="no">	static readonly int
+		<del>//baseColorId = Shader.PropertyToID("_BaseColor"),</del>
+		<ins>colorAId = Shader.PropertyToID("_ColorA"),</ins>
+		<ins>colorBId = Shader.PropertyToID("_ColorB")</ins>,
+		matricesId = Shader.PropertyToID("_Matrices"),
+		sequenceNumbersId = Shader.PropertyToID("_SequenceNumbers");</pre>
+						
+						<p>Also replace the single configurable gradient with an A and a B gradient.</p>
+						
+						<pre translate="no">	[SerializeField]
+	<del>//Gradient gradient;</del>
+	<ins>Gradient gradientA, gradientB;</ins></pre>
+						
+						<p>Then evaluate both gradients in the draw loop of <code>Update</code> and set their colors.</p>
+						
+						<pre translate="no">			<ins>float gradientInterpolator = i / (matricesBuffers.Length - 1f);</ins>
+			propertyBlock.SetColor(<ins>colorAId</ins>, gradientA.Evaluate(<ins>gradientInterpolator</ins>));
+			<ins>propertyBlock.SetColor(colorBId, gradientB.Evaluate(gradientInterpolator));</ins></pre>
+						
+						<figure>
+							<img src="arbitrary-colors/two-gradient-properties.png" width="320" height="62">
+							<figcaption>Two gradient properties.</figcaption>
+						</figure>
+						
+						<p>Also replace the single color property in <em translate="no">FractalGPU</em> with two.</p>
+						
+						<pre class="shader" translate="no"><del>//float4 _BaseColor;</del>
+<ins>float4 _ColorA, _ColorB;</ins></pre>
+						
+						<p>And interpolate between them in <code class="shader">GetFractalColor</code> using <code class="shader">lerp</code> with the sequence result as the interpolator.</p>
+						
+						<pre class="shader" translate="no">		return <ins>lerp(</ins>
+			<ins>_ColorA, _ColorB,</ins>
+			frac(unity_InstanceID * _SequenceNumbers.x + _SequenceNumbers.y)
+		<ins>)</ins>;</pre>
+						
+						<p>Finally, for the <code class="shader">#else</code> case simply return the A color.</p>
+						
+						<pre class="shader" translate="no">	#else
+		return <ins>_ColorA</ins>;
+	#endif</pre>
+						
+						<figure>
+							<img src="arbitrary-colors/colored-two-gradients.png" width="370" height="320">
+							<figcaption>Colored with two gradients.</figcaption>
+						</figure>
+						
+						<p>Note that the result is not a binary choice between the two colors per instance, but a blend.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Leaves</h2>
+					
+					<p>A common property of plants is that their extremities are specialized. Examples are leaves, flowers, and fruit. We can add this feature to our fractal by making the deepest level different than the other levels. From now on we'll consider this the leaf level, even though it might not represent actual leaves.</p>
+					
+					<section>
+						<h3>Leaf Colors</h3>
+						
+						<p>To make the leaf instances of our fractal distinct we'll give them a different color. Although we could do this simply via our gradient, it's more convenient to configure the leaf color separately, dedicating the gradients to the trunk, branches, and twigs. So add configuration options for two leaf colors to <code>Fractal</code>.</p>
+						
+						<pre translate="no">	[SerializeField]
+	Gradient gradientA, gradientB;
+
+	<ins>[SerializeField]</ins>
+	<ins>Color leafColorA, leafColorB;</ins></pre>
+						
+						<figure>
+							<img src="leaves/leaf-color-properties.png" width="320" height="82">
+							<figcaption>Leaf color properties.</figcaption>
+						</figure>
+						
+						<p>In <code>Update</code>, determine the leaf index before the draw loop, which is equal to the last index.</p>
+						
+						<pre translate="no">		<ins>int leafIndex = matricesBuffers.Length - 1;</ins>
+		for (int i = 0; i &lt; matricesBuffers.Length; i++) { &hellip; }</pre>
+						
+						<p>Then inside the loop directly use the configured colors for the leaf level, while still evaluating the gradients for all other levels. Also, because we now end the gradient one step earlier we have to subtract 2 instead of 1 from the buffer length when calculating the interpolator.</p>
+						
+						<pre translate="no">			<ins>Color colorA, colorB;</ins>
+			<ins>if (i == leafIndex) {</ins>
+				<ins>colorA = leafColorA;</ins>
+				<ins>colorB = leafColorB;</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				float gradientInterpolator = i / (matricesBuffers.Length - <ins>2f</ins>);
+				<ins>colorA = gradientA.Evaluate(gradientInterpolator);</ins>
+				<ins>colorB = gradientB.Evaluate(gradientInterpolator);</ins>
+			<ins>}</ins>
+			propertyBlock.SetColor(colorAId, <ins>colorA</ins>);
+			propertyBlock.SetColor(colorBId, <ins>colorB</ins>);</pre>
+						
+						<figure>
+							<img src="leaves/colored-leaves.png" width="370" height="320">
+							<figcaption>Fractal with distinct leaf colors.</figcaption>
+						</figure>
+						
+						<p>Note that this change forces us to increment the minimum fractal depth once more.</p>
+						
+						<pre translate="no">	[SerializeField, Range(<ins>3</ins>, 8)]
+	int depth = 4;</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Leaf Mesh</h3>
+						
+						<p>Now that we're treating the lowest level differently we can also use a different mesh to draw it. Add a configuration field for it. This makes it possible to use a cube for the leaves, while using a sphere for everything else.</p>
+						
+						<pre translate="no">	[SerializeField]
+	Mesh mesh<ins>, leafMesh</ins>;</pre>
+						
+						<figure>
+							<img src="leaves/leaf-mesh-property.png" width="320" height="42">
+							<figcaption>Leaf mesh property, set to cube.</figcaption>
+						</figure>
+						
+						<p>Use the appropriate mesh when invoking <code>Graphics.DrawMeshInstancedProcedural</code> in <code>Update</code>.</p>
+						
+						<pre translate="no">			<ins>Mesh instanceMesh;</ins>
+			if (i == leafIndex) {
+				colorA = leafColorA;
+				colorB = leafColorB;
+				<ins>instanceMesh = leafMesh;</ins>
+			}
+			else {
+				float gradientInterpolator = i / (matricesBuffers.Length - 2f);
+				colorA = gradientA.Evaluate(gradientInterpolator);
+				colorB = gradientB.Evaluate(gradientInterpolator);
+				<ins>instanceMesh = mesh;</ins>
+			}
+			&hellip;
+			Graphics.DrawMeshInstancedProcedural(
+				<ins>instanceMesh</ins>, 0, material, bounds, buffer.count, propertyBlock
+			);</pre>
+						
+						<figure>
+							<img src="leaves/cube-leaves.png" width="370" height="320">
+							<figcaption>Cubes for leaves.</figcaption>
+						</figure>
+						
+						<p>Besides looking more interesting, using cubes for leaves improves performance significantly, because most instances are now cubes. We end up with a frame rate that is somewhere in between exclusively drawing spheres and exclusively drawing cubes.</p>
+						
+						<table>
+							<thead>
+								<tr><th>Depth</th><th>URP</th><th><abbr title="Built-in Render Pipeline">BRP</abbr></th></tr></thead>
+							<tbody>
+								<tr><td>6</td><td>360</td><td>150</td></tr>
+								<tr><td>7</td><td>125</td><td>90</td></tr>
+								<tr><td>8</td><td>48</td><td>31</td></tr>
+							</tbody>
+						</table>
+					</section>
+					
+					<section>
+						<h3>Smoothness</h3>
+						
+						<p>Besides a different color we can also give leaves a different smoothness. In fact, we can vary smoothness just like we vary color, based on a second sequence. To configure that second sequence all we need to do is fill the other two components of the sequence numbers vector with random values as well, in <code>OnEnable</code>.</p>
+						
+						<pre translate="no">			sequenceNumbers[i] =
+				new Vector4(Random.value, Random.value<ins>, Random.value, Random.value</ins>);</pre>
+						
+						<p>Then we'll interpolate the RGB and the A channels separately in <code class="shader">GetFractalColor</code>, using the other two configured numbers for the A channel.</p>
+						
+						<pre class="shader" translate="no"><ins>float4</ins> _SequenceNumbers;
+
+float4 GetFractalColor () {
+	#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)
+			<ins>float4 color;</ins>
+		<ins>color.rgb =</ins> lerp(
+			_ColorA<ins>.rgb</ins>, _ColorB<ins>.rgb</ins>,
+			frac(unity_InstanceID * _SequenceNumbers.x + _SequenceNumbers.y)
+		);
+		<ins>color.a = lerp(</ins>
+			<ins>_ColorA.a, _ColorB.a,</ins>
+			<ins>frac(unity_InstanceID * _SequenceNumbers.z + _SequenceNumbers.w)</ins>
+		<ins>);</ins>
+		<ins>return color;</ins>
+	#else
+		return _ColorA;
+	#endif
+}</pre>
+						
+						<p>We do this because from now on we'll use the color's A channel to set the smoothness, which is possible because we don't use it for transparency. This means that in our shader graph we'll use a <em translate="no">Split</em> node to extract the alpha channel from <em translate="no">FractalColor</em> and link that to the <em translate="no">Smoothness</em> input of <em translate="no">Fragment</em>. Then remove the smoothness property from the blackboard.</p>
+						
+						<figure>
+							<img src="leaves/shader-graph-smoothness.png" width="350" height="210">
+							<figcaption>Derived smoothness.</figcaption>
+						</figure>
+						
+						<p>Note that you can minimize shader graph nodes to hide unused input and outputs via the arrow button that appears in their top right corner when you hover the cursor over the node.</p>
+						
+						<figure>
+							<img src="leaves/shader-graph-minimized-node.png" width="350" height="150">
+							<figcaption>Minimized <em translate="no">Split</em> node.</figcaption>
+						</figure>
+						
+						<p>We set smoothness the same way in our surface shader.</p>
+						
+						<pre class="shader" translate="no">		void ConfigureSurface (Input input, inout SurfaceOutputStandard surface) {
+			surface.Albedo = GetFractalColor().rgb;
+			<ins>surface.Smoothness = GetFractalColor().a;</ins>
+		}</pre>
+						
+						<aside>
+							<h3>Shouldn't we reuse the result of a single invocation of <code class="">GetFractalColor</code>?</h3>
+							<div>
+								<p>Yes, but we're already doing that. The shader compiler recognizes and optimizes away the duplicated work. Note that this always happens for shaders, but usually not for regular C# code.</p>
+							</div>
+						</aside>
+						
+						<p>We can also remove the entire <code class="shader">Properties</code> block from the surface shader.</p>
+						
+						<pre class="shader" translate="no">	<del>//Properties {</del>
+		<del>//_Smoothness ("Smoothness", Range(0,1)) = 0.5</del>
+	<del>//}</del></pre>
+						
+						<p>As we're using the color's alpha channel to control smoothness we now have to adjust our colors to take this into account. For example, I set the leaf smoothness to 50% and 90%. Note that the smoothness is chosen independently of the color, even though they're configured together via the same property. We're just taking advantage of the already existing channel that was thus far unused.</p>
+						
+						<figure>
+							<img src="leaves/black-leaves-smoothness-inspector.png" width="320" height="40" alt="inspector"><br>
+							<video width="250" height="216" controls loop muted>
+								<source src="leaves/variable-smoothness.mp4" type="video/mp4">
+							</video>
+							<figcaption>Black leaves with variable smoothness.</figcaption>
+						</figure>
+						
+						<p>We also have to do this for the gradients, which are set to 100% alpha by default. I set them to 80&ndash;90 and 140&ndash;160 out of 255. I also adjusted the colors to make the fractal more tree-like.</p>
+						
+						<figure>
+							<img src="leaves/color-configuration.png" width="320" height="82" alt="inspector"><br>
+							<img src="leaves/coloration-depth-6.png" width="370" height="320" alt="fractal">
+							<figcaption>Colored to look like a plant.</figcaption>
+						</figure>
+						
+						<p>The effect is most convincing when the fractal depth is set to maximum.</p>
+						
+						<figure>
+							<img src="leaves/coloration-depth-8.png" width="370" height="320">
+							<figcaption>Same coloration with depth 8.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Sagging</h2>
+					
+					<p>Although our fractal can already look a lot more organic, this only applies to its coloration. Its structure is still rigid and perfect. This is easiest to see from the side, with the scene window in orthographic mode, and the spin temporarily set to zero in <code>Update</code>.</p>
+					
+					<pre translate="no">		float spinAngleDelta = 0.125f * PI * Time.deltaTime <ins>* 0f</ins>;</pre>
+					
+					<figure>
+						<img src="sagging/rigid.png" width="360" height="280">
+						<figcaption>Perfectly rigid structure.</figcaption>
+					</figure>
+					
+					<p>Organic structures aren't this perfect. Besides irregularity added during growth, the most obvious quality of plants is that they are subject to gravity. Everything sags at least a bit due to its own weight. Our fractal doesn't experience this, but we can approximate the phenomenon by adjusting the rotation of each part.</p>
+					
+					<section>
+						<h3>Sagging Rotation Axis</h3>
+						
+						<p>We can simulate sagging by rotating everything so it points a little bit downward. Thus we have to rotate each instance around some axis so that its local up axis appears to get pulled down. The first step is then to determine the part's up axis in world space. This is the axis that points away from its parent. We find it by rotating the up vector by the part's initial world rotation. This must be done without taking the part's own previous sagging into account, otherwise it will accumulate and everything will drop straight down very quickly. So we rotate at the beginning of <code>Execute</code> based on the part's fixed local rotation and its parent's world-space rotation, before adjusting the part's world rotation.</p>
+						
+						<pre translate="no">		public void Execute (int i) {
+			FractalPart parent = parents[i / 5];
+			FractalPart part = parts[i];
+			part.spinAngle += spinAngleDelta;
+
+			<ins>float3 upAxis = mul(mul(parent.worldRotation, part.rotation), up());</ins>
+
+			part.worldRotation = mul(parent.worldRotation,
+				mul(part.rotation, quaternion.RotateY(part.spinAngle))
+			);
+			&hellip;
+		}</pre>
+						
+						<p>If a part doesn't point straight up then its own up axis will be different than the world up axis. It is possible to rotate from the world up axis to the part's up axis, by rotating around yet another axis. This axis&mdash;which we'll name the sag axis&mdash;is found by taking the cross product of both axes, via the <code>cross</code> method.</p>
+						
+						<pre translate="no">			float3 upAxis = mul(mul(parent.worldRotation, part.rotation), up());
+			<ins>float3 sagAxis = cross(up(), upAxis);</ins></pre>
+						
+						<p>The result of the cross product is a vector that is perpendicular to both its arguments. The length of the vector depends on the relative orientation and lengths of the original vectors. Because we're working with unit-length vectors the length of the sag axis is equal to the sine of the angle between the operands. So to arrive at a proper unit-length axis we have to resize it to unit-length, for which we can use the <code>normalize</code> method.</p>
+						
+						<pre translate="no">			float3 sagAxis = cross(up(), upAxis);
+			<ins>sagAxis = normalize(sagAxis);</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Applying Sagging</h3>
+						
+						<p>Now that we have the sag axis we can construct a sag rotation, by invoking <code>quaternion.AxisAngle</code> with an axis and and angle, in radians. Let's create a rotation of 45&deg;, so a quarter &pi; radians.</p>
+						
+						<pre translate="no">			sagAxis = normalize(sagAxis);
+
+			<ins>quaternion sagRotation = quaternion.AxisAngle(sagAxis, PI * 0.25f);</ins></pre>
+						
+						<p>To apply the sagging we have to base the part's world rotation no longer directly on its parent's. Instead we introduce a new base rotation, by applying the sag rotation to the parent's world rotation.</p>
+						
+						<pre translate="no">			quaternion sagRotation = quaternion.AxisAngle(sagAxis, PI * 0.25f);
+			<ins>quaternion baseRotation = mul(sagRotation, parent.worldRotation);</ins>
+
+			part.worldRotation = mul(<ins>baseRotation</ins>,
+				mul(part.rotation, quaternion.RotateY(part.spinAngle))
+			);</pre>
+						
+						<figure>
+							<img src="sagging/top-missing.png" width="360" height="150">
+							<figcaption>Top is missing.</figcaption>
+						</figure>
+						
+						<p>This makes an obvious difference, which is clearly incorrect. The most extreme mistake is that the top of the fractal appears to be missing. This happened because when a part points straight up the angle between its and the world's up axis is zero. The result of the cross product is then a vector with length zero, for which normalization fails. We fix this by checking whether the magnitude of the sag vector&mdash;its length&mdash; is greater than zero. If so we apply sagging, otherwise we do not and use the parent's rotation directly. This makes physical sense, because if a part points straight up it is in equilibrium and won't sag.</p>
+						
+						<p>The vector's length&mdash;also known as its magnitude&mdash;can be found via the <code>length</code> method. After that the vector can be made unit-length by dividing it by its magnitude, if needed, which is what <code>normalize</code> does as well.</p>
+						
+						<pre translate="no">			<del>//sagAxis = normalize(sagAxis);</del>
+
+			<ins>float sagMagnitude = length(sagAxis);</ins>
+			<ins>quaternion baseRotation;</ins>
+			<ins>if (sagMagnitude > 0f) {</ins>
+				<ins>sagAxis /= sagMagnitude;</ins>
+				quaternion sagRotation = quaternion.AxisAngle(sagAxis, PI * 0.25f);
+				<ins>baseRotation</ins> = mul(sagRotation, parent.worldRotation);
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>baseRotation = parent.worldRotation;</ins>
+			<ins>}</ins>
+		
+			part.worldRotation = mul(baseRotation,
+				mul(part.rotation, quaternion.RotateY(part.spinAngle))
+			);</pre>
+						
+						<figure>
+							<img src="sagging/with-top-malformed.png" width="360" height="250">
+							<figcaption>With top, but malformed.</figcaption>
+						</figure>
+						
+						<p>The fractal is still malformed because we're now effectively applying each part's orientation twice. First when sagging, and later when offsetting it in a specific direction. We fix this by always offsetting along the part's local up axis.</p>
+						
+						<pre translate="no">			part.worldPosition =
+				parent.worldPosition +
+				<del>//mul(parent.worldRotation, (1.5f * scale * part.direction));</del>
+				<ins>mul(part.worldRotation, float3(0f, 1.5f * scale, 0f));</ins></pre>
+						
+						<figure>
+							<img src="sagging/uniform-sagging.png" width="360" height="320">
+							<figcaption>Uniform sagging of 45&deg;.</figcaption>
+						</figure>
+						
+						<p>Note that this means that we no longer need to keep track of a direction vector per part and can remove all code related to it.</p>
+						
+						<pre translate="no">	struct FractalPart {
+		<del>//public float3 direction, worldPosition;</del>
+		<ins>public float3 worldPosition;</ins>
+		public quaternion rotation, worldRotation;
+		public float spinAngle;
+	}
+	
+	&hellip;
+
+	<del>//static float3[] directions = {</del>
+	<del>//	up(), right(), left(), forward(), back()</del>
+	<del>//};</del>
+
+	&hellip;
+
+	FractalPart CreatePart (int childIndex) => new FractalPart {
+		<del>//direction = directions[childIndex],</del>
+		rotation = rotations[childIndex]
+	};</pre>
+					</section>
+					
+					<section>
+						<h3>Modulated Sagging</h3>
+						
+						<p>Sagging appears to work, but it's important to observe it while the fractal is in motion, so make it spin again.</p>
+						
+						<pre translate="no">		float spinAngleDelta = 0.125f * PI * Time.deltaTime<ins>;</ins> <del>// * 0f;</del></pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="sagging/fixed-sagging.mp4" type="video/mp4">
+							</video>
+							<figcaption>Constant 45&deg; sagging.</figcaption>
+						</figure>
+						
+						<p>It mostly works. No matter the orientation of a part, it appears to get pulled downward. But there are sudden changes of direction. This happens when the direction of sagging changes. Because we use a fixed sag angle the only options are to sag in either a positive or negative direction, or not sag at all. This also means that the sag rotation ends up overshooting for parts that are pointing almost straight down, pulling them upward instead.</p>
+						
+						<p>The solution is to let the amount of sagging depend on the angle between the world up axis and the part's up axis. If the part points nearly straight up or down there should be almost no sagging, while sagging should be at its maximum if the part points perfectly sideways, sticking out at a 90&deg; angle. The relation between the amount of sagging and the angle needn't be linear. In fact, using the sine of the angle produces good results. This is the magnitude of the cross product, which we already have. So use it to modulate the sag rotation angle.</p>
+						
+						<pre translate="no">				quaternion sagRotation =
+					quaternion.AxisAngle(sagAxis, PI * 0.25f <ins>* sagMagnitude</ins>);</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="sagging/modulated-sagging.mp4" type="video/mp4">
+							</video>
+							<figcaption>Modulated sagging.</figcaption>
+						</figure>
+						
+						<p>Because the sagging is calculated in world space the orientation of the entire fractal affects it. So by rotating the fractal game object a little we can make its top sag as well.</p>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="sagging/rotated-sagging.mp4" type="video/mp4">
+							</video>
+							<figcaption>Fractal rotated 20&deg; around Z axis.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Maximum Sag Angle</h3>
+						
+						<p>Now that sagging works let's make the maximum sag angle configurable, once again adding variety by exposing two values to define a range. We use degrees to configure these angles as that's easier than using radians, with 90&deg; as maximum and 15&deg; and 25&deg; as default values.</p>
+						
+						<pre translate="no">	[SerializeField]
+	Color leafColorA, leafColorB;
+
+	<ins>[SerializeField, Range(0f, 90f)]</ins>
+	<ins>float maxSagAngleA = 15f, maxSagAngleB = 25f;</ins></pre>
+						
+						<figure>
+							<img src="sagging/max-sag-angles.png" width="320" height="82">
+							<figcaption>Max sag angles.</figcaption>
+						</figure>
+						
+						<p>Add a max sag angle to <code>FractalPart</code> and initialize it in <code>CreatePart</code>, by invoking <code>Random.Range€</code> with the two configured angles as arguments. The result can be converted to radians via the <code>radians</code> method.</p>
+						
+						<pre translate="no">	struct FractalPart {
+		public float3 worldPosition;
+		public quaternion rotation, worldRotation;
+		public float <ins>maxSagAngle</ins>, spinAngle;
+	}
+
+	&hellip;
+
+	FractalPart CreatePart (int childIndex) => new FractalPart {
+		<ins>maxSagAngle = radians(Random.Range€(maxSagAngleA, maxSagAngleB)),</ins>
+		rotation = rotations[childIndex]
+	};</pre>
+						
+						<aside>
+							<h3>Does the A angle have to be smaller than the B angle?</h3>
+							<div>
+								<p>Although this is sensible it is not needed. The <code>Random.Range€</code> method simply uses a random value to interpolate between its two arguments.</p>
+							</div>
+						</aside>
+						
+						<p>Then use the part's max sag angle instead of the constant 45&deg; in <code>Execute</code>.</p>
+						
+						<pre translate="no">				quaternion sagRotation =
+					quaternion.AxisAngle(sagAxis, <ins>part.maxSagAngle</ins> * sagMagnitude)</pre>
+						
+						<figure>
+							<img src="sagging/variable-max-sage-angle.png" width="290" height="320">
+							<figcaption>Variable 15&ndash;25&deg; max sag angle, depth 8.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Spin</h2>
+					
+					<p>At this point we have adjusted our fractal so much that it can look at least somewhat organic. The final enhancement that we'll make is to also add variety to its spinning behavior.</p>
+					
+					<section>
+						<h3>Variable Velocity</h3>
+						
+						<p>Like we did for the max sag angle, introduce configuration options for a spin velocity range, in degrees per second. These velocities should be zero or greater.</p>
+						
+						<pre translate="no">	[SerializeField, Range(0f, 90f)]
+	float maxSagAngleA = 15f, maxSagAngleB = 25f;
+
+	<ins>[SerializeField, Range(0f, 90f)]</ins>
+	<ins>float spinVelocityA = 20f, spinVelocityB = 25f;</ins></pre>
+						
+						<figure>
+							<img src="spin/spin-velocities.png" width="320" height="82">
+							<figcaption>Spin velocities.</figcaption>
+						</figure>
+						
+						<p>Add a spin velocity field to <code>FractalPart</code> and randomly initialize it in <code>CreatePart</code>.</p>
+						
+						<pre translate="no">	struct FractalPart {
+		public float3 worldPosition;
+		public quaternion rotation, worldRotation;
+		public float maxSagAngle, spinAngle<ins>, spinVelocity</ins>;
+	}
+
+	&hellip;
+
+	FractalPart CreatePart (int childIndex) => new FractalPart {
+		maxSagAngle = radians(Random.Range€(maxSagAngleA, maxSagAngleB)),
+		rotation = rotations[childIndex]<ins>,</ins>
+		<ins>spinVelocity = radians(Random.Range€(spinVelocityA, spinVelocityB))</ins>
+	};</pre>
+						
+						<p>Next, get rid of the uniform spin angle delta field in <code>UpdateFractalLevelJob</code>, replacing it with a delta time field. Then apply the part's own spin velocity in <code>Execute</code>.</p>
+						
+						<pre translate="no">		<del>//public float spinAngleDelta;</del>
+		public float scale;
+		<ins>public float deltaTime;</ins>
+
+		&hellip;
+		
+		public void Execute (int i) {
+			FractalPart parent = parents[i / 5];
+			FractalPart part = parts[i];
+			part.spinAngle += <ins>part.spinVelocity * deltaTime</ins>;
+
+			&hellip;
+		}</pre>
+						
+						<p>After that adjust <code>Update</code> so it no longer uses a uniform spin angle delta and passes the time delta to the jobs instead.</p>
+						
+						<pre translate="no">		<del>//float spinAngleDelta = 0.125f * PI * Time.deltaTime;</del>
+		<ins>float deltaTime = Time.deltaTime;</ins>
+		FractalPart rootPart = parts[0][0];
+		rootPart.spinAngle += <ins>rootPart.spinVelocity * deltaTime</ins>;
+		&hellip;
+		for (int li = 1; li &lt; parts.Length; li++) {
+			scale *= 0.5f;
+			jobHandle = new UpdateFractalLevelJob {
+				<del>//spinAngleDelta = spinAngleDelta,</del>
+				<ins>deltaTime = deltaTime,</ins>
+				&hellip;
+			}.ScheduleParallel(parts[li].Length, 5, jobHandle);
+		}</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="spin/variable-spin-velocity.mp4" type="video/mp4">
+							</video>
+							<figcaption>Variable spin velocity between 0 and 90.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Reverse Spin</h3>
+						
+						<p>An extra thing that we can do is to reverse the spin direction of some parts. This could already be done by allowing the configuration of negative spin velocities. However, if we want to mix both positive and negative velocities then our two configured values must have different signs. Thus the range goes through zero and low velocities cannot be avoided. We could not configure our fractal so that its speed is for example somewhere in the 20&ndash;25 range, but either positive or negative.</p>
+						
+						<p>The solution is to configure speed and direction separately. First rename the velocities to speeds, to indicate that they are without direction. Then add another configuration option for a reverse spin chance, expressed as a probability, so a value in the 0&ndash;1 range.</p>
+						
+						<pre translate="no">	[SerializeField, Range(0f, 90f)]
+	float <ins>spinSpeedA</ins> = 20f, <ins>spinSpeedB</ins> = 25f;
+
+	<ins>[SerializeField, Range(0f, 1f)]</ins>
+	<ins>float reverseSpinChance = 0.25f;</ins>
+	
+	&hellip;
+
+	FractalPart CreatePart (int childIndex) => return new FractalPart {
+		maxSagAngle = radians(Random.Range(maxSagAngleA, maxSagAngleB)),
+		rotation = rotations[childIndex],
+		spinVelocity = radians(Random.Range(<ins>spinSpeedA</ins>, <ins>spinSpeedB</ins>))
+	};</pre>
+						
+						<figure>
+							<img src="spin/reverse-spin-chance.png" width="320" height="62">
+							<figcaption>Speeds and reverse spin chance.</figcaption>
+						</figure>
+						
+						<p>We can pick the direction of the spin in <code>CreatePart</code> by checking whether a random value is less than the reverse spin chance. If so we multiply the speed by &minus;1, otherwise by 1.</p>
+						
+						<pre translate="no">		spinVelocity =
+			<ins>(Random.value &lt; reverseSpinChance ? -1f : 1f) *</ins>
+			radians(Random.Range(spinSpeedA, spinSpeedB))</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="spin/different-spin-directions.mp4" type="video/mp4">
+							</video>
+							<figcaption>Different spin directions, velocity always 45&deg;.</figcaption>
+						</figure>
+						
+						<p>Note that it is now possible for parts of the fractal to appear relatively motionless. This happens when opposite spin velocities cancel each other.</p>
+					</section>
+					
+					<section>
+						<h3>Performance</h3>
+						
+						<p>We wrap up by once again looking at performance, after all the adjustments that we made since the previous tutorial. It turns out that the update time has increased, roughly doubling for depth 6 and 7, while increasing by 40% for depth 8. This hasn't negatively affected the frame rate compared to the last time we measured it, because it goes so fast.</p>
+						
+						<table>
+							<thead>
+								<tr><th>Depth</th><th>MS</th><th>URP</th><th><abbr title="Built-in Render Pipeline">BRP</abbr></th></tr></thead>
+							<tbody>
+								<tr><td>6</td><td>0.20</td><td>365</td><td>145</td></tr>
+								<tr><td>7</td><td>0.45</td><td>130</td><td>91</td></tr>
+								<tr><td>8</td><td>2.40</td><td>48</td><td>31</td></tr>
+							</tbody>
+						</table>
+						
+						<p>Want to know when the next tutorial gets released? Keep tabs on my <a href="https://www.patreon.com/catlikecoding">Patreon</a> page!</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/basics-07-organic-variety/" class="repository">repository</a>
+					<a href="Organic-Variety.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

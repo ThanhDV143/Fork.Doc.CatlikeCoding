@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/hex-map/part-12/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/hex-map/part-12/tutorial-image.jpg">
+		<meta property="og:title" content="Hex Map 12">
+		<meta property="og:description" content="A Unity Hex Map tutorial about making it possible to save and load maps. Part 12 of 27.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hex Map 12</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/hex-map/part-12/#article",
+				"headline": "Hex Map 12",
+				"alternativeHeadline": "Saving and Loading",
+				"datePublished": "2016-12-22",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Hex Map tutorial about making it possible to save and load maps. Part 12 of 27.",
+				"image": "https://catlikecoding.com/unity/tutorials/hex-map/part-12/tutorial-image.jpg",
+				"dependencies": "Unity 5.3.1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/hex-map/", "name": "Hex Map" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				EdgeVertices: 1,
+				HexCell: 1,
+				HexEdgeType: 1,
+				HexCoordinates: 1,
+				HexCoordinatesDrawer: 1,
+				HexDirection: 1,
+				HexDirectionExtensions: 1,
+				HexFeatureCollection: 1,
+				HexFeatureManager: 1,
+				HexGrid: 1,
+				HexGridChunk: 1,
+				HexHash: 1,
+				HexMapCamera: 1,
+				HexMapEditor: 1,
+				HexMesh: 1,
+				HexMetrics: 1,
+				ListPool: 1,
+				OptionalToggle: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Hex Map</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hex Map 12</h1>
+					<p>Saving and Loading</p>
+					<ul>
+						<li>Keep track of terrain type, instead of color.</li>
+						<li>Create a file.</li>
+						<li>Write data to a file, then read it.</li>
+						<li>Serialize cell data.</li>
+						<li>Reduce file size.</li>
+					</ul>
+				</header>
+
+				<p>This is the 12<sup>th</sup> part of a tutorial series about <a href="../index.html">hexagon maps</a>. By now we can create reasonably interesting maps. It's time to save them.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Loaded from a <a href="test.map.html">test.map</a> file.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Terrain Type</h2>
+					
+					<p>When saving a map, we do not need to store all the data that we keep track of at run time. For example, we only have to remember the elevation level of a cell. Its actual vertical position is derived from it, so need not be stored. In fact, it is better that we don't store those derived metrics. That way, the map data remains valid, even if later on we decide to adjust the elevation offset. The data is separate from the presentation.</p>
+					
+					<p>Likewise, the exact color of a cell need not be stored. It's ok to remember that a cell is green. But the exact shade of green might change if we adjust the visual style. To do this, we could store the color index, instead of the colors themselves. In fact, we can suffice with storing this index in cells at run time as well, instead of the actual colors. That allows us to upgrade to a more advanced terrain visualization later.</p>
+					
+					<section>
+						<h3>Moving the Color Array</h3>
+						
+						<p>If cells no longer have color data, then it should be available somewhere else. The most convenient place is <code>HexMetrics</code>. So let's add a color array to it.</p>
+
+						<pre translate="no">	<ins>public static Color[] colors;</ins></pre>
+						
+						<p>Like with other global data like the noise, we can initialize these colors via <code>HexGrid</code>.</p>
+
+						<pre translate="no">	<ins>public Color[] colors;</ins>
+	
+	&hellip;
+	
+	void Awake () {
+		HexMetrics.noiseSource = noiseSource;
+		HexMetrics.InitializeHashGrid(seed);
+		<ins>HexMetrics.colors = colors;</ins>
+
+		&hellip;
+	}
+
+	&hellip;
+
+	void OnEnable () {
+		if (!HexMetrics.noiseSource) {
+			HexMetrics.noiseSource = noiseSource;
+			HexMetrics.InitializeHashGrid(seed);
+			<ins>HexMetrics.colors = colors;</ins>
+		}
+	}</pre>
+
+						<p>And as we'll no longer directly assign colors to cells, get rid of the default color.</p>
+
+						<pre translate="no"><del>//	public Color defaultColor = Color.white;</del>
+	
+	&hellip;
+					
+	void CreateCell (int x, int z, int i) {
+		&hellip;
+
+		HexCell cell = cells[i] = Instantiate&lt;HexCell>(cellPrefab);
+		cell.transform.localPosition = position;
+		cell.coordinates = HexCoordinates.FromOffsetCoordinates(x, z);
+<del>//		cell.Color = defaultColor;</del>
+
+		&hellip;
+	}</pre>
+						
+						<p>Configure the new colors so they match the public array of the hex map editor.</p>
+
+						<figure>
+							<img src="terrain-type/colors.png" width="320" height="292">
+							<figcaption>Colors added to the grid.</figcaption>
+						</figure>
+					</section>
+
+					<section>
+						<h3>Refactoring Cells</h3>
+						
+						<p>Remove the color field from <code>HexCell</code>. Instead, we'll store an index. And instead of a color index, we'll use a more generic terrain type index.</p>
+						
+						<pre translate="no"><del>//	Color color;</del>
+	<ins>int terrainTypeIndex;</ins></pre>
+						
+						<p>The color property can use this index to retrieve the appropriate color. It can no longer be directly set, so remove that part. That will produce a compile error, which we'll fix shortly.</p>
+						
+						<pre translate="no">	public Color Color {
+		get {
+			return <ins>HexMetrics.colors[terrainTypeIndex]</ins>;
+		}
+<del>//		set {</del>
+<del>//			&hellip;</del>
+<del>//		}</del>
+	}</pre>
+						
+						<p>Add a new property to get and set our new terrain type index.</p>
+						
+						<pre translate="no">	<ins>public int TerrainTypeIndex {</ins>
+		<ins>get {</ins>
+			<ins>return terrainTypeIndex;</ins>
+		<ins>}</ins>
+		<ins>set {</ins>
+			<ins>if (terrainTypeIndex != value) {</ins>
+				<ins>terrainTypeIndex = value;</ins>
+				<ins>Refresh();</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Refactoring the Editor</h3>
+						
+						<p>Inside <code>HexMapEditor</code>, remove all the code that deals with colors. That will fix the compile error as well.</p>
+						
+						<pre translate="no"><del>//	public Color[] colors;</del>
+
+	&hellip;
+
+<del>//	Color activeColor;</del>
+
+	&hellip;
+
+<del>//	bool applyColor;</del>
+
+&hellip;
+
+<del>//	public void SelectColor (int index) {</del>
+<del>//		applyColor = index >= 0;</del>
+<del>//		if (applyColor) {</del>
+<del>//			activeColor = colors[index];</del>
+<del>//		}</del>
+<del>//	}</del>
+
+&hellip;
+
+<del>//	void Awake () {</del>
+<del>//		SelectColor(0);</del>
+<del>//	}</del>
+	
+	&hellip;
+	
+	void EditCell (HexCell cell) {
+		if (cell) {
+<del>//			if (applyColor) {</del>
+<del>//				cell.Color = activeColor;</del>
+<del>//			}</del>
+			&hellip;
+		}
+	}</pre>
+						
+						<p>Now add a field and method to control the active terrain type index.</p>
+						
+						<pre translate="no">	<ins>int activeTerrainTypeIndex;</ins>
+	
+	&hellip;
+	
+	<ins>public void SetTerrainTypeIndex (int index) {</ins>
+		<ins>activeTerrainTypeIndex = index;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Use this method as a replacement for the now missing <code>SelectColor</code> method. Connect the color widgets in the UI to <code>SetTerrainTypeIndex</code>, keeping everything else the same. This means that a negative index is still used to indicate that the color shouldn't be changed.</p>
+						
+						<p>Adjust <code>EditCell</code> so the terrain type index is assigned to the edited cell, when appropriate.</p>
+						
+						<pre translate="no">	void EditCell (HexCell cell) {
+		if (cell) {
+			<ins>if (activeTerrainTypeIndex >= 0) {</ins>
+				<ins>cell.TerrainTypeIndex = activeTerrainTypeIndex;</ins>
+			<ins>}</ins>
+			&hellip;
+		}
+	}</pre>
+						
+						<p>Although we have removed the color data from our cells, the map should still work as before. The only difference is that the default color is now the first in the array, which is yellow in my case.</p>
+						
+						<figure>
+							<img src="terrain-type/new-default-color.png" width="380" height="180">
+							<figcaption>Yellow is the new default.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="terrain-type/terrain-type.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Storing Data in a File</h2>
+					
+					<p>We'll use <code>HexMapEditor</code> to control saving and loading our map. Create two methods to take care of this, leaving them empty for now.</p>
+					
+					<pre translate="no">	<ins>public void Save () {</ins>
+	<ins>}</ins>
+
+	<ins>public void Load () {</ins>
+	<ins>}</ins></pre>
+					
+					<p>Add two buttons to the UI, via <em translate="no">GameObject / UI / Button</em>. Hook them up to the <code>Save</code> and <code>Load</code> methods, and give them appropriate labels. I put them at the bottom of the right panel.</p>
+					
+					<figure>
+						<img src="storing-data-a-file/save-load-buttons.png" width="108" height="284">
+						<figcaption>Save and Load buttons.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>File Location</h3>
+						
+						<p>To save a map, we have to store it somewhere. As most games do, we'll store the data in a file. But where on the player's file system should this file be put? The answer depends on which operating system the game runs on. Each has a different convention for storing application-specific files.</p>
+						
+						<p>We don't need to know these conventions. Unity knows the appropriate path, which we can retrieve via <code>Application.persistentDataPath</code>. You can check what it is for you, by logging it in <code>Save</code> and clicking the button while in play mode.</p>
+						
+						<pre translate="no">	public void Save () {
+		<ins>Debug.Log(Application.persistentDataPath);</ins>
+	}</pre>
+						
+						<p>On desktops, the path will contain the company and product name. Both the editor and builds use this path. You can adjust the names via <em translate="no">Edit / Project Settings / Player</em>.</p>
+						
+						<figure>
+							<img src="storing-data-a-file/player-settings.png" width="320" height="88">
+							<figcaption>Company and product name.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why can't I find the Library folder on a Mac?</h3>
+							<div>
+								<p>The <em translate="no">Library</em> folder is often hidden. How to make it visible depends on the OS X version. Unless you have an old version, select your home folder in Finder and go to <em translate="no">Show View Options</em>. There's a checkbox for the <em translate="no">Library</em> folder.</p>
+							</div>
+						</aside>
+						
+						<aside>
+							<h3>What about WebGL?</h3>
+							<div>
+								<p>WebGL games cannot access the user's file system. Instead, all file operations will be directed to an in-memory file system instead. This is transparent to us. However, to persist the data, you'll have to manually instruct the webpage to flush the data to the browser's storage.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Creating a File</h3>
+						
+						<p>To create a file, we have to use classes from the <code>System.IO</code> namespace. So add a <code>using</code> statement for it above the <code>HexMapEditor</code> class.</p>
+						
+						<pre translate="no">using UnityEngine;
+using UnityEngine.EventSystems;
+<ins>using System.IO;</ins>
+
+public class HexMapEditor : MonoBehaviour {
+	&hellip;
+}</pre>
+						
+						<p>First, we need to create the full path of the file. We'll use <em translate="no">test.map</em> as the file's name. It should be appended to the persistent data path. Whether we have to put a slash or a backslash between them depends on the platform. The <code>Path.Combine</code> method will take care of this for us.</p>
+						
+						<pre translate="no">	public void Save () {
+		<ins>string path = Path.Combine(Application.persistentDataPath, "test.map");</ins>
+	}
+</pre>
+						
+						<p>Next, we have to access the file at this location. We do this with the <code>File.Open</code> method. Because we want to write data to this file, we have to use its create mode. That will either create a new file at the provided path, or replace the file if it already existed.</p>
+						
+						<pre translate="no">		string path = Path.Combine(Application.persistentDataPath, "test.map");
+		<ins>File.Open(path, FileMode.Create);</ins></pre>
+						
+						<p>The result of invoking this method is an open data stream, linked to this file. We can use it to write data into the file. And we must make sure to close the stream, once we no longer need it.</p>
+						
+						<pre translate="no">		string path = Path.Combine(Application.persistentDataPath, "test.map");
+		<ins>Stream fileStream =</ins> File.Open(path, FileMode.Create);
+		<ins>fileStream.Close();</ins></pre>
+						
+						<p>At this point, pressing the <em translate="no">Save</em> button will create a <em translate="no">test.map</em> file in the folder specified by the persistent data path. If you inspect this file, you'll find that it is empty, with a size of zero bytes. That's because we haven't written anything to it yet.</p>
+						
+					</section>
+					
+					<section>
+						<h3>Writing to a File</h3>
+						
+						<p>To actually put data into the file, we need a way to stream data to it. The most basic way to do this is by using a <code>BinaryWriter</code>. These objects allow us to write primitive data to any stream.</p>
+						
+						<p>Create a new <code>BinaryWriter</code> object, with our file stream as an argument. Closing the writer will also close the stream that it uses. So we don't need to keep a direct reference to the stream anymore.</p>
+						
+						<pre translate="no">		string path = Path.Combine(Application.persistentDataPath, "test.map");
+		<ins>BinaryWriter writer</ins> =
+			<ins>new BinaryWriter(</ins>File.Open(path, FileMode.Create)<ins>)</ins>;
+		<ins>writer</ins>.Close();</pre>
+						
+						<p>We can use the <code>BinaryWriter.Write</code> method to send data into the stream. There is a <code>Write</code> method variant for all primitive types, like integers and floats. It can also write strings. Let's try writing the integer 123.</p>
+						
+						<pre translate="no">		BinaryWriter writer =
+			new BinaryWriter(File.Open(path, FileMode.Create));
+		<ins>writer.Write(123);</ins>
+		writer.Close();</pre>
+						
+						<p>Press our <em translate="no">Save</em> button, and inspect <em translate="no">test.map</em> again. Its size is now four bytes. That's because the size of an integer is four bytes.</p>
+						
+						<aside>
+							<h3>Why does my file browser report that the file takes up more space?</h3>
+							<div>
+								<p>That's because file systems partitions space in blocks of bytes. It doesn't track single bytes. As <em translate="no">test.map</em> is currently only four bytes, it ends up claiming a single block of storage space.</p>
+							</div>
+						</aside>
+						
+						<p>Note that we are storing binary data, not human-readable text. So if you were to open our file in a text editor, you would see gibberish. You might see the character <em translate="no">{</em>, followed by either nothing or some placeholder characters.</p>
+						
+						<p>You could open the file with a hex editor. In that case, you would see <em translate="no">7b 00 00 00</em>. Those are the four bytes of our integer, displayed using hexadecimal notation. That's <em translate="no">123 0 0 0</em> when using regular decimal numbers. In binary notation, the first byte is <em translate="no">01111011</em>.</p>
+						
+						<p>The ASCII code for <em translate="no">{</em> is 123, which is why a text editor might show that character. ASCII 0 is the null character, which doesn't correspond to a valid visible character.</p>
+						
+						<p>The other three bytes are zero, because we wrote a number that is smaller than 256. Had we written 256, then the hex editor would have shown <em translate="no">00 01 00 00</em>.</p>
+						
+						<aside>
+							<h3>Shouldn't <em translate="no">123</em> be stored as <em translate="no">00 00 00 7b</em>?</h3>
+							<div>
+								<p><code>BinaryWriter</code> uses the little-endian convention to store numbers. This means that the least significant bytes are written first. This is the convention used by Microsoft when developing the .Net framework, which might have been chosen because Intel CPUs natively use the little-endian format.</p>
+								
+								<p>The alternative is big-endian, which stores the most significant bytes first. This corresponds to how we order the digits of numbers. 123 is one-hundred-twenty-three because we assume big-endian notation. If it were little-endian, 123 would represent three-hundred-twenty-one.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Making Sure Resources are Released</h3>
+						
+						<p>It is important that we close the writer. As long as we have it open, the file system locks the file, preventing other processes from writing to it. If we forgot to close it, we'd lock ourselves out too. If we clicked the save button twice, we'd fail to open a stream the second time.</p>
+						
+						<p>Instead of manually closing the writer, we can create a <code>using</code> block for it. This defines a scope inside which the writer is valid. Once code execution exits this scope, the writer is disposed of and the stream is closed.</p>
+						
+						<pre translate="no">		<ins>using (</ins>
+			BinaryWriter writer =
+				new BinaryWriter(File.Open(path, FileMode.Create))
+		<ins>) {</ins>
+			writer.Write(123);
+		<ins>}</ins>
+<del>//		writer.Close();</del></pre>
+						
+						<p>This works because both the writer and file stream classes implement the <code>IDisposable</code> interface. These objects have a <code>Dispose</code> method, which is implicitly invoked when exiting the <code>using</code> scope.</p>
+						
+						<p>The big advantage of <code>using</code> is that it works no matter how execution leaves the scope. Early returns, exceptions, and errors don't break it. It's also concise to write.</p>
+					</section>
+
+					<section>
+						<h3>Retrieving the Data</h3>
+						
+						<p>To read back the data that we wrote earlier, we have to put code in our <code>Load</code> method. Like when saving, we have to construct the path and open a file stream. What's different is that this time we open the file to read, not write. And we need a <code>BinaryReader</code> instead of a writer.</p>
+
+						<pre translate="no">	public void Load () {
+		<ins>string path = Path.Combine(Application.persistentDataPath, "test.map");</ins>
+		<ins>using (</ins>
+			<ins>BinaryReader reader =</ins>
+				<ins>new BinaryReader(File.Open(path, FileMode.Open))</ins>
+		<ins>) {</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>In this case, we can use the shorthand method <code>File.OpenRead</code> to open the file for the purpose of reading.</p>
+
+						<pre translate="no">		using (BinaryReader reader = new BinaryReader(File.<ins>OpenRead(path)</ins>)) {
+		}</pre>
+						
+						<aside>
+							<h3>Why can't we use <code>File.OpenWrite</code> when writing?</h3>
+							<div>
+								<p>That method creates a stream that appends to existing files, instead of replacing them.</p>
+							</div>
+						</aside>
+						
+						<p>When reading, we have to be explicit about the type of data we're retrieving. To read our integer from the stream, we have to use <code>BinaryReader.ReadInt32</code>. That method reads a 32-bit integer, so four bytes.</p>
+
+						<pre translate="no">		using (BinaryReader reader = new BinaryReader(File.OpenRead(path))) {
+			<ins>Debug.Log(reader.ReadInt32());</ins>
+		}</pre>
+						
+						<p>Note that to retrieve <em translate="no">123</em>, we could suffice with reading a single byte. But that would leave three bytes still in the stream that belong to the integer. It also wouldn't work for numbers outside the 0&ndash;255 range. So don't do that.</p>
+					</section>
+					
+					<a href="storing-data-a-file/storing-data-in-a-file.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Writing and Reading Map Data</h2>
+					
+					<p>When storing anything, a big question is whether you should use a human-readable format. Common human-readable formats are JSON, XML, and plain ASCII with some custom structure. Such files can be opened, parsed, and edited in text editors. It can also make sharing data between different applications more easy.</p>
+					
+					<p>However, such formats come with a cost. The file sizes will be larger &ndash; sometimes much larger &ndash; than when using binary data. They can also add a lot of overhead when encoding and decoding the data, both in execution time and memory allocations.</p>
+					
+					<p>In contrast, binary data is compact and fast. This is important when you write a lot of data. For example, when auto-saving a large map every game turn. So we'll stick to binary. If you can handle that, you can also handle more verbose formats.</p>
+					
+					<aside>
+						<h3>What about automatic serialization?</h3>
+						<div>
+							<p>Just like Unity serializes data, we could directly write serializable classes to a stream. The details of writing individual fields will be hidden from us. However, we cannot directly serialize our cells. They're <code>MonoBehaviour</code> classes, which come with stuff that we don't want to store. So we'd need to use a separate object hierarchy, which destroys the simplicity of automatic serialization. Also, future code changes are harder to support this way. So we stick to the total control of manual serialization. It also forces us to really understand what's going on.</p>
+						</div>
+					</aside>
+					
+					<p>To serialize our map, we have to store the data of every cell. To save and load a single cell, add a <code>Save</code> and a <code>Load</code> method to <code>HexCell</code>. As they need a writer or reader to do their work, add those as parameters.</p>
+					
+					<pre translate="no">using UnityEngine;
+<ins>using System.IO;</ins>
+
+public class HexCell : MonoBehaviour {
+	
+	&hellip;
+	
+	<ins>public void Save (BinaryWriter writer) {</ins>
+	<ins>}</ins>
+
+	<ins>public void Load (BinaryReader reader) {</ins>
+	<ins>}</ins>
+}</pre>
+					
+					<p>Add <code>Save</code> and <code>Load</code> methods to <code>HexGrid</code> as well. These methods simply iterate through all the cells, invoking their <code>Load</code> and <code>Save</code> methods.</p>
+					
+					<pre translate="no">using UnityEngine;
+using UnityEngine.UI;
+<ins>using System.IO;</ins>
+
+public class HexGrid : MonoBehaviour {
+
+	&hellip;
+
+	<ins>public void Save (BinaryWriter writer) {</ins>
+		<ins>for (int i = 0; i &lt; cells.Length; i++) {</ins>
+			<ins>cells[i].Save(writer);</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	<ins>public void Load (BinaryReader reader) {</ins>
+		<ins>for (int i = 0; i &lt; cells.Length; i++) {</ins>
+			<ins>cells[i].Load(reader);</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+}</pre>
+					
+					<p>If we load a map, it has to be refreshed after the cell data has been changed. To do this, simply refresh all the chunks.</p>
+					
+					<pre translate="no">	public void Load (BinaryReader reader) {
+		for (int i = 0; i &lt; cells.Length; i++) {
+			cells[i].Load(reader);
+		}
+		<ins>for (int i = 0; i &lt; chunks.Length; i++) {</ins>
+			<ins>chunks[i].Refresh();</ins>
+		<ins>}</ins>
+	}</pre>
+					
+					<p>Finally, replace our test code in <code>HexMapEditor</code> with invocations of the <code>Save</code> and <code>Load</code> methods of the grid, passing along the writer or reader.</p>
+					
+					<pre translate="no">	public void Save () {
+		string path = Path.Combine(Application.persistentDataPath, "test.map");
+		using (
+			BinaryWriter writer =
+				new BinaryWriter(File.Open(path, FileMode.Create))
+		) {
+			<ins>hexGrid.Save(writer);</ins>
+		}
+	}
+
+	public void Load () {
+		string path = Path.Combine(Application.persistentDataPath, "test.map");
+		using (BinaryReader reader = new BinaryReader(File.OpenRead(path))) {
+			<ins>hexGrid.Load(reader);</ins>
+		}
+	}</pre>
+					
+					<section>
+						<h3>Saving Terrain Type</h3>
+						
+						<p>At this point, saving once again produces an empty file, and loading does nothing. Let's start slow, by writing and loading just the terrain type index of <code>HexCell</code>.</p>
+						
+						<p>Directly write the <code>terrainTypeIndex</code> field, and directly assign it well. We're not going to use the properties. As we're explicitly refreshing all chunks, the <code>Refresh</code> invocations of properties are unneeded. Also, as we're only saving valid maps, we're going to assume that all maps we load are valid too. So we don't need to check whether a river or road is allowed, for example.</p>
+						
+						<pre translate="no">	public void Save (BinaryWriter writer) {
+		<ins>writer.Write(terrainTypeIndex);</ins>
+	}
+	
+	public void Load (BinaryReader reader) {
+		<ins>terrainTypeIndex = reader.ReadInt32();</ins>
+	}</pre>
+						
+						<p>When saving, the terrain type index of all cells will be written to the file, one after the other. Because the index is an integer, its size is four bytes. My map contains 300 cells, which means that the file size will be 1,200 bytes.</p>
+						
+						<p>Loading reads the indices back in the same order that they were written. If you've changed the cell colors after saving, loading the map will revert the colors to the same state that you saved. Because we're not storing anything else, the other cell data remains the same. So loading will replace the terrain type, but not their elevation, water level, features, and so on.</p>
+					</section>
+					
+					<section>
+						<h3>Saving All Integers</h3>
+						
+						<p>Saving the terrain type index is not enough. We have to store all the other cell data as well. Let's start with all integer fields. These are the terrain type index, elevation, water level, urban level, farm level, plant level, and the special index. Be sure to read them back in the same order that you write them.</p>
+						
+						<pre translate="no">	public void Save (BinaryWriter writer) {
+		writer.Write(terrainTypeIndex);
+		<ins>writer.Write(elevation);</ins>
+		<ins>writer.Write(waterLevel);</ins>
+		<ins>writer.Write(urbanLevel);</ins>
+		<ins>writer.Write(farmLevel);</ins>
+		<ins>writer.Write(plantLevel);</ins>
+		<ins>writer.Write(specialIndex);</ins>
+	}
+
+	public void Load (BinaryReader reader) {
+		terrainTypeIndex = reader.ReadInt32();
+		<ins>elevation = reader.ReadInt32();</ins>
+		<ins>waterLevel = reader.ReadInt32();</ins>
+		<ins>urbanLevel = reader.ReadInt32();</ins>
+		<ins>farmLevel = reader.ReadInt32();</ins>
+		<ins>plantLevel = reader.ReadInt32();</ins>
+		<ins>specialIndex = reader.ReadInt32();</ins>
+	}</pre>
+						
+						<p>Try to save and load the map now, while making some changes in between. Everything that we included gets restored as expected, except for the elevation. That's because when changing the elevation level, the cell's vertical position should be updated as well. We could do this by assigning the loaded elevation to its property, instead of its field. But that property performs additional work that we don't need. So let's extract the code which updates the cell position from the <code>Elevation</code> setter, and put it inside a separate <code>RefreshPosition</code> method. The only change we have to make to this bit of code is replacing <code>value</code> with a reference to the <code>elevation</code> field.</p>
+						
+						<pre translate="no">	<ins>void RefreshPosition () {</ins>
+		Vector3 position = transform.localPosition;
+		position.y = <ins>elevation</ins> * HexMetrics.elevationStep;
+		position.y +=
+			(HexMetrics.SampleNoise(position).y * 2f - 1f) *
+			HexMetrics.elevationPerturbStrength;
+		transform.localPosition = position;
+
+		Vector3 uiPosition = uiRect.localPosition;
+		uiPosition.z = -position.y;
+		uiRect.localPosition = uiPosition;
+	<ins>}</ins></pre>
+						
+						<p>Now we can invoke this method when setting the property, and also after loading the elevation data.</p>
+						
+						<pre translate="no">	public int Elevation {
+		&hellip;
+		set {
+			if (elevation == value) {
+				return;
+			}
+			elevation = value;
+			<ins>RefreshPosition();</ins>
+			ValidateRivers();
+			
+			&hellip;
+		}
+	}
+	
+	&hellip;
+	
+	public void Load (BinaryReader reader) {
+		terrainTypeIndex = reader.ReadInt32();
+		elevation = reader.ReadInt32();
+		<ins>RefreshPosition();</ins>
+		&hellip;
+	}</pre>
+						<p>With this change, the cells will correctly adjust their visible elevation when loading.</p>
+					</section>
+					
+					<section>
+						<h3>Saving All Data</h3>
+						
+						<p>Whether a cell is walled and has an incoming or outgoing river is stored in boolean fields. We can write these just like integers. Besides that, the road data is an array of six booleans, which we can write using a loop.</p>
+						
+						
+						<pre translate="no">	public void Save (BinaryWriter writer) {
+		writer.Write(terrainTypeIndex);
+		writer.Write(elevation);
+		writer.Write(waterLevel);
+		writer.Write(urbanLevel);
+		writer.Write(farmLevel);
+		writer.Write(plantLevel);
+		writer.Write(specialIndex);
+		<ins>writer.Write(walled);</ins>
+
+		<ins>writer.Write(hasIncomingRiver);</ins>
+		<ins>writer.Write(hasOutgoingRiver);</ins>
+
+		<ins>for (int i = 0; i &lt; roads.Length; i++) {</ins>
+			<ins>writer.Write(roads[i]);</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>The directions of the incoming and outgoing rivers are stored in <code>HexDirection</code> fields. The <code>HexDirection</code> type is an enumeration, which is internally stored as integers. So we can serialize them as integers too, using an explicit cast.</p>
+						
+						<pre translate="no">		writer.Write(hasIncomingRiver);
+		<ins>writer.Write((int)incomingRiver);</ins>
+
+		writer.Write(hasOutgoingRiver);
+		<ins>writer.Write((int)outgoingRiver);</ins></pre>
+						
+						<p>Reading the booleans is done with the <code>BinaryReader.ReadBoolean</code> method. The river directions are integers, which we have to cast back to <code>HexDirection</code>.</p>
+						
+						<pre translate="no">	public void Load (BinaryReader reader) {
+		terrainTypeIndex = reader.ReadInt32();
+		elevation = reader.ReadInt32();
+		RefreshPosition();
+		waterLevel = reader.ReadInt32();
+		urbanLevel = reader.ReadInt32();
+		farmLevel = reader.ReadInt32();
+		plantLevel = reader.ReadInt32();
+		specialIndex = reader.ReadInt32();
+		<ins>walled = reader.ReadBoolean();</ins>
+
+		<ins>hasIncomingRiver = reader.ReadBoolean();</ins>
+		<ins>incomingRiver = (HexDirection)reader.ReadInt32();</ins>
+
+		<ins>hasOutgoingRiver = reader.ReadBoolean();</ins>
+		<ins>outgoingRiver = (HexDirection)reader.ReadInt32();</ins>
+
+		<ins>for (int i = 0; i &lt; roads.Length; i++) {</ins>
+			<ins>roads[i] = reader.ReadBoolean();</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>We're now storing all the cell data that we need to completely save and restore our map. It takes nine integers and nine booleans per cell. Booleans take up a single byte each, so we end up using 45 bytes per cell. So a map with 300 cells requires 13,500 bytes in total.</p>
+					</section>
+					
+					<a href="writing-and-reading-map-data/writing-and-reading-map-data.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Smaller File Size</h2>
+					
+					<p>Although 13,500 bytes doesn't seem like much for 300 cells, maybe we can make do with less. After all, we have total control over how our data gets serialized. Let's see if we can find a more compact way to store it.</p>
+					
+					<section>
+						<h3>Reducing Numerical Range</h3>
+						
+						<p>The various levels and indices of our cells are stored as integers. However, they only cover a small value range. They certainly stay inside the 0&ndash;255 range each. This means that only the first byte of each integer will be used. The other three will always be zero. There is no point in storing those empty bytes. We can discard them by converting the integers to bytes before writing to the stream.</p>
+						
+						<pre translate="no">		writer.Write(<ins>(byte)</ins>terrainTypeIndex);
+		writer.Write(<ins>(byte)</ins>elevation);
+		writer.Write(<ins>(byte)</ins>waterLevel);
+		writer.Write(<ins>(byte)</ins>urbanLevel);
+		writer.Write(<ins>(byte)</ins>farmLevel);
+		writer.Write(<ins>(byte)</ins>plantLevel);
+		writer.Write(<ins>(byte)</ins>specialIndex);
+		writer.Write(walled);
+
+		writer.Write(hasIncomingRiver);
+		writer.Write((<ins>byte</ins>)incomingRiver);
+
+		writer.Write(hasOutgoingRiver);
+		writer.Write((<ins>byte</ins>)outgoingRiver);</pre>
+						
+						<p>Now we have to use <code>BinaryReader.ReadByte</code> to get our numbers back. The conversion from byte to integer is implicit, so we don't have to add explicit casts.</p>
+
+						<pre translate="no">		terrainTypeIndex = reader.<ins>ReadByte</ins>();
+		elevation = reader.<ins>ReadByte</ins>();
+		RefreshPosition();
+		waterLevel = reader.<ins>ReadByte</ins>();
+		urbanLevel = reader.<ins>ReadByte</ins>();
+		farmLevel = reader.<ins>ReadByte</ins>();
+		plantLevel = reader.<ins>ReadByte</ins>();
+		specialIndex = reader.<ins>ReadByte</ins>();
+		walled = reader.ReadBoolean();
+
+		hasIncomingRiver = reader.ReadBoolean();
+		incomingRiver = (HexDirection)reader.<ins>ReadByte</ins>();
+
+		hasOutgoingRiver = reader.ReadBoolean();
+		outgoingRiver = (HexDirection)reader.<ins>ReadByte</ins>();</pre>
+
+						<p>This eliminates three bytes per integer, which saves us 27 bytes per cell. We're now at 18 bytes per cell, a total of 5,400 bytes for 300 cells.</p>
+						
+						<p>Note that old map data has become meaningless at this point. When loading an old save, the data is misaligned and you'll get messed-up cells. That's because we're now reading less data than before. Had we instead read more data than before, we'd get an error when trying to read beyond the end of the file.</p>
+						
+						<p>Being unable to handle older save data is fine while we're in the middle of defining the format. But once we've settled on a save format, we have to make sure that future code will always be able to read it. Even if we change the format, we should ideally still be able to read the old format as well.</p>
+					</section>
+					
+					<section>
+						<h3>Merging River Bytes</h3>
+						
+						<p>At this point, we're using four bytes to store the river data, two per direction. For one direction, we store whether there's a river, and in which direction it flows.</p>
+						
+						<p>It seems obvious that we don't have to store the direction of a river, if it doesn't exist. That means that cells without a river need two fewer bytes. Actually, we can make do with a single byte per river direction, regardless whether it exists or not.</p>
+						
+						<p>There are six possible directions, which get stored as numbers in the 0&ndash;5 range. This requires only three bits, because in binary the numbers 0 through 5 are 000, 001, 010, 011, 100, and 101. That leaves five more bits of a single byte unused. We can use one of those to store whether a river exists. For example, we can use the eighth bit, which corresponds with the number 128.</p>
+						
+						<p>To do this, add 128 to the direction before casting it to a byte. So if we have a river going northwest, we'll write 133, which is 10000101 in binary. And if there isn't a river, we simply write a zero byte.</p>
+						
+						<p>This leaves four bits of our byte still unused, which is fine. We could merge both river directions in a single byte, but that's getting rather convoluted.</p>
+						
+						<pre translate="no"><del>//		writer.Write(hasIncomingRiver);</del>
+<del>//		writer.Write((byte)incomingRiver);</del>
+		<ins>if (hasIncomingRiver) {</ins>
+			<ins>writer.Write((byte)(incomingRiver + 128));</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>writer.Write((byte)0);</ins>
+		<ins>}</ins>
+
+<del>//		writer.Write(hasOutgoingRiver);</del>
+<del>//		writer.Write((byte)outgoingRiver);</del>
+		<ins>if (hasOutgoingRiver) {</ins>
+			<ins>writer.Write((byte)(outgoingRiver + 128));</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>writer.Write((byte)0);</ins>
+		<ins>}</ins></pre>
+						
+						<p>To decode the river data, we have to first read back the byte. If its value is at least 128, it means that there is a river. To get its direction, subtract 128 before casting to <code>HexDirection</code>.</p>
+						
+						<pre translate="no"><del>//		hasIncomingRiver = reader.ReadBoolean();</del>
+<del>//		incomingRiver = (HexDirection)reader.ReadByte();</del>
+		<ins>byte riverData = reader.ReadByte();</ins>
+		<ins>if (riverData >= 128) {</ins>
+			<ins>hasIncomingRiver = true;</ins>
+			<ins>incomingRiver = (HexDirection)(riverData - 128);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>hasIncomingRiver = false;</ins>
+		<ins>}</ins>
+
+<del>//		hasOutgoingRiver = reader.ReadBoolean();</del>
+<del>//		outgoingRiver = (HexDirection)reader.ReadByte();</del>
+		<ins>riverData = reader.ReadByte();</ins>
+		<ins>if (riverData >= 128) {</ins>
+			<ins>hasOutgoingRiver = true;</ins>
+			<ins>outgoingRiver = (HexDirection)(riverData - 128);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>hasOutgoingRiver = false;</ins>
+		<ins>}</ins></pre>
+						
+						<p>This gets us down to 16 bytes per cell. It might not be a big improvement, but it's one of the tricks used to reduce the size of binary data.</p>
+					</section>
+					
+					<section>
+						<h3>Storing Roads in a Single Byte</h3>
+						
+						<p>We can use a similar trick to compress our road data. We have six booleans, which we can store in the six first bits of a byte. So each road direction is represented by a number that's a power of 2. They are 1, 2, 4, 8, 16, and 32, which in binary is 1, 10, 100, 1000, 10000, and 100000.</p>
+						
+						<p>To create the final byte, we have to set the bits corresponding to the road directions that are in use. We can use the <code>&lt;&lt;</code> operator to get the correct value for a direction. Then we merge those together using the bitwise OR operator. For example, if the 1<sup>st</sup>, 2<sup>nd</sup>, 3<sup>rd</sup>, and 6<sup>th</sup> roads are in use, the final byte will be 100111.</p>
+						
+						<pre translate="no">		<ins>int roadFlags = 0;</ins>
+		for (int i = 0; i &lt; roads.Length; i++) {
+<del>//			writer.Write(roads[i]);</del>
+			<ins>if (roads[i]) {</ins>
+				<ins>roadFlags |= 1 &lt;&lt; i;</ins>
+			<ins>}</ins>
+		}
+		<ins>writer.Write((byte)roadFlags);</ins></pre>
+						
+						<aside>
+							<h3>How does <code>&lt;&lt;</code> work?</h3>
+							<div>
+								<p>This is the bitwise left shift operator. It takes an integer on the left, and shifts all its bits leftwards. Overflow is discarded. How many steps it shifts is controlled by the integer on the right. Because the numbers are binary, shifting all bits one step leftward doubles the number's value. So <code>1 &lt;&lt; n</code> produces 2<sup>n</sup>, which is exactly what we want.</p>
+							</div>
+						</aside>
+						
+						<p>To get a road's boolean back, we have to check whether its bit is set. To do so, mask all other bits by using the bitwise AND operator with the corresponding number. If the result isn't zero, the bit is set and the road exists.</p>
+						
+						<pre translate="no">		<ins>int roadFlags = reader.ReadByte();</ins>
+		for (int i = 0; i &lt; roads.Length; i++) {
+			roads[i] = <ins>(roadFlags &amp; (1 &lt;&lt; i)) != 0</ins>;
+		}
+</pre>
+						
+						<p>Having compressed six bytes into a single one, we have now reached 11 bytes per cell. For 300 cells, that's only 3,300 bytes. So messing around with some bytes has reduced our file size by 75%.</p>
+					</section>
+					
+					<section>
+						<h3>Preparing for the Future</h3>
+						
+						<p>Before we declare our save format finished, let's add one little detail. Before saving the map data, have <code>HexMapEditor</code> write the integer zero.</p>
+						
+						<pre translate="no">	public void Save () {
+		string path = Path.Combine(Application.persistentDataPath, "test.map");
+		using (
+			BinaryWriter writer =
+				new BinaryWriter(File.Open(path, FileMode.Create))
+		) {
+			<ins>writer.Write(0);</ins>
+			hexGrid.Save(writer);
+		}
+	}</pre>
+						
+						<p>This prepends four empty bytes to our data. So before we can load the map, we have to read these four bytes.</p>
+						
+						<pre translate="no">	public void Load () {
+		string path = Path.Combine(Application.persistentDataPath, "test.map");
+		using (BinaryReader reader = new BinaryReader(File.OpenRead(path))) {
+			<ins>reader.ReadInt32();</ins>
+			hexGrid.Load(reader);
+		}
+	}</pre>
+						
+						<p>While these bytes are currently useless, they act as a header that make future backwards-compatibility possible. Had we not added these zero bytes, the contents of the first few bytes would depend on the fist cell of the map. That would make it harder to figure out which save format version we're dealing with in the future. Now we can simply check the first four bytes. If they're empty, we're dealing with format version zero. It's up to future versions to put something else in there.</p>
+						
+						<p>So if the header is not zero, we're dealing with some unknown version. As we have no way of knowing what data is in there, we should refuse to load the map.</p>
+						
+						<pre translate="no">		using (BinaryReader reader = new BinaryReader(File.OpenRead(path))) {
+			<ins>int header =</ins> reader.ReadInt32();
+			<ins>if (header == 0) {</ins>
+				hexGrid.Load(reader);
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>Debug.LogWarning("Unknown map format " + header);</ins>
+			<ins>}</ins>
+		}</pre>
+						
+						<p>The next tutorial is <a href="../part-13/index.html">Managing Maps</a>.</p>
+					</section>
+					
+					<a href="smaller-file-size/smaller-file-size.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Hex-Map-12.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/custom-srp/point-and-spot-shadows/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/custom-srp/point-and-spot-shadows/tutorial-image.jpg">
+		<meta property="og:title" content="Point and Spot Shadows">
+		<meta property="og:description" content="A Unity Custom SRP tutorial about supporting shadows for point and spot lights.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Point and Spot Shadows</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/custom-srp/point-and-spot-shadows/#article",
+				"headline": "Point and Spot Shadows",
+				"alternativeHeadline": "Perspective Shadows",
+				"datePublished": "2020-06-30",
+				"dateModified": "2023-08-03",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Custom SRP tutorial about supporting shadows for point and spot lights",
+				"image": "https://catlikecoding.com/unity/tutorials/custom-srp/point-and-spot-shadows/tutorial-image.jpg",
+				"dependencies": "Unity 2022.3.5f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/custom-srp/", "name": "Custom SRP" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				CameraRenderer: 1,
+				CascadeBlendMode: 1,
+				CustomLightEditor: 1,
+				CustomRenderPipeline: 1,
+				CustomRenderPipelineAsset: 1,
+				CustomShaderGUI: 1,
+				Directional: 1,
+				DirectionalShadowData: 1,
+				FilterMode: 1,
+				InputConfig: 1,
+				Lighting: 1,
+				MeshBall: 1,
+				Other: 1,
+				OtherShadowData: 1,
+				PerObjectMaterialProperties: 1,
+				ShadowedDirLight: 1,
+				ShadowedOtherLight: 1,
+				ShadowData: 1,
+				Shadows: 1,
+				ShadowMask: 1,
+				ShadowMode: 1,
+				ShadowSettings: 1,
+				MapSize: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../../scriptable-render-pipeline/reflections/index.html">Custom SRP</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Point and Spot Shadows</h1>
+					<p>Perspective Shadows</p>
+					<ul>
+						<li>Mix baked and realtime shadows for point and spot lights.</li>
+						<li>Add a second shadow atlas.</li>
+						<li>Render and sample shadows with a perspective projection.</li>
+						<li>Use custom cube maps.</li>
+					</ul>
+				</header>
+				
+				<p>This is the tenth part of a tutorial series about creating a <a href="../../scriptable-render-pipeline/reflections/index.html">custom scriptable render pipeline</a>. It adds support for realtime shadows of point and spot lights.</p>
+				
+				<p>This tutorial is made with Unity 2019.4.1f1 and upgraded to 2022.3.5f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>100% realtime shadows.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Spot Light Shadows</h2>
+					
+					<p>We'll start by supporting realtime shadows for spot lights. We'll use the same approach that we use for directional lights, with a few changes. We'll also keep support as simple as possible, using a uniformly tiled shadow atlas and filling it with shadowed lights in the order provided by Unity.</p>
+					
+					<section>
+						<h3>Shadow Mixing</h3>
+						
+						<p>The first step is to make it possible to mix baked and realtime shadows. Adjust <code class="shader">GetOtherShadowAttenuation</code> in <em translate="no">Shadows</em> so it behaves like <code class="shader">GetDirectionalShadowAttenuation</code>, except that it uses the other shadow data and relies on a new <code class="shader">GetOtherShadow</code> function. The new function initially returns 1 because other lights don't have realtime shadows yet.</p>
+						
+						<pre class="shader" translate="no"><ins>float GetOtherShadow (</ins>
+	<ins>OtherShadowData other, ShadowData global, Surface surfaceWS</ins>
+<ins>) {</ins>
+	<ins>return 1.0;</ins>
+<ins>}</ins>
+
+float GetOtherShadowAttenuation (
+	OtherShadowData other, ShadowData global, Surface surfaceWS
+) {
+	#if !defined(_RECEIVE_SHADOWS)
+		return 1.0;
+	#endif
+	
+	float shadow;
+	if (other.strength <ins>* global.strength &lt;= 0.0</ins>) {
+		shadow = GetBakedShadow(
+			global.shadowMask, other.shadowMaskChannel, <ins>abs(</ins>other.strength<ins>)</ins>
+		);
+	}
+	else {
+		shadow = <ins>GetOtherShadow(other, global, surfaceWS)</ins>;
+		<ins>shadow = MixBakedAndRealtimeShadows(</ins>
+			<ins>global, shadow, other.shadowMaskChannel, other.strength</ins>
+		<ins>);</ins>
+	}
+	return shadow;
+}</pre>
+						
+						<p>The global strength is used to determine whether we can skip sampling realtime shadows, either because we're beyond the shadow distance or outside the largest cascade sphere. However, cascades are only applicable to directional shadows. They don't make sense for other light because those have a fixed position, thus their shadow maps don't move with the view. Having said that, it's a good idea to fade all shadows out the same way, otherwise we could end up with some areas of the screen that don't have directional shadows but do have other shadows. So we'll use the same global shadow strength for everything.</p>
+						
+						<p>One corner case that we have to deal with is when no directional shadows exist while we do have other shadows. When this happens there aren't any cascades, so they shouldn't affect the global shadow strength. And we still need the shadow distance fade values. So let's move the code to set the cascade count and distance fade from <code>Shadows.RenderDirectionShadows</code> to <code>Shadows.Render</code> and set the cascade count to zero when appropriate.</p>
+						
+						<pre translate="no">	public void Render () {
+		&hellip;
+		<ins>buffer.SetGlobalInt(</ins>
+			<ins>cascadeCountId,</ins>
+			<ins>shadowedDirLightCount > 0 ? settings.directional.cascadeCount : 0</ins>
+		<ins>);</ins>
+		<ins>float f = 1f - settings.directional.cascadeFade;</ins>
+		<ins>buffer.SetGlobalVector(</ins>
+			<ins>shadowDistanceFadeId, new Vector4(</ins>
+				<ins>1f / settings.maxDistance, 1f / settings.distanceFade,</ins>
+				<ins>1f / (1f - f * f)</ins>
+			<ins>)</ins>
+		<ins>);</ins>
+		buffer.EndSample(bufferName);
+		ExecuteBuffer();
+	}
+
+	void RenderDirectionalShadows () {
+		&hellip;
+
+		<del>//buffer.SetGlobalInt(cascadeCountId, settings.directional.cascadeCount);</del>
+		buffer.SetGlobalVectorArray(
+			cascadeCullingSpheresId, cascadeCullingSpheres
+		);
+		buffer.SetGlobalVectorArray(cascadeDataId, cascadeData);
+		buffer.SetGlobalMatrixArray(dirShadowMatricesId, dirShadowMatrices);
+		<del>//float f = 1f - settings.directional.cascadeFade;</del>
+		<del>//buffer.SetGlobalVector(</del>
+		<del>//	shadowDistanceFadeId, new Vector4(</del>
+		<del>//		1f / settings.maxDistance, 1f / settings.distanceFade,</del>
+		<del>//		1f / (1f - f * f)</del>
+		<del>//	)</del>
+		<del>//);</del>
+		&hellip;
+	}</pre>
+						
+						 <p>Then we have to ensure that the global strength isn't incorrectly set to zero after the cascade loop in <code class="shader">GetShadowData</code>.</p>
+						
+						<pre class="shader" translate="no">	if (i == _CascadeCount <ins>&amp;&amp; _CascadeCount > 0</ins>) {
+		data.strength = 0.0;
+	}</pre>
+
+					</section>
+					
+					<section>
+						<h3>Other Realtime Shadows</h3>
+						
+						<p>Directional shadows have their own atlas map. We'll use a separate atlas for all other shadowed lights and count them separately. Let's use a maximum of sixteen other lights with realtime shadows.</p>
+						
+						<pre translate="no">	const int maxShadowedDirLightCount = 4<ins>, maxShadowedOtherLightCount = 16;</ins>
+	<ins>const int</ins> maxCascades = 4;
+
+	&hellip;
+
+	int shadowedDirLightCount<ins>, shadowedOtherLightCount</ins>;
+	
+	&hellip;
+	
+	public void Setup (&hellip;) {
+		&hellip;
+		shadowedDirLightCount = <ins>shadowedOtherLightCount =</ins> 0;
+		useShadowMask = false;
+	}</pre>
+						
+						<p>This means that we can end up with lights that have shadows enabled but won't fit in the atlas. Which lights won't get shadows depends on their place in the visible light list. We simply won't reserve shadows for lights that lose out, but if they have baked shadows we can still allow those. To make this possible first refactor <code>ReserveOtherShadows</code> so it immediately returns when the light doesn't have shadows. Otherwise it checks for a shadow mask channel&mdash;using &minus;1 by default&mdash;and then always returns the shadow strength and channel.</p>
+						
+						<pre translate="no">	public Vector4 ReserveOtherShadows (Light light, int visibleLightIndex) {
+		<ins>if (light.shadows == LightShadows.None || light.shadowStrength &lt;= 0f) {</ins>
+			<ins>return new Vector4(0f, 0f, 0f, -1f);</ins>
+		<ins>}</ins>
+
+		<ins>float maskChannel = -1f;</ins>
+		<del>//if (light.shadows != LightShadows.None && light.shadowStrength > 0f) {</del>
+		LightBakingOutput lightBaking = light.bakingOutput;
+		if (
+			lightBaking.lightmapBakeType == LightmapBakeType.Mixed &&
+			lightBaking.mixedLightingMode == MixedLightingMode.Shadowmask
+		) {
+			useShadowMask = true;
+			<ins>maskChannel = lightBaking.occlusionMaskChannel;</ins>
+		<ins>}</ins>
+		return new Vector4(
+			light.shadowStrength, 0f, 0f,
+			maskChannel
+		);
+			<del>//}</del>
+		<del>//}</del>
+		<del>//return new Vector4(0f, 0f, 0f, -1f);</del>
+	}</pre>
+						
+						<p>Then before returning check whether increasing the light count would go over the max, or if there are no shadows to render for this light. If so return with a negative shadow strength and the mask channel, so baked shadows are used when appropriate. Otherwise proceed to increment the light count and set the tile index.</p>
+						
+						<pre translate="no">		<ins>if (</ins>
+			<ins>shadowedOtherLightCount >= maxShadowedOtherLightCount ||</ins>
+			<ins>!cullingResults.GetShadowCasterBounds(visibleLightIndex, out Bounds b)</ins>
+		<ins>) {</ins>
+			<ins>return new Vector4(-light.shadowStrength, 0f, 0f, maskChannel);</ins>
+		<ins>}</ins>
+
+		return new Vector4(
+			light.shadowStrength, <ins>shadowedOtherLightCount++</ins>, 0f,
+			maskChannel
+		);</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Two Atlases</h3>
+						
+						<p>Because directional and other shadows are kept separate we can configure them differently. Add a new configuration struct and field to <code>ShadowSettings</code> for the other shadows, only containing an atlas size and filter as cascades don't apply.</p>
+						
+						<pre translate="no"><ins>[System.Serializable]</ins>
+	<ins>public struct Other {</ins>
+
+		<ins>public MapSize atlasSize;</ins>
+
+		<ins>public FilterMode filter;</ins>
+	<ins>}</ins>
+
+	<ins>public Other other = new Other {</ins>
+		<ins>atlasSize = MapSize._1024,</ins>
+		<ins>filter = FilterMode.PCF2x2</ins>
+	<ins>};</ins></pre>
+						
+						<figure>
+							<img src="spot-light-shadows/other-shadows-settings.png" width="320" height="82">
+							<figcaption>Settings for other shadows.</figcaption>
+						</figure>
+						
+						<p>Add a multi-compile directive to the <em translate="no">CustomLit</em> pass of our <em translate="no">Lit</em> shader to support shadow filtering for other shadows.</p>
+						
+						<pre class="shader" translate="no">			<ins>#pragma multi_compile _ _OTHER_PCF3 _OTHER_PCF5 _OTHER_PCF7</ins></pre>
+						
+						<p>And add a corresponding keyword array to <code>Shadows</code>.</p>
+						
+						<pre translate="no">	<ins>static string[] otherFilterKeywords = {</ins>
+		<ins>"_OTHER_PCF3",</ins>
+		<ins>"_OTHER_PCF5",</ins>
+		<ins>"_OTHER_PCF7",</ins>
+	<ins>};</ins></pre>
+						
+						<p>We also need to keep track of shader property identifiers for the other shadow atlas and matrices, plus an array to hold the matrices.</p>
+						
+						<pre translate="no">	static int
+		dirShadowAtlasId = Shader.PropertyToID("_DirectionalShadowAtlas"),
+		dirShadowMatricesId = Shader.PropertyToID("_DirectionalShadowMatrices"),
+		<ins>otherShadowAtlasId = Shader.PropertyToID("_OtherShadowAtlas"),</ins>
+		<ins>otherShadowMatricesId = Shader.PropertyToID("_OtherShadowMatrices"),</ins>
+		&hellip;;
+		
+	&hellip;
+		
+	static Matrix4x4[]
+		dirShadowMatrices = new Matrix4x4[maxShadowedDirLightCount * maxCascades]<ins>,</ins>
+		<ins>otherShadowMatrices = new Matrix4x4[maxShadowedOtherLightCount]</ins>;</pre>
+						
+						<p>We already send the atlas size of the directional atlas to the GPU, using the XY components of a vector. We now also need to send the size of the other atlas, which we can put in ZW components of the same vector. Promote it to a field and move setting the global vector from <code>RenderDirectionalShadows</code> to <code>Render</code>. Then <code>RenderDirectionalShadows</code> only has to assign to the XY components of the field.</p>
+						
+						<pre translate="no">	<ins>Vector4 atlasSizes;</ins>
+	
+	&hellip;
+	
+	public void Render () {
+		&hellip;
+		<ins>buffer.SetGlobalVector(shadowAtlasSizeId, atlasSizes);</ins>
+		buffer.EndSample(bufferName);
+		ExecuteBuffer();
+	}
+	
+	void RenderDirectionalShadows () {
+		int atlasSize = (int)settings.directional.atlasSize;
+		<ins>atlasSizes.x = atlasSize;</ins>
+		<ins>atlasSizes.y = 1f / atlasSize;</ins>
+		&hellip;
+		<ins>//buffer.SetGlobalVector(</ins>
+		<ins>//	shadowAtlasSizeId, new Vector4(atlasSize, 1f / atlasSize)</ins>
+		<ins>//);</ins>
+		buffer.EndSample(bufferName);
+		ExecuteBuffer();
+	}</pre>
+						
+						<p>After that, duplicate <code>RenderDirectionalShadows</code> and rename it to <code>RenderOtherShadows</code>. Change it so it uses the correct settings, atlas, matrices, and sets the correct size components. Then remove the cascade and culling sphere code from it. Also remove the invocation of <code>RenderDirectionalShadows</code>, but keep the loop.</p>
+						
+						<pre translate="no">	void <ins>RenderOtherShadows</ins> () {
+		int atlasSize = (int)settings.<ins>other</ins>.atlasSize;
+		atlasSizes.<ins>z</ins> = atlasSize;
+		atlasSizes.<ins>w</ins> = 1f / atlasSize;
+		buffer.GetTemporaryRT(
+			<ins>otherShadowAtlasId</ins>, atlasSize, atlasSize,
+			32, FilterMode.Bilinear, RenderTextureFormat.Shadowmap
+		);
+		buffer.SetRenderTarget(
+			<ins>otherShadowAtlasId</ins>,
+			RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store
+		);
+		buffer.ClearRenderTarget(true, false, Color.clear);
+		buffer.BeginSample(bufferName);
+		ExecuteBuffer();
+
+		int tiles = <ins>shadowedOtherLightCount</ins>;
+		int split = tiles &lt;= 1 ? 1 : tiles &lt;= 4 ? 2 : 4;
+		int tileSize = atlasSize / split;
+
+		for (int i = 0; i &lt; <ins>shadowedOtherLightCount</ins>; i++) {
+			<del>//RenderDirectionalShadows(i, split, tileSize);</del>
+		}
+
+		<del>//buffer.SetGlobalVectorArray(</del>
+		<del>//	cascadeCullingSpheresId, cascadeCullingSpheres</del>
+		<del>//);</del>
+		<del>//buffer.SetGlobalVectorArray(cascadeDataId, cascadeData);</del>
+		buffer.SetGlobalMatrixArray(<ins>otherShadowMatricesId</ins>, <ins>otherShadowMatrices</ins>);
+		SetKeywords(
+			<ins>otherFilterKeywords</ins>, (int)settings.<ins>other</ins>.filter - 1
+		);
+		<del>//SetKeywords(</del>
+		<del>//	cascadeBlendKeywords, (int)settings.directional.cascadeBlend - 1</del>
+		<del>//);</del>
+		buffer.EndSample(bufferName);
+		ExecuteBuffer();
+	}</pre>
+						
+						<p>Now we can render both directional and other shadows in <code>RenderShadows</code> when needed. If there aren't other shadows then we need a dummy texture for them, just like for directional shadows. We can simply use the directional shadow atlas as the dummy.</p>
+						
+						<pre translate="no">	public void Render () {
+		if (shadowedDirLightCount > 0) {
+			RenderDirectionalShadows();
+		}
+		else {
+			buffer.GetTemporaryRT(
+				dirShadowAtlasId, 1, 1,
+				32, FilterMode.Bilinear, RenderTextureFormat.Shadowmap
+			);
+		}
+		<ins>if (shadowedOtherLightCount > 0) {</ins>
+			<ins>RenderOtherShadows();</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>buffer.SetGlobalTexture(otherShadowAtlasId, dirShadowAtlasId);</ins>
+		<ins>}</ins>
+		
+		&hellip;
+	}</pre>
+						<p>And release the other shadow atlas in <code>Cleanup</code>, in this case only if we did get one.</p>
+						
+						<pre translate="no">	public void Cleanup () {
+		buffer.ReleaseTemporaryRT(dirShadowAtlasId);
+		<ins>if (shadowedOtherLightCount > 0) {</ins>
+			<ins>buffer.ReleaseTemporaryRT(otherShadowAtlasId);</ins>
+		<ins>}</ins>
+		ExecuteBuffer();
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Rendering Spot Shadows</h3>
+						
+						<p>To render the shadows of a spot light we need to know its visible light index, slope scale bias, and normal bias. So create a <code>ShadowedOtherLight</code> struct with fields for those and add an array field for them, similar to how we keep track of data for directional shadows.</p>
+						
+						<pre translate="no">	<ins>struct ShadowedOtherLight {</ins>
+		<ins>public int visibleLightIndex;</ins>
+		<ins>public float slopeScaleBias;</ins>
+		<ins>public float normalBias;</ins>
+	<ins>}</ins>
+
+	<ins>ShadowedOtherLight[] shadowedOtherLights =</ins>
+		<ins>new ShadowedOtherLight[maxShadowedOtherLightCount];</ins></pre>
+						
+						<p>Copy the relevant data at the end of <code>ReserveOtherShadows</code>, before returning.</p>
+						
+						<pre translate="no">	public Vector4 ReserveOtherShadows (Light light, int visibleLightIndex) {
+		&hellip;
+
+		<ins>shadowedOtherLights[shadowedOtherLightCount] = new ShadowedOtherLight {</ins>
+			<ins>visibleLightIndex = visibleLightIndex,</ins>
+			<ins>slopeScaleBias = light.shadowBias,</ins>
+			<ins>normalBias = light.shadowNormalBias</ins>
+		<ins>};</ins>
+
+		return new Vector4(
+			light.shadowStrength, shadowedOtherLightCount++, 0f,
+			maskChannel
+		);
+	}</pre>
+							
+						<p>However, at this point we should realize that we're not guaranteed to send the correct light index to <code>ReserveOtherShadows</code> in <code>Lighting</code>, because it's passing its own index for other lights. When there are shadowed directional lights the index will be wrong. We fix this by adding a parameter for the correct visible light index to the light setup methods and use that one when reserving shadows. Let's also do this for directional lights, for consistency.</p>
+						
+						<pre translate="no">	void SetupDirectionalLight (
+		int index, <ins>int visibleIndex,</ins> ref VisibleLight visibleLight
+	) {
+		&hellip;
+		dirLightShadowData[index] =
+			shadows.ReserveDirectionalShadows(visibleLight.light, <ins>visibleIndex</ins>);
+	}
+
+	void SetupPointLight (
+		int index, <ins>int visibleIndex,</ins> ref VisibleLight visibleLight
+	) {
+		&hellip;
+		otherLightShadowData[index] =
+			shadows.ReserveOtherShadows(light, <ins>visibleIndex</ins>);
+	}
+
+	void SetupSpotLight (
+		int index, <ins>int visibleIndex,</ins> ref VisibleLight visibleLight
+	) {
+		&hellip;
+		otherLightShadowData[index] =
+			shadows.ReserveOtherShadows(light, <ins>visibleIndex</ins>);
+	}</pre>
+						
+						<p>Adjust <code>SetupLights</code> so it passes the visible light index to the setup methods.</p>
+						
+						<pre translate="no">			switch (visibleLight.lightType) {
+				case LightType.Directional:
+					if (dirLightCount &lt; maxDirLightCount) {
+						SetupDirectionalLight(
+							dirLightCount++, <ins>i,</ins> ref visibleLight
+						);
+					}
+					break;
+				case LightType.Point:
+					if (otherLightCount &lt; maxOtherLightCount) {
+						newIndex = otherLightCount;
+						SetupPointLight(otherLightCount++, <ins>i,</ins> ref visibleLight);
+					}
+					break;
+				case LightType.Spot:
+					if (otherLightCount &lt; maxOtherLightCount) {
+						newIndex = otherLightCount;
+						SetupSpotLight(otherLightCount++, <ins>i,</ins> ref visibleLight);
+					}
+					break;
+			}</pre>
+						
+						<p>Back to <code>Shadows</code>, create a <code>RenderSpotShadows</code> method that does the same as the <code>RenderDirectionalShadows</code> method with parameters, except that it doesn't loop over multiple tiles, has no cascades, and no culling factor. In this case we can use <code>CullingResults.ComputeSpotShadowMatricesAndCullingPrimitives</code>, which works like <code>ComputeDirectionalShadowMatricesAndCullingPrimitives</code> except that it only has the visible light index, matrices, and split data as arguments. In Unity 2022 we also have to use <code>BatchCullingProjectionType.Perspective</code> instead of orthographic.</p>
+						
+						<pre translate="no">	<ins>void RenderSpotShadows (int index, int split, int tileSize) {</ins>
+		<ins>ShadowedOtherLight light = shadowedOtherLights[index];</ins>
+		<ins>var shadowSettings = new ShadowDrawingSettings(</ins>
+			<ins>cullingResults, light.visibleLightIndex,</ins>
+			<ins>BatchCullingProjectionType.Perspective</ins>
+		<ins>);</ins>
+		<ins>cullingResults.ComputeSpotShadowMatricesAndCullingPrimitives(</ins>
+			<ins>light.visibleLightIndex, out Matrix4x4 viewMatrix,</ins>
+			<ins>out Matrix4x4 projectionMatrix, out ShadowSplitData splitData</ins>
+		<ins>);</ins>
+		<ins>shadowSettings.splitData = splitData;</ins>
+		<ins>otherShadowMatrices[index] = ConvertToAtlasMatrix(</ins>
+			<ins>projectionMatrix * viewMatrix,</ins>
+			<ins>SetTileViewport(index, split, tileSize), split</ins>
+		<ins>);</ins>
+		<ins>buffer.SetViewProjectionMatrices(viewMatrix, projectionMatrix);</ins>
+		<ins>buffer.SetGlobalDepthBias(0f, light.slopeScaleBias);</ins>
+		<ins>ExecuteBuffer();</ins>
+		<ins>context.DrawShadows(ref shadowSettings);</ins>
+		<ins>buffer.SetGlobalDepthBias(0f, 0f);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Invoke this method inside the loop of <code>RenderOtherShadows</code>.</p>
+						
+						<pre translate="no">		for (int i = 0; i &lt; shadowedOtherLightCount; i++) {
+			<ins>RenderSpotShadows(i, split, tileSize);</ins>
+		}</pre>
+						
+						<figure>
+							<img src="spot-light-shadows/spot-shadow-map.png" width="256" height="256">
+							<figcaption>Shadow atlas for three spot lights.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>No Pancaking</h3>
+						
+						<p>Shadows now get rendered for spot lights, using the same <em translate="no">ShadowCaster</em> pass that is used for directional shadows. This works fine, except that shadow pancaking is only valid for orthographic shadow projections, used for directional lights that are assumed to be infinitely far away. In the case of spot lights&mdash;which do have a position&mdash;shadow casters can end up partially behind the light's position. As we're using a perspective projection in this case, clamping vertices to the near plane would severely distort such shadows. So we should turn off clamping when pancaking isn't appropriate.</p>
+						
+						<p>We can tell the shader whether pancaking is active via a global shader property, which we'll name <em translate="no">_ShadowPancaking</em>. Keep track of its identifier in <code>Shadows</code>.</p>
+						
+						<pre translate="no">	static int
+		&hellip;
+		shadowDistanceFadeId = Shader.PropertyToID("_ShadowDistanceFade")<ins>,</ins>
+		<ins>shadowPancakingId = Shader.PropertyToID("_ShadowPancaking")</ins>;</pre>
+						
+						<p>Set it to 1 before rendering shadows <code>RenderDirectionalShadows</code>.</p>
+						
+						<pre translate="no">		buffer.ClearRenderTarget(true, false, Color.clear);
+		<ins>buffer.SetGlobalFloat(shadowPancakingId, 1f);</ins>
+		buffer.BeginSample(bufferName);</pre>
+						
+						<p>And to zero in <code>RenderOtherShadows</code>.</p>
+						
+						<pre translate="no">		buffer.ClearRenderTarget(true, false, Color.clear);
+		<ins>buffer.SetGlobalFloat(shadowPancakingId, <ins>0f</ins>);</ins>
+		buffer.BeginSample(bufferName);</pre>
+						
+						<p>Then add it to the <em translate="no">ShadowCaster</em> pass of our <em translate="no">Lit</em> shader as a boolean, using it to only clamp when appropriate.</p>
+						
+						<pre class="shader" translate="no"><ins>bool _ShadowPancaking;</ins>
+
+Varyings ShadowCasterPassVertex (Attributes input) {
+	&hellip;
+
+	<ins>if (_ShadowPancaking) {</ins>
+		#if UNITY_REVERSED_Z
+			output.positionCS.z = min(
+				output.positionCS.z, output.positionCS.w * UNITY_NEAR_CLIP_VALUE
+			);
+		#else
+			output.positionCS.z = max(
+				output.positionCS.z, output.positionCS.w * UNITY_NEAR_CLIP_VALUE
+			);
+		#endif
+	<ins>}</ins>
+
+	output.baseUV = TransformBaseUV(input.baseUV);
+	return output;
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Sampling Spot Shadows</h3>
+						
+						<p>To sample the other shadows we have to adjust <em translate="no">Shadows</em>. Begin by defining the other filter and max shadowed other light count macros. Then add the other shadow atlas and other shadow matrices array.</p>
+						
+						<pre class="shader" translate="no"><ins>#if defined(_OTHER_PCF3)</ins>
+	<ins>#define OTHER_FILTER_SAMPLES 4</ins>
+	<ins>#define OTHER_FILTER_SETUP SampleShadow_ComputeSamples_Tent_3x3</ins>
+<ins>#elif defined(_OTHER_PCF5)</ins>
+	<ins>#define OTHER_FILTER_SAMPLES 9</ins>
+	<ins>#define OTHER_FILTER_SETUP SampleShadow_ComputeSamples_Tent_5x5</ins>
+<ins>#elif defined(_OTHER_PCF7)</ins>
+	<ins>#define OTHER_FILTER_SAMPLES 16</ins>
+	<ins>#define OTHER_FILTER_SETUP SampleShadow_ComputeSamples_Tent_7x7</ins>
+<ins>#endif</ins>
+
+#define MAX_SHADOWED_DIRECTIONAL_LIGHT_COUNT 4
+<ins>#define MAX_SHADOWED_OTHER_LIGHT_COUNT 16</ins>
+#define MAX_CASCADE_COUNT 4
+
+TEXTURE2D_SHADOW(_DirectionalShadowAtlas);
+<ins>TEXTURE2D_SHADOW(_OtherShadowAtlas);</ins>
+#define SHADOW_SAMPLER sampler_linear_clamp_compare
+SAMPLER_CMP(SHADOW_SAMPLER);
+
+CBUFFER_START(_CustomShadows)
+	&hellip;
+	float4x4 _DirectionalShadowMatrices
+		[MAX_SHADOWED_DIRECTIONAL_LIGHT_COUNT * MAX_CASCADE_COUNT];
+	<ins>float4x4 _OtherShadowMatrices[MAX_SHADOWED_OTHER_LIGHT_COUNT];</ins>
+	&hellip;
+CBUFFER_END</pre>
+						
+						<p>Duplicate <code class="shader">SampleDirectionalShadowAtlas</code> and <code class="shader">FilterDirectionalShadow</code> and rename and adjust them to so they work for other shadows. Note that we need to use the other component pair of the atlas size vector for this version.</p>
+						
+						<pre class="shader" translate="no">float <ins>SampleOtherShadowAtlas</ins> (float3 positionSTS) {
+	return SAMPLE_TEXTURE2D_SHADOW(
+		<ins>_OtherShadowAtlas</ins>, SHADOW_SAMPLER, positionSTS
+	);
+}
+
+float <ins>FilterOtherShadow</ins> (float3 positionSTS) {
+	#if defined(<ins>OTHER_FILTER_SETUP</ins>)
+		real weights[OTHER_FILTER_SAMPLES];
+		real2 positions[OTHER_FILTER_SAMPLES];
+		float4 size = _ShadowAtlasSize.<ins>wwzz</ins>;
+		<ins>OTHER_FILTER_SETUP</ins>(size, positionSTS.xy, weights, positions);
+		float shadow = 0;
+		for (int i = 0; i &lt; <ins>OTHER_FILTER_SAMPLES</ins>; i++) {
+			shadow += weights[i] * <ins>SampleOtherShadowAtlas</ins>(
+				float3(positions[i].xy, positionSTS.z)
+			);
+		}
+		return shadow;
+	#else
+		return <ins>SampleOtherShadowAtlas</ins>(positionSTS);
+	#endif
+}</pre>
+						
+						<p>The <code class="shader">OtherShadowData</code> struct now also needs a tile index.</p>
+						
+						<pre class="shader" translate="no">struct OtherShadowData {
+	float strength;
+	<ins>int tileIndex;</ins>
+	int shadowMaskChannel;
+};</pre>
+						
+						<p>Which is set by <code>GetOtherShadowData</code> in <em translate="no">Light</em>.</p>
+						
+						<pre class="shader" translate="no">OtherShadowData GetOtherShadowData (int lightIndex) {
+	OtherShadowData data;
+	data.strength = _OtherLightShadowData[lightIndex].x;
+	<ins>data.tileIndex = _OtherLightShadowData[lightIndex].y;</ins>
+	data.shadowMaskChannel = _OtherLightShadowData[lightIndex].w;
+	return data;
+}</pre>
+						
+						<p>Now we can sample the shadow map in <code class="shader">GetOtherShadow</code> instead of always returning 1. It works like <code class="shader">GetCascadedShadow</code> except that there's no second cascade to blend with and it's a perspective projection, so we have to divide the XYZ components of the transformed position by its W component. Also, we don't have a functional normal bias yet so we'll multiply it with zero for now.</p>
+						
+						<pre class="shader" translate="no">float GetOtherShadow (
+	OtherShadowData other, ShadowData global, Surface surfaceWS
+) {
+	<ins>float3 normalBias = surfaceWS.interpolatedNormal * 0.0;</ins>
+	<ins>float4 positionSTS = mul(</ins>
+		<ins>_OtherShadowMatrices[other.tileIndex],</ins>
+		<ins>float4(surfaceWS.position + normalBias, 1.0)</ins>
+	<ins>);</ins>
+	return <ins>FilterOtherShadow(positionSTS.xyz / positionSTS.w)</ins>;
+}</pre>
+						
+						<figure>
+							<img src="spot-light-shadows/with-shadows.png" width="420" height="200" alt="with">
+							<img src="spot-light-shadows/without-shadows.png" width="420" height="200" alt="without">
+							<figcaption>Direct spot lighting only, with and without realtime shadows.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Normal Bias</h3>
+						
+						<p>Spot lights suffer from shadow acne just like directional lights do. But because of the perspective projection the texel size isn't constant, so acne isn't constant either. The further away from the light, the bigger the acne.</p>
+						
+						<figure>
+							<img src="spot-light-shadows/variable-texel-size.png" width="420" height="260">
+							<figcaption>Texel size increases with distance from light.</figcaption>
+						</figure>
+						
+						<p>Texel size increases linearly with distance from the light plane, which is the plane that spits the world into what's in front of or behind the light. So we can calculate the texel size and thus the normal bias at distance 1 and send that to the shader, where we'll scale it to the appropriate size.</p>
+						
+						<p>In world space, at distance 1 from the light plane the size of the shadow tile is twice the tangent of half the spot angle in radians.</p>
+						
+						<figure>
+							<img src="spot-light-shadows/tile-size-diagram.png" width="240" height="200">
+							<figcaption>World-space tile size derivation.</figcaption>
+						</figure>
+						
+						<p>This matches the perspective projection, so the world-space texel size at distance 1 is equal to two divided by the projection scale, for which we can use the top left value of its matrix. We can use that to compute the normal bias the same way as we do for directional lights, except that we can factor the light's normal bias into it immediately as there aren't multiple cascades. Do this before setting the shadow matrix in <code>Shadows.RenderSpotShadows</code>.</p>
+						
+						<pre translate="no">		<ins>float texelSize = 2f / (tileSize * projectionMatrix.m00);</ins>
+		<ins>float filterSize = texelSize * ((float)settings.other.filter + 1f);</ins>
+		<ins>float bias = light.normalBias * filterSize * 1.4142136f;</ins>
+		otherShadowMatrices[index] = ConvertToAtlasMatrix(
+			projectionMatrix * viewMatrix,
+			SetTileViewport(index, split, tileSize), tileScale
+		);</pre>
+						
+						<p>Now we have to send the bias to the shader. We'll need to send some more data per tile later, so let's add an <em translate="no">_OtherShadowTiles</em> vector array shader property. Add an identifier and array for it to <code>Shadows</code> and set it in <code>RenderOtherShadows</code> along with the matrices.</p>
+						
+						<pre translate="no">	static int
+		&hellip;
+		otherShadowMatricesId = Shader.PropertyToID("_OtherShadowMatrices"),
+		<ins>otherShadowTilesId = Shader.PropertyToID("_OtherShadowTiles"),</ins>
+		&hellip;;
+
+	static Vector4[]
+		cascadeCullingSpheres = new Vector4[maxCascades],
+		cascadeData = new Vector4[maxCascades]<ins>,</ins>
+		<ins>otherShadowTiles = new Vector4[maxShadowedOtherLightCount]</ins>;
+	
+	&hellip;
+	
+	void RenderOtherShadows () {
+		&hellip;
+
+		buffer.SetGlobalMatrixArray(otherShadowMatricesId, otherShadowMatrices);
+		<ins>buffer.SetGlobalVectorArray(otherShadowTilesId, otherShadowTiles);</ins>
+		&hellip;
+	}</pre>
+						
+						<p>Create a new <code>SetOtherTileData</code> method with an index and bias. Have it put the bias in the last component of a vector and then store it in the tile data array.</p>
+						
+						<pre translate="no">	<ins>void SetOtherTileData (int index, float bias) {</ins>
+		<ins>Vector4 data = Vector4.zero;</ins>
+		<ins>data.w = bias;</ins>
+		<ins>otherShadowTiles[index] = data;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Invoke it in <code>RenderSpotShadows</code> once we have the bias.</p>
+						
+						<pre translate="no">		float bias = light.normalBias * filterSize * 1.4142136f;
+		<ins>SetOtherTileData(index, bias);</ins></pre>
+						
+						<p>Then add the other shadow tile array to the shadow buffer and use it to scale the normal bias in <em translate="no">Shadows</em>.</p>
+						
+						<pre class="shader" translate="no">CBUFFER_START(_CustomShadows)
+	&hellip;
+	float4x4 _OtherShadowMatrices[MAX_SHADOWED_OTHER_LIGHT_COUNT];
+	<ins>float4 _OtherShadowTiles[MAX_SHADOWED_OTHER_LIGHT_COUNT];</ins>
+	float4 _ShadowAtlasSize;
+	float4 _ShadowDistanceFade;
+CBUFFER_END
+
+&hellip;
+
+float GetOtherShadow (
+	OtherShadowData other, ShadowData global, Surface surfaceWS
+) {
+	<ins>float4 tileData = _OtherShadowTiles[other.tileIndex];</ins>
+	float3 normalBias = surfaceWS.interpolatedNormal * <ins>tileData.w</ins>;
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="spot-light-shadows/normal-bias-constant.png" width="420" height="260">
+							<figcaption>Constant normal bias, set to 1.</figcaption>
+						</figure>
+						
+						<p>At this point we have a normal bias that's only correct at at fixed distance. To scale it with distance from the light plane we need to know the world-space light position and spot direction, so add them to <code class="shader">OtherShadowData</code>.</p>
+						
+						<pre class="shader" translate="no">struct OtherShadowData {
+	float strength;
+	int tileIndex;
+	int shadowMaskChannel;
+	<ins>float3 lightPositionWS;</ins>
+	<ins>float3 spotDirectionWS;</ins>
+};</pre>
+						
+						<p>Have <em translate="no">Light</em> copy the values to it. As these values come from the light itself and not the shadow data set them to zero in <code class="shader">GetOtherShadowData</code> and copy them in <code class="shader">GetOtherLight</code>.</p>
+						
+						<pre class="shader" translate="no">OtherShadowData GetOtherShadowData (int lightIndex) {
+	&hellip;
+	<ins>data.lightPositionWS = 0.0;</ins>
+	<ins>data.spotDirectionWS = 0.0;</ins>
+	return data;
+}
+
+Light GetOtherLight (int index, Surface surfaceWS, ShadowData shadowData) {
+	Light light;
+	light.color = _OtherLightColors[index].rgb;
+	<ins>float3 position = _OtherLightPositions[index].xyz;</ins>
+	float3 ray = <ins>position</ins> - surfaceWS.position;
+	&hellip;
+	<ins>float3 spotDirection = _OtherLightDirections[index].xyz;</ins>
+	float spotAttenuation = Square(
+		saturate(dot(<ins>spotDirection</ins>, light.direction) *
+		spotAngles.x + spotAngles.y)
+	);
+	OtherShadowData otherShadowData = GetOtherShadowData(index);
+	<ins>otherShadowData.lightPositionWS = position;</ins>
+	<ins>otherShadowData.spotDirectionWS = spotDirection;</ins>
+	&hellip;
+}</pre>
+						
+						<p>We find the distance to the plane by taking the dot product of the surface-to-light vector and the spot direction in <code class="shader">GetOtherShadow</code>. Use it to scale the normal bias.</p>
+						
+						<pre class="shader" translate="no">	float4 tileData = _OtherShadowTiles[other.tileIndex];
+	<ins>float3 surfaceToLight = other.lightPositionWS - surfaceWS.position;</ins>
+	<ins>float distanceToLightPlane = dot(surfaceToLight, other.spotDirectionWS);</ins>
+	float3 normalBias =
+		surfaceWS.interpolatedNormal * <ins>(distanceToLightPlane * </ins>tileData.w<ins>)</ins>;</pre>
+						
+						<figure>
+							<img src="spot-light-shadows/normal-bias-variable.png" width="420" height="260">
+							<figcaption>Correct normal bias everywhere.</figcaption>
+						</figure>
+					</section>
+					
+					
+					<section>
+						<h3>Clamped Sampling</h3>
+						
+						<p>We configured the cascade spheres for directional shadows to ensure that we never end up sampling outside the appropriate shadow tile, but we cannot use the same approach for other shadows. In the case of spot lights their tiles are tightly fit to their cones, so the normal bias and filter size will push sampling outside the tile bounds where the cone edge approaches the tile edge.</p>
+						
+						<figure>
+							<img src="spot-light-shadows/without-clamping.png" width="320" height="250">
+							<figcaption>Shadows from wrong tiles intrude near edges.</figcaption>
+						</figure>
+						
+						<p>The simplest way to solve that is to manually clamp sampling to stay within the tile bounds, as if each tile were its own separate texture. That will still stretch shadows near the edges, but won't introduce invalid shadows.</p>
+						
+						
+						<p>Adjust the <code>SetOtherTileData</code> method so it also calculates and stores the tile bounds, based on an offset and scale provided via new parameters. The tile's minimum texture coordinates are the scaled offset, which we'll store in the XY components of the data vector. As tiles are square we can suffice with storing the tile's scale in the Z component, leaving W to the bias. We also have to shrink the bounds by half a texel in both dimensions to make sure sampling won't bleed beyond the edge.</p>
+						
+						<pre translate="no">	void SetOtherTileData (int index, <ins>Vector2 offset, float scale,</ins> float bias) {
+		<ins>float border = atlasSizes.w * 0.5f;</ins>
+		Vector4 data<ins>;</ins>
+		<ins>data.x = offset.x * scale + border;</ins>
+		<ins>data.y = offset.y * scale + border;</ins>
+		<ins>data.z = scale - border - border;</ins>
+		data.w = bias;
+		otherShadowTiles[index] = data;
+	}</pre>
+						
+						<p>In <code>RenderSpotShadows</code>, use the offset found via <code>SetTileViewport</code> and the inverse of the split for the new arguments of <code>SetOtherTileData</code>.</p>
+						
+						<pre translate="no">		<ins>Vector2 offset = SetTileViewport(index, split, tileSize);</ins>
+		SetOtherTileData(index, <ins>offset, 1f / split,</ins> bias);
+		otherShadowMatrices[index] = ConvertToAtlasMatrix(
+			projectionMatrix * viewMatrix, <ins>offset</ins>, split
+		);</pre>
+						
+						<p>The <code>ConverToAtlasMatrix</code> method also uses the inverse of the split, so we can calculate it once and pass that to both methods.</p>
+						
+						<pre translate="no">		<ins>float tileScale = 1f / split;</ins>
+		SetOtherTileData(index, offset, <ins>tileScale</ins>, bias);
+		otherShadowMatrices[index] = ConvertToAtlasMatrix(
+			projectionMatrix * viewMatrix, offset, <ins>tileScale</ins>
+		);</pre>
+						
+						<p>Then <code>ConvertToAtlasMatrix</code> doesn't have to perform the division itself.</p>
+						
+						<pre translate="no">	Matrix4x4 ConvertToAtlasMatrix (Matrix4x4 m, Vector2 offset, <ins>float scale</ins>) {
+		&hellip;
+		<del>//float scale = 1f / split;</del>
+		&hellip;
+	}</pre>
+						
+						<p>This requires <code>RenderDirectionalShadows</code> to perform the division instead, which it only needs to do once for all cascades.</p>
+						
+						<pre translate="no">	void RenderDirectionalShadows (int index, int split, int tileSize) {
+		&hellip;
+		<ins>float tileScale = 1f / split;</ins>
+		
+		for (int i = 0; i &lt; cascadeCount; i++) {
+			&hellip;
+			dirShadowMatrices[tileIndex] = ConvertToAtlasMatrix(
+				projectionMatrix * viewMatrix,
+				SetTileViewport(tileIndex, split, tileSize), <ins>tileScale</ins>
+			);
+			&hellip;
+		}
+	}</pre>
+						
+						<p>To apply the bounds add a <code class="shader">float3</code> parameter for it to <code class="shader">SampleOtherShadowAtlas</code> and use it to clamp the position in shadow tile space. <code class="shader">FilterOtherShadows</code> needs the same parameter so it can pass it along. And <code class="shader">GetOtherShadow</code> retrieves it from the tile data.</p>
+						
+						<pre class="shader" translate="no">float SampleOtherShadowAtlas (float3 positionSTS<ins>, float3 bounds</ins>) {
+	<ins>positionSTS.xy = clamp(positionSTS.xy, bounds.xy, bounds.xy + bounds.z);</ins>
+	return SAMPLE_TEXTURE2D_SHADOW(
+		_OtherShadowAtlas, SHADOW_SAMPLER, positionSTS
+	);
+}
+
+float FilterOtherShadow (float3 positionSTS<ins>, float3 bounds</ins>) {
+	#if defined(OTHER_FILTER_SETUP)
+		&hellip;
+		for (int i = 0; i &lt; OTHER_FILTER_SAMPLES; i++) {
+			shadow += weights[i] * SampleOtherShadowAtlas(
+				float3(positions[i].xy, positionSTS.z)<ins>, bounds</ins>
+			);
+		}
+		return shadow;
+	#else
+		return SampleOtherShadowAtlas(positionSTS<ins>, bounds</ins>);
+	#endif
+}
+
+float GetOtherShadow (
+	OtherShadowData other, ShadowData global, Surface surfaceWS
+) {
+	&hellip;
+	return FilterOtherShadow(positionSTS.xyz / positionSTS.w<ins>, tileData.xyz</ins>);
+}</pre>
+						
+						<figure>
+							<img src="spot-light-shadows/with-clamping.png" width="320" height="250">
+							<figcaption>No more shadows from wrong tiles.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Point Light Shadows</h2>
+					
+					<p>Shadows for point lights works like those for spot lights. The difference is that point lights aren't limited to a cone, so we need to render their shadows to a cube map. This is done by rendering shadows for all six faces of the cube separately. Thus we'll treat a point light as if it were six lights for the purpose of realtime shadows. It'll take up six tiles in the shadow atlas. This means that we can support realtime shadows for up to two point lights at the same time, as they would claim twelve of the sixteen available tiles. If there's fewer than six tiles free a point light cannot get realtime shadows.</p>
+					
+					<section>
+						<h3>Six Tiles for One Light</h3>
+						
+						<p>First, we need to know that we're dealing with a point light when rendering shadows, so add a boolean to indicate this to <code>ShadowedOtherLight</code>.</p>
+						
+						<pre translate="no">	struct ShadowedOtherLight {
+		&hellip;
+		<ins>public bool isPoint;</ins>
+	}</pre>
+						
+						<p>Check whether we have a point light in <code>ReserveOtherShadows</code>. If so, the new light count with this one included would be six greater than the current count, otherwise it's just one greater. If that would exceed the max then the light can have baked shadows at best. If there's enough room in the atlas then also store whether it's a point light in the third component of the returned shadow data, to make it easy to detect point lights in the shader.</p>
+						
+						<pre translate="no">	public Vector4 ReserveOtherShadows (Light light, int visibleLightIndex) {
+		&hellip;
+
+		<ins>bool isPoint = light.type == LightType.Point;</ins>
+		<ins>int newLightCount = shadowedOtherLightCount + (isPoint ? 6 : 1);</ins>
+		if (
+			<ins>newLightCount ></ins> maxShadowedOtherLightCount ||
+			!cullingResults.GetShadowCasterBounds(visibleLightIndex, out Bounds b)
+		) {
+			return new Vector4(-light.shadowStrength, 0f, 0f, maskChannel);
+		}
+
+		shadowedOtherLights[shadowedOtherLightCount] = new ShadowedOtherLight {
+			visibleLightIndex = visibleLightIndex,
+			slopeScaleBias = light.shadowBias,
+			normalBias = light.shadowNormalBias<ins>,</ins>
+			<ins>isPoint = isPoint</ins>
+		};
+
+		<ins>Vector4 data =</ins> new Vector4(
+			light.shadowStrength, shadowedOtherLightCount,
+			<ins>isPoint ? 1f : 0f</ins>, maskChannel
+		);
+		<ins>shadowedOtherLightCount = newLightCount;</ins>
+		<ins>return data;</ins>
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Rendering Point Shadows</h3>
+						
+						<p>Adjust <code>RenderOtherShadows</code> so it invokes either a new <code>RenderPointShadows</code> method or the existing <code>RenderSpotShadows</code> method in its loop, as appropriate. Also, as point lights count for six increase the iterator by the correct amount for each light type, instead of just incrementing it.</p>
+						
+						<pre translate="no">		for (int i = 0; i &lt; shadowedOtherLightCount;<ins>) {</ins> <del>//i++) {</del>
+			<ins>if (shadowedOtherLights[i].isPoint) {</ins>
+				<ins>RenderPointShadows(i, split, tileSize);</ins>
+				<ins>i += 6;</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				RenderSpotShadows(i, split, tileSize);
+				<ins>i += 1;</ins>
+			<ins>}</ins>
+		}</pre>
+						
+						<p>The new <code>RenderPointShadows</code> method is a duplicate of <code>RenderSpotShadows</code>, with two differences. First, it has to render six times instead of just once, looping through its six tiles. Second, it has to use <code>ComputePointShadowMatricesAndCullingPrimitives</code> instead of <code>ComputeSpotShadowMatricesAndCullingPrimitives</code>. This method requires two extra arguments after the light index: a <code>CubemapFace</code> index and a bias. We render once for each face and leave the bias at zero for now.</p>
+						
+						<pre translate="no">	void <ins>RenderPointShadows</ins> (int index, int split, int tileSize) {
+		ShadowedOtherLight light = shadowedOtherLights[index];
+		var shadowSettings = new ShadowDrawingSettings(
+			cullingResults, light.visibleLightIndex,
+			BatchCullingProjectionType.Perspective
+		);
+		<ins>for (int i = 0; i &lt; 6; i++) {</ins>
+			cullingResults.<ins>ComputePointShadowMatricesAndCullingPrimitives</ins>(
+				light.visibleLightIndex, <ins>(CubemapFace)i, 0f,</ins>
+				out Matrix4x4 viewMatrix, out Matrix4x4 projectionMatrix,
+				out ShadowSplitData splitData
+			);
+			shadowSettings.splitData = splitData;
+			<ins>int tileIndex = index + i;</ins>
+			float texelSize = 2f / (tileSize * projectionMatrix.m00);
+			float filterSize = texelSize * ((float)settings.other.filter + 1f);
+			float bias = light.normalBias * filterSize * 1.4142136f;
+			Vector2 offset = SetTileViewport(<ins>tileIndex</ins>, split, tileSize);
+			float tileScale = 1f / split;
+			SetOtherTileData(<ins>tileIndex</ins>, offset, tileScale, bias);
+			otherShadowMatrices[<ins>tileIndex</ins>] = ConvertToAtlasMatrix(
+				projectionMatrix * viewMatrix, offset, tileScale
+			);
+
+			buffer.SetViewProjectionMatrices(viewMatrix, projectionMatrix);
+			buffer.SetGlobalDepthBias(0f, light.slopeScaleBias);
+			ExecuteBuffer();
+			context.DrawShadows(ref shadowSettings);
+			buffer.SetGlobalDepthBias(0f, 0f);
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<img src="point-light-shadows/point-shadow-map-back-faces.png" width="256" height="256">
+							<figcaption>Shadow atlas for two point lights.</figcaption>
+						</figure>
+						
+						<p>The field of view for cubemap faces is always 90&deg;, thus the world-space tile size at distance 1 is always 2. This means that we can hoist the calculation of the bias out of the loop. We can also do that with the tile scale.</p>
+						
+						<pre translate="no">		<ins>float texelSize = 2f / tileSize;</ins>
+		<ins>float filterSize = texelSize * ((float)settings.other.filter + 1f);</ins>
+		<ins>float bias = light.normalBias * filterSize * 1.4142136f;</ins>
+		<ins>float tileScale = 1f / split;</ins>
+		
+		for (int i = 0; i &lt; 6; i++) {
+			&hellip;
+			<del>//float texelSize = 2f / (tileSize * projectionMatrix.m00);</del>
+			<del>//float filterSize = texelSize * ((float)settings.other.filter + 1f);</del>
+			<del>//float bias = light.normalBias * filterSize * 1.4142136f;</del>
+			Vector2 offset = SetTileViewport(tileIndex, split, tileSize);
+			<del>//float tileScale = 1f / split;</del>
+			&hellip;
+		}</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Sampling Point Shadows</h3>
+						
+						<p>The idea is that point light shadows are stored in a cube map, which our shader samples. However, we store the cube map faces as tiles in an atlas, so we cannot use standard cube map sampling. We have to determine the appropriate face to sample from ourselves. To do this we need to know whether we're dealing with a point light as well as the surface-to-light direction. Add both to <code class="shader">OtherShadowData</code>.</p> 
+						
+						<pre class="shader" translate="no">struct OtherShadowData {
+	float strength;
+	int tileIndex;
+	<ins>bool isPoint;</ins>
+	int shadowMaskChannel;
+	float3 lightPositionWS;
+	<ins>float3 lightDirectionWS;</ins>
+	float3 spotDirectionWS;
+};</pre>
+						
+						<p>Set both values in <em translate="no">Light</em>. It's a point light if the third component of the other light's shadow data equals 1.</p>
+						
+						<pre class="shader" translate="no">OtherShadowData GetOtherShadowData (int lightIndex) {
+	&hellip;
+	<ins>data.isPoint = _OtherLightShadowData[lightIndex].z == 1.0;</ins>
+	data.lightPositionWS = 0.0;
+	<ins>data.lightDirectionWS = 0.0;</ins>
+	data.spotDirectionWS = 0.0;
+	return data;
+}
+
+Light GetOtherLight (int index, Surface surfaceWS, ShadowData shadowData) {
+	&hellip;
+	otherShadowData.lightPositionWS = position;
+	<ins>otherShadowData.lightDirectionWS = light.direction;</ins>
+	otherShadowData.spotDirectionWS = spotDirection;
+	&hellip;
+}</pre>
+						
+						<p>Next, we have to adjust the tile index and light plane in <code class="shader">GetOtherShadow</code> in case of a point light. Begin by turning them into variables, initially configured for spot lights. Make the tile index a <code class="shader">float</code> because we'll add an offset to it that's also defined as a <code class="shader">float</code>.</p>
+						
+						<pre class="shader" translate="no">float GetOtherShadow (
+	OtherShadowData other, ShadowData global, Surface surfaceWS
+) {
+	<ins>float tileIndex = other.tileIndex;</ins>
+	<ins>float3 lightPlane = other.spotDirectionWS;</ins>
+	float4 tileData = _OtherShadowTiles[<ins>tileIndex</ins>];
+	float3 surfaceToLight = other.lightPositionWS - surfaceWS.position;
+	float distanceToLightPlane = dot(surfaceToLight, <ins>lightPlane</ins>);
+	float3 normalBias =
+		surfaceWS.interpolatedNormal * (distanceToLightPlane * tileData.w);
+	float4 positionSTS = mul(
+		_OtherShadowMatrices[<ins>tileIndex</ins>],
+		float4(surfaceWS.position + normalBias, 1.0)
+	);
+	return FilterOtherShadow(positionSTS.xyz / positionSTS.w, tileData.xyz);
+}</pre>
+						
+						<p>If we have a point light then we must use the appropriate axis-aligned plane instead. We can use the <code class="shader">CubeMapFaceID</code> function to find the face offset, by passing it the negated light direction. This function either intrinsic or defined in the <em translate="no">Core RP Library</em>, returning a <code class="shader">float</code>. The order of the cubemap faces is +X, &minus;X, +Y, &minus;Y, +Z, &minus;Z, which matches how we rendered them. Add the offset to the tile index.</p> 
+						
+						<pre class="shader" translate="no">float GetOtherShadow (
+	OtherShadowData other, ShadowData global, Surface surfaceWS
+) {
+	float tileIndex = other.tileIndex;
+	float3 lightPlane = other.spotDirectionWS;
+	<ins>if (other.isPoint) {</ins>
+		<ins>float faceOffset = CubeMapFaceID(-other.lightDirectionWS);</ins>
+		<ins>tileIndex += faceOffset;</ins>
+	<ins>}</ins>
+	&hellip;
+}</pre>
+						
+						<p>Next, we need to use a light plane that matches the face orientation. Create a static constant array for them and use the face offset to index it. The plane normals have to point in the opposite direction as the faces, like the spot direction points toward the light.</p>
+						
+						<pre class="shader" translate="no"><ins>static const float3 pointShadowPlanes[6] = {</ins>
+	<ins>float3(-1.0, 0.0, 0.0),</ins>
+	<ins>float3(1.0, 0.0, 0.0),</ins>
+	<ins>float3(0.0, -1.0, 0.0),</ins>
+	<ins>float3(0.0, 1.0, 0.0),</ins>
+	<ins>float3(0.0, 0.0, -1.0),</ins>
+	<ins>float3(0.0, 0.0, 1.0)</ins>
+<ins>};</ins>
+
+float GetOtherShadow (
+	OtherShadowData other, ShadowData global, Surface surfaceWS
+) {
+	float tileIndex = other.tileIndex;
+	float3 plane = other.spotDirectionWS;
+	if (other.isPoint) {
+		float faceOffset = CubeMapFaceID(-other.lightDirectionWS);
+		tileIndex += faceOffset;
+		<ins>lightPlane = pointShadowPlanes[faceOffset];</ins>
+	}
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="point-light-shadows/with-shadows.png" width="320" height="220" alt="with">
+							<img src="point-light-shadows/without-shadows.png" width="320" height="220" alt="without">
+							<figcaption>Direct point light only, with and without realtime shadows; no biases.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Drawing the Correct Faces</h3>
+						
+						<p>We can now see realtime shadows for point lights. They don't appear to suffer from shadow acne, even with zero bias. Unfortunately, light now leaks through objects to surfaces very close to them on the opposite side. Increasing the shadow bias makes this worse and also appears to cut holes in the shadows of objects close to other surfaces.</p>
+						
+						<figure>
+							<img src="point-light-shadows/normal-bias-3.png" width="320" height="220">
+							<figcaption>Maximum normal bias 3.</figcaption>
+						</figure>
+						
+						<p>This happens because of the way Unity renders shadows for point lights. It draws them upside down, which reverses the winding order of triangles. Normally the front faces&mdash;from the point of view of the light&mdash;are drawn, but now the back faces get rendered. This prevents most acne but introduces light leaking. We cannot stop the flipping, but we can undo it by negating a row of the view matrix that we get from <code>ComputePointShadowMatricesAndCullingPrimitives</code>. Let's negate its second row. This flips everything upside down in the atlas at second time, which turns everything back to normal. Because the first component of that row is always zero we can suffice with only negating the other three components.</p>
+						
+						<pre translate="no">			cullingResults.ComputePointShadowMatricesAndCullingPrimitives(
+				light.visibleLightIndex, (CubemapFace)i, fovBias*0,
+				out Matrix4x4 viewMatrix, out Matrix4x4 projectionMatrix,
+				out ShadowSplitData splitData
+			);
+			<ins>viewMatrix.m11 = -viewMatrix.m11;</ins>
+			<ins>viewMatrix.m12 = -viewMatrix.m12;</ins>
+			<ins>viewMatrix.m13 = -viewMatrix.m13;</ins></pre>
+						
+						<figure>
+							<img src="point-light-shadows/normal-shadows-bias-0.png" width="320" height="220" alt="bias 0">
+							<img src="point-light-shadows/normal-shadow-bias-1.png" width="320" height="220" alt="bias 1">
+							<figcaption>Front-face shadow rendering, normal bias 0 and 1.</figcaption>
+						</figure>
+						
+						<p>How this changes the rendered shadows is most obvious when comparing the shadow maps.</p>
+						
+						<figure>
+							<img src="point-light-shadows/point-shadow-map-front-faces.png" width="256" height="256" alt="front">
+							<img src="point-light-shadows/point-shadow-map-back-faces.png" width="256" height="256" alt="back">
+							<figcaption>Front and back versions of the shadow map.</figcaption>
+						</figure>
+						
+						<p>Note that objects that have the <em translate="no">Cast Shadows</em> mode of their <code>MeshRenderer</code> set to <em translate="no">Two Sided</em> aren't affected, because none of their faces are culled. For example, I've made all spheres with a clip or transparent material cast two-sided shadows, so they appear more solid.</p>
+						
+						<figure>
+							<img src="point-light-shadows/two-sided-sphere-shadows.png" width="320" height="220">
+							<figcaption>Clip and transparent spheres with two-sided shadows.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Field of View Bias</h3>
+						
+						<p>There's always a discontinuity between faces of a cube map, because the orientation of the texture plane suddenly changes 90&deg;. Regular cubemap sampling can hide this somewhat because it can interpolate between faces, but we're sampling from a single tile per fragment. We get the same issues that exist at the edge of spot shadow tiles, but now they aren't hidden because there's no spot attenuation.</p>
+						
+						<figure>
+							<img src="point-light-shadows/without-fov-bias-with-clamping.png" width="280" height="180" alt="with claming">
+							<img src="point-light-shadows/without-fov-bias-without-claming.png" width="280" height="180" alt="without claming">
+							<figcaption>Discontinuities between faces, with and without tile clamping.</figcaption>
+						</figure>
+						
+						<p>We can reduce these artifacts by increasing the field of view&mdash;FOV for short&mdash;a little when rendering the shadows, so we never sample beyond the edge of a tile. That's what the bias argument of <code>ComputePointShadowMatricesAndCullingPrimitives</code> is for. We do that by making our tile size a bit larger than 2 at distance 1 from the light. Specifically, we add the normal bias plus the filter size on each side. The tangent of the half corresponding FOV angle is then equal to 1 plus the bias and filter size. Double that, convert it to degrees, subtract 90&deg;, and use it for the FOV bias in <code>RenderPointShadows</code>.</p>
+						
+						<figure>
+							<img src="point-light-shadows/fov-bias-diagram.png" width="270" height="130">
+							<figcaption>Increasing the world-space tile size.</figcaption>
+						</figure>
+						
+						<pre translate="no">		<ins>float fovBias =</ins>
+			<ins>Mathf.Atan(1f + bias + filterSize) * Mathf.Rad2Deg * 2f - 90f;</ins>
+		for (int i = 0; i &lt; 6; i++) {
+			cullingResults.ComputePointShadowMatricesAndCullingPrimitives(
+				light.visibleLightIndex, (CubemapFace)i, <ins>fovBias</ins>,
+				out Matrix4x4 viewMatrix, out Matrix4x4 projectionMatrix,
+				out ShadowSplitData splitData
+			);
+			&hellip;
+		}</pre>
+						
+						<figure>
+							<img src="point-light-shadows/with-fov-bias.png" width="280" height="180">
+							<figcaption>With FOV bias.</figcaption>
+						</figure>
+						
+						<p>Note that this approach isn't perfect, because by increasing the tile size the texel size increases as well. Thus the filter size increases and the normal bias should also increase, which means that we must increase the FOV again. However, the difference is usually small enough that we can get away with ignoring the tile size increase, unless a large normal bias and filter is used in combination with a small atlas size.</p>
+						
+						<aside>
+							<h3>Could we use the same approach for spot lights?</h3>
+							<div>
+								<p>We could, which would make tile clamping no longer necessary with a little extra work. However, <code>ComputeSpotShadowMatricesAndCullingPrimitives</code> doesn't have a FOV bias parameter, so we'd have to create our own variant of it, which is out the scope of this tutorial.</p>
+							</div>
+						</aside>
+						
+						<p>The next tutorial is <a href="../post-processing/index.html">Post Processing</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/custom-srp-10-point-and-spot-shadows/" class="repository">repository</a>
+					<a href="Point-and-Spot-Shadows.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

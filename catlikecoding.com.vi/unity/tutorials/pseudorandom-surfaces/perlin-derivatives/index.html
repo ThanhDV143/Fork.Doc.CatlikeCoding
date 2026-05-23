@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/pseudorandom-surfaces/perlin-derivatives/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/pseudorandom-surfaces/perlin-derivatives/tutorial-image.jpg">
+		<meta property="og:title" content="Perlin Derivatives">
+		<meta property="og:description" content="A Unity C# Pseudorandom Surfaces tutorial about calculating derivatives of Perlin noise.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Perlin Derivatives</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/pseudorandom-surfaces/perlin-derivatives/#article",
+				"headline": "Perlin Derivatives",
+				"alternativeHeadline": "Derivatives of Interpolation",
+				"datePublished": "2022-09-15",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity C# Applied Noise tutorial about calculating derivatives of Perlin noise.",
+				"image": "https://catlikecoding.com/unity/tutorials/pseudorandom-surfaces/perlin-derivatives/tutorial-image.jpg",
+				"dependencies": "Unity 2020.3.38f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/pseudorandom-surfaces/", "name": "Pseudorandom Surfaces" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				AdvancedMeshJobScheduleDelegate: 1,
+				BaseGradients: 1,
+				G: 1,
+				IGradient: 1,
+				IMeshGenerator: 1,
+				IMeshStreams: 1,
+				INoise: 1,
+				Job: 1,
+				LatticeNormal: 1,
+				LatticeSpan4: 1,
+				Lattice1D: 1,
+				Lattice2D: 1,
+				Lattice3D: 1,
+				MaterialMode: 1,
+				MathExtensions: 1,
+				MeshJob: 1,
+				MultiStream: 1,
+				N: 1,
+				Noise: 1,
+				NoiseType: 1,
+				Perlin: 1,
+				PositionStream: 1,
+				ProceduralMesh: 1,
+				ProceduralSurface: 1,
+				S: 1,
+				Sample4: 1,
+				Settings: 1,
+				SharedSquareGrid: 1,
+				Simplex: 1,
+				Simplex1D: 1,
+				Simplex2D: 1,
+				Simplex3D: 1,
+				SingleStream: 1,
+				SmallXXHash4: 1,
+				Smoothstep: 1,
+				SurfaceJob: 1,
+				SurfaceJobScheduleDelegate: 1,
+				SmallXXHash: 1,
+				SpaceTRS: 1,
+				Stream0: 1,
+				Turbulence: 1,
+				Value: 1,
+				Vertex4: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Pseudorandom Surfaces</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Perlin Derivatives</h1>
+					<p>Derivatives of Interpolation</p>
+					<ul>
+						<li>Find derivatives for linear, bilinear, and trilinear interpolation.</li>
+						<li>Calculate derivatives for value and Perlin noise.</li>
+					</ul>
+				</header>
+				
+				<p>This is the third tutorial in a series about <a href="../index.html">pseudorandom surfaces</a>. In it we will calculate derivatives of value and Perlin noise.</p>
+				
+				<p>This tutorial is made with Unity 2020.3.38f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>2D Perlin noise with analytical normal vectors.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Value Noise</h2>
+					
+					<p>As we did for simplex noise, we begin with value noise, as that means that we can treat the gradients as constant values, simplifying the derivatives. So add options for 1D, 2D, and 3D value noise to <code>ProceduralSurface</code>.</p>
+					
+					<pre translate="no">	static SurfaceJobScheduleDelegate[,] surfaceJobs = {
+		<ins>{</ins>
+			<ins>SurfaceJob&lt;Lattice1D&lt;LatticeNormal, Value>>.ScheduleParallel,</ins>
+			<ins>SurfaceJob&lt;Lattice2D&lt;LatticeNormal, Value>>.ScheduleParallel,</ins>
+			<ins>SurfaceJob&lt;Lattice3D&lt;LatticeNormal, Value>>.ScheduleParallel</ins>
+		<ins>},</ins>
+		&hellip;
+	};
+
+	public enum NoiseType {
+		<ins>PerlinValue,</ins> Simplex€, SimplexSmoothTurbulence, SimplexValue
+	}</pre>
+					
+					<section>
+						<h3>Lattice Interpolator</h3>
+						
+						<p>We use the function `t(x)=6x^5-15x^4+10x^3` to interpolate between lattice points. We'll need the derivative of that, so add a field for it to <code>LatticeSpan4</code> named <code>dt</code>.</p>
+						
+						<pre translate="no">	public struct LatticeSpan4 {
+		public int4 p0, p1;
+		public float4 g0, g1;
+		public float4 t<ins>, dt</ins>;
+	}</pre>
+						
+						<p>In <a href="../../pseudorandom-noise/value-noise/index.html#2.6">section 2.6 of Pseudorandom Noise / Value Noise</a> we already determined that `t'(x)=30x^4-60x^3+30x^2`. Calculate it to both in <code>LatticeNormal</code> and <code>LatticeTiling</code>.</p>
+						
+						<pre translate="no">		public LatticeSpan4 GetLatticeSpan4 (float4 coordinates, int frequency) {
+			&hellip;
+			<ins>float4 t</ins> = coordinates - points;
+			span.t = <ins>t</ins> * <ins>t</ins> * <ins>t</ins> * (<ins>t</ins> * (<ins>t</ins> * 6f - 15f) + 10f);
+			<ins>span.dt = t * t * (t * (t * 30f - 60f) + 30f);</ins>
+			return span;
+		}</pre>
+						
+						<aside>
+							<h3>Does tiling the noise affect the derivatives?</h3>
+							<div>
+								<p>No, how the gradients are selected doesn't matter for the calculation.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Linear Interpolation</h3>
+						
+						<p>We use the linear interpolation function to transition between lattice points. This function can be mathematically defined as `l(a,b,t)=a(1-t)+bt=a+(b-a)t` where `t` is the variable interpolator. The rate of change of that interpolation is `l'_t(a,b,t)=b-a`.</p>
+						
+						<p>Our 1D value noise function is `v(x)=l(a,b,t(x))` so by applying the chain rule we find its derivative `v'(x)=(b-a)t'(x)`.</p>
+						
+						<p>Adjust <code>Lattice1D.GetNoise4</code> so it stores its gradients in variables and returns an explicit <code>Sample4</code>.</p>
+						
+						<pre translate="no">		public Sample4 GetNoise4(float4x3 positions, SmallXXHash4 hash, int frequency) {
+			LatticeSpan4 x = default(L).GetLatticeSpan4(positions.c0, frequency);
+
+			var g = default(G);
+			<del>//return g.EvaluateCombined(lerp(</del>
+			<del>//	g.Evaluate(hash.Eat(x.p0), x.g0).v,</del>
+			<del>//	g.Evaluate(hash.Eat(x.p1), x.g1).v, x.t</del>
+			<del>//));</del>
+			<ins>Sample4</ins>
+				<ins>a = g.Evaluate(hash.Eat(x.p0), x.g0),</ins>
+				<ins>b = g.Evaluate(hash.Eat(x.p1), x.g1);</ins>
+			
+			<ins>return g.EvaluateCombined(new Sample4 {</ins>
+				<ins>v = lerp(a.v, b.v, x.t)</ins>
+			<ins>});</ins>
+		}</pre>
+						
+						<p>Then include the derivative calculation.</p>
+						
+						<pre translate="no">			return g.EvaluateCombined(new Sample4 {
+				v = lerp(a.v, b.v, x.t)<ins>,</ins>
+				<ins>dx = frequency * (b.v - a.v) * x.dt</ins>
+			});</pre>
+						
+						<figure>
+							<img src="value-noise/1d-analytical.png" width="250" height="290" alt="analytical">
+								<img src="value-noise/1d-recalculated.png" width="250" height="290" alt="recalculated">
+							<figcaption>1D value noise; analytical and recalculated; frequency 4.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Bilinear Interpolation</h3>
+						
+						<p>For 2D value noise we use bilinear interpolation, so an interpolation of two interpolations. Begin by adjusting <code>Lattice2D.GetNoise4</code> so it also stores its gradients in variables and returns an explict <code>Sample4</code>.</p>
+						
+						<pre translate="no">			var g = default(G);
+			<ins>Sample4</ins>
+				<ins>a = g.Evaluate(h0.Eat(z.p0), x.g0, z.g0),</ins>
+				<ins>b = g.Evaluate(h0.Eat(z.p1), x.g0, z.g1),</ins>
+				<ins>c = g.Evaluate(h1.Eat(z.p0), x.g1, z.g0),</ins>
+				<ins>d = g.Evaluate(h1.Eat(z.p1), x.g1, z.g1);</ins>
+
+			return g.EvaluateCombined(<ins>new Sample4 {</ins>
+				<ins>v = lerp(lerp(a.v, b.v, z.t), lerp(c.v, d.v, z.t), x.t)</ins>
+			<ins>}</ins>);</pre>
+						
+						<p>The function for 2D value noise is `v(x,z)=l(l(a,b,t(z)),l(c,d,t(z)),t(x))`. As this is hard to read let's introduce a variant notation for the interpolation function: `l(a,b,t)-=aoversettrightarrowb`. The arrow operator indicates interpolation from its left to its right operand, with the interpolator written above it. It has priority over addition and subtraction.</p>
+						
+						<p>Now we can write `v(x,z)=(aoverset(t(z))rightarrowb)overset(t(x))rightarrow(coverset(t(z))rightarrowd)`.</p>
+						
+						<p>The partial X derivative of that is `v'_x(x,z)=(coverset(t(z))rightarrowd-aoverset(t(z))rightarrowb)t'(x)`, because the interpolations in the Z dimension are constant in this case. Add it to the noise result.</p>
+						
+						<pre translate="no">				v = lerp(lerp(a.v, b.v, z.t), lerp(c.v, d.v, z.t), x.t)<ins>,</ins>
+				<ins>dx = frequency * (lerp(c.v, d.v, z.t) - lerp(a.v, b.v, z.t)) * x.dt</ins></pre>
+						
+						<figure>
+							<img src="value-noise/2d-analytical-x.png" width="260" height="240">
+							<figcaption>2D value noise; analytical X derivatives only.</figcaption>
+						</figure>
+						
+						<p>For the partial Z derivative we have two separate Z interpolations of which we take the derivative, and then X interpolate those: `v'_z(x,z)=(b-a)t'(z)overset(t(x))rightarrow(d-c)t'(z)`.</p>
+						
+						<aside>
+							<h3>Can we interpolate between derivatives?</h3>
+							<div>
+								<p>Yes, because the outer interpolation only applies addition, subtraction, and multiplication with a constant: `(a(x)oversettrightarrowb(x))'=a'(x)+(b'(x)-a'(x))t`.</p>
+							</div>
+						</aside>
+						
+						<pre translate="no">				v = lerp(lerp(a.v, b.v, z.t), lerp(c.v, d.v, z.t), x.t),
+				dx = frequency * (lerp(c.v, d.v, z.t) - lerp(a.v, b.v, z.t)) * x.dt<ins>,</ins>
+				<ins>dz = frequency * lerp((b.v - a.v) * z.dt, (d.v - c.v) * z.dt, x.t)</ins></pre>
+						
+						<figure>
+							<img src="value-noise/2d-analytical-xz.png" width="270" height="240" alt="analytical">
+								<img src="value-noise/2d-recalculated.png" width="270" height="240" alt="recalculated">
+							<figcaption>2D value noise; analytical and recalculated.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Trilinear Interpolation</h3>
+						
+						<p>For 3D value noise we have to extend this approach to three dimensions. Again begin by adjusting the <code>Lattice3D.GetNoise4</code> method, as before.</p>
+						
+						<pre translate="no">			var <ins>gradient</ins> = default(G);
+			<ins>Sample4</ins>
+				<ins>a = gradient.Evaluate(h00.Eat(z.p0), x.g0, y.g0, z.g0),</ins>
+				<ins>b = gradient.Evaluate(h00.Eat(z.p1), x.g0, y.g0, z.g1),</ins>
+				<ins>c = gradient.Evaluate(h01.Eat(z.p0), x.g0, y.g1, z.g0),</ins>
+				<ins>d = gradient.Evaluate(h01.Eat(z.p1), x.g0, y.g1, z.g1),</ins>
+				<ins>e = gradient.Evaluate(h10.Eat(z.p0), x.g1, y.g0, z.g0),</ins>
+				<ins>f = gradient.Evaluate(h10.Eat(z.p1), x.g1, y.g0, z.g1),</ins>
+				<ins>g = gradient.Evaluate(h11.Eat(z.p0), x.g1, y.g1, z.g0),</ins>
+				<ins>h = gradient.Evaluate(h11.Eat(z.p1), x.g1, y.g1, z.g1);</ins>
+
+			return <ins>gradient</ins>.EvaluateCombined(<ins>new Sample4 {</ins>
+				<ins>v = lerp(</ins>
+					<ins>lerp(lerp(a.v, b.v, z.t), lerp(c.v, d.v, z.t), y.t),</ins>
+					<ins>lerp(lerp(e.v, f.v, z.t), lerp(g.v, h.v, z.t), y.t),</ins>
+					<ins>x.t</ins>
+				<ins>)</ins>
+			<ins>}</ins>);</pre>
+						
+						<p>The entire function can be written as `v(x,y,z)=((aoverset(t(z))rightarrowb)overset(t(y))rightarrow(coverset(t(z))rightarrowd))overset(t(x))rightarrow((eoverset(t(z))rightarrowf)overset(t(y))rightarrow(goverset(t(z))rightarrowh))`.</p>
+						
+						<p>Its partial X derivative works the same as for 2D noise, except that it is larger: `v'_x(x,y,z)=((eoverset(t(z))rightarrowf)overset(t(y))rightarrow(goverset(t(z))rightarrowh)-(aoverset(t(z))rightarrowb)overset(t(y))rightarrow(coverset(t(z))rightarrowd))t'(x)`.</p>
+						
+						<pre translate="no">				v = lerp(
+					lerp(lerp(a.v, b.v, z.t), lerp(c.v, d.v, z.t), y.t),
+					lerp(lerp(e.v, f.v, z.t), lerp(g.v, h.v, z.t), y.t),
+					x.t
+				)<ins>,</ins>
+				<ins>dx = frequency * (</ins>
+					<ins>lerp(lerp(e.v, f.v, z.t), lerp(g.v, h.v, z.t), y.t) -</ins>
+					<ins>lerp(lerp(a.v, b.v, z.t), lerp(c.v, d.v, z.t), y.t)</ins>
+				<ins>) * x.dt</ins></pre>
+						
+						<figure>
+							<img src="value-noise/3d-analytical-x.png" width="310" height="270">
+							<figcaption>3D value noise; analytical X derivatives only.</figcaption>
+						</figure>
+						
+						<p>The partial Z derivate also works like the 2D version, except that it goes one level deeper: `v'_z(x,y,z)=((b-a)t'(z)overset(t(y))rightarrow(d-c)t'(z))overset(t(x))rightarrow((f-e)t'(z)overset(t(y))rightarrow(h-g)t'(z))`.</p>
+						
+						<pre translate="no">				dx = frequency * (
+					lerp(lerp(e.v, f.v, z.t), lerp(g.v, h.v, z.t), y.t) -
+					lerp(lerp(a.v, b.v, z.t), lerp(c.v, d.v, z.t), y.t)
+				) * x.dt<ins>,</ins>
+				<ins>dz = frequency * lerp(</ins>
+					<ins>lerp((b.v - a.v) * z.dt, (d.v - c.v) * z.dt, y.t),</ins>
+					<ins>lerp((f.v - e.v) * z.dt, (h.v - g.v) * z.dt, y.t),</ins>
+					<ins>x.t</ins>
+				<ins>)</ins></pre>
+						
+						<figure>
+							<img src="value-noise/3d-analytical-xz.png" width="310" height="270" alt="analytical">
+							<img src="value-noise/3d-recalculated.png" width="310" height="270" alt="analytical">
+							<figcaption>3D value noise; analytical XZ derivatives and recalculated.</figcaption>
+						</figure>
+						
+						<p>Finally, the partial Y derivative sits in the middle and looks like a mix of the other two derivatives: `v'_y(x,y,z)=(coverset(t(z))rightarrowd-aoverset(t(z))rightarrowb)t'(y)overset(t(x))rightarrow(goverset(t(z))rightarrowh-eoverset(t(z))rightarrowf)t'(y)`.</p>
+						
+						<pre translate="no">				dx = frequency * (
+					lerp(lerp(e.v, f.v, z.t), lerp(g.v, h.v, z.t), y.t) -
+					lerp(lerp(a.v, b.v, z.t), lerp(c.v, d.v, z.t), y.t)
+				) * x.dt,
+				<ins>dy = frequency * lerp(</ins>
+					<ins>(lerp(c.v, d.v, z.t) - lerp(a.v, b.v, z.t)) * y.dt,</ins>
+					<ins>(lerp(g.v, h.v, z.t) - lerp(e.v, f.v, z.t)) * y.dt,</ins>
+					<ins>x.t</ins>
+				<ins>),</ins>
+				dz = frequency * lerp(
+					lerp((b.v - a.v) * z.dt, (d.v - c.v) * z.dt, y.t),
+					lerp((f.v - e.v) * z.dt, (h.v - g.v) * z.dt, y.t),
+					x.t
+				)</pre>
+						
+						<figure>
+							<img src="value-noise/3d-analytical-rotated.png" width="270" height="270" alt="analytical">
+							<img src="value-noise/3d-recalculated-rotated.png" width="270" height="270" alt="analytical">
+							<figcaption>3D value noise rotated 45&deg; on all axes; analytical and recalculated.</figcaption>
+						</figure>
+						
+					</section>
+				</section>
+				
+				<section>
+					<h2>Perlin Noise</h2>
+					
+					<p>Just like with simplex noise, to support Perlin noise we must treat the gradients as functions and thus incorporate them into the derivatives. Add 1D, 2D, and 3D Perlin noise options to <code>ProceduralSurface</code> so that we can see then.</p>
+					
+					<section>
+						<h3>Interpolation with Gradients</h3>
+						
+						<pre translate="no">	static SurfaceJobScheduleDelegate[,] surfaceJobs = {
+		<ins>{</ins>
+			<ins>SurfaceJob&lt;Lattice1D&lt;LatticeNormal, Perlin>>.ScheduleParallel,</ins>
+			<ins>SurfaceJob&lt;Lattice2D&lt;LatticeNormal, Perlin>>.ScheduleParallel,</ins>
+			<ins>SurfaceJob&lt;Lattice3D&lt;LatticeNormal, Perlin>>.ScheduleParallel</ins>
+		<ins>},</ins>
+		&hellip;
+	};
+
+	public enum NoiseType {
+		<ins>Perlin€</ins>, PerlinValue, Simplex€, SimplexSmoothTurbulence, SimplexValue
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>1D Gradients</h3>
+						
+						<p>For 1D Perlin noise we have to use the function `p(x)=a(x)overset(t(x))rightarrowb(x)`. We find its derivative by applying the product rule: `p'(x)=a'(x)overset(t(x))rightarrowb'(x)+(b(x)-a(x))t'(x)`.</p>
+						
+						<aside>
+							<h3>How did you find that derivative?</h3>
+							<div>
+								<p>`p(x)=a(x)overset(t(x))rightarrowb(x)=a(x)+(b(x)-a(x))t(x)`.</p>
+								
+								<p>Apply the product rule: `p'(x)=a'(x)+(b'(x)-a'(x))t(x)+(b(x)-a(x))t'(x)`.</p>
+								
+								<p>Note that the first portion is an interpolation between the gradient derivatives based on `t(x)`.</p>
+							</div>
+						</aside>
+						
+						<p>Adjust <code>Lattice1D.GetNoise4</code> by adding the new part to its derivative. Note that if the gradients are constant their derivatives are zero, so the new interpolation would add nothing.</p>
+						
+						<pre translate="no">				dx = frequency * <ins>(lerp(a.dx, b.dx, x.t) +</ins> (b.v - a.v) * x.dt<ins>)</ins></pre>
+						
+						<figure>
+							<img src="perlin-noise/1d-analytical.png" width="260" height="180" alt="analytical">
+								<img src="perlin-noise/1d-recalculated.png" width="260" height="180" alt="recalculated">
+							<figcaption>1D Perlin noise; analytical and recalculated; frequency 2.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>2D Gradients</h3>
+						
+						<p>For 2D noise the partial X derivative changes in the same way, also gaining a interpolation of gradient derivatives: `p'_x(x,z)=(a'_xoverset(t(z))leftrightarrowb'_x)overset(t(x))leftrightarrow(c'_xoverset(t(z))leftrightarrowd'_x)+(coverset(t(z))leftrightarrowd-aoverset(t(z))leftrightarrowb)t'(x)`. Here I omitted the `(x,z)` arguments that all gradients should have. Add the new portion of the derivative to <code>Lattice2D.GetNoise4</code>.</p>
+						
+						<pre translate="no">				v = lerp(lerp(a.v, b.v, z.t), lerp(c.v, d.v, z.t), x.t),
+				dx = frequency * <ins>(</ins>
+					<ins>lerp(lerp(a.dx, b.dx, z.t), lerp(c.dx, d.dx, z.t), x.t) +</ins>
+					(lerp(c.v, d.v, z.t) - lerp(a.v, b.v, z.t)) * x.dt
+				<ins>)</ins>,</pre>
+						
+						<p>And the partial Z derivative changes likewise: `p'_z(x,z)=(aoverset(t(z))leftrightarrowb)'_zoverset(t(x))leftrightarrow(coverset(t(z))leftrightarrowd)'_z`. Here I didn't write out the derivatives of the inner interpolations.</p>
+						
+						<pre translate="no">				dz = frequency * lerp(
+					<ins>lerp(a.dz, b.dz, z.t) +</ins> (b.v - a.v) * z.dt,
+					<ins>lerp(c.dz, d.dz, z.t) +</ins> (d.v - c.v) * z.dt,
+					x.t
+				)</pre>
+						
+						<p>To complete the 2D derivatives we must also adjust <code>BaseGradients.Square</code> so it returns its derivatives, like <code>BaseGradients.Circle</code>.</p>
+						
+						<pre translate="no">		public static <ins>Sample4</ins> Square (SmallXXHash4 hash, float4 x, float4 y) {
+			float4x2 v = SquareVectors(hash);
+			return <ins>new Sample4 {</ins>
+				<ins>v =</ins> v.c0 * x + v.c1 * y<ins>,</ins>
+				<ins>dx = v.c0,</ins>
+				<ins>dz = v.c1</ins>
+			<ins>}</ins>;
+		}</pre>
+						
+						<figure>
+							<img src="perlin-noise/2d-analytical.png" width="270" height="240" alt="analytical">
+								<img src="perlin-noise/2d-recalculated.png" width="270" height="240" alt="recalculated">
+							<figcaption>2D Perlin noise; analytical and recalculated.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>3D Gradients</h3>
+						
+						<p>The changes to 3D noise again follow the same pattern as for 2D. Interpolations of gradient derivatives are added where applicable. First for the partial X derivative.</p>
+						
+						<pre translate="no">				dx = frequency * (
+					<ins>lerp(</ins>
+						<ins>lerp(lerp(a.dx, b.dx, z.t), lerp(c.dx, d.dx, z.t), y.t),</ins>
+						<ins>lerp(lerp(e.dx, f.dx, z.t), lerp(g.dx, h.dx, z.t), y.t),</ins>
+						<ins>x.t</ins>
+					<ins>) + (</ins>
+						lerp(lerp(e.v, f.v, z.t), lerp(g.v, h.v, z.t), y.t) -
+						lerp(lerp(a.v, b.v, z.t), lerp(c.v, d.v, z.t), y.t)
+					) * x.dt
+				<ins>)</ins>,</pre>
+						
+						<p>Second for the partial Y derivative.</p>
+						
+						<pre translate="no">				dy = frequency * lerp(
+					<ins>lerp(lerp(a.dy, b.dy, z.t), lerp(c.dy, d.dy, z.t), y.t) +</ins>
+					(lerp(c.v, d.v, z.t) - lerp(a.v, b.v, z.t)) * y.dt,
+					<ins>lerp(lerp(e.dy, f.dy, z.t), lerp(g.dy, h.dy, z.t), y.t) +</ins>
+					(lerp(g.v, h.v, z.t) - lerp(e.v, f.v, z.t)) * y.dt,
+					x.t
+				),</pre>
+						
+						<p>Third for the partial Z derivative.</p>
+						
+						<pre translate="no">				dz = frequency * lerp(
+					lerp(
+						<ins>lerp(a.dz, b.dz, z.t) +</ins> (b.v - a.v) * z.dt,
+						<ins>lerp(c.dz, d.dz, z.t) +</ins> (d.v - c.v) * z.dt,
+						y.t
+					),
+					lerp(
+						<ins>lerp(e.dz, f.dz, z.t) +</ins> (f.v - e.v) * z.dt,
+						<ins>lerp(g.dz, h.dz, z.t) +</ins> (h.v - g.v) * z.dt,
+						y.t
+					),
+					x.t
+				)</pre>
+						
+						<p>And finally the inclusion of derivatives in <code>BaseGradients.Octahedron</code>.</p>
+						
+						<pre translate="no">		public static <ins>Sample4</ins> Octahedron (
+			SmallXXHash4 hash, float4 x, float4 y, float4 z
+		) {
+			float4x3 v = OctahedronVectors(hash);
+			return <ins>new Sample4 {</ins>
+				<ins>v =</ins> v.c0 * x + v.c1 * y + v.c2 * z<ins>,</ins>
+				<ins>dx = v.c0,</ins>
+				<ins>dy = v.c1,</ins>
+				<ins>dz = v.c2</ins>
+			<ins>}</ins>;
+		}</pre>
+						
+						<figure>
+							<img src="perlin-noise/3d-analytical.png" width="260" height="240" alt="analytical">
+								<img src="perlin-noise/3d-recalculated.png" width="260" height="240" alt="recalculated">
+							<figcaption>3D Perlin noise; rotated 45&deg; on all axes; frequency 3; analytical and recalculated.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Turbulence</h3>
+						
+						<p>We wrap up this tutorial with the inclusion of smooth turbulence variants of Perlin noise.</p>
+						
+						<pre translate="no">	static SurfaceJobScheduleDelegate[,] surfaceJobs = {
+		{
+			SurfaceJob&lt;Lattice1D&lt;LatticeNormal, Perlin>>.ScheduleParallel,
+			SurfaceJob&lt;Lattice2D&lt;LatticeNormal, Perlin>>.ScheduleParallel,
+			SurfaceJob&lt;Lattice3D&lt;LatticeNormal, Perlin>>.ScheduleParallel
+		},
+		<ins>{</ins>
+			<ins>SurfaceJob&lt;Lattice1D&lt;LatticeNormal, Smoothstep&lt;Turbulence&lt;Perlin>>>></ins>
+				<ins>.ScheduleParallel,</ins>
+			<ins>SurfaceJob&lt;Lattice2D&lt;LatticeNormal, Smoothstep&lt;Turbulence&lt;Perlin>>>></ins>
+				<ins>.ScheduleParallel,</ins>
+			<ins>SurfaceJob&lt;Lattice3D&lt;LatticeNormal, Smoothstep&lt;Turbulence&lt;Perlin>>>></ins>
+				<ins>.ScheduleParallel</ins>
+		<ins>},</ins>
+		&hellip;
+	};
+
+	public enum NoiseType {
+		Perlin€, <ins>PerlinSmoothTurbulence,</ins> PerlinValue,
+		Simplex€, SimplexSmoothTurbulence, SimplexValue
+	}</pre>
+						
+						<figure>
+							<img src="perlin-noise/turbulence-analytical.png" width="240" height="200" alt="analytical">
+								<img src="perlin-noise/turbulence-recalculated.png" width="240" height="200" alt="recalculated">
+							<figcaption>2D Perlin smooth turbulence noise; frequency 2; analytical and recalculated.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../voronoi-derivatives/index.html">Voronoi Derivatives</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/pseudorandom-surfaces-03-perlin-derivatives/" class="repository">repository</a>
+					<a href="Perlin-Derivatives.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/flow/looking-through-water/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/flow/looking-through-water/tutorial-image.jpg">
+		<meta property="og:title" content="Looking Through Water">
+		<meta property="og:description" content="A Unity Flow tutorial about underwater fog and fake refraction.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Looking Through Water</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/flow/looking-through-water/#article",
+				"headline": "Looking Through Water",
+				"alternativeHeadline": "Underwater Fog and Refraction",
+				"datePublished": "2018-08-30",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Flow tutorial about underwater fog and fake refraction.",
+				"image": "https://catlikecoding.com/unity/tutorials/flow/looking-through-water/tutorial-image.jpg",
+				"dependencies": "Unity 2017.4.4f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/flow/", "name": "Flow" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {};
+			
+			var defaultCodeClass = 'shader';
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Flow</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Looking Through Water</h1>
+					<p>Underwater Fog and Refraction</p>
+					<ul>
+						<li>Make water transparent.</li>
+						<li>Sample depth and grab what's rendered.</li>
+						<li>Add underwater fog.</li>
+						<li>Create fake refractions.</li>
+					</ul>
+				</header>
+				
+				<p>This is the fourth tutorial in a series about creating the appearance of <a href="../index.html">flowing materials</a>. In it, we will make a water surface transparent, adding underwater fog and refraction.
+				
+				<p>This tutorial is made with Unity 2017.4.4f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Look below the surface.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Transparent Water</h2>
+					
+					<p>The water effects that we have created thus far are fully opaque. This works for water or other liquids that are very murky, or are covered with a layer of debris, foam, plants, or something else that blocks light. But clear water is transparent, which requires a transparent shader. So we're going to adjust our surface shaders to work with transparency. We're only going to concern ourselves with looking into the water. An underwater camera requires a different approach.</p>
+					
+					<section>
+						<h3>Underwater Scenery</h3>
+						
+						<p>First, create some underwater scenery so that there is something interesting below the water surface. I have created a deep pit with some objects that suggest plant growth, both deep below and at the surface. I also added two spheres that float on the water. To brighten the bottom part of the pit, I added an intense spotlight that shines from above the water. Both this light and the main directional light have shadows enabled.</p>
+						
+						<figure>
+							<img src="transparent-water/no-water.jpg" width="410" height="310">
+							<figcaption>Test scene, without water.</figcaption>
+						</figure>
+						
+						<p>We're going to work with the <em translate="no">Distortion Flow</em> effect, so add a quad with that material to the scene, representing the water surface. It is still fully opaque, so it will hide everything that is underwater.</p>
+						
+						<figure>
+							<img src="transparent-water/opaque-water.jpg" width="410" height="310">
+							<figcaption>Test scene, with opaque water.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Transparent Surface Shader</h3>
+						
+						<p>To make the <em translate="no">Distortion Flow</em> shader support transparency, change its <em translate="no">RenderType</em> tag to <em translate="no">Transparent</em> and give it a <em translate="no">Queue</em> tag set to <em translate="no">Transparent</em> as well. That makes it work with any replacement shaders that you might have and moves the shader to the transparent rendering queue, now being drawn after all opaque geometry has been rendered.</p>
+						
+						<pre translate="no">		Tags { "RenderType"="<ins>Transparent</ins>" <ins>"Queue"="Transparent"</ins> }</pre>
+						
+						<p>We also have to instruct Unity to generate transparent shaders from our surface shader code, which is done by adding the <em translate="no">alpha</em> keyword to the surface pragma directive.</p>
+						
+						<pre translate="no">		#pragma surface surf Standard <ins>alpha</ins> fullforwardshadows</pre>
+						
+						<p>Because we're using the standard physically-based lighting function, our shader will use Unity's transparent rendering mode by default, which keep highlights and reflections on top of its otherwise transparent surface. The alternative would be the fade mode, which fades out everything equally, which is not realistic.</p>
+						
+						<p>We can now control the water transparency by adjusting the alpha component of our material's albedo.</p>
+						
+						<figure>
+							<img src="transparent-water/transparent-water.jpg" width="410" height="310">
+							<figcaption>Transparent water surface.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Removing Water Shadows</h3>
+						
+						<p>The water no longer receives shadows, even when its alpha is set back to 1. That's because it is now put in the transparent rendering queue. Because of the way that these objects are rendered, they cannot receive shadows. While you could somewhat work around this limitation, that's not possible with a simple surface shader.</p>
+						
+						<p>However, our water does still cast shadows, which removes all the direct lighting underwater. We don't want this, because it makes the underwater scenery too dark. First, we can remove the <em translate="no">fillforwardshadows</em> keyword, because we no longer need to support any shadow type.</p>
+						
+						<pre translate="no">		#pragma surface surf Standard alpha <del>//fullforwardshadows</del></pre>
+						
+						<p>This does not yet remove the shadows of the main directional light. Those are still added by the default diffuse shadow caster pass, which we've inherited from the diffuse fallback shader. To eliminate the shadows, remove the fallback.</p>
+						
+						<pre translate="no">	<del>//FallBack "Diffuse"</del></pre>
+						
+						<figure>
+							<img src="transparent-water/underwater-lighting.jpg" width="410" height="310">
+							<figcaption>Light passes through water.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="transparent-water/transparent-water.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Underwater Fog</h2>
+					
+					<p>Water isn't perfectly transparent. It absorbs part of the light that travels through it, and scatters some of it as well. This happens in any medium, but it is more noticeable in water than in air. Clear water absorbs a little bit of light, but different frequencies are absorbed at different rates. Blue light is absorbed the least, which is why things turn blue the deeper you go. This isn't the same as a partially-transparent water surface, because that doesn't change the underwater color based on depth.</p>
+					
+					<figure>
+						<img src="underwater-fog/half-transparent.jpg" width="410" height="310">
+						<figcaption>Half-transparent water, no depth-based color change.</figcaption>
+					</figure>
+					
+					<p>The underwater light absorption and scattering behaves somewhat like fog. Although a fog effect is a poor approximation of what really goes on, it is a cheap and easy-to-control way of having underwater depth affect the color of what we see. So we'll use the same approach as described in <a href="../../rendering/part-14.1.html">Rendering 18, Fog</a>, except only underwater.</p>
+					
+					<p>There are two ways that we could add underwater fog to our scene. The first is to use a global fog and apply it to everything that gets rendered before the water surface. This can work fine when you have a single uniform water level. The other approach is to apply the fog while rendering a water surface. That makes the fog specific to each surface, which allows water at different levels&mdash;and even at different orientations&mdash;without affecting anything that's not underwater. We'll use the second approach.</p>
+					
+					<section>
+						<h3>Finding the Depth</h3>
+						
+						<p>Because we're going to change the color of whatever is below the water surface, we can no longer rely on the default transparent blending of the standard shader. When rendering the fragment of a water surface, we have to somehow determine what the final color behind the water surface should be. Let's create a <code>ColorBelowWater</code> function for that, and put it in a separate <em translate="no">LookingThroughWater.cging</em> include file. Initially, it just returns black.</p>
+						
+						<pre translate="no"><ins>#if !defined(LOOKING_THROUGH_WATER_INCLUDED)</ins>
+<ins>#define LOOKING_THROUGH_WATER_INCLUDED</ins>
+
+<ins>float3 ColorBelowWater () {</ins>
+	<ins>return 0;</ins>
+<ins>}</ins>
+
+<ins>#endif</ins></pre>
+						
+						<p>To test this color, we'll directly use it for our water's albedo, temporarily overriding its true surface albedo. Also set alpha to 1, so we're not distracted by regular transparency.</p>
+						
+						<pre translate="no">		#include "Flow.cginc"
+		<ins>#include "LookingThroughWater.cginc"</ins>
+		
+		&hellip;
+		
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			&hellip;
+
+			fixed4 c = (texA + texB) * _Color;
+			o.Albedo = c.rgb;
+			o.Metallic = _Metallic;
+			o.Smoothness = _Glossiness;
+			o.Alpha = c.a;
+			
+			<ins>o.Albedo = ColorBelowWater();</ins>
+			<ins>o.Alpha = 1;</ins>
+		}</pre>
+						
+						<figure>
+							<img src="underwater-fog/black-underwater-color.jpg" width="410" height="310">
+							<figcaption>Black underwater color.</figcaption>
+						</figure>
+						
+						<p>To figure out how far light has traveled underwater, we have to know how far away whatever lies below the water is. Because the water is transparent, it doesn't write to the depth buffer. All opaque objects have already been rendered, so the depth buffer contains the information that we need.</p>
+						
+						<p>Unity makes the depth buffer globally available via the <code>_CameraDepthTexture</code> variable, so add it to our <em translate="no">LookingThroughWater</em> include file.</p>
+						
+						<pre translate="no"><ins>sampler2D _CameraDepthTexture;</ins></pre>
+						
+						<aside>
+							<h3>Is <code>_CameraDepthTexture</code> always available?</h3>
+							<div>
+								<p>It only contains depth information if Unity decides to render a depth pass. This is always the case when deferred rendering is used. A depth pass is also used in forward rendering when the main directional light is rendered with screen-space shadow cascades, which is usually the case. Otherwise, you'll have to set the depth texture mode of the camera via a script.</p>
+							</div>
+						</aside>
+						
+						<p>To sample the depth texture, we need the screen-space coordinates of the current fragment. We can retrieve those by adding a <code>float4 screenPos</code> field to our surface shader's input structure, then pass it to <code>ColorBelowWater</code>.</p>
+						
+						<pre translate="no">		struct Input {
+			float2 uv_MainTex;
+			<ins>float4 screenPos;</ins>
+		};
+
+		&hellip;
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			&hellip;
+			
+			o.Albedo = ColorBelowWater(<ins>IN.screenPos</ins>);
+			o.Alpha = 1;
+		}</pre>
+						
+						<p>The screen position is simply the clip space position, with the range of its XY components changed from &minus;1&ndash;1 to 0&ndash;1. Besides that, the orientation of the Y component might be changed, depending on the target platform. It is a four-component vector because we're dealing with homogeneous coordinates. As explained in <a href="../../rendering/part-7.1.html">Rendering 7, Shadows</a>, we have to divide XY by W to get the final depth texture coordinates. Do this in <code>ColorBelowWater</code>.</p>
+						
+						<pre translate="no">float3 ColorBelowWater (<ins>float4 screenPos</ins>) {
+	<ins>float2 uv = screenPos.xy / screenPos.w;</ins>
+	return 0;
+}</pre>
+						
+						<p>Now we can sample the background depth via the <code>SAMPLE_DEPTH_TEXTURE</code> macro, and then convert the raw value to the linear depth via the <code>LinearEyeDepth</code> function.</p>
+						
+						<pre translate="no">	float2 uv = screenPos.xy / screenPos.w;
+	<ins>float backgroundDepth =</ins>
+		<ins>LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv));</ins></pre>
+						
+						<p>This is the depth relative to the screen, not the water surface. So we need to know the distance between the water and the screen as well. We find it by taking the Z component of <code>screenPos</code>&mdash;which is the interpolated clip space depth&mdash;and converting it to linear depth via the <code>UNITY_Z_0_FAR_FROM_CLIPSPACE</code> macro.</p>
+						
+						<pre translate="no">	float backgroundDepth =
+		LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv));
+	<ins>float surfaceDepth = UNITY_Z_0_FAR_FROM_CLIPSPACE(screenPos.z);</ins></pre>
+						
+						<p>The underwater depth is found by subtracting the surface depth from the background depth. Let's use that as our final color to see whether it is correct, scaled down so at least part of the gradient is visible.</p>
+						
+						<pre translate="no">	float surfaceDepth = UNITY_Z_0_FAR_FROM_CLIPSPACE(screenPos.z);
+	<ins>float depthDifference = backgroundDepth - surfaceDepth;</ins>
+	
+	<ins>return depthDifference / 20;</ins></pre>
+						
+						<figure>
+							<img src="underwater-fog/depth-difference.jpg" width="410" height="310">
+							<figcaption>Depth difference, spotlight off.</figcaption>
+						</figure>
+						
+						<p>You could get an upside-down result at this point. To guard against that, check whether the texel size of the camera depth texture is negative in the V dimension. If so, invert the V coordinate. We only have to check this on platforms that work with top-to-bottom coordinates. In those cases, <code>UNITY_UV_STARTS_AT_TOP</code> is defined as <code>1</code>.</p>
+						
+						<pre translate="no">sampler2D _CameraDepthTexture, _WaterBackground;
+<ins>float4 _CameraDepthTexture_TexelSize;</ins>
+
+float3 ColorBelowWater (float4 screenPos) {
+	float2 uv = screenPos.xy / screenPos.w;
+	<ins>#if UNITY_UV_STARTS_AT_TOP</ins>
+		<ins>if (_CameraDepthTexture_TexelSize.y &lt; 0) {</ins>
+			<ins>uv.y = 1 - uv.y;</ins>
+		<ins>}</ins>
+	<ins>#endif</ins>
+	&hellip;
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Grabbing the Background</h3>
+						
+						<p>To adjust the color of the background, we have to retrieve it somehow. The only way that's possible with a surface shader is by adding a grab pass. This is done by adding <code>GrabPass {}</code> before the <code>CGPROGRAM</code> block in our shader.</p>
+						
+						<pre translate="no">	SubShader {
+		Tags { "RenderType"="Transparent" "Queue"="Transparent" }
+		LOD 200
+		
+		<ins>GrabPass {}</ins>
+
+		CGPROGRAM
+		&hellip;
+		ENDCG
+	}</pre>
+						
+						<p>Unity will now add an extra step in the rendering pipeline. Just before the water gets drawn, what's rendered up to this points gets copied to a grab-pass texture. This happens each time something that uses our water shader gets rendered. We can reduce this to a single extra draw by giving the grabbed texture an explicit name. That is done by putting a string with the texture's name inside the otherwise empty block of the grab pass. Then all water surfaces will use the same texture, which gets grabbed right before the first water gets drawn. Let's name the texture <em translate="no">_WaterBackground</em>.</p>
+						
+						<pre translate="no">		GrabPass { <ins>"_WaterBackground"</ins> }</pre>
+						
+						<p>Add a variable for this texture, then sample it using the same UV coordinates that we used to sample the depth texture. Using that as the result of <code>ColorBelowWater</code> should produce the same image as the fully-transparent water earlier.</p>
+						
+						<pre translate="no">sampler2D _CameraDepthTexture<ins>, _WaterBackground</ins>;
+
+float3 ColorBelowWater (float4 screenPos) {
+	&hellip;
+	
+	<ins>float3 backgroundColor = tex2D(_WaterBackground, uv).rgb;</ins>
+	<ins>return backgroundColor;</ins>
+}</pre>
+						
+						<figure>
+							<img src="underwater-fog/grabbed-background.jpg" width="410" height="310">
+							<figcaption>Grabbed background.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Shouldn't we use <code>ComputeGrabScreenPos</code>?</h3>
+							<div>
+								<p>The rules for V coordinate orientation should be the same for both the depth texture and the grabbed texture. <code>ComputeGrabScreenPos</code> flips it based on <code>UNITY_UV_STARTS_AT_TOP</code>, which we also check. If this doesn't work, let me know.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Applying Fog</h3>
+						
+						<p>Besides the depth and the original color, we also need settings to control the fog. We'll use simple exponential fog, so we need to add a color and a density property to our shader.</p>
+						
+						<pre translate="no">	Properties {
+		&hellip;
+		<ins>_WaterFogColor ("Water Fog Color", Color) = (0, 0, 0, 0)</ins>
+		<ins>_WaterFogDensity ("Water Fog Density", Range(0, 2)) = 0.1</ins>
+		_Glossiness ("Smoothness", Range(0,1)) = 0.5
+		_Metallic ("Metallic", Range(0,1)) = 0.0
+	}</pre>
+						
+						<p>I made the fog color the same as the water's albedo, which has hex code 4E83A9FF. I set the density to 0.15.</p>
+						
+						<figure>
+							<img src="underwater-fog/fog-settings.png" width="320" height="74">
+							<figcaption>Fog settings.</figcaption>
+						</figure>
+						
+						<p>Add the corresponding variables to the include file, then use them to compute the fog factor and interpolate the color.</p>
+						
+						<pre translate="no"><ins>float3 _WaterFogColor;</ins>
+<ins>float _WaterFogDensity;</ins>
+
+float3 ColorBelowWater (float4 screenPos) {
+	&hellip;
+	
+	float3 backgroundColor = tex2D(_WaterBackground, uv).rgb;
+	<ins>float fogFactor = exp2(-_WaterFogDensity * depthDifference);</ins>
+	return <ins>lerp(_WaterFogColor, backgroundColor, fogFactor)</ins>;
+}</pre>
+						
+						<figure>
+							<img src="underwater-fog/underwater-fog.jpg" width="410" height="310">
+							<figcaption>Underwater fog.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Custom Blending</h3>
+						
+						<p>The underwater fog works, but we're currently using it as the albedo of the water surface. This is incorrect, because the albedo is affected by lighting. Instead, we must add the underwater color to the surface lighting, which we can do by using it as the emissive color. But we must modulate this by the water's albedo. The more opaque it is, the less we see of the background. Also, we have to restore the original alpha, because that affects how the water surface gets lit.</p>
+						
+						<pre translate="no">			fixed4 c = (texA + texB) * _Color;
+			o.Albedo = c.rgb;
+			o.Metallic = _Metallic;
+			o.Smoothness = _Glossiness;
+			o.Alpha = c.a;
+			
+			o.<ins>Emission</ins> = ColorBelowWater(IN.screenPos) <ins>* (1 - c.a)</ins>;
+			<del>//o.Alpha = 1;</del></pre>
+						
+						<figure>
+							<img src="underwater-fog/background-added.jpg" width="410" height="310">
+							<figcaption>Underwater color gets added.</figcaption>
+						</figure>
+						
+						<p>This is almost correct, except that the final alpha value is used to blend with what was already rendered, so we end up with the original background showing through. We're already blending with the background, it shouldn't happen twice. We have to disable the default blending by setting alpha back to 1 after the final fragment color has been calculated. This can be done by adding a function to adjust the final color of the surface shader. Add <code>finalcolor:ResetAlpha</code> to the pragma directive of the surface shader.</p>
+						
+						<pre translate="no">		#pragma surface surf Standard alpha <ins>finalcolor:ResetAlpha</ins></pre>
+						
+						<p>Then add a <code>void ResetAlpha</code> function. This function has the original input, the surface output, and an <code>inout</code> color as parameters. All we need to do is set that color's alpha component to 1.</p>
+						
+						<pre translate="no"> 		<ins>void ResetAlpha (Input IN, SurfaceOutputStandard o, inout fixed4 color) {</ins>
+			<ins>color.a = 1;</ins>
+		<ins>}</ins></pre>
+						
+						<figure>
+							<video width="410" height="310" controls loop muted>
+								<source src="underwater-fog/surface-transparency.mp4" type="video/mp4">
+							</video>
+							<figcaption>Adjusting water surface transparency.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="underwater-fog/underwater-fog.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Fake Refraction</h2>
+					
+					<p>When light passes through the boundary between media with different density, it changes direction. It's like a reflection, but instead of bouncing off it goes through at a different angle. The change of direction depends on the angle at which the light crossed the boundary. The shallower the angle, the stronger the refraction.</p>
+					
+					<p>Just like with reflections, accurate refractions would require us to trace rays into the scene, but we'll settle for an approximation. Reflections are made either with reflection probes, screen-space reflections, or planar reflections with a separate rendering from a different point of view. The same techniques can be used for refraction.</p>
+					
+					<p>Because we already use screen-space data to create the underwater fog, we'll reuse it for screen-space refractions. This allows us to add a refraction effect with little extra effort, although the result won't be realistic. That's fine, because most of the time having the underwater scenery wiggle a bit in sync with the surface motion is enough to create a convincing illusion of refraction, especially for shallow water.</p>
+					
+					<section>
+						<h3>Jittering the Background Sample</h3>
+						
+						<p>We'll create fake refractions by jittering the UV coordinates that we use to sample the background. Let's see what that looks like when we apply a constant diagonal offset, by adding 1 to both coordinates. Do this before the perspective division, so perspective applies to the offset as well.</p>
+						
+						<pre translate="no">	<ins>float2 uvOffset = 1;</ins>
+	float2 uv = <ins>(</ins>screenPos.xy <ins>+ uvOffset)</ins> / screenPos.w;</pre>
+						
+						<figure>
+							<img src="fake-refraction/diagonal-offset.jpg" width="300" height="300">
+							<figcaption>Diagonal offset, top view.</figcaption>
+						</figure>
+						
+						<p>We get a diagonal offset, but it is not symmetrical. The vertical offset is less than the horizontal. At least, that's the case when the image is wider than it is tall. To equalize the offsets, we have to multiply the V offset by the image width divided by its height. We can use the size information of the depth texture for this. Its Z component contains the width in pixels and its W component contains the height in pixels. However, we can also use its Y component, which contains reciprocal of the width, using a multiplication instead of a division.</p>
+						
+						<pre translate="no">	float2 uvOffset = 1;
+	<ins>uvOffset.y *=</ins>
+		<ins>_CameraDepthTexture_TexelSize.z * _CameraDepthTexture_TexelSize.y;</ins>
+	float2 uv = (screenPos.xy + uvOffset) / screenPos.w;</pre>
+						
+						<p>But Y can be negative, to signal an inverted V coordinate. So we should take its absolute, which doesn't require additional work.</p>
+						
+						<pre translate="no">	uvOffset.y *=
+		_CameraDepthTexture_TexelSize.z * <ins>abs(</ins>_CameraDepthTexture_TexelSize.y<ins>)</ins>;
+</pre>
+						
+						<figure>
+							<img src="fake-refraction/symmetrical-offset.jpg" width="300" height="300">
+							<figcaption>Symmetrical offset.</figcaption>
+						</figure>
+						
+						<p>Note that this means that the effect does not depend on the resolution of the image, but is affected by its aspect ratio.</p>
+					</section>
+					
+					<section>
+						<h3>Using the Normal Vector</h3>
+						
+						<p>To make the offset wiggle, we'll use the XY coordinates of the tangent-space normal vector as the offset. That makes no physical sense, but is synchronized with the apparent motion of the surface. Add a property for this to <code>ColorBelowWater</code>.</p>
+						
+						<pre translate="no">float3 ColorBelowWater (float4 screenPos<ins>, float3 tangentSpaceNormal</ins>) {
+	float2 uvOffset = <ins>tangentSpaceNormal.xy</ins>;
+	&hellip;
+}</pre>
+						
+						<p>And pass it the final tangent-space normal of the water surface.</p>
+						
+						<pre translate="no">			o.Emission = ColorBelowWater(IN.screenPos<ins>, o.Normal</ins>) * (1 - c.a);</pre>
+						
+						<figure>
+							<img src="fake-refraction/normal-offset.jpg" width="410" height="310">
+							<figcaption>Offset with normal vector.</figcaption>
+						</figure>
+						
+						<p>The X and Y components of the normal vector work because they lie in the tangent plane. For a flat surface, they are both zero, which produces no offset. The higher the water ripples get, the greater the offset becomes and the stronger the refraction effect gets. We can control the overall strength of the effect via a shader property. A range of 0&ndash;1 will do.</p>
+						
+						<pre translate="no">		_WaterFogDensity ("Water Fog Density", Range(0, 2)) = 0.1
+		<ins>_RefractionStrength ("Refraction Strength", Range(0, 1)) = 0.25</ins></pre>
+						
+						<p>Add the corresponding variable to our include file and use it to modulate the offset.</p>
+						
+						<pre translate="no"><ins>float _RefractionStrength;</ins>
+
+float3 ColorBelowWater (float4 screenPos, float3 tangentSpaceNormal) {
+	float2 uvOffset = tangentSpaceNormal.xy <ins>* _RefractionStrength;</ins>
+	&hellip;
+}</pre>
+						
+						<p>Full-strength refraction is rather strong. I've reduced it to 0.25.</p>
+						
+						<figure>
+							<img src="fake-refraction/refraction-settings.png" width="320" height="56" alt="inspector"><br>
+							<video width="410" height="310" controls loop muted>
+								<source src="fake-refraction/toned-down-refraction.mp4" type="video/mp4">
+							</video>
+							<figcaption>Toned-down refraction.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Only Refract Underwater</h3>
+						
+						<p>We now have a nice fake refraction effect, but it also includes things that are not underwater. That happens because the UV coordinates can end up with an offset that places the final sample inside something that sits in front of the water.</p>
+						
+						<figure>
+							<img src="fake-refraction/refracted-foreground.jpg" width="410" height="310">
+							<figcaption>Refracted foreground.</figcaption>
+						</figure>
+						
+						<p>This is a very obvious mistake that we have to eliminate. We can detect whether we've hit the foreground by checking whether the depth difference that we use for the fog is negative. If so, we've sampled a fragment that's in front of the water. As we don't know what's behind that point, we cannot produce a meaningful refraction. So let's just eliminate the offset and use the original UV for the final color sample.</p>
+						
+						<pre translate="no">	float depthDifference = backgroundDepth - surfaceDepth;
+	
+	<ins>if (depthDifference &lt; 0) {</ins>
+		<ins>uv = screenPos.xy / screenPos.w;</ins>
+		<ins>#if UNITY_UV_STARTS_AT_TOP</ins>
+			<ins>if (_CameraDepthTexture_TexelSize.y &lt; 0) {</ins>
+				<ins>uv.y = 1 - uv.y;</ins>
+			<ins>}</ins>
+		<ins>#endif</ins>
+	<ins>}</ins>
+	
+	float3 backgroundColor = tex2D(_WaterBackground, uv).rgb;</pre>
+						
+						<figure>
+							<img src="fake-refraction/filtered-offset.jpg" width="410" height="310">
+							<figcaption>Filtered offset.</figcaption>
+						</figure>
+						
+						<p>That removes most mistaken color samples, but doesn't fix the fog yet. We also have to sample the depth again, with the reset UV, before determining the fog factor.</p>
+						
+						<pre translate="no">	if (depthDifference &lt; 0) {
+		uv = screenPos.xy / screenPos.w;
+		#if UNITY_UV_STARTS_AT_TOP
+			&hellip;
+		#endif
+		<ins>backgroundDepth =</ins>
+			<ins>LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv));</ins>
+		<ins>depthDifference = backgroundDepth - surfaceDepth;</ins>
+	}</pre>
+						
+						<figure>
+							<img src="fake-refraction/resampled-depth.jpg" width="410" height="310">
+							<figcaption>Using correct depth.</figcaption>
+						</figure>
+						
+						<p>That fixed the fog as well, but we're still getting a thin line of artifacts around the edge of the refractions that we eliminated. It can be hard to spot sometimes, but can be very obvious too, especially when the water animates.</p>
+						
+						<figure>
+							<img src="fake-refraction/unaligned.png" width="275" height="250">
+							<figcaption>Thin wiggly artifact lines.</figcaption>
+						</figure>
+						
+						<p>These artifacts exist because of blending when sampling the grabbed texture. That could be fixed by using point filtering, but we cannot control the filtering mode of the grab texture via a surface shader. We'll do it the hard way, by multiplying the UV by the texture size, discarding the fractions, offsetting to the texel center, and then dividing by the texture size. Let's create an <code>AlignWithGrabTexel</code> function for this, which can also take care of the coordinate flipping. Then use that function to find the final UV coordinates.</p>
+						
+						<pre translate="no"><ins>float2 AlignWithGrabTexel (float2 uv) {</ins>
+	<ins>#if UNITY_UV_STARTS_AT_TOP</ins>
+		<ins>if (_CameraDepthTexture_TexelSize.y &lt; 0) {</ins>
+			<ins>uv.y = 1 - uv.y;</ins>
+		<ins>}</ins>
+	<ins>#endif</ins>
+
+	<ins>return</ins>
+		<ins>(floor(uv * _CameraDepthTexture_TexelSize.zw) + 0.5) *</ins>
+		<ins>abs(_CameraDepthTexture_TexelSize.xy);</ins>
+<ins>}</ins>
+
+float3 ColorBelowWater (float4 screenPos, float3 tangentSpaceNormal) {
+	&hellip;
+	float2 uv = <ins>AlignWithGrabTexel(</ins>(screenPos.xy + uvOffset) / screenPos.w<ins>)</ins>;
+	
+	&hellip;
+	
+	if (depthDifference &lt; 0) {
+		uv = <ins>AlignWithGrabTexel(</ins>screenPos.xy / screenPos.w<ins>)</ins>;
+		<del>//#if UNITY_UV_STARTS_AT_TOP</del>
+		<del>//	…</del>
+		<del>//#endif</del>
+		&hellip;
+	}
+	
+	&hellip;
+}</pre>
+						
+						<p>That should remove the artifact lines, but not always. Because we rely on the depth buffer, MSAA must be disabled as well. So either use forward rendering without MSAA, or use deferred rendering. Even then, the artifacts can still appear in the scene or game window, depending on whether their size is even or odd. To verify that they are indeed gone, you have to make a build and play that.</p>
+						
+						<figure>
+							<img src="fake-refraction/aligned.png" width="275" height="250">
+							<figcaption>Aligned texel samples.</figcaption>
+						</figure>
+						
+						<p>While we got rid of most of the incorrect refractions, we still get some weirdness close to the water surface. This is where refractions can suddenly get eliminated. We can smooth that out by scaling down the final offset based on the depth difference. Instead of only discarding negative refractions, multiply the offset by the saturated depth difference. That reduces refractions up to a depth difference of 1.</p>
+						
+						<pre translate="no">	<del>//if (depthDifference &lt; 0) {</del>
+	<ins>uvOffset *= saturate(depthDifference);</ins>
+	uv = AlignWithGrabTexel((screenPos.xy + uvOffset) / screenPos.w);
+	backgroundDepth =
+		LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv));
+	depthDifference = backgroundDepth - surfaceDepth;
+	<del>//}</del>
+</pre>
+						
+						<figure>
+							<img src="fake-refraction/saturated.png" width="275" height="250">
+							<figcaption>Smoothing out shallow refractions.</figcaption>
+						</figure>
+						
+						<p>It is still possible to get weird results where refractions are eliminated, but in most cases it is no longer obvious.</p>
+						
+						<figure>
+							<video width="410" height="310" controls loop muted>
+								<source src="fake-refraction/final-refractions.mp4" type="video/mp4">
+							</video>
+							<figcaption>Final refractions.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Directional Flow</h3>
+						
+						<p>Our <em translate="no">Distortion Flow</em> shader is now complete. We can give the <em translate="no">Directional Flow</em> shader the same treatment, with just a few changes.</p>
+						
+						<pre translate="no">Shader "Custom/DirectionalFlow" {
+	Properties {
+		&hellip;
+		<ins>_WaterFogColor ("Water Fog Color", Color) = (0, 0, 0, 0)</ins>
+		<ins>_WaterFogDensity ("Water Fog Density", Range(0, 2)) = 0.1</ins>
+		<ins>_RefractionStrength ("Refraction Strength", Range(0, 1)) = 0.25</ins>
+		_Glossiness ("Smoothness", Range(0,1)) = 0.5
+		_Metallic ("Metallic", Range(0,1)) = 0.0
+	}
+	SubShader {
+		Tags { "RenderType"="Opaque" }
+		LOD 200
+		
+		<ins>GrabPass { "_WaterBackground" }</ins>
+
+		CGPROGRAM
+		#pragma surface surf Standard <ins>alpha finalcolor:ResetAlpha</ins>
+		#pragma target 3.0
+
+		#pragma shader_feature _DUAL_GRID
+		
+		#include "Flow.cginc"
+		<ins>#include "LookingThroughWater.cginc"</ins>
+
+		&hellip;
+
+		struct Input {
+			float2 uv_MainTex;
+			<ins>float4 screenPos;</ins>
+		};
+
+		&hellip;
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			&hellip;
+			fixed4 c = dh.z * dh.z * _Color;
+			<ins>c.a = _Color.a;</ins>
+			o.Albedo = c.rgb;
+			o.Normal = normalize(float3(-dh.xy, 1));
+			o.Metallic = _Metallic;
+			o.Smoothness = _Glossiness;
+			o.Alpha = c.a;
+			
+			<ins>o.Emission = ColorBelowWater(IN.screenPos, o.Normal) * (1 - c.a);</ins>
+		}
+		
+		<ins>void ResetAlpha (Input IN, SurfaceOutputStandard o, inout fixed4 color) {</ins>
+			<ins>color.a = 1;</ins>
+		<ins>}</ins>
+		
+		ENDCG
+	}
+	<del>//FallBack "Diffuse"</del>
+}</pre>
+						
+						<figure>
+							<video width="410" height="310" controls loop muted>
+								<source src="fake-refraction/directional-flow.mp4" type="video/mp4">
+							</video>
+							<figcaption>Transparent directional flow with fog and refraction.</figcaption>
+						</figure>
+						
+						<p>The fake refractions don't work for the <em translate="no">Waves</em> shader, which displaces vertices and doesn't use tangent-space normals. Underwater fog could work though, if you limit the wave height so you never see through multiple waves at the same time. You could also use <em translate="no">Waves</em> as a basis on which to apply smaller tangent-space ripples, to which you can then add fake refractions.</p>
+					</section>
+					
+					<a href="fake-refraction/fake-refraction.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Looking-Through-Water.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

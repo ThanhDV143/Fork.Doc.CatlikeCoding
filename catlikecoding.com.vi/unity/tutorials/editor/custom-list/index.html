@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html>
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/editor/custom-list/">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/editor/custom-list/inspector-multi-hidden.png">
+		<meta property="og:description" content="A Unity C# scripting tutorial in which you create an alternative visualization for lists in the editor.">
+		<meta name="description" content="A Unity C# scripting tutorial in which you create an alternative visualization for lists in the editor.">
+		<meta property="og:title" content="Custom List, a Unity C# Editor Tutorial">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<title>Custom List, a Unity C# Editor Tutorial</title>
+		<link href="../../../default.css" rel="stylesheet">
+		<script>
+			var customTypes = {
+				ColorPoint: 1,
+				ColorPointDrawer: 1,
+				ColorPointTester: 1,
+				EditorList: 1,
+				EditorListOption: 1,
+				ListTester: 1,
+				ListTesterInspector: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header data-type="tutorial"></header>
+
+		<article class="tutorial" itemscope="" itemtype="http://schema.org/TechArticle">
+			<h1 itemprop="name headline">Custom List<span>, displaying data your way</span></h1>
+
+			<div class="instructions">
+				<span itemprop="about description">In this Unity C# tutorial you will create a custom visualization for arrays and lists in the editor.</span>
+				You will learn to
+
+				<ul>
+					<li>create a custom editor</li>
+					<li>use <code>SerializedObject</code></li>
+					<li>manipulate a <code>SerializedProperty</code> that represents an array or list</li>
+					<li>use an enumeration for option flags</li>
+					<li>use GUI buttons</li>
+				</ul>
+				<p>
+				<span itemprop="dependencies">This tutorial comes after the <a href="../custom-data/index.html">Custom Data</a> tutorial.</span>
+				<p>
+					This tutorial is for Unity version 4.3 and above.
+			</div>
+			
+			<aside class="share"></aside>
+			
+			<figure>
+				<img src="inspector-multi-hidden.png" width="320" height="226" itemprop="image">
+				<figcaption>Customized lists.</figcaption>
+			</figure>
+
+			<h2>Creating Test Data</h2>
+
+			<div class="instructions">
+				Unity's default way to show lists is serviceable, but it's possible to find yourself wanting
+				for an alternative. The specifics can vary from case to case. So it would be useful if we
+				could use a mix of different visualizations. It is possible to do this by adding attributes
+				to variables that specify how the editor should show them.
+				<p>
+				We start with the finished <a href="../custom-data/index.html">Custom Data</a> tutorial project, or by
+				creating a new empty project and importing <a href="../custom-data/custom-data.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Unity', 'Download', 'Custom Data Tutorial']);" target="_blank">custom-data.unitypackage</a>.
+				<p>
+				Then we create a new test script named <i class="name">ListTester</i> with some test arrays, and make a new prefab and prefab instance with it, so we can see it all works as expected.
+			</div>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+
+<mark>public class ListTester : MonoBehaviour {</mark>
+	
+	<mark>public int[] integers;</mark>
+	
+	<mark>public Vector3[] vectors;</mark>
+	
+	<mark>public ColorPoint[] colorPoints;</mark>
+
+	<mark>public Transform[] objects;</mark>
+<mark>}</mark></pre>
+			
+			<figure>
+				<img src="list-project.png" width="786" height="426">
+				<figcaption>New test object, with wide inspector.</figcaption>
+			</figure>
+			
+			<h2>Creating a Custom Inspector</h2>
+			
+			<div class="instructions">
+				Our first step to customizing our lists is to create a custom inspector for our test component.
+				Create a new C# script named <i>ListTesterInspector</i> in the <i>Editor</i> folder, make it
+				extend <code>UnityEditor.Editor</code>, and apply the <code>UnityEditor.CustomEditor</code>
+				attribute to tell Unity that we want it to do the drawing for our component.
+			</div>
+			
+			<pre translate="no"><mark>using UnityEditor;</mark>
+<mark>using UnityEngine;</mark>
+
+<mark>[CustomEditor(typeof(ListTester))]</mark>
+<mark>public class ListTesterInspector : Editor {</mark>
+<mark>}</mark></pre>
+			
+			<figure>
+				<img src="custom-inspector.png" width="234" height="182">
+				<figcaption>Custom inspector script.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				To actually change the inspector we need to override the <code>OnInspectorGUI</code> method of the
+				<code>Editor</code> class. Leaving the method empty will result in an empty inspector as well.
+			</div>
+			
+			<pre translate="no">	<mark>public override void OnInspectorGUI () {</mark>
+	<mark>}</mark></pre>
+			
+			<figure>
+				<img src="inspector-empty.png" width="334" height="76">
+				<figcaption>Empty inspector.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				There are three important differences between a property drawer and an editor. Firstly, in the
+				editor we work with an entire <code>SerializedObject</code> instead of a single
+				<code>SerializedProperty</code>. Secondly, an instance of the editor exists as long as the object
+				stays selected, keeping a reference to its data instead of getting it via a method parameter.
+				Finally, we can use <code>EditorGUILayout</code>, which takes care of positioning for us.
+				<p>
+				We can get to the serialized object via the <code>serializedObject</code> property.
+				To prepare it for editing, we must first synchronize it with the component
+				it represents, by calling its <code>Update</code> method. Then we can show the properties.
+				And after we are done, we have to
+				commit any changes via its <code>ApplyModifiedProperties</code> method. This also takes care
+				of Unity's undo history. In between these two is where we'll draw our properties.
+			</div>
+			
+			<pre translate="no">	public override void OnInspectorGUI () {
+		<mark>serializedObject.Update();</mark>
+		<mark>EditorGUILayout.PropertyField(serializedObject.FindProperty("integers"));</mark>
+		<mark>EditorGUILayout.PropertyField(serializedObject.FindProperty("vectors"));</mark>
+		<mark>EditorGUILayout.PropertyField(serializedObject.FindProperty("colorPoints"));</mark>
+		<mark>EditorGUILayout.PropertyField(serializedObject.FindProperty("objects"));</mark>
+		<mark>serializedObject.ApplyModifiedProperties();</mark>
+	}</pre>
+			
+			<figure>
+				<img src="inspector-no-children.png" width="334" height="94">
+				<figcaption>Inspector with empty properties.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				The fields are visible again, but they're empty. This is because <code>PropertyField</code>
+				doesn't show any children &ndash; like array elements &ndash; unless we tell it to do so.
+			</div>
+			
+			<pre translate="no">	public override void OnInspectorGUI () {
+		serializedObject.Update();
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("integers")<mark>, true</mark>);
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("vectors")<mark>, true</mark>);
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("colorPoints")<mark>, true</mark>);
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("objects")<mark>, true</mark>);
+		serializedObject.ApplyModifiedProperties();
+	}</pre>
+			
+			<figure>
+				<img src="inspector-with-children.png" width="334" height="304">
+				<figcaption>Inspector with children.</figcaption>
+			</figure>
+			
+			<h2>Creating an Editor List</h2>
+			
+			<div class="instructions">
+				To use a customized list in our inspector, we'll create an alternative for the
+				<code>PropertyField</code> method. We will name this method <i>Show</i> and put it in its
+				own static utility class, so we	can use it wherever we want. We'll name this class
+				<i>EditorList</i> and place it in the <i>Editor</i> folder.
+			</div>
+			
+			<pre translate="no"><mark>using UnityEditor;</mark>
+<mark>using UnityEngine;</mark>
+
+<mark>public static class EditorList {</mark>
+	
+	<mark>public static void Show (SerializedProperty list) {</mark>
+	<mark>}</mark>
+<mark>}</mark></pre>
+			
+			<figure>
+				<img src="project-editorlist.png" width="234" height="198">
+				<figcaption>EditorList script.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				This method doesn't do anything yet, but we can already use it in our custom editor, resulting
+				once again in an empty inspector.
+			</div>
+			
+			<pre translate="no">	public override void OnInspectorGUI () {
+		serializedObject.Update();
+		<mark>EditorList.Show(serializedObject.FindProperty("integers"));</mark>
+		<mark>EditorList.Show(serializedObject.FindProperty("vectors"));</mark>
+		<mark>EditorList.Show(serializedObject.FindProperty("colorPoints"));</mark>
+		<mark>EditorList.Show(serializedObject.FindProperty("objects"));</mark>
+		serializedObject.ApplyModifiedProperties();
+	}
+</pre>
+			
+			<div class="instructions">
+				Showing a list consists of three parts, its foldout, its size, and its elements.
+				We can show the foldout by using <code>EditorGUILayout.PropertyField</code> without having it
+				show the children of the list. Then we can show the list elements ourselves with help of the
+				<code>arraySize</code> property and the <code>GetArrayElementAtIndex</code> method of
+				<code>SerializedProperty</code>. We'll leave the size for later.
+			</div>
+			
+			<pre translate="no">	public static void Show (SerializedProperty list) {
+		<mark>EditorGUILayout.PropertyField(list);</mark>
+		<mark>for (int i = 0; i &lt; list.arraySize; i++) {</mark>
+			<mark>EditorGUILayout.PropertyField(list.GetArrayElementAtIndex(i));</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<figure>
+				<img src="inspector-no-indent.png" width="334" height="232">
+				<figcaption>Lists without indented elements.</figcaption>
+			</figure>
+			
+			<h2>Properly Indenting</h2>
+			
+			<div class="instructions">
+				We have our lists again, but their elements aren't indented. We can solve this by increasing
+				the indent level before showing the elements, and decreasing it again afterwards.
+			</div>
+			
+			<pre translate="no">	public static void Show (SerializedProperty list) {
+		EditorGUILayout.PropertyField(list);
+		<mark>EditorGUI.indentLevel += 1;</mark>
+		for (int i = 0; i &lt; list.arraySize; i++) {
+			EditorGUILayout.PropertyField(list.GetArrayElementAtIndex(i));
+		}
+		<mark>EditorGUI.indentLevel -= 1;</mark>
+	}</pre>
+			
+			<figure>
+				<img src="inspector-wrong-indent.png" width="334" height="232">
+				<figcaption>Messed up indenting.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				Now indentation works again, except for our color point list, which goes wrong after the first
+				element. This is because we set the indent level to zero in our custom property drawer.
+				There are two ways to fix this. Either our custom list should set the indent level to the correct
+				value again after each element, or the property drawer should make sure it leaves the indent level
+				unchanged. Let's make sure that <code>ColorPointDrawer</code> behaves well.
+			</div>
+			
+			<pre translate="no">	public override void OnGUI (Rect position, SerializedProperty property, GUIContent label) {
+		<mark>int oldIndentLevel = EditorGUI.indentLevel;</mark>
+		label = EditorGUI.BeginProperty(position, label, property);
+		Rect contentPosition = EditorGUI.PrefixLabel(position, label);
+		if (position.height > 16f) {
+			position.height = 16f;
+			EditorGUI.indentLevel += 1;
+			contentPosition = EditorGUI.IndentedRect(position);
+			contentPosition.y += 18f;
+		}
+		contentPosition.width *= 0.75f;
+		EditorGUI.indentLevel = 0;
+		EditorGUI.PropertyField(contentPosition, property.FindPropertyRelative("position"), GUIContent.none);
+		contentPosition.x += contentPosition.width;
+		contentPosition.width /= 3f;
+		EditorGUIUtility.labelWidth = 14f;
+		EditorGUI.PropertyField(contentPosition, property.FindPropertyRelative("color"), new GUIContent("C"));
+		EditorGUI.EndProperty();
+		<mark>EditorGUI.indentLevel = oldIndentLevel;</mark>
+	}</pre>
+			
+			<figure>
+				<img src="inspector-no-collapse.png" width="334" height="232">
+				<figcaption>Correct indenting, but no collapsing.</figcaption>
+			</figure>
+			
+			<h2>Collapsing Lists</h2>
+			
+			<div class="instructions">
+				Now that indenting works, we can take care of the next problem. Toggling the foldouts
+				should collapse and expand the lists, but it currently doesn't work. This is easy to fix by
+				checking the <code>isExpanded</code> property of our list.
+			</div>
+			
+			<pre translate="no">	public static void Show (SerializedProperty list) {
+		EditorGUILayout.PropertyField(list);
+		EditorGUI.indentLevel += 1;
+		<mark>if (list.isExpanded) {</mark>
+			for (int i = 0; i &lt; list.arraySize; i++) {
+				EditorGUILayout.PropertyField(list.GetArrayElementAtIndex(i));
+			}
+		<mark>}</mark>
+		EditorGUI.indentLevel -= 1;
+	}</pre>
+			
+			<figure>
+				<img src="inspector-collapse.png" width="334" height="196">
+				<figcaption>Correctly collapsing.</figcaption>
+			</figure>
+			
+			<h2>Showing the Size</h2>
+			
+			<div class="instructions">
+				To show the list's size, we can use the special relative property named <i>Array.size</i>. We'll
+				simply show it in between the foldout and the elements.
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-arraySize" id="q-arraySize">Why not use <code>arraySize</code> here?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	public static void Show (SerializedProperty list) {
+		EditorGUILayout.PropertyField(list);
+		EditorGUI.indentLevel += 1;
+		if (list.isExpanded) {
+			<mark>EditorGUILayout.PropertyField(list.FindPropertyRelative("Array.size"));</mark>
+			for (int i = 0; i &lt; list.arraySize; i++) {
+				EditorGUILayout.PropertyField(list.GetArrayElementAtIndex(i));
+			}
+		}
+		EditorGUI.indentLevel -= 1;
+	}</pre>
+			
+			<figure>
+				<img src="inspector-size.png" width="334" height="248">
+				<figcaption>Complete lists.</figcaption>
+			</figure>
+			
+			<h2>Customizing the List</h2>
+			
+			<div class="instructions">
+				Now that we have replicated the default list, it's time to add customizations. An easy start
+				is to make the size that we just added optional. We add a boolean parameter to control this
+				and turn it on by default.
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-optional" id="q-optional">How does <code>showListSize</code> work?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	public static void Show (SerializedProperty list<mark>, bool showListSize = true</mark>) {
+		EditorGUILayout.PropertyField(list);
+		EditorGUI.indentLevel += 1;
+		if (list.isExpanded) {
+			<mark>if (showListSize) {</mark>
+				EditorGUILayout.PropertyField(list.FindPropertyRelative("Array.size"));
+			<mark>}</mark>
+			for (int i = 0; i &lt; list.arraySize; i++) {
+				EditorGUILayout.PropertyField(list.GetArrayElementAtIndex(i));
+			}
+		}
+		EditorGUI.indentLevel -= 1;
+	}</pre>
+			
+			<div class="instructions">
+				Using this new option, we can switch of the size for some of our lists.
+			</div>
+			
+			<pre translate="no">	public override void OnInspectorGUI () {
+		serializedObject.Update();
+		EditorList.Show(serializedObject.FindProperty("integers"));
+		EditorList.Show(serializedObject.FindProperty("vectors"));
+		EditorList.Show(serializedObject.FindProperty("colorPoints")<mark>, false</mark>);
+		EditorList.Show(serializedObject.FindProperty("objects")<mark>, false</mark>);
+		serializedObject.ApplyModifiedProperties();
+	}</pre>
+			
+			<figure>
+				<img src="inspector-size-hidden.png" width="334" height="212">
+				<figcaption>Hiding some of the list sizes.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				As a second option, let's make the list's label optional as well. If we don't show the label,
+				we won't indent either and we will always show the elements, regardless whether the list is
+				expanded.
+			</div>
+			
+			<pre translate="no">	public static void Show (SerializedProperty list, bool showListSize = true<mark>, bool showListLabel = true</mark>) {
+		<mark>if (showListLabel) {</mark>
+			EditorGUILayout.PropertyField(list);
+			EditorGUI.indentLevel += 1;
+		<mark>}</mark>
+		if (<mark>!showListLabel ||</mark> list.isExpanded) {
+			if (showListSize) {
+				EditorGUILayout.PropertyField(list.FindPropertyRelative("Array.size"));
+			}
+			for (int i = 0; i &lt; list.arraySize; i++) {
+				EditorGUILayout.PropertyField(list.GetArrayElementAtIndex(i));
+			}
+		}
+		<mark>if (showListLabel) {</mark>
+			EditorGUI.indentLevel -= 1;
+		<mark>}</mark>
+	}</pre>
+			
+			<div class="instructions">
+				Now we can remove the label from some of our lists.
+			</div>
+			
+			<pre translate="no">	public override void OnInspectorGUI () {
+		serializedObject.Update();
+		EditorList.Show(serializedObject.FindProperty("integers")<mark>, true, false</mark>);
+		EditorList.Show(serializedObject.FindProperty("vectors"));
+		EditorList.Show(serializedObject.FindProperty("colorPoints"), false<mark>, false</mark>);
+		EditorList.Show(serializedObject.FindProperty("objects"), false);
+		serializedObject.ApplyModifiedProperties();
+	}</pre>
+			
+			<figure>
+				<img src="inspector-label-hidden.png" width="334" height="178">
+				<figcaption>Hiding some of the list labels.</figcaption>
+			</figure>
+			
+			<h2>Using Flags</h2>
+			
+			<div class="instructions">
+				While we can keep adding options this way, our method calls will become increasingly obscure.
+				We could add wrapper methods with more descriptive names, but that would bloat our script and
+				isn't flexible. An alternative is the use of option flags.
+				<p>
+				The first thing we need to do is create an enumeration of all our options. We name it
+				<i>EditorListOption</i> and give it the <code>System.Flags</code> attribute. We place it in its
+				own script file or in the same script as <code>EditorList</code>, but outside of the class.
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-flags-attribute" id="q-flags-attribute">Is the <code>Flags</code> attribute required?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">using UnityEditor;
+using UnityEngine;
+<mark>using System;</mark>
+
+<mark>[Flags]</mark>
+<mark>public enum EditorListOption {</mark>
+<mark>}</mark></pre>
+			
+			<div class="instructions">
+				Now we add entries for the two options that we already have. We also add an option for when we
+				want nothing and for when we want the default. The default is to show both the list's label and
+				its size. We specify this by combining both options with the bitwise OR operator <code>|</code>.
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-flags" id="q-flags">How do bitwise flags work?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">[Flags]
+public enum EditorListOption {
+	<mark>None = 0,</mark>
+	<mark>ListSize = 1,</mark>
+	<mark>ListLabel = 2,</mark>
+	<mark>Default = ListSize | ListLabel</mark>
+}</pre>
+			
+			<div class="instructions">
+				The boolean parameters of the <code>Show</code> method can now be replaced with a single options
+				parameter. Then we'll extract the individual options with the help of the bitwise AND operator
+				<code>&amp;</code> and store them in local variables to keep things clear.
+			</div>
+			
+			<pre translate="no">	public static void Show (SerializedProperty list, <mark>EditorListOption options = EditorListOption.Default</mark>) {
+		<mark>bool</mark>
+			<mark>showListLabel = (options & EditorListOption.ListLabel) != 0,</mark>
+			<mark>showListSize = (options & EditorListOption.ListSize) != 0;</mark>
+
+		if (showListLabel) {
+			EditorGUILayout.PropertyField(list);
+			EditorGUI.indentLevel += 1;
+		}
+		if (!showListLabel || list.isExpanded) {
+			if (showListSize) {
+				EditorGUILayout.PropertyField(list.FindPropertyRelative("Array.size"));
+			}
+			for (int i = 0; i &lt; list.arraySize; i++) {
+				EditorGUILayout.PropertyField(list.GetArrayElementAtIndex(i));
+			}
+		}
+		if (showListLabel) {
+			EditorGUI.indentLevel -= 1;
+		}
+	}</pre>
+			
+			<div class="instructions">
+				Then we can modify our custom inspector to use the new options approach.
+			</div>
+			
+			<pre translate="no">	public override void OnInspectorGUI () {
+		serializedObject.Update();
+		EditorList.Show(serializedObject.FindProperty("integers"), <mark>EditorListOption.ListSize</mark>);
+		EditorList.Show(serializedObject.FindProperty("vectors"));
+		EditorList.Show(serializedObject.FindProperty("colorPoints"), <mark>EditorListOption.None</mark>);
+		EditorList.Show(serializedObject.FindProperty("objects"), <mark>EditorListOption.ListLabel</mark>);
+		serializedObject.ApplyModifiedProperties();
+	}</pre>
+			
+			<h2>Hiding the Element Labels</h2>
+			
+			<div class="instructions">
+				Another useful feature is the ability to hide the labels of the elements. So let's add an option for
+				element labels and include it in the default. We can also add a convenient entry for the default without the element labels.
+			</div>
+			
+			<pre translate="no">[Flags]
+public enum EditorListOption {
+	None = 0,
+	ListSize = 1,
+	ListLabel = 2,
+	<mark>ElementLabels = 4,</mark>
+	Default = ListSize | ListLabel <mark>| ElementLabels,</mark>
+	<mark>NoElementLabels = ListSize | ListLabel</mark>
+}</pre>
+		
+			<div class="instructions">
+				Now all we have to do in our <code>Show</code> method is extract this option and perform a simple
+				check. Let's also move the element loop to its own private method, for clarity.
+			</div>
+			
+			<pre translate="no">	public static void Show (SerializedProperty list, EditorListOption options = EditorListOption.Default) {
+		bool
+			showListLabel = (options & EditorListOption.ListLabel) != 0,
+			showListSize = (options & EditorListOption.ListSize) != 0;
+
+		if (showListLabel) {
+			EditorGUILayout.PropertyField(list);
+			EditorGUI.indentLevel += 1;
+		}
+		if (!showListLabel || list.isExpanded) {
+			if (showListSize) {
+				EditorGUILayout.PropertyField(list.FindPropertyRelative("Array.size"));
+			}
+			<mark>ShowElements(list, options);</mark>
+		}
+		if (showListLabel) {
+			EditorGUI.indentLevel -= 1;
+		}
+	}
+
+	<mark>private static void ShowElements (SerializedProperty list, EditorListOption options) {</mark>
+		<mark>bool showElementLabels = (options & EditorListOption.ElementLabels) != 0;</mark>
+
+		for (int i = 0; i &lt; list.arraySize; i++) {
+			<mark>if (showElementLabels) {</mark>
+				EditorGUILayout.PropertyField(list.GetArrayElementAtIndex(i));
+			<mark>}</mark>
+			<mark>else {</mark>
+				<mark>EditorGUILayout.PropertyField(list.GetArrayElementAtIndex(i), GUIContent.none);</mark>
+			<mark>}</mark>
+		}
+	<mark>}</mark></pre>
+			
+			<figure>
+				<img alt="wide" src="inspector-element-labels-hidden.png" width="334" height="230">
+				<img alt="narrow" src="inspector-element-labels-hidden-narrow.png" width="330" height="316">
+				<figcaption>Hiding some of the element labels, wide and narrow.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				Our element labels can now be hidden, but something is wrong when we use a narrower inspector.
+				It turns out that our color point drawer still decides to use an additional line, but without
+				a label this is no longer useful. The solution is simply to make sure <code>ColorPointDrawer</code>
+				does not claim an extra line when it does not receive a label.
+			</div>
+			
+			<pre translate="no">	public override float GetPropertyHeight (SerializedProperty property, GUIContent label) {
+		return <mark>label != GUIContent.none &&</mark> Screen.width &lt; 333 ? (16f + 18f) : 16f;
+	}</pre>
+			
+			<figure>
+				<img src="inspector-element-labels-hidden-correct.png" width="330" height="262">
+				<figcaption>No longer needlessly claiming extra lines.</figcaption>
+			</figure>
+			
+			<h2>Adding Buttons</h2>
+			
+			<div class="instructions">
+				Instead of removing parts, we can also add thing to our list. We could add a set of buttons
+				for manipulating list elements. They can provide an alternative way to delete and duplicate
+				elements, and we can add a means to reorder the elements as well.
+				<p>
+				First we'll add an option for buttons, and also a convenient option to activate everything.
+			</div>
+			
+			<pre translate="no">[Flags]
+public enum EditorListOption {
+	None = 0,
+	ListSize = 1,
+	ListLabel = 2,
+	ElementLabels = 4,
+	<mark>Buttons = 8,</mark>
+	Default = ListSize | ListLabel | ElementLabels,
+	NoElementLabels = ListSize | ListLabel<mark>,</mark>
+	<mark>All = Default | Buttons</mark>
+}</pre>
+			
+			<div class="instructions">
+				For the button labels we'll use a simple "+" for duplicate, a "-" for delete, and a "&#8628;"
+				(rightwards arrow with corner downwards) for move. You can directly insert the arrow unicode
+				character, but I use its escape code just to be sure everyone can copy it correctly.
+				<p>
+				We predefine static <code>GUIContent</code> for these buttons and include handy tooltips as well.
+				We also add a separate method for showing the buttons and call it after each element, if desired.
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-static-const" id="q-static-const">Why <code>static</code> instead of <code>const</code>?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>private static GUIContent</mark>
+		<mark>moveButtonContent = new GUIContent("\u21b4", "move down"),</mark>
+		<mark>duplicateButtonContent = new GUIContent("+", "duplicate"),</mark>
+		<mark>deleteButtonContent = new GUIContent("-", "delete");</mark>
+		
+	private static void ShowElements (SerializedProperty list, EditorListOption options) {
+		bool
+			showElementLabels = (options & EditorListOption.ElementLabels) != 0<mark>,</mark>
+			<mark>showButtons = (options & EditorListOption.Buttons) != 0</mark>;
+
+		for (int i = 0; i &lt; list.arraySize; i++) {
+			if (showElementLabels) {
+				EditorGUILayout.PropertyField(list.GetArrayElementAtIndex(i));
+			}
+			else {
+				EditorGUILayout.PropertyField(list.GetArrayElementAtIndex(i), GUIContent.none);
+			}
+			<mark>if (showButtons) {</mark>
+				<mark>ShowButtons();</mark>
+			<mark>}</mark>
+		}
+	}
+
+	<mark>private static void ShowButtons () {</mark>
+		<mark>GUILayout.Button(moveButtonContent);</mark>
+		<mark>GUILayout.Button(duplicateButtonContent);</mark>
+		<mark>GUILayout.Button(deleteButtonContent);</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				Let's add these buttons to the lists for our color points and objects.
+			</div>
+			
+			<pre translate="no">	public override void OnInspectorGUI () {
+		serializedObject.Update();
+		EditorList.Show(serializedObject.FindProperty("integers"), EditorListOption.ListSize);
+		EditorList.Show(serializedObject.FindProperty("vectors"));
+		EditorList.Show(serializedObject.FindProperty("colorPoints"), EditorListOption.<mark>Buttons</mark>);
+		EditorList.Show(
+			serializedObject.FindProperty("objects"),
+			EditorListOption.ListLabel <mark>| EditorListOption.Buttons</mark>);
+		serializedObject.ApplyModifiedProperties();
+	}</pre>
+			
+			<figure>
+				<img src="inspector-buttons-huge.png" width="330" height="436">
+				<figcaption>Quite huge buttons.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				These buttons are way too large, because each claims an entire line. We want everything to stay
+				together on a single line instead. We can instruct the automatic layout to do this by putting our
+				content in between calls to <code>EditorGUILayout.BeginHorizontal</code> and
+				<code>EditorGUILayout.EndHorizontal</code>.
+			</div>
+			
+			<pre translate="no">	private static void ShowElements (SerializedProperty list, EditorListOption options) {
+		bool
+			showElementLabels = (options & EditorListOption.ElementLabels) != 0,
+			showButtons = (options & EditorListOption.Buttons) != 0;
+
+		for (int i = 0; i &lt; list.arraySize; i++) {
+			<mark>if (showButtons) {</mark>
+				<mark>EditorGUILayout.BeginHorizontal();</mark>
+			<mark>}</mark>
+			if (showElementLabels) {
+				EditorGUILayout.PropertyField(list.GetArrayElementAtIndex(i));
+			}
+			else {
+				EditorGUILayout.PropertyField(list.GetArrayElementAtIndex(i), GUIContent.none);
+			}
+			if (showButtons) {
+				ShowButtons();
+				<mark>EditorGUILayout.EndHorizontal();</mark>
+			}
+		}
+	}</pre>
+			
+			<figure>
+				<img src="inspector-buttons-large.png" width="330" height="186">
+				<figcaption>Pretty large buttons.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				That is a lot better, but the buttons are still too large. We'll change two things to make them
+				behave. First, we'll apply some mini button styles to them. Second, we'll give them a fixed width
+				of 20 pixels each.
+			</div>
+			
+			<pre translate="no">	<mark>private static GUILayoutOption miniButtonWidth = GUILayout.Width(20f);</mark>
+			
+	private static void ShowButtons () {
+		GUILayout.Button(moveButtonContent<mark>, EditorStyles.miniButtonLeft, miniButtonWidth</mark>);
+		GUILayout.Button(duplicateButtonContent<mark>, EditorStyles.miniButtonMid, miniButtonWidth</mark>);
+		GUILayout.Button(deleteButtonContent<mark>, EditorStyles.miniButtonRight, miniButtonWidth</mark>);
+	}</pre>
+			
+			<figure>
+				<img src="inspector-buttons-mini.png" width="330" height="176">
+				<figcaption>Mini buttons.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				Now the buttons look fine, but they don't do anything yet.
+				<p>
+				Fortunately, adding functionality
+				to the buttons is very simple, as we can directly use the methods for array manipulation provided
+				by <code>SerializedProperty</code>. We need the list and the current element index for this to
+				work, so we add them as parameters to our <code>ShowButtons</code> method and pass them along
+				inside the loop of <code>ShowElements</code>.
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-button" id="q-button">How does <code>Button</code> work?</a></li>
+					<li><a href="index.html#a-move" id="q-move">What happens when we move the bottom element?</a></li>
+					<li><a href="index.html#a-duplicate" id="q-duplicate">What are the contents of a new item?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	private static void ShowElements (SerializedProperty list, EditorListOption options) {
+		bool
+			showElementLabels = (options & EditorListOption.ElementLabels) != 0,
+			showButtons = (options & EditorListOption.Buttons) != 0;
+
+		for (int i = 0; i &lt; list.arraySize; i++) {
+			if (showButtons) {
+				EditorGUILayout.BeginHorizontal();
+			}
+			if (showElementLabels) {
+				EditorGUILayout.PropertyField(list.GetArrayElementAtIndex(i));
+			}
+			else {
+				EditorGUILayout.PropertyField(list.GetArrayElementAtIndex(i), GUIContent.none);
+			}
+			if (showButtons) {
+				ShowButtons(<mark>list, i</mark>);
+				EditorGUILayout.EndHorizontal();
+			}
+		}
+	}
+
+	private static void ShowButtons (<mark>SerializedProperty list, int index</mark>) {
+		<mark>if (</mark>GUILayout.Button(moveButtonContent, EditorStyles.miniButtonLeft, miniButtonWidth)<mark>) {</mark>
+			<mark>list.MoveArrayElement(index, index + 1);</mark>
+		<mark>}</mark>
+		<mark>if (</mark>GUILayout.Button(duplicateButtonContent, EditorStyles.miniButtonMid, miniButtonWidth)<mark>) {</mark>
+			<mark>list.InsertArrayElementAtIndex(index);</mark>
+		<mark>}</mark>
+		<mark>if (</mark>GUILayout.Button(deleteButtonContent, EditorStyles.miniButtonRight, miniButtonWidth)<mark>) {</mark>
+			<mark>list.DeleteArrayElementAtIndex(index);</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<div class="instructions">
+				Our buttons now work as expected. Or do they? Try deleting an element from the objects list.
+				If it references no component, it works. But if it does reference something, it will clear the
+				reference, but not remove the element from the list.
+				<p>
+				While this is how Unity handles deletion in this case, it is weird. Instead, we want the
+				element to always be removed, not sometimes cleared. We can enforce this by checking whether the
+				list's size has remained the same after deleting the element. If so, it has only been cleared and
+				we should delete it again, for real this time.
+			</div>
+			
+			<pre translate="no">	private static void ShowButtons (SerializedProperty list, int index) {
+		if (GUILayout.Button(moveButtonContent, EditorStyles.miniButtonLeft, miniButtonWidth)) {
+			list.MoveArrayElement(index, index + 1);
+		}
+		if (GUILayout.Button(duplicateButtonContent, EditorStyles.miniButtonMid, miniButtonWidth)) {
+			list.InsertArrayElementAtIndex(index);
+		}
+		if (GUILayout.Button(deleteButtonContent, EditorStyles.miniButtonRight, miniButtonWidth)) {
+			<mark>int oldSize = list.arraySize;</mark>
+			list.DeleteArrayElementAtIndex(index);
+			<mark>if (list.arraySize == oldSize) {</mark>
+				<mark>list.DeleteArrayElementAtIndex(index);</mark>
+			<mark>}</mark>
+		}
+	}</pre>
+			
+			<div class="instructions">
+				An additional button we could include is one to add an element when the list is empty.
+				This is useful when we're not showing the list size, because in that case you could neither duplicate an
+				element nor manipulate the list size directly. So let's add such a button.
+			</div>
+			
+			<pre translate="no">	private static GUIContent
+		moveButtonContent = new GUIContent("\u21b4", "move down"),
+		duplicateButtonContent = new GUIContent("+", "duplicate"),
+		deleteButtonContent = new GUIContent("-", "delete")<mark>,</mark>
+		<mark>addButtonContent = new GUIContent("+", "add element")</mark>;
+			
+	private static void ShowElements (SerializedProperty list, EditorListOption options) {
+		bool
+			showElementLabels = (options & EditorListOption.ElementLabels) != 0,
+			showButtons = (options & EditorListOption.Buttons) != 0;
+
+		for (int i = 0; i &lt; list.arraySize; i++) {
+			if (showButtons) {
+				EditorGUILayout.BeginHorizontal();
+			}
+			if (showElementLabels) {
+				EditorGUILayout.PropertyField(list.GetArrayElementAtIndex(i));
+			}
+			else {
+				EditorGUILayout.PropertyField(list.GetArrayElementAtIndex(i), GUIContent.none);
+			}
+			if (showButtons) {
+				ShowButtons(list, i);
+				EditorGUILayout.EndHorizontal();
+			}
+		}
+		<mark>if (showButtons && list.arraySize == 0 && GUILayout.Button(addButtonContent, EditorStyles.miniButton)) {</mark>
+			<mark>list.arraySize += 1;</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<figure>
+				<img src="inspector-buttons-add.png" width="330" height="176">
+				<figcaption>A big add button.</figcaption>
+			</figure>
+			
+			<h2>Only Allowing Lists</h2>
+			
+			<div class="instructions">
+				What would happen if we would try to use our editor list with something that isn't a list at all?
+				Let's find out by adding something to <code>ListTester</code> that is not a list.
+			</div>
+			
+			<pre translate="no">	public int notAList;</pre>
+			
+			<div class="instructions">
+				Now also try to show it in <code>ListTestInspector</code>.
+			</div>
+			
+			<pre translate="no">	public override void OnInspectorGUI () {
+		serializedObject.Update();
+		EditorList.Show(serializedObject.FindProperty("integers"), EditorListOption.ListSize);
+		EditorList.Show(serializedObject.FindProperty("vectors"));
+		EditorList.Show(serializedObject.FindProperty("colorPoints"), EditorListOption.Buttons);
+		EditorList.Show(
+			serializedObject.FindProperty("objects"),
+			EditorListOption.ListLabel | EditorListOption.Buttons);
+		<mark>EditorList.Show(serializedObject.FindProperty("notAList"));</mark>
+		serializedObject.ApplyModifiedProperties();
+	}</pre>
+			
+			<figure>
+				<img src="inspector-not-a-list.png" width="330" height="194">
+				<figcaption>Not a list shown.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				It actually works for our integer. But it's not guaranteed to work for any arbitrary type and it will also
+				result in errors for some options. It is a better idea to flatly refuse to show anything that
+				isn't a list. So let's check whether the property is an array.
+				If it isn't, we display a nicely formatted warning and nothing else.
+			</div>
+			
+			<pre translate="no">	public static void Show (SerializedProperty list, EditorListOption options = EditorListOption.Default) {
+		<mark>if (!list.isArray) {</mark>
+			<mark>EditorGUILayout.HelpBox(list.name + " is neither an array nor a list!", MessageType.Error);</mark>
+			<mark>return;</mark>
+		<mark>}</mark>
+
+		bool
+			showListLabel = (options & EditorListOption.ListLabel) != 0,
+			showListSize = (options & EditorListOption.ListSize) != 0;
+
+		if (showListLabel) {
+			EditorGUILayout.PropertyField(list);
+			EditorGUI.indentLevel += 1;
+		}
+		if (!showListLabel || list.isExpanded) {
+			if (showListSize) {
+				EditorGUILayout.PropertyField(list.FindPropertyRelative("Array.size"));
+			}
+			ShowElements(list, options);
+		}
+		if (showListLabel) {
+			EditorGUI.indentLevel -= 1;
+		}
+	}</pre>
+			
+			<figure>
+				<img src="inspector-only-lists.png" width="330" height="218">
+				<figcaption>Only lists allowed.</figcaption>
+			</figure>
+			
+			<h2>Multi-object Editing</h2>
+			
+			<div class="instructions">
+				Another interesting point is multi-object editing. You can test this by duplicating our list tester
+				object, make them a little different, and selecting both at the same time.
+			</div>
+			
+			<figure>
+				<img src="inspector-no-multi.png" width="330" height="40">
+				<figcaption>No multi-object editing yet.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				By default custom editors do not support multi-object editing, though that is easily fixed by
+				adding the <code>CanEditMultipleObjects</code> attribute to our <code>ListTesterInspector</code>.
+			</div>
+			
+			<pre translate="no">[CustomEditor(typeof(ListTester))<mark>, CanEditMultipleObjects</mark>]</pre>
+			
+			<figure>
+				<img src="inspector-multi.png" width="330" height="236">
+				<figcaption>Multi-object editing.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				While this can be useful, it gets weird when you're editing multiple objects that have lists of
+				different sizes. In general it is not very useful and might even be drawn wrong. So let's not
+				show the list's elements when we have multiple different sizes.
+			</div>
+			
+			<pre translate="no">	public static void Show (SerializedProperty list, EditorListOption options = EditorListOption.Default) {
+		if (!list.isArray) {
+			EditorGUILayout.HelpBox(list.name + " is neither an array nor a list!", MessageType.Error);
+			return;
+		}
+
+		bool
+			showListLabel = (options & EditorListOption.ListLabel) != 0,
+			showListSize = (options & EditorListOption.ListSize) != 0;
+
+		if (showListLabel) {
+			EditorGUILayout.PropertyField(list);
+			EditorGUI.indentLevel += 1;
+		}
+		if (!showListLabel || list.isExpanded) {
+			<mark>SerializedProperty size =</mark> list.FindPropertyRelative("Array.size");
+			if (showListSize) {
+				EditorGUILayout.PropertyField(<mark>size</mark>);
+			}
+			<mark>if (size.hasMultipleDifferentValues) {</mark>
+				<mark>EditorGUILayout.HelpBox("Not showing lists with different sizes.", MessageType.Info);</mark>
+			<mark>}</mark>
+			<mark>else {</mark>
+				ShowElements(list, options);
+			<mark>}</mark>
+		}
+		if (showListLabel) {
+			EditorGUI.indentLevel -= 1;
+		}
+	}</pre>
+			
+			<figure>
+				<img src="inspector-multi-hidden.png" width="330" height="226">
+				<figcaption>Divergent lists will not be shown.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				We now have a generic list drawer with four customization options that you can use
+				instead of the default list representation. Quite handy!
+			</div>
+			
+			<aside class="share"></aside>
+			
+			<h2>Downloads</h2>
+
+				<dl>
+					<dt><a href="custom-list.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Custom List', 'Final']);" target="_blank" download rel="nofollow">custom-list.unitypackage</a></dt>
+					<dd>The finished project.</dd>
+				</dl>
+		</article>
+
+		<h1>Questions &amp; Answers</h1>
+
+		<dl class="questions-answers">
+			<dt><a href="index.html#q-arraySize" id="a-arraySize">Why not use <code>arraySize</code> here?</a></dt>
+			<dd>
+				<code>SerializedProperty</code> has an <code>arraySize</code> property, which is a convenient
+				way to get the size of the array or list represented by the property. Why not use it here?
+				<p>
+				At this point we don't want a simple integer, we want the size as a <code>SerializedProperty</code>
+				so it's easy to edit. Fortunately, we can extract the size as a property via the special relative path <i>Array.size</i>.
+				We will use <code>arraySize</code> in all other cases.
+			</dd>
+			
+			<dt><a href="index.html#q-optional" id="a-optional">How does <code>showListSize</code> work?</a></dt>
+			<dd>
+				We define <code>showListSize</code> as an optional parameter by assigning a constant value to
+				it. This is equivalent to adding a second method declaration without the argument, then calling
+				the original method with the constant value as an argument.
+				<p>
+				<code>void DoWork (bool fast = true) {}</code>
+				<p>
+				is the same as
+				<p>
+				<code>void DoWork (bool fast) {} void DoWork () { DoWork(true); }</code>
+				<p>
+				Be advised that using optional parameters can lead to weird errors on some platform builds.
+				I only use them in editor scripts, which won't be included in builds.
+			</dd>
+			
+			<dt><a href="index.html#q-flags-attribute" id="a-flags-attribute">Is the <code>Flags</code> attribute required?</a></dt>
+			<dd>
+				You do not need to apply the <code>Flags</code> attribute, it will work fine without. What the
+				attribute does is signify that you are using the enumeration for flags that can be combined
+				together, which will affect how such values are converted to strings, among other things.
+			</dd>
+			
+			<dt><a href="index.html#q-flags" id="a-flags">How do bitwise flags work?</a></dt>
+			<dd>
+				You can use the individual digits of a number to represent a sequence of boolean values, commonly
+				named flags. For example,
+				01 would mean that the fist option is on, 10 would mean that the second option is on, 11 would mean
+				that both are on, and 00 would mean that neither are on.
+				<p>
+				As each option gets its own digit, their values must be set to 1, 10, 100, 1000, 10000, and so on. However,
+				we are dealing with binary numbers here, while in our scripts we write decimal numbers. So we have
+				to use powers of two instead of powers of ten, writing 1, 2, 4, 8, 16, etcetera.
+			</dd>
+			
+			<dt><a href="index.html#q-static-const" id="a-static-const">Why <code>static</code> instead of <code>const</code>?</a></dt>
+			<dd>
+				Objects cannot be constants, only simple values can. So we make our content static instead, which means
+				that it will be created the first time that any <code>EditorList</code> code is accessed, and then stay as they are as long as we don't mess with them.
+			</dd>
+			
+			<dt><a href="index.html#q-button" id="a-button">How does <code>Button</code> work?</a></dt>
+			<dd>
+				The method <code>GUI.Button</code> both shows a button and returns whether it was clicked. So
+				you typically call it inside an <code>if</code> statement and perform the necessary work in the corresponding code block.
+				<p>
+				What actually happens is that your own GUI method, in this case <code>OnInspectorGUI</code>,
+				gets called far more often than just once. It gets called when performing layout, when repainting, and
+				whenever a significant GUI event happens, which is quite often. Only when a mouse click event comes along that is consumed
+				by the button, will it return <code>true</code>.
+				<p>
+				To get an idea of how often the GUI methods get called, put <code>Debug.Log(Event.current);</code>
+				at the start of your <code>OnInspectorGUI</code> method, then fool around a bit in the editor and watch the console.
+				<p>
+				Usually you need not worry about this, but be aware of it when performing heavy work like generating
+				textures. You don't want to do that dozens of times per second if you don't need to.
+			</dd>
+			
+			<dt><a href="index.html#q-move" id="a-move">What happens when we move the bottom element?</a></dt>
+			<dd>
+				When trying to move the bottom element even lower, nothing will happen. Nothing gets screwed up, the action simply changes nothing.
+			</dd>
+			
+			<dt><a href="index.html#q-duplicate" id="a-duplicate">What are the contents of a new item?</a></dt>
+			<dd>
+				If you insert a new array element via a <code>SerializedProperty</code>, the new element will be a
+				duplicate of the element just above it. If there's no other element, it gets default values.
+			</dd>
+		</dl>
+
+		<footer></footer>
+		<script src="../../../jquery.js"></script>
+		<script src="../../../default.js"></script>
+	</body>
+</html>

@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html>
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/editor/custom-data/">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/editor/custom-data/drawer-color.png">
+		<meta property="og:description" content="A Unity C# scripting tutorial in which you create your own custom data and a property drawer for it.">
+		<meta name="description" content="A Unity C# scripting tutorial in which you create your own custom data and a property drawer for it.">
+		<meta property="og:title" content="Custom Data, a Unity C# Editor Tutorial">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<title>Custom Data, a Unity C# Editor Tutorial</title>
+		<link href="../../../default.css" rel="stylesheet">
+		<script>
+			var customTypes = {
+				ColorPoint: 1,
+				ColorPointDrawer: 1,
+				ColorPointTester: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header data-type="tutorial"></header>
+
+		<article class="tutorial" itemscope="" itemtype="http://schema.org/TechArticle">
+			<h1 itemprop="name headline">Custom Data<span>, an introduction to serialized classes and property drawers</span></h1>
+
+			<div class="instructions">
+				<span itemprop="about description">In this Unity C# tutorial you will create a simple data structure and write your own property drawer for it.</span>
+				You will learn to
+
+				<ul>
+					<li>use a serialized class</li>
+					<li>create a custom property drawer</li>
+					<li>use <code>SerializedProperty</code></li>
+					<li>use Unity's immidiate-mode GUI in the editor</li>
+				</ul>
+				<p>
+				<span itemprop="dependencies">You're assumed to know your way around Unity's editor and know the basics of Unity C# scripting.
+				If you've completed some of the <a href="../../index.html">other tutorials</a> then you're good to go.</span>
+				<p>
+				This tutorial is for Unity version 4.3 and above.
+			</div>
+			
+			<aside class="share"></aside>
+			
+			<figure>
+				<img src="drawer-color.png" width="330" height="218" itemprop="image">
+				<figcaption>Compact color points.</figcaption>
+			</figure>
+
+			<h2>Colored Points</h2>
+
+			<div class="instructions">
+				Unity has a variety of data types and you can make all kinds of custom components to contain data.
+				But sometimes you need a small custom set of data that's used in multiple places. Instead of
+				writing the same code repeatedly, we can use a simple class to encapsulate this data and reuse that
+				as if it were a built-in data type.
+				<p>
+				We will create a colored point, a data structure that contains both a color and a position.
+				<p>
+				We start by creating a new empty project and adding a new C# script named <i class="name">ColorPoint</i> with the required variables.
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-class-performance" id="q-class-performance">What about classes and performance?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+
+<mark>public class ColorPoint {</mark>
+
+	<mark>public Color color;</mark>
+	<mark>public Vector3 position;</mark>
+<mark>}</mark></pre>
+
+			<div class="instructions">
+				Then we create a new script named <i class="name">ColorPointTester</i> for the sole purpose of testing our new data type.
+				We give it a single point and an array of points, as well as a single vector and an array of vectors for comparison. Then we create an empty game object and add the component to it.
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-lists" id="q-lists">Will it work with lists as well?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+
+<mark>public class ColorPointTester : MonoBehaviour {</mark>
+	
+	<mark>public ColorPoint point;</mark>
+	
+	<mark>public ColorPoint[] points;</mark>
+	
+	<mark>public Vector3 vector;</mark>
+	
+	<mark>public Vector3[] vectors;</mark>
+<mark>}</mark></pre>
+			
+			<figure>
+				<img src="tester_empty.png" width="784" height="154">
+				<figcaption>Color point and empty tester.</figcaption>
+			</figure>
+
+			<div class="instructions">
+				Our new type fails to show in the inspector, because its contents currently cannot be saved.
+				We can solve this problem by adding the <code>System.Serializable</code> attribute to our class.
+				By doing this it becomes possible to serialize all public fields of the class to a data stream, which allows it to be stored.
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-serialization" id="q-serialization">How does serialization work?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">using UnityEngine;
+<mark>using System;</mark>
+
+<mark>[Serializable]</mark>
+public class ColorPoint {
+	
+	public Color color;
+	public Vector3 position;
+}</pre>
+
+			<div class="instructions">
+				Our data now shows up in the inspector, we can edit it as we please, and it can be saved.
+				Also, turn our test object into a prefab by dragging it into the project view, then change some
+				values of the instance in the scene. This will demonstrate that the type works correctly with
+				prefabs.
+			</div>
+			
+			<figure>
+				<img src="tester_default.png" alt="regular instance" width="320" height="484">
+				<img src="tester_prefab_instance.png" alt="prefab instance" width="320" height="504">
+				<br><img src="prefab_project.png" alt="project" width="414" height="86">
+				<figcaption>Normal object and a tweaked prefab instance.</figcaption>
+			</figure>
+			
+			The inspector looks quite messy. This can be amended somewhat by making it a bit wider by dragging,
+			as the vectors will collapse to a single line once it's considered wide enough.
+			
+			<figure>
+				<img src="tester_wider.png" width="330" height="326">
+				<figcaption>A wider inspector.</figcaption>
+			</figure>
+			
+			<h2>Drawing the Property</h2>
+			
+			<div class="instructions">
+				Unfortunately, even with a wider inspector our color point still requires multiple lines. It would be better if it needed less space.
+				<p>
+				Fortunately, we can replace Unity's default way of drawing properties in the editor with our own variant.
+				This is done by creating a class that extends from <code>UnityEditor.PropertyDrawer</code> and using the
+				<code>UnityEditor.CustomPropertyDrawer</code> attribute to associate it with the type we want it to do the drawing for.
+				We will name this class <i class="name">ColorPointDrawer</i> and because this is an editor class we place it in a new folder named <i class="name">Editor</i>.
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-typeof" id="q-typeof">What does <code>typeof</code> do?</a></li>
+					<li><a href="index.html#a-editor" id="q-editor">Is the Editor folder required?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no"><mark>using UnityEditor;</mark>
+<mark>using UnityEngine;</mark>
+
+<mark>[CustomPropertyDrawer(typeof(ColorPoint))]</mark>
+<mark>public class ColorPointDrawer : PropertyDrawer {</mark>
+<mark>}</mark></pre>
+			
+			<figure>
+				<img src="drawer_not_implemented.png" alt="inspector" width="330" height="218">
+				<img src="drawer_project.png" alt="project" width="182" height="118">
+				<figcaption>Property drawer that does nothing.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				Now the inspector doesn't show anything useful anymore, but we'll change that by overriding the
+				default <code>OnGUI</code> method of <code>PropertyDrawer</code> with our own version.
+				<p>
+				This <code>OnGUI</code> method has three parameters. First is a <code>Rect</code> that tells us
+				what area of the window we should use to draw our property. Second is the property itself,
+				represented by a <code>SerializedProperty</code>. Third is a <code>GUIContent</code> that defines
+				the label we should use for the property.
+				<p>
+				Let's start by drawing just the label using the <code>GUIEditor.PrefixLabel</code> method followed
+				by the positions using the <code>GUIEditor.PropertyField</code> method.
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-override" id="q-override">What does <code>override</code> do?</a></li>
+					<li><a href="index.html#a-position" id="q-position">Isn't <i class="name">position</i> a misnomer?</a></li>
+					<li><a href="index.html#a-SerializedProperty" id="q-SerializedProperty">How does <code>SerializedProperty</code> work?</a></li>
+					<li><a href="index.html#a-guicontent" id="q-guicontent">What's a <code>GUIContent</code>?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>public override void OnGUI (Rect position, SerializedProperty property, GUIContent label) {</mark>
+		<mark>EditorGUI.PrefixLabel(position, label);</mark>
+		<mark>EditorGUI.PropertyField(position, property.FindPropertyRelative("position"));</mark>
+	<mark>}</mark></pre>
+			
+			<figure>
+				<img src="drawer_wrong.png" width="330" height="218">
+				<figcaption>Property drawer with overlapping labels.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				While we do get our position, its label now overlaps with the label of our color points.
+				Let's get rid of the position's label by overriding it with <code>GUIContent.none</code>.
+			</div>
+			
+			<pre translate="no">	public override void OnGUI (Rect position, SerializedProperty property, GUIContent label) {
+		EditorGUI.PrefixLabel(position, label);
+		EditorGUI.PropertyField(position, property.FindPropertyRelative("position")<mark>, GUIContent.none</mark>);
+	}
+			</pre>
+			
+			<figure>
+				<img src="drawer_wrong_2.png" width="330" height="218">
+				<figcaption>One label, still overlapping.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				The vector is still overlapping the label, because we are using the exact same position rectangle
+				for it. Fortunately, the <code>PrefixLabel</code> method returns an adjusted rectangle for the
+				space to the right of it. So we will use this rect instead.
+			</div>
+			
+			<pre translate="no">	public override void OnGUI (Rect position, SerializedProperty property, GUIContent label) {
+		<mark>Rect contentPosition =</mark> EditorGUI.PrefixLabel(position, label);
+		EditorGUI.PropertyField(<mark>contentPosition</mark>, property.FindPropertyRelative("position"), GUIContent.none);
+	}</pre>
+			
+			<figure>
+				<img src="drawer_wrong_3.png" width="330" height="218">
+				<figcaption>No longer overlapping, though incorrectly positioned.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				This looks a lot better, but the position vector of the array elements is placed too far to the right.
+				That happens because the <code>PropertyField</code> method adjusts for the current editor indent level. While this is usually convenient, we don't want
+				any automatic adjustments in this case.
+				<p>
+				The intent level is set via the static int
+				<code>EditorGUI.indentLevel</code>. To temporarily eliminate automatic indenting, we simply set it to zero.
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-indentLevel" id="q-indentLevel">Do we need to restore <code>indentLevel</code>?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	public override void OnGUI (Rect position, SerializedProperty property, GUIContent label) {
+		Rect contentPosition = EditorGUI.PrefixLabel(position, label);
+		<mark>EditorGUI.indentLevel = 0;</mark>
+		EditorGUI.PropertyField(contentPosition, property.FindPropertyRelative("position"), GUIContent.none);
+	}</pre>
+			
+			<figure>
+				<img src="drawer_correct.png" width="330" height="218">
+				<figcaption>Position correctly placed.</figcaption>
+			</figure>
+			
+			<h2>Fixing the Prefix</h2>
+			
+			<div class="instructions">
+				While our prefix label turns bold to signal that it is a modified prefab value, it doesn't
+				allow any actions. So we cannot revert our entire color point at once and neither can we
+				easily delete or duplicate array elements of it.
+				<p>
+				We need to tell the editor where our property starts and where it ends, because right now
+				we are only showing part of its contents. We can use the <code>EditorGUI.BeginProperty</code> method
+				to construct a new label and signal the start of a property, and use the
+				<code>EditorGUI.EndProperty</code> method to signal when we are done.
+				This will give us a label that provides the expected functionality via its context menu.
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-bug" id="q-bug">Prefab revert doesn't work with undo?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	public override void OnGUI (Rect position, SerializedProperty property, GUIContent label) {
+		<mark>label = EditorGUI.BeginProperty(position, label, property);</mark>
+		Rect contentPosition = EditorGUI.PrefixLabel(position, label);
+		EditorGUI.indentLevel = 0;
+		EditorGUI.PropertyField(contentPosition, property.FindPropertyRelative("position"), GUIContent.none);
+		<mark>EditorGUI.EndProperty();</mark>
+	}</pre>
+			
+			<figure>
+				<img src="drawer_actions.png" width="330" height="218">
+				<figcaption>Revert and array functionality support.</figcaption>
+			</figure>
+			
+			<h2>Adding the Color</h2>
+			
+			<div class="instructions">
+				Now it's time to also draw the color property. To make it fit on the same line, we'll have to
+				reduce the space that the vector uses. As the vector has three parts and the color is the fourth
+				part, we'll give the vector the fist 75% of the horizontal space and place the color in the remaining
+				25%. We also use a single letter for the color label.
+			</div>
+			
+			<pre translate="no">	public override void OnGUI (Rect position, SerializedProperty property, GUIContent label) {
+		label = EditorGUI.BeginProperty(position, label, property);
+		Rect contentPosition = EditorGUI.PrefixLabel(position, label);
+		<mark>contentPosition.width *= 0.75f;</mark>
+		EditorGUI.indentLevel = 0;
+		EditorGUI.PropertyField(contentPosition, property.FindPropertyRelative("position"), GUIContent.none);
+		<mark>contentPosition.x += contentPosition.width;</mark>
+		<mark>contentPosition.width /= 3f;</mark>
+		<mark>EditorGUI.PropertyField(contentPosition, property.FindPropertyRelative("color"), new GUIContent("C"));</mark>
+		EditorGUI.EndProperty();
+	}</pre>
+			
+			<figure>
+				<img src="drawer-color-wrong.png" width="330" height="218">
+				<figcaption>With color, but wrong.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				Even though we're using a short label, it claims too much space and pushes the color data to the right.
+				This is because the label width is fixed, regardless of its contents. You can tweak the label width
+				by adjusting <code>EditorGUIUtility.labelWidth</code>. Using a width of 14 pixels works fine.
+			</div>
+			
+			<pre translate="no">	public override void OnGUI (Rect position, SerializedProperty property, GUIContent label) {
+		label = EditorGUI.BeginProperty(position, label, property);
+		Rect contentPosition = EditorGUI.PrefixLabel(position, label);
+		contentPosition.width *= 0.75f;
+		EditorGUI.indentLevel = 0;
+		EditorGUI.PropertyField(contentPosition, property.FindPropertyRelative("position"), GUIContent.none);
+		contentPosition.x += contentPosition.width;
+		contentPosition.width /= 3f;
+		<mark>EditorGUIUtility.labelWidth = 14f;</mark>
+		EditorGUI.PropertyField(contentPosition, property.FindPropertyRelative("color"), new GUIContent("C"));
+		EditorGUI.EndProperty();
+	}</pre>
+			
+			<figure>
+				<img src="drawer-color.png" width="330" height="218">
+				<figcaption>Correctly sized color label.</figcaption>
+			</figure>
+			
+			<h2>Claiming an Extra Line</h2>
+			
+			<div class="instructions">
+				The default vectors switch between a single line and a double line depending on the width of the
+				inspector. We can do so as well.
+				<p>
+				We have to override the <code>GetPropertyHeight</code> method to specify how much vertical space
+				we need. The default for one line is 16 pixels. Adding a second line requires 18 additional pixels,
+				16 for the second line plus a margin of 2 between then.
+				<p>
+				It turns out that <code>Screen.width</code> contains the width of our inspector panel when we need
+				it, so we can use that. Vectors switch to multiple lines when this width drops below 333, so we will
+				do this as well.
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-GetPropertyHeight" id="q-GetPropertyHeight">Why a separate <code>GetPropertyHeight</code> method?</a></li>
+				</ul>
+			</aside>
+
+			<pre translate="no">	<mark>public override float GetPropertyHeight (SerializedProperty property, GUIContent label) {</mark>
+		<mark>return Screen.width &lt; 333 ? (16f + 18f) : 16f;</mark>
+	<mark>}</mark></pre>
+			
+			<figure>
+				<img src="more-space.png" width="320" height="318">
+				<figcaption>Claiming more space.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				Now we claim more vertical space when we make the inspector narrow enough. However, we're not
+				yet using it. To do so we have to take care of four things.
+				<p>
+				First, we can detect that we're using two lines by checking the height of our position rect.
+				Second, we need to set the height back to 16 so the color property stays on one line.
+				Third, we have to move down a line after we've drawn the property label.
+				Fourth, we have to increase the indent level by one and apply it to our position, using the
+				<code>EditorGUI.IndentedRect</code> method.
+			</div>
+			
+			<pre translate="no">	public override void OnGUI (Rect position, SerializedProperty property, GUIContent label) {
+		label = EditorGUI.BeginProperty(position, label, property);
+		Rect contentPosition = EditorGUI.PrefixLabel(position, label);
+		<mark>if (position.height > 16f) {</mark>
+			<mark>position.height = 16f;</mark>
+			<mark>EditorGUI.indentLevel += 1;</mark>
+			<mark>contentPosition = EditorGUI.IndentedRect(position);</mark>
+			<mark>contentPosition.y += 18f;</mark>
+		<mark>}</mark>
+		contentPosition.width *= 0.75f;
+		EditorGUI.indentLevel = 0;
+		EditorGUI.PropertyField(contentPosition, property.FindPropertyRelative("position"), GUIContent.none);
+		contentPosition.x += contentPosition.width;
+		contentPosition.width /= 3f;
+		EditorGUIUtility.labelWidth = 14f;
+		EditorGUI.PropertyField(contentPosition, property.FindPropertyRelative("color"), new GUIContent("C"));
+		EditorGUI.EndProperty();
+	}</pre>
+			
+			<figure>
+				<img src="more-space-used.png" width="320" height="318">
+				<figcaption>Using more space.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				We now have a nice compact representation of our <code>ColorPoint</code>.
+				It supports undo, redo, prefabs, and multi-object editing like normal. It uses only one line
+				if the inspector is wide enough, otherwise it uses two.
+				<p>
+				The next editor tutorial is <a href="../custom-list/index.html">Custom List</a>.
+			</div>
+			
+			<aside class="share"></aside>
+
+			<h2>Downloads</h2>
+
+				<dl>
+					<dt><a href="custom-data.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Custom Data', 'Final']);" target="_blank" download rel="nofollow">custom-data.unitypackage</a></dt>
+					<dd>The finished project.</dd>
+				</dl>
+		</article>
+
+		<h1>Questions &amp; Answers</h1>
+
+		<dl class="questions-answers">
+			<dt><a href="index.html#q-class-performance" id="a-class-performance">What about class performance?</a></dt>
+			<dd>
+				There are trade-offs between using a class or a struct as containers for data. If your data is very small, short-lived, treated like an atomic value, or you iterate through many instances, usually you'd use a struct.
+				Otherwise, a class is usually better.
+				<p>
+				Before Unity 4.5, if you want your data to show up in the inspector and be saved, you had no choice but to use a class.
+				<p>
+				Our <code>ColorPoint</code> data might look small, but it consists of seven floats, a total of 28 bytes. That's almost twice the maximum size recommended for structs.
+				<p>
+				So just use classes, unless the criteria for using a struct are met, you don't need to save or show them in the editor, you're using thousands of them, and you're running into performance issues.
+			</dd>
+			
+			<dt><a href="index.html#q-lists" id="a-lists">Will it work with lists as well?</a></dt>
+			<dd>
+				Yes. You can use either a <code>ColorPoint[]</code> or a <code>System.Collections.Generic.List&lt;ColorPoint&gt;</code>.
+				The Unity editor treats both exactly the same.
+				<p>
+				Only bother using a list when you're modifying its element structure a lot &ndash; especially its size &ndash; while in play mode.
+				If you don't, then there's no reason to introduce the slight overhead of using a list.
+			</dd>
+			
+			<dt><a href="index.html#q-serialization" id="a-serialization">How does serialization work?</a></dt>
+			<dd>
+				Serialization is the process of converting a collection of data in memory into a stream of data
+				that can be stored in a persistent state or transmitted over a network. It's what
+				Unity does when it saves your scene and asset data. Deserialization is its complement,
+				constructing data in memory from a stream.
+				<p>
+				This functionality is part of .NET and you can read more about it on <a href="http://msdn.microsoft.com/en-us/library/7ay27kt9.aspx">MSDN</a>, though it's not required.
+			</dd>
+			
+			<dt><a href="index.html#q-typeof" id="a-typeof">What does "typeof" do?</a></dt>
+			<dd>
+				The <code>typeof</code> operator is used to get the type object of something, usually a class. You
+				cannot use it with variables, only with explicit type names.
+				<p>
+				Why not just write down the class name? Because that results in a compiler error! The extra step is
+				needed because you're converting a type into a variable.
+			</dd>
+
+			<dt><a href="index.html#q-editor" id="a-editor">Is the Editor folder required?</a></dt>
+			<dd>
+				Unity splits projects into multiple parts that are compiled in a specific order. The Editor folder
+				is used to separate everything that's about the editor from everything that's not. It's not included
+				in game builds, and code outside of it cannot access it. For example, while <code>ColorPointDrawer</code>
+				knows about <code>ColorPoint</code>, the reverse is not true.
+				<p>
+				Technically, it is possible to place <code>ColorPointDrawer</code> outside of the Editor folder
+				and everything will still work. However, it's best not to mix editor and non-editor code. Also,
+				some editor specific stuff won't work if not placed in an Editor folder.
+			</dd>
+
+			<dt><a href="index.html#q-override" id="a-override">What does <code>override</code> do?</a></dt>
+			<dd>
+				Overriding is a mechanic which you use to replace a method from the class you are extending.
+				You can only <code>override</code> methods that have been marked as <code>virtual</code>. In this case,
+				it allows Unity to call any property drawer's <code>OnGUI</code> method without having to know it's exact type.
+				<p>
+				So why don't Unity event methods like <code>Start</code> and <code>Update</code> require the <code>override</code>
+				keyword? Because Unity uses a different approach to make such event methods from outside the .NET framework.
+			</dd>
+			
+			<dt><a href="index.html#q-position" id="a-position">Isn't <i class="name">position</i> a misnomer?</a></dt>
+			<dd>
+				It's not just a position, it has a width and height as well. It defines the bounds to use for drawing the property.
+				So why is it named <i class="name">position</i> and not <i class="name">bounds</i> or just <i class="name">rect</i>?
+				<p>
+				The answer is consistency. All Unity code and examples that use such a rect name it <i class="name">position</i>.
+			</dd>
+
+			<dt><a href="index.html#q-SerializedProperty" id="a-SerializedProperty">How does <code>SerializedProperty</code> work?</a></dt>
+			<dd>
+				A <code>SerializedObject</code> object acts as a wrapper or proxy for Unity objects that can be edited. You can
+				use it to extract data from an object, even if you don't have a clue what's inside it.
+				This is how the	Unity inspector can show default inspectors for anything you create yourself.
+				<p>
+				The fields of these objects are in turn represented by <code>SerializedProperty</code> objects. You can drill down the data hierarchy through use of the
+				<code>FindPropertyRelative</code> method.
+				<p>
+				Using these objects makes it possible to support undo, redo, prefabs, and multi-object editing without much effort.
+			</dd>
+			
+			<dt><a href="index.html#q-guicontent" id="a-guicontent">What's a <code>GUIContent</code>?</a></dt>
+			<dd>
+				<code>GUIContent</code> is a wrapper object for text, textures, and tooltips that you typically use
+				as labels.
+			</dd>
+
+			<dt><a href="index.html#q-indentLevel" id="a-indentLevel">Do we need to restore <code>indentLevel</code>?</a></dt>
+			<dd>
+				Because <code>EditorGUI.indentLevel</code> lives outside the scope of the method, changes to it will persist after
+				the method invocation is finished. However, Unity takes care of setting it back to the old value for us afterwards.
+			</dd>
+			
+			<dt><a href="index.html#q-bug" id="a-bug">Prefab revert doesn't work with undo?</a></dt>
+			<dd>
+				Unity version 4.3 and above have some editor bugs, and this is one of them. Some bugs have been partially
+				or completely fixed in updates, but others still remain.
+				
+			</dd>
+			
+			<dt><a href="index.html#q-GetPropertyHeight" id="a-GetPropertyHeight">Why a separate <code>GetPropertyHeight</code> method?</a></dt>
+			<dd>
+				The method is separate so that the height of a drawer can be queried before it is drawn.
+				For example, it can be used to determine whether a scrollbar is needed because the content won't fit in the available space.
+			</dd>
+		</dl>
+		
+		<footer></footer>
+		<script src="../../../jquery.js"></script>
+		<script src="../../../default.js"></script>
+	</body>
+</html>

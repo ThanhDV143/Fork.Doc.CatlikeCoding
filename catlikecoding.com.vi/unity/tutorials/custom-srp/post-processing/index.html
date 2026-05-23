@@ -1,0 +1,1310 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/custom-srp/post-processing/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/custom-srp/post-processing/tutorial-image.jpg">
+		<meta property="og:title" content="Post Processing">
+		<meta property="og:description" content="A Unity Custom SRP tutorial about creating a post-processing stack and adding a bloom effect.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Post Processing</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/custom-srp/post-processing/#article",
+				"headline": "Post Processing",
+				"alternativeHeadline": "Bloom",
+				"datePublished": "2020-07-29",
+				"dateModified": "2023-08-03",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Custom SRP tutorial about creating a post-processing stack and adding a bloom effect.",
+				"image": "https://catlikecoding.com/unity/tutorials/custom-srp/post-processing/tutorial-image.jpg",
+				"dependencies": "Unity 2022.3.5f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/custom-srp/", "name": "Custom SRP" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				BloomSettings: 1,
+				CameraRenderer: 1,
+				CascadeBlendMode: 1,
+				CustomLightEditor: 1,
+				CustomRenderPipeline: 1,
+				CustomRenderPipelineAsset: 1,
+				CustomShaderGUI: 1,
+				Directional: 1,
+				DirectionalShadowData: 1,
+				FilterMode: 1,
+				InputConfig: 1,
+				Lighting: 1,
+				MeshBall: 1,
+				Other: 1,
+				OtherShadowData: 1,
+				Pass: 1,
+				PerObjectMaterialProperties: 1,
+				PostFXSettings: 1,
+				PostFXStack: 1,
+				ShadowedDirLight: 1,
+				ShadowedOtherLight: 1,
+				ShadowData: 1,
+				Shadows: 1,
+				ShadowMask: 1,
+				ShadowMode: 1,
+				ShadowSettings: 1,
+				TextureSize: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../../scriptable-render-pipeline/reflections/index.html">Custom SRP</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Post Processing</h1>
+					<p>Bloom</p>
+					<ul>
+						<li>Create a simple post-FX stack.</li>
+						<li>Alter the rendered image.</li>
+						<li>Perform post-processing when needed.</li>
+						<li>Make an artistic bloom effect.</li>
+					</ul>
+				</header>
+				
+				<p>This is the 11th part of a tutorial series about creating a <a href="../../scriptable-render-pipeline/reflections/index.html">custom scriptable render pipeline</a>. It adds support for post processing, initially only bloom.</p>
+				
+				<p>This tutorial is made with Unity 2019.4.4f1 and upgraded to 2022.3.5f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Make it glow!</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Post-FX Stack</h2>
+					
+					<p>Most of the time a rendered image isn't displayed as-is. The image is post-processed, getting various effects&mdash;FX for short&mdash;applied to it. Common FX include bloom, color grading, depth-of-field, motion blur, and tone mapping. These FX are applied as a stack, one on top of the other. In this tutorial we'll create a simple post-FX stack that initially only supports bloom.</p>
+					
+					<section>
+						<h3>Settings Asset</h3>
+						
+						<p>A project could require multiple post-FX stack configurations, so we begin by creating a <code>PostFXSettings</code> asset type to store the settings for a stack.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>[CreateAssetMenu(menuName = "Rendering/Custom Post FX Settings")]</ins>
+<ins>public class PostFXSettings : ScriptableObject { }</ins></pre>
+						
+						<p>We'll use a single stack in this tutorial, which we'll make available to the RP by adding a configuration option for it to <code>CustomRenderPipelineAsset</code>, which passes it to the RP's constructor.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>PostFXSettings postFXSettings = default;</ins>
+
+	protected override RenderPipeline CreatePipeline () {
+		return new CustomRenderPipeline(
+			useDynamicBatching, useGPUInstancing, useSRPBatcher,
+			useLightsPerObject, shadows<ins>, postFXSettings</ins>
+		);
+	}</pre>
+						
+						<p><code>CustomRenderPipeline</code> then has to keep track of the FX settings and pass them to the camera renderer along with the other settings during rendering.</p>
+						
+						<pre translate="no">	<ins>PostFXSettings postFXSettings;</ins>
+
+	public CustomRenderPipeline (
+		bool useDynamicBatching, bool useGPUInstancing, bool useSRPBatcher,
+		bool useLightsPerObject, ShadowSettings shadowSettings<ins>,</ins>
+		<ins>PostFXSettings postFXSettings</ins>
+	) {
+		<ins>this.postFXSettings = postFXSettings;</ins>
+		&hellip;
+	}
+	
+	&hellip;
+	
+	protected override void Render (
+		ScriptableRenderContext context, List&lt;Camera> cameras
+	) {
+		for (int i = 0; i &lt; cameras.Count; i++) {
+			renderer.Render(
+				context, cameras[i],
+				useDynamicBatching, useGPUInstancing, useLightsPerObject,
+				shadowSettings<ins>, postFXSettings</ins>
+			);
+		}
+	}</pre>
+						
+						<p><code>CameraRenderer.Render</code> initially does nothing with the settings, as we don't have a stack yet.</p>
+						
+						<pre translate="no">	public void Render (
+		ScriptableRenderContext context, Camera camera,
+		bool useDynamicBatching, bool useGPUInstancing, bool useLightsPerObject,
+		ShadowSettings shadowSettings<ins>, PostFXSettings postFXSettings</ins>
+	) { &hellip; }</pre>
+						
+						<p>Now we can create an empty post-FX settings asset and assign it to the pipeline asset.</p>
+						
+						<figure>
+							<img src="post-fx-stack/post-fx-settings-assigned.png" width="320" height="42">
+							<figcaption>Assigned post FX settings.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Stack Object</h3>
+						
+						<p>We'll use the same approach for the stack that we used for <code>Lighting</code> and <code>Shadows</code>. We create a class for it that keeps track of a buffer, context, camera, and post-FX settings, with a public <code>Setup</code> method to initialize them.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+<ins>using UnityEngine.Rendering;</ins>
+
+<ins>public class PostFXStack {</ins>
+
+	<ins>const string bufferName = "Post FX";</ins>
+
+	<ins>CommandBuffer buffer = new CommandBuffer {</ins>
+		<ins>name = bufferName</ins>
+	<ins>};</ins>
+
+	<ins>ScriptableRenderContext context;</ins>
+	
+	<ins>Camera camera;</ins>
+
+	<ins>PostFXSettings settings;</ins>
+
+	<ins>public void Setup (</ins>
+		<ins>ScriptableRenderContext context, Camera camera, PostFXSettings settings</ins>
+	<ins>) {</ins>
+		<ins>this.context = context;</ins>
+		<ins>this.camera = camera;</ins>
+		<ins>this.settings = settings;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Next, add a public property to indicate whether the stack is active, which is only the case if there are settings for it. The idea is that if no settings are provided post-processing should be skipped.</p>
+						
+						<pre translate="no">	<ins>public bool IsActive => settings != null;</ins></pre>
+						
+						<p>And the last part we need is a public <code>Render</code> method that renders the stack. Applying an effect to the entire image is done by simply drawing a rectangle that covers the entire image, using an appropriate shader. Right now we have no shader, so we'll simply copy whatever's rendered up to this point to the camera's frame buffer. That can be done by invoking <code>Blit</code> on the command buffer, passing it identifiers for the source and destination. These identifiers can be provided in multiple formats. We'll use an integer for a source, for which we'll add a parameter, and <code>BuiltinRenderTextureType.CameraTarget</code> for the destination. Then we execute and clear the buffer.</p>
+						
+						<pre translate="no">	<ins>public void Render (int sourceId) {</ins>
+		<ins>buffer.Blit(sourceId, BuiltinRenderTextureType.CameraTarget);</ins>
+		<ins>context.ExecuteCommandBuffer(buffer);</ins>
+		<ins>buffer.Clear();</ins>
+	<ins>}</ins></pre>
+						
+						<p>In this case we don't need to manually begin and end buffer samples, as we don't need to invoke <code>ClearRenderTarget</code> because we completely replace what was at the destination.</p>
+						
+					</section>
+					
+					<section>
+						<h3>Using the Stack</h3>
+						
+						<p><code>CameraRenderer</code> now needs a stack instance and invoke <code>Setup</code> on it in <code>Render</code>, just like it does for its <code>Lighting</code> object.</p>
+						
+						<pre translate="no">	Lighting lighting = new Lighting();
+
+	<ins>PostFXStack postFXStack = new PostFXStack();</ins>
+
+	public void Render (&hellip;) {
+		&hellip;
+		lighting.Setup(
+			context, cullingResults, shadowSettings, useLightsPerObject
+		);
+		<ins>postFXStack.Setup(context, camera, postFXSettings);</ins>
+		buffer.EndSample(SampleName);
+		Setup();
+		&hellip;
+	}</pre>
+						
+						<p>Up to this point we always rendered directly to the camera's frame buffer, which is either one used for a display or a configured render texture. We have no direct control over those and are only supposed to write to them. So to provide a source texture for an active stack we have to use a render texture as an intermediate frame buffer for the camera. Getting one and setting it as the render target works like for shadow maps, except that we'll use the <code>RenderTextureFormat.Default</code> format. Do this before we clear the render target.</p>
+						
+						<pre translate="no">	<ins>static int frameBufferId = Shader.PropertyToID("_CameraFrameBuffer");</ins>
+	
+	&hellip;
+	
+	void Setup () {
+		context.SetupCameraProperties(camera);
+		CameraClearFlags flags = camera.clearFlags;
+
+		<ins>if (postFXStack.IsActive) {</ins>
+			<ins>buffer.GetTemporaryRT(</ins>
+				<ins>frameBufferId, camera.pixelWidth, camera.pixelHeight,</ins>
+				<ins>32, FilterMode.Bilinear, RenderTextureFormat.Default</ins>
+			<ins>);</ins>
+			<ins>buffer.SetRenderTarget(</ins>
+				<ins>frameBufferId,</ins>
+				<ins>RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store</ins>
+			<ins>);</ins>
+		<ins>}</ins>
+
+		buffer.ClearRenderTarget(&hellip;);
+		buffer.BeginSample(SampleName);
+		ExecuteBuffer();
+	}</pre>
+						
+						<p>Also add a <code>Cleanup</code> method to release the texture if we have an active stack. We can move the lighting cleanup there as well.</p>
+						
+						<pre translate="no">	<ins>void Cleanup () {</ins>
+		<ins>lighting.Cleanup();</ins>
+		<ins>if (postFXStack.IsActive) {</ins>
+			<ins>buffer.ReleaseTemporaryRT(frameBufferId);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Invoke <code>Cleanup</code> at the end of <code>Render</code> before submitting. Directly before that render the stack, if it is active.</p>
+						
+						<pre translate="no">	public void Render (&hellip;) {
+		&hellip;
+		DrawGizmos();
+		<ins>if (postFXStack.IsActive) {</ins>
+			<ins>postFXStack.Render(frameBufferId);</ins>
+		<ins>}</ins>
+		<ins>Cleanup();</ins>
+		<del>//lighting.Cleanup();</del>
+		Submit();
+	}</pre>
+						
+						<p>At this point the result should look no different, but an extra draw step has been added, copying from the intermediate to the final frame buffer. It's listed in the frame debugger as <em translate="no">Draw Dynamic</em>.</p>
+						
+						<figure>
+							<img src="post-fx-stack/rendering.png" width="170" height="132">
+							<figcaption>Rendering the FX stack.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Forced Clearing</h3>
+						
+						<p>When drawing to an intermediate frame buffer we render to a texture filled with arbitrary data. To prevent random results, when a stack is active always clear depth and color.</p>
+						
+						<pre translate="no">		CameraClearFlags flags = camera.clearFlags;
+
+		if (postFXStack.IsActive) {
+			<ins>if (flags > CameraClearFlags.Color€) {</ins>
+				<ins>flags = CameraClearFlags.Color€;</ins>
+			<ins>}</ins>
+			&hellip;
+		}
+
+		buffer.ClearRenderTarget(&hellip;);</pre>
+						
+						<p>Note that this makes it impossible to have a camera render on top of another without clearing when a post-FX stack is in use. There are ways around that, but that's out of the scope of this tutorial.</p>
+					</section>
+					
+					<section>
+						<h3>Gizmos</h3>
+						
+						<p>We're currently drawing all gizmos at the same time, but there is a distinction between those that should be rendered before and after post FX. So let's split the <code>DrawGizmos</code> method in two.</p>
+						
+						<pre translate="no">	partial void <ins>DrawGizmosBeforeFX</ins> ();
+
+	<ins>partial void DrawGizmosAfterFX ();</ins>
+	
+	&hellip;
+	
+#if UNITY_EDITOR
+	
+	&hellip;
+						
+	partial void <ins>DrawGizmosBeforeFX</ins> () {
+		if (Handles.ShouldRenderGizmos()) {
+			context.DrawGizmos(camera, GizmoSubset.PreImageEffects);
+			<del>//context.DrawGizmos(camera, GizmoSubset.PostImageEffects);</del>
+		}
+	}
+
+	<ins>partial void DrawGizmosAfterFX () {</ins>
+		<ins>if (Handles.ShouldRenderGizmos()) {</ins>
+			<ins>context.DrawGizmos(camera, GizmoSubset.PostImageEffects);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Then we can draw them at the correct time in <code>Render</code>.</p>
+						
+						<pre translate="no">		<del>//DrawGizmos();</del>
+		<ins>DrawGizmosBeforeFX();</ins>
+		if (postFXStack.IsActive) {
+			postFXStack.Render(frameBufferId);
+		}
+		<ins>DrawGizmosAfterFX();</ins></pre>
+						
+						<p>Note that when 3D icons are used for gizmos they are no longer obscured by objects when a stack is active. This happens because the scene window relies the depth data of the original frame buffer, which we don't use. We'll cover depth in combination with post FX in the future.</p>
+						
+						<figure>
+							<img src="post-fx-stack/gizmos-with-fx.png" width="130" height="130" alt="with">
+							<img src="post-fx-stack/gizmos-without-fx.png" width="130" height="130" alt="without">
+							<figcaption>3D gizmos with and without FX.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Custom Drawing</h3>
+						
+						<p>The <code>Blit</code> method that we current use draws a quad mesh&mdash;two triangles&mdash;that covers the entire screen space. But we could get the same results by drawing only a single triangle, which is a bit less work. We don't even need to send a single-triangle mesh to the GPU, we can generate it procedurally.</p>
+						
+						<aside>
+							<h3>Does it make a significant difference?</h3>
+							<div>
+								<p>The obvious benefit of that is the reduction of vertices from six to three. However, the more significant difference is that it eliminates the diagonal where the two triangles of the quad meet. Because GPUs render fragments parallel in small blocks, some fragments end up wasted along the edges of triangles. As the quad has two triangles, the fragment blocks along the diagonal get rendered twice, which is inefficient. Besides that rendering a single triangle can have better local cache coherency.</p>
+								
+								<figure>
+									<img src="post-fx-stack/quad-block-rendering.png" width="256" height="156">
+									<figcaption>Redundant block rendering, exaggerated.</figcaption>
+								</figure>
+							</div>
+						</aside>
+						
+						<p>Create a <em translate="no">PostFXStackPasses.hlsl</em> file in our RP's <em translate="no">Shaders</em> folder. We'll put all passes of our stack in there. The first thing we'll define in it is the <code class="shader">Varyings</code> struct, which only needs to contain the clip-space position and screen-space UV coordinates.</p>
+						
+						<pre class="shader" translate="no"><ins>#ifndef CUSTOM_POST_FX_PASSES_INCLUDED</ins>
+<ins>#define CUSTOM_POST_FX_PASSES_INCLUDED</ins>
+
+<ins>struct Varyings {</ins>
+	<ins>float4 positionCS : SV_POSITION;</ins>
+	<ins>float2 screenUV : VAR_SCREEN_UV;</ins>
+<ins>};</ins>
+
+<ins>#endif</ins></pre>
+						
+						<p>Next, create a default vertex pass, with only a vertex identifier as a parameter. It's an unsigned integer&mdash;<code class="shader">uint</code>&mdash;with the <code class="shader">SV_VertexID</code> semantic. Use the ID to generate the vertex position and UV coordinates. The X coordinates are &minus;1, &minus;1, 3. The Y coordinates are &minus;1, 3, &minus;1. To make the visible UV coordinates cover the 0&ndash;1 range use 0, 0, 2 for U and 0, 2, 0 for V.</p>
+						
+						<figure>
+								<img src="post-fx-stack/clip-space-triangle.png" width="335" height="335">
+								<figcaption>Triangle covering clip space.</figcaption>
+							</figure>
+						
+						<pre class="shader" translate="no"><ins>Varyings DefaultPassVertex (uint vertexID : SV_VertexID) {</ins>
+	<ins>Varyings output;</ins>
+	<ins>output.positionCS = float4(</ins>
+		<ins>vertexID &lt;= 1 ? -1.0 : 3.0,</ins>
+		<ins>vertexID == 1 ? 3.0 : -1.0,</ins>
+		<ins>0.0, 1.0</ins>
+	<ins>);</ins>
+	<ins>output.screenUV = float2(</ins>
+		<ins>vertexID &lt;= 1 ? 0.0 : 2.0,</ins>
+		<ins>vertexID == 1 ? 2.0 : 0.0</ins>
+	<ins>);</ins>
+	<ins>return output;</ins>
+<ins>}</ins></pre>
+						
+						<p>Add a fragment pass for simple copying, making it initially return the UV coordinates for debugging purposes.</p>
+						
+						<pre class="shader" translate="no"><ins>float4 CopyPassFragment (Varyings input) : SV_TARGET {</ins>
+	<ins>return float4(input.screenUV, 0.0, 1.0);</ins>
+<ins>}</ins></pre>
+						
+						<p>Create an accompanying shader file in the same folder. All passes will use no culling and ignore depth, so we can put those directives directly in the <code class="shader">Subshader</code> block. We also always included our <em translate="no">Common</em> and <em translate="no">PostFXStackPasses</em> files. Its only pass right now is for copying, using the vertex and fragment functions that we created. We can also give it a name by using the <code class="shader">Name</code> directive, which is handy when combining multiple passes in the same shader, as the frame debugger will use it for the pass label instead of a number. Finally, put its menu item under the <em translate="no">Hidden</em> folder so it doesn't show up when selecting a shader for a material.</p>
+						
+						<pre class="shader" translate="no"><ins>Shader "Hidden/Custom RP/Post FX Stack" {</ins>
+	
+	<ins>SubShader {</ins>
+		<ins>Cull Off</ins>
+		<ins>ZTest Always</ins>
+		<ins>ZWrite Off</ins>
+		
+		<ins>HLSLINCLUDE</ins>
+		<ins>#include "../ShaderLibrary/Common.hlsl"</ins>
+		<ins>#include "PostFXStackPasses.hlsl"</ins>
+		<ins>ENDHLSL</ins>
+
+		<ins>Pass {</ins>
+			<ins>Name "Copy"</ins>
+			
+			<ins>HLSLPROGRAM</ins>
+				<ins>#pragma target 3.5</ins>
+				<ins>#pragma vertex DefaultPassVertex</ins>
+				<ins>#pragma fragment CopyPassFragment</ins>
+			<ins>ENDHLSL</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>We'll simply manually link the shader to our stack via its settings.</p>
+						
+						<pre translate="no">public class PostFXSettings : ScriptableObject {
+
+	<ins>[SerializeField]</ins>
+	<ins>Shader shader = default;</ins>
+}</pre>
+						
+						<figure>
+							<img src="post-fx-stack/post-fx-shader.png" width="320" height="42">
+							<figcaption>Post FX shader assigned.</figcaption>
+						</figure>
+						
+						<p>But we need a material when rendering, so add a public property which we can use to get a material directly from the settings asset. We'll create it on demand and set to hide and not save in the project. Also, the material cannot be serialized along with the asset because it's created on demand.</p>
+						
+						<pre translate="no">	<ins>[System.NonSerialized]</ins>
+	<ins>Material material;</ins>
+
+	<ins>public Material Material€ {</ins>
+		<ins>get {</ins>
+			<ins>if (material == null &amp;&amp; shader != null) {</ins>
+				<ins>material = new Material(shader);</ins>
+				<ins>material.hideFlags = HideFlags.HideAndDontSave;</ins>
+			<ins>}</ins>
+			<ins>return material;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>As it's convenient to address passes by name instead of a number, create a <code>Pass</code> enum inside <code>PostFXStack</code>, initially only containing the copy pass.</p>
+						
+						<pre translate="no">	<ins>enum Pass {</ins>
+		<ins>Copy</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can define our own <code>Draw</code> method. Give it two <code>RenderTargetIdentifier</code> parameters to indicate from where and to where should be drawn, plus a pass parameter. In it, make the source available via a <em translate="no">_PostFXSource</em> texture, use the destination as the render target as before, and then draw the triangle. We do that by invoking <code>DrawProcedural</code> on the buffer, with an unused matrix, the stack material, and the pass as arguments. After that come two more arguments. First is the kind of shape that we're drawing, which is <code>MeshTopology.Triangles</code>. Second is how many vertices we want, which is three for a single triangle.</p>
+						
+						<pre translate="no">	<ins>int fxSourceId = Shader.PropertyToID("_PostFXSource");</ins>
+	
+	&hellip;
+	
+	<ins>void Draw (</ins>
+		<ins>RenderTargetIdentifier from, RenderTargetIdentifier to, Pass pass</ins>
+	<ins>) {</ins>
+		<ins>buffer.SetGlobalTexture(fxSourceId, from);</ins>
+		<ins>buffer.SetRenderTarget(</ins>
+			<ins>to, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store</ins>
+		<ins>);</ins>
+		<ins>buffer.DrawProcedural(</ins>
+			<ins>Matrix4x4.identity, settings.Material€, (int)pass,</ins>
+			<ins>MeshTopology.Triangles, 3</ins>
+		<ins>);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Finally, replace the invocation of <code>Blit</code> with our own method.</p>
+						
+						<pre translate="no">		<del>//buffer.Blit(sourceId, BuiltinRenderTextureType.CameraTarget);</del>
+		<ins>Draw(sourceId, BuiltinRenderTextureType.CameraTarget, Pass.Copy);</ins></pre>
+						
+					</section>
+					
+					<section>
+						<h3>Don't Always Apply FX</h3>
+						
+						<p>We should now see the screen-space UV coordinates appear in the scene window. And in the game window. And also in material previews and even in reflection probes, once they refresh.</p>
+						
+						<figure>
+							<img src="post-fx-stack/reflection-probe-fx.png" width="160" height="160">
+							<figcaption>Reflection probe with FX applied.</figcaption>
+						</figure>
+						
+						<p>The idea is that post FX get applied to proper cameras and nothing else. We can enforce this by checking whether we have a game or scene camera in <code>PostFXStack.Setup</code>. If not we set the settings to <code>null</code>, which deactivates the stack for that camera.
+						
+						<pre translate="no">		this.settings =
+			<ins>camera.cameraType &lt;= CameraType.SceneView€ ?</ins> settings <ins>: null</ins>;</pre>
+						
+						<p>Besides that, it's also possible to toggle post-processing in the scene window via its effects dropdown menu in its toolbar. It's possible to have multiple scene windows open at the same time, which can have post effects enabled or disabled individually. To support this create an editor partial class for <code>PostFXStack</code> with an <code>ApplySceneViewState</code> method that does nothing in a build. Its editor version checks whether we're dealing with a scene view camera and if so disables the stack if the currently drawing scene view's state has image effects disabled.</p>
+						
+						<pre translate="no"><ins>using UnityEditor;</ins>
+<ins>using UnityEngine;</ins>
+
+<ins>partial class PostFXStack {</ins>
+
+	<ins>partial void ApplySceneViewState ();</ins>
+
+<ins>#if UNITY_EDITOR</ins>
+
+	<ins>partial void ApplySceneViewState () {</ins>
+		<ins>if (</ins>
+			<ins>camera.cameraType == CameraType.SceneView€ &amp;&amp;</ins>
+			<ins>!SceneView.currentDrawingSceneView.sceneViewState.showImageEffects</ins>
+		<ins>) {</ins>
+			<ins>settings = null;</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+<ins>#endif</ins>
+<ins>}</ins></pre>
+						
+						<p>Invoke this method at the end of <code>Setup</code>.</p>
+						
+						<pre translate="no">public <ins>partial</ins> class PostFXStack {
+
+	&hellip;
+
+	public void Setup (&hellip;) {
+		&hellip;
+		<ins>ApplySceneViewState();</ins>
+	}</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Copying</h3>
+						
+						<p>We complete the stack by making our copy pass return the source color. Create a <code class="shader">GetSource</code> function for that, which does the sampling. We'll always use a linear clamp sampler so we can declare that explicitly.</p>
+						
+						<pre class="shader" translate="no"><ins>TEXTURE2D(_PostFXSource);</ins>
+<ins>SAMPLER(sampler_linear_clamp);</ins>
+
+<ins>float4 GetSource(float2 screenUV) {</ins>
+	<ins>return SAMPLE_TEXTURE2D(_PostFXSource, sampler_linear_clamp, screenUV);</ins>
+<ins>}</ins>
+
+float4 CopyPassFragment (Varyings input) : SV_TARGET {
+	return <ins>GetSource(input.screenUV)</ins>;
+}</pre>
+						
+						<p>Because our buffer will never have mip maps we can sidestep automatic mip map selection by replacing <code class="shader">SAMPLE_TEXTURE2D</code> with <code class="shader">SAMPLE_TEXTURE2D_LOD</code>, adding an extra argument to force the selection of mip map level zero.</p>
+						
+						<pre class="shader" translate="no">	<ins>return <ins>SAMPLE_TEXTURE2D_LOD</ins>(_PostFXSource, sampler_linear_clamp, screenUV<ins>, 0</ins>);</ins></pre>
+						
+						<p>We finally get the original image back, but in some cases it is upside down, typically in the scene window. This depends on the graphics API and the types of the source and destination. This happens because some graphics APIs have the texture V coordinate start at the top while others have it start at the bottom. Unity usually hides this, but cannot do so in all situations involving render textures. Fortunately Unity indicates whether a manual flip is needed via the X component of a <em translate="no">_ProjectionParams</em> vector, which we should define in <em translate="no">UnityInput</em>.</p>
+						
+						<pre class="shader" translate="no"><ins>float4 _ProjectionParams;</ins></pre>
+						
+						<p>If the value is negative we have to flip the V coordinate in <code class="shader">DefaultPassVertex</code>.</p>
+						
+						<pre class="shader" translate="no">Varyings DefaultPassVertex (uint vertexID : SV_VertexID) {
+	&hellip;
+	<ins>if (_ProjectionParams.x &lt; 0.0) {</ins>
+		<ins>output.screenUV.y = 1.0 - output.screenUV.y;</ins>
+	<ins>}</ins>
+	<ins>return output;</ins>
+}</pre>
+						
+					</section>
+					
+				</section>
+				
+				<section>
+					<h2>Bloom</h2>
+					
+					<p>The bloom post effect is used to make things glow. This has a basis in physics, but the classical bloom effect is artistic rather than realistic. The nonrealistic bloom is very obvious and is thus a good effect to demonstrate that our post FX stack works. We'll look at more realistic bloom in the next tutorial, when we'll cover HDR rendering. For now we'll aim for an LDR bloom glow effect.</p>
+					
+					<section>
+						<h3>Bloom Pyramid</h3>
+						
+						<p>Bloom represents the scattering of color, which can be done by blurring the image. Bright pixels will bleed into adjacent darker pixels and thus appear to glow. The simplest and fastest way to blur a texture is by copying it to another texture that has half the width and height. Each sample of the copy pass ends up sampling in between four source pixels. With bilinear filtering this averages blocks of 2&times;2 pixels.</p>
+						
+						<figure>
+							<img src="bloom/2x2-bilinear-downsampling.png" width="153" height="153">
+							<figcaption>Bilinear downsampling 4&times;4 to 2&times;2.</figcaption>
+						</figure>
+						
+						<p>Doing this a single time only blurs a little. So we repeat this process, progressively downsampling until a desired level, effectively building a pyramid of textures.</p>
+						
+						<figure>
+							<img src="bloom/texture-pyramid.png" width="300" height="161">
+							<figcaption>Pyramid with four textures, halving dimensions each level.</figcaption>
+						</figure>
+						
+						<p>We need to keep track of the textures in the stack, but how many there are depends on how many levels there are in the pyramid, which depends on the source image size. Let's define a maximum of sixteen levels in <code>PostFXStack</code>, which would be enough to scale a 65,536&times;65,526 texture all the way down to a single pixel.</p>
+						
+						<pre translate="no">	<ins>const int maxBloomPyramidLevels = 16;</ins></pre>
+						
+						<p>To keep track of the textures in the pyramid we need texture identifiers. We'll use the property names <em translate="no">_BloomPyramid0</em>, <em translate="no">_BloomPyramid1</em>, and so on. But let's not write all these sixteen names explicitly. Instead we'll get the identifiers in a constructor method and only keep track of the first. This works because <code>Shader.PropertyToID</code> simply assigns identifiers sequentially in the order that new property names are requested. We just have to make sure that all identifiers are requested at once, because the numbers are fixed per application session, both in the editor and in builds.</p>
+						
+						<pre translate="no">	<ins>int bloomPyramidId;</ins>
+	
+	&hellip;
+	
+	<ins>public PostFXStack () {</ins>
+		<ins>bloomPyramidId = Shader.PropertyToID("_BloomPyramid0");</ins>
+		<ins>for (int i = 1; i &lt; maxBloomPyramidLevels; i++) {</ins>
+			<ins>Shader.PropertyToID("_BloomPyramid" + i);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now create a <code>DoBloom</code> method that applies the bloom effect for a give source identifier. Begin by halving the camera's pixel width and height and selecting the default render texture format. Initially we'll copy from the source to the first texture in the pyramid. Keep track of those identifiers.</p>
+						
+						<pre translate="no">	<ins>void DoBloom (int sourceId) {</ins>
+		<ins>buffer.BeginSample("Bloom");</ins>
+		<ins>int width = camera.pixelWidth / 2, height = camera.pixelHeight / 2;</ins>
+		<ins>RenderTextureFormat format = RenderTextureFormat.Default;</ins>
+		<ins>int fromId = sourceId, toId = bloomPyramidId;</ins>
+		<ins>buffer.EndSample("Bloom");</ins>
+	<ins>}</ins></pre>
+						
+						<p>Then loop through all pyramid levels. Each iteration, begin by checking whether a level would become degenerate. If so we stop at that point. If not get a new render texture, copy to it, make that the new source, increment the destination, and halve the dimensions again. Declare the loop iterator variable outside the loop, as we need it later.</p>
+						
+						<pre translate="no">		int fromId = sourceId, toId = bloomPyramidId;
+
+		<ins>int i;</ins>
+		<ins>for (i = 0; i &lt; maxBloomPyramidLevels; i++) {</ins>
+			<ins>if (height &lt; 1 || width &lt; 1) {</ins>
+				<ins>break;</ins>
+			<ins>}</ins>
+			<ins>buffer.GetTemporaryRT(</ins>
+				<ins>toId, width, height, 0, FilterMode.Bilinear, format</ins>
+			<ins>);</ins>
+			<ins>Draw(fromId, toId, Pass.Copy);</ins>
+			<ins>fromId = toId;</ins>
+			<ins>toId += 1;</ins>
+			<ins>width /= 2;</ins>
+			<ins>height /= 2;</ins>
+		<ins>}</ins></pre>
+						
+						<p>Once the pyramid is complete copy the end result to the camera target. Then decrement the iterator and loop backwards, releasing all textures that we claimed.</p>
+						
+						<pre translate="no">		for (i = 0; i &lt; maxBloomPyramidLevels; i++) { &hellip; }
+
+		<ins>Draw(fromId, BuiltinRenderTextureType.CameraTarget, Pass.Copy);</ins>
+
+		<ins>for (i -= 1; i >= 0; i--) {</ins>
+			<ins>buffer.ReleaseTemporaryRT(bloomPyramidId + i);</ins>
+		<ins>}</ins>
+		buffer.EndSample("Bloom");</pre>
+						
+						<p>Now we can replace the simple copy in <code>Render</code> with the bloom effect.</p>
+						
+						<pre translate="no">	public void Render (int sourceId) {
+		<del>//Draw(sourceId, BuiltinRenderTextureType.CameraTarget, Pass.Copy);</del>
+		<ins>DoBloom(sourceId);</ins>
+		context.ExecuteCommandBuffer(buffer);
+		buffer.Clear();
+	}</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Configurable Bloom</h3>
+						
+						<p>We're now blurring so much that the end result is almost uniform. You can inspect the intermediate steps via the frame debugger. Those steps appear more useful as end points, so let's make it possible to stop early.</p>
+						
+						<figure>
+							<img src="bloom/progressive-downsampling.png" width="360" height="80">
+							<figcaption>Three iterations of progressive downsampling.</figcaption>
+						</figure>
+						
+						<p>We can do that in two ways. First, we can limit the amount of blur iterations. Second, we can set the downscale limit to a higher value. Let's support both, by adding a <code>BloomSettings</code> configuration struct inside <code>PostFXSettings</code> with options for them. Make it publicly available via a getter property.</p>
+						
+						<pre translate="no">	<ins>[System.Serializable]</ins>
+	<ins>public struct BloomSettings {</ins>
+
+		<ins>[Range(0f, 16f)]</ins>
+		<ins>public int maxIterations;</ins>
+
+		<ins>[Min(1f)]</ins>
+		<ins>public int downscaleLimit;</ins>
+	<ins>}</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>BloomSettings bloom = default;</ins>
+
+	<ins>public BloomSettings Bloom => bloom;</ins></pre>
+						
+						<figure>
+							<img src="bloom/bloom-settings.png" width="320" height="104">
+							<figcaption>Default bloom settings.</figcaption>
+						</figure>
+						
+						<p>Have <code>PostFXStack.DoBloom</code> use these settings to limit itself.</p>
+						
+						<pre translate="no">		<ins>PostFXSettings.BloomSettings bloom = settings.Bloom;</ins>
+		int width = camera.pixelWidth / 2, height = camera.pixelHeight / 2;
+		RenderTextureFormat format = RenderTextureFormat.Default;
+		int fromId = sourceId, toId = bloomPyramidId;
+
+		int i;
+		for (i = 0; i &lt; <ins>bloom.maxIterations</ins>; i++) {
+			if (height &lt; <ins>bloom.downscaleLimit</ins> || width &lt; <ins>bloom.downscaleLimit</ins>) {
+				break;
+			}
+			buffer.GetTemporaryRT(
+				toId, width, height, 0, FilterMode.Bilinear, format
+			);
+			&hellip;
+		}</pre>
+						
+						<figure>
+							<img src="bloom/down-3.png" width="320" height="200" alt="3 steps">
+							<img src="bloom/down-5.png" width="320" height="200" alt="5 steps">
+							<figcaption>Progressive bilinear downsampling, 3 and 5 steps.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Gaussian Filtering</h3>
+						
+						<p>Downsampling with a small 2&times;2 filter produces very blocky results. The effect can be improved a lot by using a larger filter kernel, for example an approximate 9&times;9 Gaussian filter. If we combine this with bilinear downsampling we double it to effectively 18&times;18. This is what the Universal RP and HDRP use for their bloom.</p>
+												
+						<p>Although this operation blends 81 samples it is separable, which means that it can be split in a horizontal and a vertical pass, blending a single row or column of nine samples each. Thus we need to sample only 18 times, but with two draws per iteration.</p>
+						
+						<aside>
+							<h3>How does a separable filter work?</h3>
+							<div>
+								<p>It's a filter that can be created with a symmetrical row vector multiplied with its transpose.</p>
+								
+								<figure>
+									<img src="bloom/separable-filter.png" width="470" height="301">
+									<figcaption>Separable 3&times;3 filter with relative weights.</figcaption>
+								</figure>
+							</div>
+						</aside>
+						
+						<p>Let's start with the horizonal pass. Create a new <code class="shader">BloomHorizontalPassFragment</code> function for it in <em translate="no">PostFXStackPasses</em>. It accumulates a row of nine samples centered on the current UV coordinates. We'll also downsample at the same time so each offset step is double the source texel width. The sample weights starting from the left are 0.01621622, 0.05405405, 0.12162162, 0.19459459, then 0.22702703 for the center and reversed for the other side.</p>
+						
+						<pre class="shader" translate="no"><ins>float4 _PostFXSource_TexelSize;</ins>
+
+<ins>float4 GetSourceTexelSize () {</ins>
+	<ins>return _PostFXSource_TexelSize;</ins>
+<ins>}</ins>
+
+&hellip;
+
+<ins>float4 BloomHorizontalPassFragment (Varyings input) : SV_TARGET {</ins>
+	<ins>float3 color = 0.0;</ins>
+	<ins>float offsets[] = {</ins>
+		<ins>-4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0</ins>
+	<ins>};</ins>
+	<ins>float weights[] = {</ins>
+		<ins>0.01621622, 0.05405405, 0.12162162, 0.19459459, 0.22702703,</ins>
+		<ins>0.19459459, 0.12162162, 0.05405405, 0.01621622</ins>
+	<ins>};</ins>
+	<ins>for (int i = 0; i &lt; 9; i++) {</ins>
+		<ins>float offset = offsets[i] * 2.0 * GetSourceTexelSize().x;</ins>
+		<ins>color += GetSource(input.screenUV + float2(offset, 0.0)).rgb * weights[i];</ins>
+	<ins>}</ins>
+	<ins>return float4(color, 1.0);</ins>
+<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Where do those weights come from?</h3>
+							<div>
+								<p>The weights are derived from Pascal's triangle. For a proper 9&times;9 Gaussian filter we'd pick the ninth row of the triangle, which is 1 8 28 56 70 56 28 8 1. But that makes the contribution of the samples at the edge of the filter too weak to notice, so we shift down to the thirteenth row and cut off its edges, arriving at 66 220 495 792 924 792 495 220 66. The sum of those numbers is 4070, so divide each number by that to get the final weights.</p>
+							</div>
+						</aside>
+						
+						<p>Also add a pass for it to the <em translate="no">PostFXStack</em> shader. I placed it above the copy pass, to keep them in alphabetical order.</p>
+						
+						<pre class="shader" translate="no">		<ins>Pass {</ins>
+			<ins>Name "Bloom Horizontal"</ins>
+			
+			<ins>HLSLPROGRAM</ins>
+				<ins>#pragma target 3.5</ins>
+				<ins>#pragma vertex DefaultPassVertex</ins>
+				<ins>#pragma fragment BloomHorizontalPassFragment</ins>
+			<ins>ENDHLSL</ins>
+		<ins>}</ins></pre>
+						
+						<p>Add an entry for it to the <code>PostFXStack.Pass</code> enum as well, again in the same order.</p>
+						
+						<pre translate="no">	enum Pass {
+		<ins>BloomHorizontal,</ins>
+		Copy
+	}</pre>
+						
+						<p>Now we can use the bloom-horizontal pass when downsampling in <code>DoBloom</code>.</p>
+						
+						<pre translate="no">			Draw(fromId, toId, Pass.<ins>BloomHorizontal</ins>);</pre>
+						
+						<figure>
+							<img src="bloom/down-horizontal-3.png" width="320" height="200" alt="3 steps">
+							<img src="bloom/down-horizontal-5.png" width="320" height="200" alt="5 steps">
+							<figcaption>Horizontal Gaussian, 3 and 5 steps.</figcaption>
+						</figure>
+						
+						<p>At this point the result is obviously stretched horizontally, but it looks promising. We can create the vertical pass by duplicating <code class="shader">BloomHorizontalPassFragment</code>, renaming it, and switching from rows to columns. We downsampled in the first pass but this time we stay at the same size to complete the Gaussian filter, so the texel size offset shouldn't be doubled.</p>
+						
+						<pre class="shader" translate="no">float4 <ins>BloomVerticalPassFragment</ins> (Varyings input) : SV_TARGET {
+	float3 color = 0.0;
+	float offsets[] = {
+		-4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0
+	};
+	float weights[] = {
+		0.01621622, 0.05405405, 0.12162162, 0.19459459, 0.22702703,
+		0.19459459, 0.12162162, 0.05405405, 0.01621622
+	};
+	for (int i = 0; i &lt; 9; i++) {
+		float offset = offsets[i] * <ins>GetSourceTexelSize().y</ins>;
+		color += GetSource(input.screenUV + float2(<ins>0.0</ins>, <ins>offset</ins>)).rgb * weights[i];
+	}
+	return float4(color, 1.0);
+}</pre>
+						
+						<p>Add a pass and enum entry for it as well. I won't shows those steps anymore from now on.</p>
+						
+						<p>We now need an additional step in the middle of each pyramid level, for which we also have to reserve texture identifiers. We can do so by simply doubling the loop limit in the <code>PostFXStack</code> constructor. As we haven't introduced other shader property names the identifiers will all be in sequence, otherwise a restart of Unity would be needed.</p>
+						
+						<pre translate="no">	public PostFXStack () {
+		bloomPyramidId = Shader.PropertyToID("_BloomPyramid0");
+		for (int i = 1; i &lt; maxBloomPyramidLevels <ins>* 2</ins>; i++) {
+			Shader.PropertyToID("_BloomPyramid" + i);
+		}
+	}</pre>
+						
+						<p>In <code>DoBloom</code> the destination identifier now has to start one higher and increase by two after each downsampling step. Then the mid texture can be placed in between. The horizontal draw goes to the middle, followed by a vertical draw to the destination. We also have to release the additional textures, which is easiest by working backwards from the last pyramid source.</p>
+						
+						<figure>
+							<img src="bloom/hv-downsamling.png" width="360" height="305">
+							<figcaption>Horizontal to next level, vertical at same level.</figcaption>
+						</figure>
+						
+						<pre translate="no">	void DoBloom (int sourceId) {
+		&hellip;
+		int fromId = sourceId, toId = bloomPyramidId <ins>+ 1</ins>;
+		
+		for (i = 0; i &lt; bloom.maxIterations; i++) {
+			&hellip;
+			<ins>int midId = toId - 1;</ins>
+			<ins>buffer.GetTemporaryRT(</ins>
+				<ins>midId, width, height, 0, FilterMode.Bilinear, format</ins>
+			<ins>);</ins>
+			buffer.GetTemporaryRT(
+				toId, width, height, 0, FilterMode.Bilinear, format
+			);
+			Draw(fromId, <ins>midId</ins>, Pass.BloomHorizontal);
+			<ins>Draw(midId, toId, Pass.BloomVertical);</ins>
+			fromId = toId;
+			toId += <ins>2</ins>;
+			&hellip;
+		}
+
+		Draw(fromId, BuiltinRenderTextureType.CameraTarget, Pass.Copy);
+
+		for (i -= 1; i >= 0; i--) {
+			buffer.ReleaseTemporaryRT(<ins>fromId</ins>);
+			<ins>buffer.ReleaseTemporaryRT(fromId - 1);</ins>
+			<ins>fromId -= 2;</ins>
+		}
+		buffer.EndSample("Bloom");
+	}</pre>
+						
+						<figure>
+							<img src="bloom/down-gaussian-3.png" width="320" height="200" alt="3 steps">
+							<img src="bloom/down-gaussian-5.png" width="320" height="200" alt="5 steps">
+							<figcaption>Complete Gaussian, 3 and 5 steps.</figcaption>
+						</figure>
+						
+						<p>Our downsampling filter is now complete and looks a lot better than simple bilinear filtering, at the cost of more texture samples. Fortunately we can reduce the amount of samples a bit by using bilinear filtering to sample in between the Gaussian sampling points at appropriate offsets. That reduces nine samples to just five. We can use this trick in <code class="shader">BloomVerticalPassFragment</code>. The offsets become 3.23076923 and 1.38461538 in both directions, with weights 0.07027027 and 0.31621622.</p>
+						
+						<pre class="shader" translate="no">	float offsets[] = {
+		<ins>-3.23076923, -1.38461538, 0.0, 1.38461538, 3.23076923</ins>
+	};
+	float weights[] = {
+		<ins>0.07027027, 0.31621622, 0.22702703, 0.31621622, 0.07027027</ins>
+	};
+	for (int i = 0; i &lt; <ins>5</ins>; i++) {
+		float offset = offsets[i] * GetSourceTexelSize().y;
+		color += GetSource(input.screenUV + float2(0.0, offset)).rgb * weights[i];
+	}</pre>
+						
+						<p>We cannot do this in <code class="shader">BloomHorizontalPassFragment</code> because we already use bilinear filtering for downsampling in that pass. Each of its nine samples averages 2&times;2 source pixels.</p>
+						
+					</section>
+					
+					<section>
+						<h3>Additive Blurring</h3>
+						
+						<p>Using the top of the bloom pyramid as the final image produces a uniform blend that doesn't look like anything is glowing. We can get the desired result by progressively upsampling back down the pyramid, accumulating all levels in a single image.</p>
+						
+						<figure>
+							<img src="bloom/additive-progressive-upsampling.png" width="285" height="305">
+							<figcaption>Additive progressive upsampling, reusing textures.</figcaption>
+						</figure>
+						
+						<p>We could use additive blending to combine two images, but let's use the same blend mode for all passes and instead add a second source texture. Claim an identifier for it in <code>PostFXStack</code>.</p>
+						
+						<pre translate="no">	int
+		fxSourceId = Shader.PropertyToID("_PostFXSource")<ins>,</ins>
+		<ins>fxSource2Id = Shader.PropertyToID("_PostFXSource2")</ins>;</pre>
+						
+						<p>Then no longer perform the final draw directly after finishing the pyramid in <code>DoBloom</code>. Instead, release the texture used for the horizontal draw of the last iteration and set the destination to the texture used for the horizontal draw one level lower.</p>
+						
+						<pre translate="no">		<del>//Draw(fromId, BuiltinRenderTextureType.CameraTarget, Pass.Copy);</del>
+		<ins>buffer.ReleaseTemporaryRT(fromId - 1);</ins>
+		<ins>toId -= 5;</ins></pre>
+						
+						<p>When we loop back we draw again each iteration, in the opposite direction, with the result of each level as the second source. This works only up to the fist level, so we have to stop one step earlier. After that draw to the final destination with the original image as the secondary source.</p>
+						
+						<pre translate="no">		for (i -= 1; <ins>i > 0</ins>; i--) {
+			<ins>buffer.SetGlobalTexture(fxSource2Id, toId + 1);</ins>
+			<ins>Draw(fromId, toId, Pass.Copy);</ins>
+			buffer.ReleaseTemporaryRT(fromId);
+			buffer.ReleaseTemporaryRT(<ins>toId + 1</ins>);
+			fromId = <ins>toId</ins>;
+			<ins>toId -= 2;</ins>
+		}
+
+		<ins>buffer.SetGlobalTexture(fxSource2Id, sourceId);</ins>
+		<ins>Draw(fromId, BuiltinRenderTextureType.CameraTarget, Pass.Copy);</ins>
+		<ins>buffer.ReleaseTemporaryRT(fromId);</ins>
+		buffer.EndSample("Bloom");</pre>
+						
+						<p>To get this to work we need to make the secondary source available to the shader passes.</p>
+						
+						<pre class="shader" translate="no">TEXTURE2D(_PostFXSource);
+<ins>TEXTURE2D(_PostFXSource2);</ins>
+SAMPLER(sampler_linear_clamp);
+
+&hellip;
+
+<ins>float4 GetSource2(float2 screenUV) {</ins>
+	<ins>return SAMPLE_TEXTURE2D_LOD(_PostFXSource2, sampler_linear_clamp, screenUV, 0);</ins>
+<ins>}</ins></pre>
+						
+						<p>And introduce a new bloom combine pass that samples and adds both textures. As before I only show the fragment program, not the new shader pass nor the new enum entry.</p>
+						
+						<pre class="shader" translate="no"><ins>float4 BloomCombinePassFragment (Varyings input) : SV_TARGET {</ins>
+	<ins>float3 lowRes = GetSource(input.screenUV).rgb;</ins>
+	<ins>float3 highRes = GetSource2(input.screenUV).rgb;</ins>
+	<ins>return float4(lowRes + highRes, 1.0);</ins>
+<ins>}</ins></pre>
+						
+						<p>Use the new pass when upsampling.</p>
+						
+						<pre translate="no">		for (i -= 1; i > 0; i--) {
+			buffer.SetGlobalTexture(fxSource2Id, toId + 1);
+			Draw(fromId, toId, Pass.<ins>BloomCombine</ins>);
+			&hellip;
+		}
+
+		buffer.SetGlobalTexture(fxSource2Id, sourceId);
+		Draw(
+			bloomPyramidId, BuiltinRenderTextureType.CameraTarget,
+			Pass.<ins>BloomCombine</ins>
+		);</pre>
+						
+						<figure>
+							<img src="bloom/additive-3.png" width="320" height="200" alt="3 steps">
+							<img src="bloom/additive-5.png" width="320" height="200" alt="5 steps">
+							<figcaption>Additive upsampling, 3 and 5 steps.</figcaption>
+						</figure>
+						
+						<p>We finally have an effect that looks like everything is glowing. But our new approach only works if there are at least two iterations. If we end up performing only a single iteration then we should skip the entire upsampling phase and only have to release the texture used for the first horizontal pass.</p>
+						
+						<pre translate="no">		<ins>if (i > 1) {</ins>
+			buffer.ReleaseTemporaryRT(fromId - 1);
+			toId -= 5;
+			for (i -= 1; i > 0; i--) {
+				&hellip;
+			}
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>buffer.ReleaseTemporaryRT(bloomPyramidId);</ins>
+		<ins>}</ins></pre>
+						
+						<p>And if we end up skipping bloom entirely we have to abort and perform a copy instead.</p>
+						
+						<pre translate="no">		int width = camera.pixelWidth / 2, height = camera.pixelHeight / 2;
+		
+		<ins>if (</ins>
+			<ins>bloom.maxIterations == 0 ||</ins>
+			<ins>height &lt; bloom.downscaleLimit || width &lt; bloom.downscaleLimit</ins>
+		<ins>) {</ins>
+			<ins>Draw(sourceId, BuiltinRenderTextureType.CameraTarget, Pass.Copy);</ins>
+			<ins>buffer.EndSample("Bloom");</ins>
+			<ins>return;</ins>
+		<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Bicubic Upsampling</h3>
+						
+						<p>Although the Gaussian filter produces smooth results we still performing bilinear filtering when upsampling, which can give the glow a blocky appearance. This is most obvious where contract in the original image is high, especially when in motion.</p>
+						
+						<figure>
+							<img src="bloom/upsampling-bilinear.png" width="320" height="200">
+							<figcaption>White glow on black background appears blocky.</figcaption>
+						</figure>
+						
+						<p>We can smooth out these artifacts by switching to bicubic filtering. There is no hardware support for this, but we can use the <code class="shader">SampleTexture2DBicubic</code> function defined in the <em translate="no">Filtering</em> include file of the Core RP Library. Use it to create our own <code class="shader">GetSourceBicubic</code> function, by passing the texture and sampler state, UV coordinates, plus the texel size vector with the size pairs swapped. Beyond that it has an argument for the maximum texture coordinate which is simply 1, followed by another unused argument which can just be zero.</p>
+						
+						<pre class="shader" translate="no"><ins>#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Filtering.hlsl"</ins>
+
+&hellip;
+
+<ins>float4 GetSourceBicubic (float2 screenUV) {</ins>
+	<ins>return SampleTexture2DBicubic(</ins>
+		<ins>TEXTURE2D_ARGS(_PostFXSource, sampler_linear_clamp), screenUV,</ins>
+		<ins>_PostFXSource_TexelSize.zwxy, 1.0, 0.0</ins>
+	<ins>);</ins>
+<ins>}</ins></pre>
+						
+						<p>Use the new function in the bloom-combine pass so we upsample with bicubic filtering.</p>
+						
+						<pre class="shader" translate="no">float4 BloomCombinePassFragment (Varyings input) : SV_TARGET {
+	float3 lowRes = <ins>GetSourceBicubic</ins>(input.screenUV).rgb;
+	float3 highRes = GetSource2(input.screenUV).rgb;
+	return float4(lowRes + highRes, 1.0);
+}</pre>
+						
+						<figure>
+							<img src="bloom/upsampling-bicubic.png" width="320" height="200">
+							<figcaption>Bicubic upsampling yields smoother glow.</figcaption>
+						</figure>
+						
+						<p>Bicubic sampling produces better results, but requires four weighed texture samples instead or a single sample. So let's make it optional via a shader boolean, in case it isn't needed. This corresponds to the <em translate="no">High Quality</em> bloom toggles of the Universal RP and HDRP.</p>
+						
+						<pre class="shader" translate="no"><ins>bool _BloomBicubicUpsampling;</ins>
+
+float4 BloomCombinePassFragment (Varyings input) : SV_TARGET {
+	float3 <ins>lowRes;</ins>
+	<ins>if (_BloomBicubicUpsampling) {</ins>
+		lowRes = GetSourceBicubic(input.screenUV).rgb;
+	<ins>}</ins>
+	<ins>else {</ins>
+		<ins>lowRes = GetSource(input.screenUV).rgb;</ins>
+	<ins>}</ins>
+	float3 highRes = GetSource2(input.screenUV).rgb;
+	return float4(lowRes + highRes, 1.0);
+}</pre>
+						
+						<p>Add a toggle option for it to <code>PostFXSettings.BloomSettings</code>.</p>
+						
+						<pre translate="no">		<ins>public bool bicubicUpsampling;</ins></pre>
+						
+						<figure>
+							<img src="bloom/bicubic-upsampling-toggle.png" width="320" height="200">
+							<figcaption>Bicubic upsampling toggle.</figcaption>
+						</figure>
+						
+						<p>And pass it to the GPU in <code>PostFXStack.DoBloom</code> before we begin upsampling.</p>
+						
+						<pre translate="no">	int
+		<ins>bloomBucibicUpsamplingId = Shader.PropertyToID("_BloomBicubicUpsampling"),</ins>
+		fxSourceId = Shader.PropertyToID("_PostFXSource"),
+		fxSource2Id = Shader.PropertyToID("_PostFXSource2");
+	
+	&hellip;
+	
+	void DoBloom (int sourceId) {
+		&hellip;
+		
+		<ins>buffer.SetGlobalFloat(</ins>
+			<ins>bloomBucibicUpsamplingId, bloom.bicubicUpsampling ? 1f : 0f</ins>
+		<ins>);</ins>
+		if (i > 1) { &hellip; }
+		&hellip;
+	}</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Half Resolution</h3>
+						
+						<p>Bloom can require a lot of time to generate, due to all the texture sampling and draws. A simple way to reduce the cost is to generate it at half resolution. As the effect is soft we can get away with this. This will change the appearance of the effect because we're effectively skipping the first iteration.</p>
+						
+						<p>First, we should look one step ahead when deciding to skip bloom. Effectively, the downscale limit is doubled for the initial check.</p>
+						
+						<pre translate="no">		if (
+			bloom.maxIterations == 0 ||
+			height &lt; bloom.downscaleLimit <ins>* 2</ins> || width &lt; bloom.downscaleLimit <ins>* 2</ins>
+		) {
+			Draw(sourceId, BuiltinRenderTextureType.CameraTarget, Pass.Copy);
+			buffer.EndSample("Bloom");
+			return;
+		}</pre>
+						
+						<p>Second, we need to claim a texture for the half-size image that we'll use as the new starting point. It's not part of the bloom pyramid, so we'll claim a new identifier for it. We use it for a pre-filtering step, so name it appropriately.</p>
+						
+						<pre translate="no">	int
+		bloomBucibicUpsamplingId = Shader.PropertyToID("_BloomBicubicUpsampling"),
+		<ins>bloomPrefilterId = Shader.PropertyToID("_BloomPrefilter"),</ins>
+		&hellip;</pre>
+						
+						<p>Back to <code>DoBloom</code>, copy the source to a pre-filter texture and use that for the start of the pyramid, also halving the width and height again. We don't need the pre-filter texture after going up the pyramid so can release it at that point.</p>
+						
+						<pre translate="no">		RenderTextureFormat format = RenderTextureFormat.Default;
+		<ins>buffer.GetTemporaryRT(</ins>
+			<ins>bloomPrefilterId, width, height, 0, FilterMode.Bilinear, format</ins>
+		<ins>);</ins>
+		<ins>Draw(sourceId, bloomPrefilterId, Pass.Copy);</ins>
+		<ins>width /= 2;</ins>
+		<ins>height /= 2;</ins>
+
+		int fromId = <ins>bloomPrefilterId</ins>, toId = bloomPyramidId + 1;
+		int i;
+		for (i = 0; i &lt; bloom.maxIterations; i++) {
+			&hellip;
+		}
+
+		<ins>buffer.ReleaseTemporaryRT(bloomPrefilterId);</ins></pre>
+						
+						<figure>
+							<img src="bloom/half-res-2.png" width="320" height="200" alt="2 steps">
+							<img src="bloom/half-res-4.png" width="320" height="200" alt="4 steps">
+							<figcaption>Bloom at half resolution, 2 and 4 steps.</figcaption>
+						</figure>
+					</section>
+					
+					
+					<section>
+						<h3>Threshold</h3>
+						
+						<p>Bloom is often used artistically to make only some things glow, but our effect currently applies to everything, no matter how bright it is. Although it makes no physical sense, we can limit what contributes to the effect by introducing a brightness threshold.</p>
+						
+						<p>We cannot suddenly eliminate colors from the effect as that would introduce sharp boundaries where a gradual transition is expected. Instead we'll multiply the color by a weight `w=(max(0,b-t))/(max(b,0.00001))`, where `b` is its brightness and `t` is the configured threshold. We'll use the maximum of the color's RGB channels for `b`. The result is always 1 when the threshold is zero, which leaves the color unchanged. As the threshold increases, the weight curve will bend downward so it becomes zero where `b&lt;=t`. Because of the curve's shape, it's known as a knee curve.</p>
+						
+						<figure>
+							<img src="bloom/threshold-graph.png" width="300" height="200">
+							<figcaption>Thresholds 0.25, 0.5, 0.75, and 1.</figcaption>
+						</figure>
+						
+						<p>This curve reaches zero at an angle, which means that although the transition is smoother than a clamp there is still an abrupt cutoff point. This is why it's also known as a hard knee. We can control the shape of the knee by changing the weight to `w=(max(s,b-t))/(max(b,0.00001))`, with `s=(min(max(0,b-t+tk),2tk)^2)/(4tk+0.00001)` and `k` a knee 0&ndash;1 slider.</p>
+						
+						<figure>
+							<img src="bloom/knee-graph.png" width="300" height="200">
+							<figcaption>Threshold 1 with knee 0, 0.25, 0.5, 0.75, and 1.</figcaption>
+						</figure>
+						
+						<p>Let's add both the threshold and knee slider to <code>PostFXSettings.BloomSettings</code>. We'll treat the configured threshold as a gamma value as that's visually more intuitive, so we'll have to convert it to linear space when sending it to the GPU. We make it open-ended, even though a threshold greater than zero will eliminate all colors at this point, as we're limited to LDR.</p>
+						
+						<pre translate="no">		<ins>[Min(0f)]</ins>
+		<ins>public float threshold;</ins>
+
+		<ins>[Range(0f, 1f)]</ins>
+		<ins>public float thresholdKnee;</ins></pre>
+						
+						<p>We'll send the threshold values to the GPU via a vector that we'll name <em translate="no">_BloomThreshold</em>. Claim an identifier for it in <code>PostFXStack</code>.</p>
+						
+						<pre translate="no">		bloomPrefilterId = Shader.PropertyToID("_BloomPrefilter"),
+		<ins>bloomThresholdId = Shader.PropertyToID("_BloomThreshold"),</ins></pre>
+						
+						<p>We can compute the constant parts of the weight function and put them in the four components of our vector to keep the shader simpler: `[[t], [-t+tk], [2tk], [1/(4tk+0.00001)]]`.</p>
+						
+						<p>We'll use it in a new pre-filter pass that replaces the initial copy pass in <code>DoBloom</code>, thus applying the threshold to the average of 2&times;2 pixels while we halve the image size.</p>
+						
+						<pre translate="no">		<ins>Vector4 threshold;</ins>
+		<ins>threshold.x = Mathf.GammaToLinearSpace(bloom.threshold);</ins>
+		<ins>threshold.y = threshold.x * bloom.thresholdKnee;</ins>
+		<ins>threshold.z = 2f * threshold.y;</ins>
+		<ins>threshold.w = 0.25f / (threshold.y + 0.00001f);</ins>
+		<ins>threshold.y -= threshold.x;</ins>
+		<ins>buffer.SetGlobalVector(bloomThresholdId, threshold);</ins>
+
+		RenderTextureFormat format = RenderTextureFormat.Default;
+		buffer.GetTemporaryRT(
+			bloomPrefilterId, width, height, 0, FilterMode.Bilinear, format
+		);
+		Draw(sourceId, bloomPrefilterId, Pass.<ins>BloomPrefilter</ins>);</pre>
+						
+						<p>Add the threshold vector and a function that applies it to a color to <em translate="no">PostFXShaderPasses</em>, followed by the new pass function which uses it.</p>
+						
+						<pre class="shader" translate="no"><ins>float4 _BloomThreshold;</ins>
+
+<ins>float3 ApplyBloomThreshold (float3 color) {</ins>
+	<ins>float brightness = Max3(color.r, color.g, color.b);</ins>
+	<ins>float soft = brightness + _BloomThreshold.y;</ins>
+	<ins>soft = clamp(soft, 0.0, _BloomThreshold.z);</ins>
+	<ins>soft = soft * soft * _BloomThreshold.w;</ins>
+	<ins>float contribution = max(soft, brightness - _BloomThreshold.x);</ins>
+	<ins>contribution /= max(brightness, 0.00001);</ins>
+	<ins>return color * contribution;</ins>
+<ins>}</ins>
+
+<ins>float4 BloomPrefilterPassFragment (Varyings input) : SV_TARGET {</ins>
+	<ins>float3 color = ApplyBloomThreshold(GetSource(input.screenUV).rgb);</ins>
+	<ins>return float4(color, 1.0);</ins>
+<ins>}</ins></pre>
+						
+						<figure>
+							<img src="bloom/threshold-inspector.png" width="320" height="62" alt="inspector"><br>
+							<img src="bloom/threshold-scene.png" width="320" height="200" alt="scene">
+							<figcaption>Four iterations with threshold and knee 0.5.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Intensity</h3>
+						
+						<p>We wrap up this tutorial by adding an intensity slider to control the overall strength of the bloom. We won't give it a limit so it's possible to blow out the entire image if desired.</p>
+						
+						<pre translate="no">		<ins>[Min(0f)]</ins>
+		<ins>public float intensity;</ins></pre>
+						
+						<figure>
+							<img src="bloom/intensity.png" width="320" height="62">
+							<figcaption>Open-ended intensity.</figcaption>
+						</figure>
+						
+						<p>If the intensity is set to zero we can skip bloom, so check for that at the start of <code>DoBloom</code>.</p>
+						
+						<pre translate="no">		if (
+			bloom.maxIterations == 0 || <ins>bloom.intensity &lt;= 0f ||</ins>
+			height &lt; bloom.downscaleLimit * 2 || width &lt; bloom.downscaleLimit * 2
+		) {
+			Draw(sourceId, BuiltinRenderTextureType.CameraTarget, Pass.Copy);
+			buffer.EndSample("Bloom");
+			return;
+		}</pre>
+						
+						<p>Otherwise pass the intensity to the GPU, using a new identifier for <em translate="no">_BloomIntensity</em>. We'll use it to weight the low-resolution image during the combine pass, so we don't need to create an extra pass. Set it to 1 for all draws except the final draw to the camera target.</p>
+						
+						<pre translate="no">		<ins>buffer.SetGlobalFloat(bloomIntensityId, 1f);</ins>
+		if (i > 1) {
+			&hellip;
+		}
+		else {
+			buffer.ReleaseTemporaryRT(bloomPyramidId);
+		}
+		<ins>buffer.SetGlobalFloat(bloomIntensityId, bloom.intensity);</ins>
+		buffer.SetGlobalTexture(fxSource2Id, sourceId);
+		Draw(fromId, BuiltinRenderTextureType.CameraTarget, Pass.BloomCombine);</pre>
+						
+						<p>Now we just need to multiply the low-resolution color in <code class="shader">BloomCombinePassFragment</code> with the intensity.</p>
+						
+						<pre class="shader" translate="no">bool _BloomBicubicUpsampling;
+<ins>float _BloomIntensity;</ins>
+
+float4 BloomCombinePassFragment (Varyings input) : SV_TARGET {
+	&hellip;
+	return float4(lowRes <ins>* _BloomIntensity</ins> + highRes, 1.0);
+}</pre>
+						
+						<figure>
+							<img src="bloom/intensity-05.png" width="320" height="200" alt="0.5">
+							<img src="bloom/intensity-5.png" width="320" height="200" alt="5">
+							<figcaption>Intensity 0.5 and 5.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../hdr/index.html">HDR</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/custom-srp-11-post-processing/" class="repository">repository</a>
+					<a href="Post-Processing.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

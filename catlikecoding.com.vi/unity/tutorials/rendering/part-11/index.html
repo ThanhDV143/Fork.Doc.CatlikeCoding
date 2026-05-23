@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/rendering/part-11/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/rendering/part-11/tutorial-image.jpg">
+		<meta property="og:title" content="Rendering 11">
+		<meta property="og:description" content="A Unity Rendering tutorial about adding support for multiple transparency modes. Part 11 of 20.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Rendering 11</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/rendering/part-11/#article",
+				"headline": "Rendering 11",
+				"alternativeHeadline": "Transparency",
+				"datePublished": "2016-12-31",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Rendering tutorial about adding support for multiple transparency modes. Part 11 of 20.",
+				"image": "https://catlikecoding.com/unity/tutorials/rendering/part-11/tutorial-image.jpg",
+				"dependencies": "Unity 5.5.0f3",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/rendering/", "name": "Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				MyLightingShaderGUI: 1,
+				RenderingMode: 1,
+				RenderingSettings: 1,
+				SmoothnessSource: 1,
+				TangentSpaceVisualizer: 1
+			};
+			
+			var hasAnimations = true;
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Rendering 11</h1>
+					<p>Transparency</p>
+					<ul>
+						<li>Cut holes with a shader.</li>
+						<li>Use a different render queue.</li>
+						<li>Support semitransparent materials.</li>
+						<li>Combine reflections and transparency.</li>
+					</ul>
+				</header>
+
+				<p>This is the eleventh part of a tutorial series about rendering. <a href="../part-10.1.html">Previously</a>, we made our shader capable of rendering complex materials. But these materials have always been fully opaque. Now we'll add support for transparency.</p>
+				
+				<p>This tutorial was made with Unity 5.5.0f3.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Some quads aren't fully there.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Cutout Rendering</h2>
+					
+					<p>To create a transparent material, we have to know the transparency of each fragment. This information is most often stored in the alpha channel of colors. In our case, that's the alpha channel of the main albedo texture, and the alpha channel of the color tint.</p>
+					
+					<p>Here is an example transparency map. It's a solid white texture with fading smooth noise in the alpha channel. It's white so we can fully focus on the transparency, without being distracted by an albedo pattern.</p>
+					
+					<figure>
+						<img src="cutout-rendering/transparency.png" width="256" height="256" style="background: #000000;">
+						<figcaption>Transparency map on a black background.</figcaption>
+					</figure>
+					
+					<p>Assigning this texture to our material just makes it white. The alpha channel is ignored, unless you chose to use it as the smoothness source. But when you select a quad with this material, you'll see a mostly-circular selection outline.</p>
+					
+					<figure>
+						<img src="cutout-rendering/selection-outline.png" width="220" height="220">
+						<figcaption>Selection outline on a solid quad.</figcaption>
+					</figure>
+					
+					<aside>
+						<h3>How do I get a selection outline?</h3>
+						<div>
+							<p>Unity 5.5 introduced a new selection highlighting method. Previously, you always saw a wireframe of the selected mesh. Now you can also choose to use an outline effect, via the <em translate="no">Gizmos</em> menu of the scene view.</p>
+							
+							<p>Unity creates the outline with a replacement shader, which we'll mention later. It samples the main texture's alpha channel. The outline is drawn where the alpha value becomes zero.</p>
+						</div>
+					</aside>
+					
+					<section>
+						<h3>Determing the Alpha Value</h3>
+						
+						<p>To retrieve the alpha value, we can use add a <code class="shader">GetAlpha</code> function to the <em translate="no">My Lighting</em> include file. Like albedo, we find it by multiplying the tint and main texture alpha values.</p>
+						
+						<pre translate="no" class="shader"><ins>float GetAlpha (Interpolators i) {</ins>
+	<ins>return _Tint.a * tex2D(_MainTex, i.uv.xy).a;</ins>
+<ins>}</ins></pre>
+						
+						<p>However, we should only use the texture when we're not using its alpha channel to determine the smoothness. If we didn't check for that, we could be misinterpreting the data.</p>
+						
+						<pre translate="no" class="shader">float GetAlpha (Interpolators i) {
+	<ins>float alpha =</ins> _Tint.a;
+	<ins>#if !defined(_SMOOTHNESS_ALBEDO)</ins>
+		<ins>alpha *=</ins> tex2D(_MainTex, i.uv.xy).a<ins>;</ins>
+	<ins>#endif</ins>
+	return <ins>alpha;</ins>
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Cutting Holes</h3>
+						
+						<p>In the case of opaque materials, every fragment that passes its depth test is rendered. All fragments are fully opaque and write to the depth buffer. Transparency complicates this.</p>
+						
+						<p>The simplest way to do transparency is to keep it binary. Either a fragment is fully opaque, or it's fully transparent. If it is transparent, then it's simply not rendered at all. This makes it possible to cut holes in surfaces.</p>
+						
+						<p>To abort rendering a fragment, we can use the <code class="shader">clip</code> function. If the argument of this function is negative, then the fragment will be discarded. The GPU won't blend its color, and it won't write to the depth buffer. If that happens, we don't need to worry about all the other material properties. So it's most efficient to clip as early as possible. In our case, that's at the beginning of the <code>MyFragmentProgram</code> function.</p>
+						
+						<p>We'll use the alpha value to determine whether we should clip or not. As alpha lies somewhere in between zero and one, we'll have to subtract something to make it negative. By subtracting &frac12;, we'll make the bottom half of the alpha range negative. This means that fragments with an alpha value of at least &frac12; will be rendered, while all others will be clipped.</p>
+						
+						<pre translate="no" class="shader">float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+	<ins>float alpha = GetAlpha(i);</ins>
+	<ins>clip(alpha - 0.5);</ins>
+
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="cutout-rendering/cutout.png" width="220" height="220">
+							<figcaption>Clipping everything below alpha 0.5.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Variable Cutoff</h3>
+						
+						<p>Subtracting &frac12; from alpha is arbitrary. We could've subtracted another number instead. If we subtract a higher value from alpha, then a large range will be clipped. So this value acts as a cutoff threshold. Let's make it variable. First, add an <em translate="no">Alpha Cutoff</em> property to our shader.</p>
+						
+						<pre translate="no" class="shader">	Properties {
+		&hellip;
+
+		<ins>_AlphaCutoff ("Alpha Cutoff", Range(0, 1)) = 0.5</ins>
+	}</pre>
+						
+						<p>Then add the corresponding variable to <em translate="no">My Lighting</em> and subtract it from the alpha value before clipping, instead of &frac12;.</p>
+						
+						<pre translate="no" class="shader"><ins>float _AlphaCutoff;</ins>
+
+&hellip;
+
+float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+	float alpha = GetAlpha(i);
+	clip(alpha - <ins>_AlphaCutoff</ins>);
+
+	&hellip;
+}</pre>
+						
+						<p>Finally, we also have to add the cutoff to our custom shader UI. The standard shader shows the cutoff below the albedo line, so we'll do that as well. We'll show an indented slider, just like we do for <em translate="no">Smoothness</em>.</p>
+						
+						<pre translate="no">	void DoMain () {
+		GUILayout.Label("Main Maps", EditorStyles.boldLabel);
+
+		MaterialProperty mainTex = FindProperty("_MainTex");
+		editor.TexturePropertySingleLine(
+			MakeLabel(mainTex, "Albedo (RGB)"), mainTex, FindProperty("_Tint")
+		);
+
+		<ins>DoAlphaCutoff();</ins>
+		&hellip;
+	}
+
+	<ins>void DoAlphaCutoff () {</ins>
+		<ins>MaterialProperty slider = FindProperty("_AlphaCutoff");</ins>
+		<ins>EditorGUI.indentLevel += 2;</ins>
+		<ins>editor.ShaderProperty(slider, MakeLabel(slider));</ins>
+		<ins>EditorGUI.indentLevel -= 2;</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="cutout-rendering/alpha-cutoff-slider.png" width="320" height="96">
+							<figcaption>Alpha cutoff slider.</figcaption>
+						</figure>
+						
+						<p>Now you can adjust the cutoff as you like. You could also animate it, for example to create a materializing or de-materializing effect.</p>
+						
+						<figure>
+							<video width="424" height="424" controls loop muted>
+								<source src="cutout-rendering/varying-alpha-cutoff.mp4" type="video/mp4">
+							</video>
+							<figcaption>Varying alpha cutoff.</figcaption>
+						</figure>
+						
+						<p>The shader compiler converts a clip to a discard instruction. Here's the relevant OpenGL Core code fragment.</p>
+						
+						<pre translate="no" class="shader">    u_xlat10_0 = texture(_MainTex, vs_TEXCOORD0.xy);
+    u_xlat1.xyz = u_xlat10_0.xyz * _Tint.xyz;
+    u_xlat30 = _Tint.w * u_xlat10_0.w + (-_AlphaCutoff);
+    u_xlatb30 = u_xlat30&lt;0.0;
+    if((int(u_xlatb30) * int(0xffffffffu))!=0){discard;}</pre>
+						
+						<p>And here it is for Direct3D 11.</p>
+						
+						<pre translate="no" class="shader">   0: sample r0.xyzw, v1.xyxx, t0.xyzw, s1
+   1: mul r1.xyz, r0.xyzx, cb0[4].xyzx
+   2: mad r0.w, cb0[4].w, r0.w, -cb0[9].x
+   3: lt r0.w, r0.w, l(0.000000)
+   4: discard_nz r0.w</pre>
+						
+						<aside>
+							<h3>What about shadows?</h3>
+							<div>
+								<p>We'll take care of shadows for cutout and semitransparent materials in the next tutorial. Until then, you can turn off shadows for objects using those materials.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Rendering Mode</h3>
+						
+						<p>Clipping doesn't come for free. It isn't that bad for desktop GPUs, but mobile GPUs that use tiled rendering don't like to discard fragments at all. So we should only include the clip statement if we're really rendering a cutout material. Fully opaque materials don't need it. To do this, let's make it dependent on a new keyword, <em translate="no">_RENDERING_CUTOUT</em>.</p>
+						
+						<pre translate="no" class="shader">	float alpha = GetAlpha(i);
+	<ins>#if defined(_RENDERING_CUTOUT)</ins>
+		clip(alpha - _AlphaCutoff);
+	<ins>#endif</ins></pre>
+						
+						<p>Add a shader feature for this keyword, both to the base pass and the additive pass.</p>
+						
+						<pre translate="no" class="shader">			<ins>#pragma shader_feature _RENDERING_CUTOUT</ins>
+			#pragma shader_feature _METALLIC_MAP</pre>
+						
+						<p>In our custom UI script, add a <code>RenderingMode</code> enumeration, offering a choice between opaque and cutout rendering.</p>
+						
+						<pre translate="no">	<ins>enum RenderingMode {</ins>
+		<ins>Opaque, Cutout</ins>
+	<ins>}</ins></pre>
+						
+						<p>Add a separate method to display a line for the rendering mode. We'll use an enumeration popup based on the keyword, like we do for the smoothness source. Set the mode based on the existence of the <em translate="no">_RENDERING_CUTOUT</em> keyword. Show the popup, and if the user changes it, set the keyword again.</p>
+						
+						<pre translate="no">	<ins>void DoRenderingMode () {</ins>
+		<ins>RenderingMode mode = RenderingMode.Opaque;</ins>
+		<ins>if (IsKeywordEnabled("_RENDERING_CUTOUT")) {</ins>
+			<ins>mode = RenderingMode.Cutout;</ins>
+		<ins>}</ins>
+
+		<ins>EditorGUI.BeginChangeCheck();</ins>
+		<ins>mode = (RenderingMode)EditorGUILayout.EnumPopup(</ins>
+			<ins>MakeLabel("Rendering Mode"), mode</ins>
+		<ins>);</ins>
+		<ins>if (EditorGUI.EndChangeCheck()) {</ins>
+			<ins>RecordAction("Rendering Mode");</ins>
+			<ins>SetKeyword("_RENDERING_CUTOUT", mode == RenderingMode.Cutout);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Like the standard shader, we'll show the rendering mode at the top of our UI.</p>
+						
+						<pre translate="no">	public override void OnGUI (
+		MaterialEditor editor, MaterialProperty[] properties
+	) {
+		this.target = editor.target as Material;
+		this.editor = editor;
+		this.properties = properties;
+		<ins>DoRenderingMode();</ins>
+		DoMain();
+		DoSecondary();
+	}</pre>
+						
+						<figure>
+							<img src="cutout-rendering/rendering-mode-popup.png" width="320" height="46">
+							<figcaption>Rendering mode choice.</figcaption>
+						</figure>
+						
+						<p>We can now switch between fully opaque and cutout rendering. However, the alpha cutoff slider remains visible, even in opaque mode. Ideally, it should only be shown when needed. The standard shader does this as well. To communicate this between <code>DoRenderingMode</code> and <code>DoMain</code>, add a boolean field that indicated whether the alpha cutoff should be shown.</p>
+						
+						<pre translate="no">	<ins>bool shouldShowAlphaCutoff;</ins>
+	
+	&hellip;
+	
+	void DoRenderingMode () {
+		RenderingMode mode = RenderingMode.Opaque;
+		<ins>shouldShowAlphaCutoff = false;</ins>
+		if (IsKeywordEnabled("_RENDERING_CUTOUT")) {
+			mode = RenderingMode.Cutout;
+			<ins>shouldShowAlphaCutoff = true;</ins>
+		}
+
+		&hellip;
+	}
+
+	void DoMain () {
+		&hellip;
+
+		<ins>if (shouldShowAlphaCutoff) {</ins>
+			DoAlphaCutoff();
+		<ins>}</ins>
+		&hellip;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Rendering Queue</h3>
+						
+						<p>Although our rendering modes are now fully functional, there is another thing that Unity's shaders do. They put cutout materials in a different render queue that opaque materials. Opaque things are rendered first, followed by the cutout stuff. This is done because clipping is more expensive. Rendering opaque objects first means that we'll never render cutout objects that end up behind solid objects.</p>
+						
+						<p>Internally, each object has a number that corresponds with its queue. The default queue is 2000. The cutout queue is 2450. Lower queues are rendered first.</p>
+						
+						<p>You can set the queue of a shader pass using the <em translate="no">Queue</em> tag. You can use the queue names, and also add an offset for more precise control over when objects get rendered. For example, <code class="shader">"Queue" = "Geometry+1"</code></p>
+						
+						<p>But we don't have a fixed queue. It depends on the rendering mode. So instead of using the tag, we'll have our UI set a custom render queue, which overrules the shader's queue. You can find out what the custom render queue of a material is by selecting it while the inspector is in debug mode. You'll be able to see its <em translate="no">Custom Render Queue</em> field. Its default value is &minus;1, which indicates that there is no custom value set, so the shader's <em translate="no">Queue</em> tag should be used.</p>
+						
+						<figure>
+							<img src="cutout-rendering/custom-render-queue.png" width="320" height="148">
+							<figcaption>Custom render queue.</figcaption>
+						</figure>
+						
+						<p>We don't really care what the exact number of a queue is. They might even change in future Unity versions. Fortunately, the <code>UnityEngine.Rendering</code> namespace contains the <code>RenderQueue</code> enum, which contains the correct values. So let's use that namespace in our UI script.</p>
+						
+						<pre translate="no">using UnityEngine;
+<ins>using UnityEngine.Rendering;</ins>
+using UnityEditor;
+
+public class MyLightingShaderGUI : ShaderGUI {
+	&hellip;
+}</pre>
+						
+						<p>When a change is detected inside <code>DoRenderingMode</code>, determine the correct render queue. Then, iterate through the selected materials and update their queue overrides.</p>
+						
+						<pre translate="no">		if (EditorGUI.EndChangeCheck()) {
+			RecordAction("Rendering Mode");
+			SetKeyword("_RENDERING_CUTOUT", mode == RenderingMode.Cutout);
+
+			<ins>RenderQueue queue = mode == RenderingMode.Opaque ?</ins>
+				<ins>RenderQueue.Geometry : RenderQueue.AlphaTest;</ins>
+			<ins>foreach (Material m in editor.targets) {</ins>
+				<ins>m.renderQueue = (int)queue;</ins>
+			<ins>}</ins>
+		}</pre>
+					</section>
+					
+					<section>
+						<h3>Render Type Tag</h3>
+						
+						<p>Another detail is the <em translate="no">RenderType</em> tag. This shader tags doesn't do anything by itself. It is a hint that tells Unity what kind of shader it is. This is used by replacement shaders to determine whether objects should be rendered or not.</p>
+						
+						<aside>
+							<h3>What are replacement shaders?</h3>
+							<div>
+								<p>It is possible to overrule what shader gets used to render objects. You can then manually render the scene, using those shaders. This can be used to create many different effects. Unity might use a replacement shader to create depth textures in some cases, when the depth buffer is needed, but not accessible. As another example, you could use shader replacement to see if there are any objects using cutout shaders in view, by making them bright red or something. Of course, this only works with shaders that have appropriate <em translate="no">RenderType</em> tags.</p>
+							</div>
+						</aside>
+						
+						<p>To adjust the <em translate="no">RenderType</em> tag, we have to use the <code>Material.SetOverrideTag</code> method. Its first parameter is the tag to override. The second parameter is the string containing the tag value. For opaque shaders, we can use the default, which is accomplished by providing an empty string. For cutout shaders, it's <em translate="no">TransparentCutout</em>.</p>
+						
+						<pre translate="no">			RenderQueue queue = mode == RenderingMode.Opaque ?
+				RenderQueue.Geometry : RenderQueue.AlphaTest;
+			<ins>string renderType = mode == RenderingMode.Opaque ?</ins>
+				<ins>"" : "TransparentCutout";</ins>
+			foreach (Material m in editor.targets) {
+				m.renderQueue = (int)queue;
+				<ins>m.SetOverrideTag("RenderType", renderType);</ins>
+			}</pre>
+						
+						<p>After switching your material to cutout mode, it will now get an entry in its <em translate="no">String Tag Map</em> list, which you can view via the debug inspector.</p>
+						
+						<figure>
+							<img src="cutout-rendering/render-type-tag.png" width="320" height="108">
+							<figcaption>Render type tag.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="cutout-rendering/cutout-rendering.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Semitransparent Rendering</h2>
+					
+					<p>Cutout rendering is sufficient when you want to cut a hole into something, but not when you desire semi-transparency. Also, cutout rendering is per fragment, which means that the edges will be aliased. There is no smooth transition between opaque and transparent parts of the surface. To solve this, we have to add support for another rendering mode. This mode will support semi-transparency. Unity's standard shaders name this mode <em translate="no">Fade</em>, so we'll use the same name. Add it to our <code>RenderingMode</code> enumeration.</p>
+					
+					<pre translate="no">	enum RenderingMode {
+		Opaque, Cutout<ins>, Fade</ins>
+	}</pre>
+					
+					<p>We'll use the <em translate="no">_RENDERING_FADE</em> keyword for this mode. Adjust <code>DoRenderingMode</code> to work with this keyword as well.</p>
+					
+					<pre translate="no">	void DoRenderingMode () {
+		RenderingMode mode = RenderingMode.Opaque;
+		shouldShowAlphaCutoff = false;
+		if (IsKeywordEnabled("_RENDERING_CUTOUT")) {
+			mode = RenderingMode.Cutout;
+			shouldShowAlphaCutoff = true;
+		}
+		<ins>else if (IsKeywordEnabled("_RENDERING_FADE")) {</ins>
+			<ins>mode = RenderingMode.Fade;</ins>
+		<ins>}</ins>
+
+		&hellip;
+		
+		if (EditorGUI.EndChangeCheck()) {
+			RecordAction("Rendering Mode");
+			SetKeyword("_RENDERING_CUTOUT", mode == RenderingMode.Cutout);
+			<ins>SetKeyword("_RENDERING_FADE", mode == RenderingMode.Fade);</ins>
+			
+			&hellip;
+		}
+	}</pre>
+					
+					<section>
+						<h3>Rendering Settings</h3>
+						
+						<p><em translate="no">Fade</em> mode comes with its own render queue and render type. The queue number is 3000, which is the default for transparent objects. The render type is <em translate="no">Transparent</em>.</p>
+						
+						<p>Instead of making <code>DoRenderingMode</code> more complex, let's define a struct inside our UI class to hold the settings per rendering type.</p>
+						
+						<pre translate="no">	enum RenderingMode {
+		Opaque, Cutout, Fade
+	}
+
+	<ins>struct RenderingSettings {</ins>
+		<ins>public RenderQueue queue;</ins>
+		<ins>public string renderType;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can create a static settings array for all of our rendering types.</p>
+
+						<pre translate="no">	struct RenderingSettings {
+		public RenderQueue queue;
+		public string renderType;
+
+		<ins>public static RenderingSettings[] modes = {</ins>
+			<ins>new RenderingSettings() {</ins>
+				<ins>queue = RenderQueue.Geometry,</ins>
+				<ins>renderType = ""</ins>
+			<ins>},</ins>
+			<ins>new RenderingSettings() {</ins>
+				<ins>queue = RenderQueue.AlphaTest,</ins>
+				<ins>renderType = "TransparentCutout"</ins>
+			<ins>},</ins>
+			<ins>new RenderingSettings() {</ins>
+				<ins>queue = RenderQueue.Transparent,</ins>
+				<ins>renderType = "Transparent"</ins>
+			<ins>}</ins>
+		<ins>};</ins>
+	}</pre>
+						
+						<p>Inside <code>DoRenderingMode</code>, use the mode to retrieve the correct settings, then configure all materials.</p>
+
+						<pre translate="no">		if (EditorGUI.EndChangeCheck()) {
+			RecordAction("Rendering Mode");
+			SetKeyword("_RENDERING_CUTOUT", mode == RenderingMode.Cutout);
+			SetKeyword("_RENDERING_FADE", mode == RenderingMode.Fade);
+
+<del>//			RenderQueue queue = mode == RenderingMode.Opaque ?</del>
+<del>//				RenderQueue.Geometry : RenderQueue.AlphaTest;</del>
+<del>//			string renderType = mode == RenderingMode.Opaque ?</del>
+<del>//				"" : "TransparentCutout";</del>
+			
+			<ins>RenderingSettings settings = RenderingSettings.modes[(int)mode];</ins>
+			foreach (Material m in editor.targets) {
+				m.renderQueue = (int)<ins>settings.</ins>queue;
+				m.SetOverrideTag("RenderType", <ins>settings.</ins>renderType);
+			}
+		}</pre>
+					</section>
+					
+					<section>
+						<h3>Rendering Transparent Geometry</h3>
+						
+						<p>You're now able to switch your material to <em translate="no">Fade</em> rendering mode. Because our shader does not support that mode yet, it will revert to opaque. However, you'll notice a difference when using the frame debugger.</p>
+						
+						<p>When using <em translate="no">Opaque</em> or <em translate="no">Cutout</em> rendering mode, objects using our material are rendered by the <code>Render.OpaqueGeometry</code> method. This has always been the case. But it's different when using <code>Fade</code> rendering mode. Then they're rendered by the <code>Render.TransparentGeometry</code> method. This happens because we're using a different render queue.</p>
+
+						<figure>
+							<img alt="opaque" src="semitransparent-rendering/opaque-rendering.png" width="298" height="132">
+							<img alt="semitransparent" src="semitransparent-rendering/semitransparent-rendering.png" width="298" height="132">
+							<figcaption>Opaque vs. semitransparent rendering.</figcaption>
+						</figure>
+						
+						<p>If you have both opaque and transparent objects in view, both the <code>Render.OpaqueGeometry</code> and the <code>Render.TransparentGeometry</code> methods will be invoked. The opaque and cutout geometry is rendered first, followed by the transparent geometry. So semitransparent objects are never drawn behind solid objects.</p>
+					</section>
+					
+					<section>
+						<h3>Blending Fragments</h3>
+						
+						<p>To make <em translate="no">Fade</em> mode work, we first have to adjust our rendering shader feature. We now support three modes with two keywords, both for the base and additive pass.</p>
+						
+						<pre translate="no" class="shader">			#pragma shader_feature <ins>_ _RENDERING_CUTOUT _RENDERING_FADE</ins></pre>
+						
+						<p>In the case of <em translate="no">Fade</em> mode, we have to blend the color of our current fragment with whatever's already been drawn. This blending is done by the GPU, outside of our fragment program. It needs the fragment's alpha value to do this, so we have to output it, instead of the constant value &ndash; one &ndash; that we've used until now.</p>
+						
+						<pre translate="no" class="shader">	color.rgb += GetEmission(i);
+	<ins>#if defined(_RENDERING_FADE)</ins>
+		<ins>color.a = alpha;</ins>
+	<ins>#endif</ins>
+	return color;</pre>
+						
+						<p>To create a semitransparent effect, we have to use a different blend mode than the one we use for opaque and cutout materials. Like with the additive pass, we have to add the new color to the already existing color. However, we can't simply add them together. The blend should depend on our alpha value.</p>
+						
+						<p>When alpha is one, then we're rendering something that's fully opaque. In that case, we should use <code class="shader">Blend One Zero</code> for the base pass, and <code class="shader">Blend One One</code> for the additive pass, as usual. But when alpha is zero, what we're rendering is fully transparent. In that case, we shouldn't change a thing. Then blend mode has to be <code class="shader">Blend Zero One</code> for both passes. And if alpha were &frac14;, then we'd need something like <code class="shader">Blend 0.25 0.75</code> and <code class="shader">Blend 0.25 One</code>.</p>
+						
+						<p>To make this possible, we can use the <code class="shader">SrcAlpha</code> and <code class="shader">OneMinusSrcAlpha</code> blend keywords.</p>
+						
+						<pre translate="no" class="shader">		Pass {
+			Tags {
+				"LightMode" = "ForwardBase"
+			}
+			<ins>Blend SrcAlpha OneMinusSrcAlpha</ins>
+
+			&hellip;
+		}
+
+		Pass {
+			Tags {
+				"LightMode" = "ForwardAdd"
+			}
+
+			Blend <ins>SrcAlpha</ins> One
+			ZWrite Off
+
+			&hellip;
+		}</pre>
+						
+						<figure>
+							<img src="semitransparent-rendering/semitransparent-quad.png" width="220" height="220">
+							<figcaption>A semitransparent quad.</figcaption>
+						</figure>
+						
+						<p>While this works, these blend modes are only appropriate for the <em translate="no">Fade</em> rendering mode. So we have to make them variable. Fortunately, this is possible. Begin by adding two float properties for the source and destination blend modes.</p>
+						
+						<pre translate="no" class="shader">	Properties {
+		&hellip;
+		
+		<ins>_SrcBlend ("_SrcBlend", Float) = 1</ins>
+		<ins>_DstBlend ("_DstBlend", Float) = 0</ins>
+	}</pre>
+						
+						<p>As these properties depend on the rendering mode, we're not going to show them in our UI. If we weren't using a custom UI, we could've hidden them using the <em translate="no">HideInInspector</em> attribute. I'll add those attributes anyway.</p>
+						
+						<pre translate="no" class="shader">		<ins>[HideInInspector]</ins> _SrcBlend ("_SrcBlend", Float) = 1
+		<ins>[HideInInspector]</ins> _DstBlend ("_DstBlend", Float) = 0
+</pre>
+						
+						<p>Use these float properties in place of the blend keywords that have to be variable. You'll have to put them inside square brackets. This is old shader syntax, to configure the GPU. We don't need to access these properties in our vertex and fragment programs.</p>
+						
+						<pre translate="no" class="shader">		Pass {
+			Tags {
+				"LightMode" = "ForwardBase"
+			}
+			Blend <ins>[_SrcBlend]</ins> <ins>[_DstBlend]</ins>
+
+			&hellip;
+		}
+
+		Pass {
+			Tags {
+				"LightMode" = "ForwardAdd"
+			}
+
+			Blend <ins>[_SrcBlend]</ins> One
+			ZWrite Off
+
+			&hellip;
+		}</pre>
+						
+						<p>To control these parameters, add two <code>BlendMode</code> fields to our <code>RenderingSettings</code> struct, and initialize them appropriately.</p>
+						
+						<pre translate="no">	struct RenderingSettings {
+		public RenderQueue queue;
+		public string renderType;
+		<ins>public BlendMode srcBlend, dstBlend;</ins>
+
+		public static RenderingSettings[] modes = {
+			new RenderingSettings() {
+				queue = RenderQueue.Geometry,
+				renderType = ""<ins>,</ins>
+				<ins>srcBlend = BlendMode.One,</ins>
+				<ins>dstBlend = BlendMode.Zero</ins>
+			},
+			new RenderingSettings() {
+				queue = RenderQueue.AlphaTest,
+				renderType = "TransparentCutout"<ins>,</ins>
+				<ins>srcBlend = BlendMode.One,</ins>
+				<ins>dstBlend = BlendMode.Zero</ins>
+			},
+			new RenderingSettings() {
+				queue = RenderQueue.Transparent,
+				renderType = "Transparent"<ins>,</ins>
+				<ins>srcBlend = BlendMode.SrcAlpha,</ins>
+				<ins>dstBlend = BlendMode.OneMinusSrcAlpha</ins>
+			}
+		};
+	}</pre>
+						
+						<p>Inside <code>DoRenderingMode</code>, we have to directly set the <em translate="no">_SrcBlend</em> and <em translate="no">_DstBlend</em> properties of the materials. We can do this via the <code>Material.SetInt</code> method.</p>
+						
+						<pre translate="no">			foreach (Material m in editor.targets) {
+				m.renderQueue = (int)settings.queue;
+				m.SetOverrideTag("RenderType", settings.renderType);
+				<ins>m.SetInt("_SrcBlend", (int)settings.srcBlend);</ins>
+				<ins>m.SetInt("_DstBlend", (int)settings.dstBlend);</ins>
+			}</pre>
+					</section>
+					
+					<section>
+						<h3>Depth Trouble</h3>
+						
+						<p>When working with a single object in <em translate="no">Fade</em> mode, everything seems to work fine. However, when you have multiple semitransparent objects close together, you might get weird results. For example, partially overlap two quads, placing one slightly above the other. From some view angles, one of the quads appears to cut away part of the other.</p>
+						
+						<figure>
+							<img src="semitransparent-rendering/zwrite-on.png" width="260" height="200">
+							<figcaption>Strange results.</figcaption>
+						</figure>
+						
+						<p>Unity tries to draw the opaque objects that are closest to the camera first. This is the most efficient way to render overlapping geometry. Unfortunately, this doesn't work for semitransparent geometry, because it has to be blended with whatever lies behind it. So transparent geometry has to be drawn the other way around. The furthest objects are drawn first, and the closest are drawn last. That's why transparent things are more expensive to draw than opaque things.</p>
+						
+						<p>To determine the draw order of geometry, Unity uses the the position of their centers. This works fine for small objects that are far apart. But it doesn't work so well for large geometry, or for flat geometry that's positioned close together. In those cases, the draw order can suddenly flip while you change the view angle. This can cause a sudden change in the appearance of overlapping semitransparent objects.</p>
+						
+						<p>There's no way around this limitation, especially not when considering intersecting geometry. However, it often isn't noticeable. But in our case, certain draw orders produce obviously wrong results. This happens because our shaders still write to the depth buffer. The depth buffer is binary and doesn't care about transparency. If a fragment isn't clipped, its depth ends up written to the buffer. Because the draw order of semitransparent objects isn't perfect, this isn't desirable. The depth values of invisible geometry can end up preventing otherwise visible stuff from being rendered. So we have to disable writing to the depth buffer when using the <em translate="no">Fade</em> rendering mode.</p>
+					</section>
+					
+					<section>
+						<h3>Controlling ZWrite</h3>
+						
+						<p>Like for the blend modes, we can use a property to control the <em translate="no">ZWrite</em> mode. We need to explicitly set this mode in the base pass, using the property. The additive pass never writes to the depth buffer, so it requires no change.</p>
+						
+						<pre translate="no" class="shader">		[HideInInspector] _SrcBlend ("_SrcBlend", Float) = 1
+		[HideInInspector] _DstBlend ("_DstBlend", Float) = 0
+		<ins>[HideInInspector] _ZWrite ("_ZWrite", Float) = 1</ins>
+		
+		&hellip;
+		
+			Blend [_SrcBlend] [_DstBlend]
+			<ins>ZWrite [_ZWrite]</ins></pre>
+						
+						<p>Add a boolean field <code>RenderingSettings</code> to indicate whether writing to the depth buffer should be enabled. This is only true for the <em translate="no">Opaque</em> and <em translate="no">Cutout</em> modes.</p>
+						
+						<pre translate="no">	struct RenderingSettings {
+		public RenderQueue queue;
+		public string renderType;
+		public BlendMode srcBlend, dstBlend;
+		<ins>public bool zWrite;</ins>
+
+		public static RenderingSettings[] modes = {
+			new RenderingSettings() {
+				queue = RenderQueue.Geometry,
+				renderType = "",
+				srcBlend = BlendMode.One,
+				dstBlend = BlendMode.Zero<ins>,</ins>
+				<ins>zWrite = true</ins>
+			},
+			new RenderingSettings() {
+				queue = RenderQueue.AlphaTest,
+				renderType = "TransparentCutout",
+				srcBlend = BlendMode.One,
+				dstBlend = BlendMode.Zero<ins>,</ins>
+				<ins>zWrite = true</ins>
+			},
+			new RenderingSettings() {
+				queue = RenderQueue.Transparent,
+				renderType = "Transparent",
+				srcBlend = BlendMode.SrcAlpha,
+				dstBlend = BlendMode.OneMinusSrcAlpha<ins>,</ins>
+				<ins>zWrite = false</ins>
+			}
+		};
+	}</pre>
+						
+						<p>Include the <em translate="no">_ZWrite</em> property inside <code>DoRenderingMode</code>, again using the <code>Material.SetInt</code> method.</p>
+						
+						<pre translate="no">			foreach (Material m in editor.targets) {
+				m.renderQueue = (int)settings.queue;
+				m.SetOverrideTag("RenderType", settings.renderType);
+				m.SetInt("_SrcBlend", (int)settings.srcBlend);
+				m.SetInt("_DstBlend", (int)settings.dstBlend);
+				<ins>m.SetInt("_ZWrite", settings.zWrite ? 1 : 0);</ins>
+			}</pre>
+						
+						<p>Switch our material to another rendering mode, and then back to <em translate="no">Fade</em> mode. While the draw order of semitransparent objects can still flip, we no longer get unexpected holes in our semitransparent geometry.</p>
+						
+						<figure>
+							<img src="semitransparent-rendering/zwrite-off.png" width="260" height="200">
+							<figcaption>No more disappearing geometry.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="semitransparent-rendering/semitransparent-rendering.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Fading vs. Transparency</h2>
+					
+					<p>The semitransparent rendering mode that we created fades out the geometry based on its alpha value. Note that the entire contribution of the geometry's color is faded. Both its diffuse reflections and its specular reflections are faded. That's why it's know as <em translate="no">Fade</em> mode.</p>
+					
+					<figure>
+						<img src="fading-vs-transparency/fading.png" width="210" height="180">
+						<figcaption>Faded red with white highlight.</figcaption>
+					</figure>
+					
+					<p>This mode is appropriate for many effects, but it does not correctly represent solid semitransparent surfaces. For example, glass is practically fully transparent, but it also has clear highlights and reflections. Reflected light is added to whatever light passes through. To support this, Unity's standard shaders also have a <em translate="no">Transparent</em> rendering mode. So let's add that mode as well.</p>
+					
+					<pre translate="no">	enum RenderingMode {
+		Opaque, Cutout, Fade<ins>, Transparent</ins>
+	}</pre>
+					
+					<p>The settings for <em translate="no">Transparent</em> mode are the same as for <em translate="no">Fade</em>, except that we have to be able to add reflections regardless of the alpha value. Thus, its source blend mode has to be one instead of depending on alpha.</p>
+					
+					<pre translate="no">		public static RenderingSettings[] modes = {
+			new RenderingSettings() {
+				queue = RenderQueue.Geometry,
+				renderType = "",
+				srcBlend = BlendMode.One,
+				dstBlend = BlendMode.Zero,
+				zWrite = true
+			},
+			new RenderingSettings() {
+				queue = RenderQueue.AlphaTest,
+				renderType = "TransparentCutout",
+				srcBlend = BlendMode.One,
+				dstBlend = BlendMode.Zero,
+				zWrite = true
+			},
+			new RenderingSettings() {
+				queue = RenderQueue.Transparent,
+				renderType = "Transparent",
+				srcBlend = BlendMode.SrcAlpha,
+				dstBlend = BlendMode.OneMinusSrcAlpha,
+				zWrite = false
+			}<ins>,</ins>
+			<ins>new RenderingSettings() {</ins>
+				<ins>queue = RenderQueue.Transparent,</ins>
+				<ins>renderType = "Transparent",</ins>
+				<ins>srcBlend = BlendMode.One,</ins>
+				<ins>dstBlend = BlendMode.OneMinusSrcAlpha,</ins>
+				<ins>zWrite = false</ins>
+			<ins>}</ins>
+		};</pre>
+					
+					<p>We'll have to use yet another keyword, in this case <em translate="no">_RENDERING_TRANSPARENT</em>. Adjust <code>DoRenderingMode</code> so it can detect and set this keyword.</p>
+					
+					<pre translate="no">	void DoRenderingMode () {
+		&hellip;
+		<ins>else if (IsKeywordEnabled("_RENDERING_TRANSPARENT")) {</ins>
+			<ins>mode = RenderingMode.Transparent;</ins>
+		<ins>}</ins>
+
+		EditorGUI.BeginChangeCheck();
+		mode = (RenderingMode)EditorGUILayout.EnumPopup(
+			MakeLabel("Rendering Mode"), mode
+		);
+		if (EditorGUI.EndChangeCheck()) {
+			RecordAction("Rendering Mode");
+			SetKeyword("_RENDERING_CUTOUT", mode == RenderingMode.Cutout);
+			SetKeyword("_RENDERING_FADE", mode == RenderingMode.Fade);
+			<ins>SetKeyword(</ins>
+				<ins>"_RENDERING_TRANSPARENT", mode == RenderingMode.Transparent</ins>
+			<ins>);</ins>
+
+			&hellip;
+		}
+	}</pre>
+					
+					<p>Add the keyword to our two shader feature directives as well.</p>
+					
+					<pre translate="no" class="shader">#pragma shader_feature _ _RENDERING_CUTOUT _RENDERING_FADE <ins>_RENDERING_TRANSPARENT</ins></pre>
+					
+					<p>Now we have to output the alpha value both for <em translate="no">Fade</em> and <em translate="no">Transparent</em> mode.</p>
+					
+					<pre translate="no" class="shader">	#if defined(_RENDERING_FADE) <ins>|| defined(_RENDERING_TRANSPARENT)</ins>
+		color.a = alpha;
+	#endif
+	return color;</pre>
+					
+					<p>Switching our material to <em translate="no">Transparent</em> mode will once again make the entire quad visible. Because we're no longer modulating the new color based on alpha, the quad will appear brighter than when using <em translate="no">Opaque</em> mode. How much of the color behind the fragment gets added is still controlled by alpha. So when alpha is one, it looks just like an opaque surface.</p>
+					
+					<figure>
+						<img src="fading-vs-transparency/adding.png" width="250" height="200">
+						<figcaption>Adding instead of fading.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Premultiplied Alpha</h3>
+						
+						<p>To make transparency work again, we have to manually factor in the alpha value. And we should only adjust the diffuse reflections, not the specular reflections. We can do this by multiplying the the material's final albedo color by the alpha value.</p>
+						
+						<pre translate="no" class="shader">float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+	&hellip;
+
+	float3 specularTint;
+	float oneMinusReflectivity;
+	float3 albedo = DiffuseAndSpecularFromMetallic(
+		GetAlbedo(i), GetMetallic(i), specularTint, oneMinusReflectivity
+	);
+	<ins>#if defined(_RENDERING_TRANSPARENT)</ins>
+		<ins>albedo *= alpha;</ins>
+	<ins>#endif</ins>
+
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="fading-vs-transparency/premultiplied-alpha.png" width="250" height="200">
+							<figcaption>Fading albedo.</figcaption>
+						</figure>
+						
+						<p>Because we're multiplying by alpha before the GPU does its blending, this technique is commonly known as premultiplied alpha blending. Many image-processing apps internally store colors this way. Textures can also contain premultiplied alpha colors. Then they either don't need an alpha channel, of they can store a different alpha value than the one that's associated with the RGB channels. That would make it possible to both brighten and darken using the same data, for example a combination of fire and smoke. However, a downside of storing colors that way in textures is a loss of precision.</p>
+
+
+					</section>
+					
+					<section>
+						<h3>Adjusting Alpha</h3>
+						
+						<p>If something is both transparent and reflective, we'll see both what's behind it, and the reflections. This is true on both sides of the object. But the same light cannot both get reflected and also pass through the object. This is once again a matter of energy conservation. So the more reflective something is, the less light is able to travel through it, regardless of its inherent transparency.</p>
+						
+						<p>To represent this, we have to adjust the alpha value before the GPU performs blending, but after we've changed the albedo. If a surface has no reflections, its alpha is unchanged. But when it reflects all light, its alpha effectively becomes one. As we determine the reflectivity in the fragment program, we can use that to adjust the alpha value. Given the original alpha `a` and reflectivity `r`, the modified alpha becomes `1 - (1 - a) (1 - r)`.</p>
+						
+						<p>Keeping in mind that we're using one-minus-reflectivity in our shader, `(1 - r)` can be represented with `R`. Then we can simplify the formula a bit. `1 - (1 - a) R = 1 - (R - aR) = 1 - R + aR`. Use this expression as the new alpha value, after adjusting the albedo color.</p>
+						
+						<pre translate="no" class="shader">	#if defined(_RENDERING_TRANSPARENT)
+		albedo *= alpha;
+		<ins>alpha = 1 - oneMinusReflectivity + alpha * oneMinusReflectivity;</ins>
+	#endif</pre>
+						
+						<p>The result should be slightly darker than before, to simulate light bouncing off the backside of our object.</p>
+						
+						<figure>
+							<img src="fading-vs-transparency/adjusted-alpha.png" width="250" height="200">
+							<figcaption>Adjusted alpha.</figcaption>
+						</figure>
+						
+						<p>Keep in mind that this is a gross simplification of transparency, because we're not taking the actual volume of an object into account, only the visible surface.</p>
+						
+						<aside>
+							<h3>What about one-way mirrors?</h3>
+							<div>
+								<p>There are no true one-way mirrors. Windows used for that purpose are actually two-way mirrors. Such windows are very reflective. When the room on one side is very bright, you won't notice the light coming from a dark room on the other side. But when both rooms are equally lit, you'll be able to see through it in both directions.</p>
+							</div>
+						</aside>
+						
+						<p>The next tutorial is <a href="../part-12.1.html">Semitransparent Shadows</a>.</p>
+					</section>
+					
+					<a href="fading-vs-transparency/fading-vs-transparency.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Rendering-11.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

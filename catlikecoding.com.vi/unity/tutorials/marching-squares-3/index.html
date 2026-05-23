@@ -1,0 +1,1694 @@
+<!DOCTYPE html>
+<html>
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/marching-squares-3/">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/marching-squares-3/tutorial-image.jpg">
+		<meta property="og:image:width" content="750">
+		<meta property="og:image:height" content="750">
+		<meta property="og:description" content="A Unity C# scripting tutorial in which you will use Hermite data to add sharp features to the Marching Squares algorithm.">
+		<meta name="description" content="A Unity C# scripting tutorial in which you will use Hermite data to add sharp features to the Marching Squares algorithm.">
+		<meta property="og:title" content="Marching Squares 3, a Unity C# Tutorial">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<title>Marching Squares 3, a Unity C# Tutorial</title>
+		<link href="../../default.css" rel="stylesheet">
+		<script>
+			var customTypes = {
+				Voxel: 1,
+				VoxelGrid: 1,
+				VoxelMap: 1,
+				VoxelStencil: 1,
+				VoxelStencilCircle: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header data-type="tutorial"></header>
+
+		<article class="tutorial" itemscope="" itemtype="http://schema.org/TechArticle">
+			<h1 itemprop="name headline">Marching Squares 3<span>, staying sharp</span></h1>
+
+			<div class="instructions">
+				<p><span itemprop="about description">
+					Marching squares with exact edge intersections allows us to triangulate a wide variety of shapes. However, it does not preserve any sharp angles that we draw. The corners of a square will be cut off. The edge intersections remain, but the sharp feature inside the cell is lost. This time we'll make sure that those features are maintained.
+				</span></p>
+				<p>You'll learn to</p>
+				<ul>
+					<li>Calculate normals of edge intersections;</li>
+					<li>Store Hermite data;</li>
+					<li>Discover sharp features;</li>
+					<li>Decide which features to add;</li>
+					<li>Resolve ambiguous cases.</li>
+				</ul>
+				<p><span itemprop="dependencies">This tutorial is the third in a series about <a href="../marching-squares-2/index.html">Marching Squares</a>.</span></p>
+				<p>This tutorial has been made with Unity 4.5.2. It might not work for older versions.</p>
+			</div>
+			
+			<aside class="share"></aside>
+
+			<figure>
+				<img src="tutorial-image.jpg" width="375" height="375" itemprop="image">
+				<figcaption>Painting with sharp features.</figcaption>
+			</figure>
+			
+			<h2>Hermite Data</h2>
+			
+			<div class="instructions">
+				<p>At this point we know where the edges or our square cells are crossed. This allows us to create a better approximation than always placing the edge vertices at the midpoint. Unfortunately, this is not enough to preserve any sharp features inside the cells, like the corners of a square. To reconstruct &ndash; or at least reasonably approximate &ndash; those features we also need to know at what angles a cell's edges are crossed.</p>
+			</div>
+			
+			<figure>
+				<img src="01-00-lost-features.png" width="175" height="175">
+				<figcaption>Features inside cells are lost.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We could represent the direction of an edge crossing with a normal vector, which points away from the filled space. So we store both the intersection point and normal, which means that we're working with Hermite data.</p>
+				<p>That means we have to store two additional 2D vectors per <code>Voxel</code>. That's quite a bit of extra data, so we better make use of it!</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-hermite-data" id="q-hermite-data">What's Hermite data?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>public Vector2 xNormal, yNormal;</mark></pre>
+			
+			<figure>
+				<img src="01-00-normals.png" width="175" height="175">
+				<figcaption>Surface normals of the actual square.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We also have to copy the normals when creating dummies, though it's only needed for edges that we'll end up using. So only the Y edge's normal for X dummies and only the X edge normal for Y dummies.</p>
+			</div>
+			
+			<pre translate="no">	public void BecomeXDummyOf (Voxel voxel, float offset) {
+		state = voxel.state;
+		position = voxel.position;
+		position.x += offset;
+		xEdge = voxel.xEdge + offset;
+		yEdge = voxel.yEdge;
+		<mark>yNormal = voxel.yNormal;</mark>
+	}
+	
+	public void BecomeYDummyOf (Voxel voxel, float offset) {
+		state = voxel.state;
+		position = voxel.position;
+		position.y += offset;
+		xEdge = voxel.xEdge;
+		yEdge = voxel.yEdge + offset;
+		<mark>xNormal = voxel.xNormal;</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>The next step is to actually store the normals, which is the responsibility of the stencils.</p>
+			</div>
+			
+			<h3>Square Stencil Normals</h3>
+			
+			<div class="instructions">
+				<p>Normals for the square <code>VoxelStencil</code> are straightforward. When we find that our stencil's edge is crossed on the right, we add a normal that points to the right. The same goes for the other three directions. However, that assumes that we're filling the voxels inside the stencil's area. If we're actually emptying the voxels, then the normals should point in the opposite direction. So the final direction depends on the fill type.</p>
+			</div>
+			
+			<figure>
+				<img src="01-01-square-norlams.png" width="225" height="125">
+				<figcaption>Square normals.</figcaption>
+			</figure>
+			
+			<pre translate="no">	protected virtual void FindHorizontalCrossing (Voxel xMin, Voxel xMax) {
+		if (xMin.position.y &lt; YStart || xMin.position.y > YEnd) {
+			return;
+		}
+		if (xMin.state == fillType) {
+			if (xMin.position.x &lt;= XEnd &amp;&amp; xMax.position.x >= XEnd) {
+				if (xMin.xEdge == float.MinValue || xMin.xEdge &lt; XEnd) {
+					xMin.xEdge = XEnd;
+					<mark>xMin.xNormal = new Vector2(fillType ? 1f : -1f, 0f);</mark>
+				}
+			}
+		}
+		else if (xMax.state == fillType) {
+			if (xMin.position.x &lt;= XStart &amp;&amp; xMax.position.x >= XStart) {
+				if (xMin.xEdge == float.MinValue || xMin.xEdge > XStart) {
+					xMin.xEdge = XStart;
+					<mark>xMin.xNormal = new Vector2(fillType ? -1f : 1f, 0f);</mark>
+				}
+			}
+		}
+	}
+	
+	protected virtual void FindVerticalCrossing (Voxel yMin, Voxel yMax) {
+		if (yMin.position.x &lt; XStart || yMin.position.x > XEnd) {
+			return;
+		}
+		if (yMin.state == fillType) {
+			if (yMin.position.y &lt;= YEnd &amp;&amp; yMax.position.y >= YEnd) {
+				if (yMin.yEdge == float.MinValue || yMin.yEdge &lt; YEnd) {
+					yMin.yEdge = YEnd;
+					<mark>yMin.yNormal = new Vector2(0f, fillType ? 1f : -1f);</mark>
+				}
+			}
+		}
+		else if (yMax.state == fillType) {
+			if (yMin.position.y &lt;= YStart &amp;&amp; yMax.position.y >= YStart) {
+				if (yMin.yEdge == float.MinValue || yMin.yEdge > YStart) {
+					yMin.yEdge = YStart;
+					<mark>yMin.yNormal = new Vector2(0f, fillType ? -1f : 1f);</mark>
+				}
+			}
+		}
+	}</pre>
+			
+			<h3>Circle Stencil Normals</h3>
+			
+			<div class="instructions">
+				<p>The same goes for <code>VoxelStencilCircle</code>, but normals are a bit more complex for circles. When filling, normals are equal to the vector pointing from the stencil center to the intersection point, normalized. When emptying, it's the other way around. Let's add a helper method for that.</p>
+			</div>
+			
+			<figure>
+				<img src="01-02-circle-normals.png" width="225" height="125">
+				<figcaption>Circle normals.</figcaption>
+			</figure>
+			
+			<pre translate="no">	<mark>private Vector3 ComputeNormal (float x, float y) {</mark>
+		<mark>if (fillType) {</mark>
+			<mark>return new Vector2(x - centerX, y - centerY).normalized;</mark>
+		<mark>}</mark>
+		<mark>else {</mark>
+			<mark>return new Vector2(centerX - x, centerY - y).normalized;</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Then Invoke it with four all four edge cases.</p>
+			</div>
+			
+			<pre translate="no">	protected override void FindHorizontalCrossing (Voxel xMin, Voxel xMax) {
+		float y2 = xMin.position.y - centerY;
+		y2 *= y2;
+		if (xMin.state == fillType) {
+			float x = xMin.position.x - centerX;
+			if (x * x + y2 &lt;= sqrRadius) {
+				x = centerX + Mathf.Sqrt(sqrRadius - y2);
+				if (xMin.xEdge == float.MinValue || xMin.xEdge &lt; x) {
+					xMin.xEdge = x;
+					<mark>xMin.xNormal = ComputeNormal(x, xMin.position.y);</mark>
+				}
+			}
+		}
+		else if (xMax.state == fillType) {
+			float x = xMax.position.x - centerX;
+			if (x * x + y2 &lt;= sqrRadius) {
+				x = centerX - Mathf.Sqrt(sqrRadius - y2);
+				if (xMin.xEdge == float.MinValue || xMin.xEdge > x) {
+					xMin.xEdge = x;
+					<mark>xMin.xNormal = ComputeNormal(x, xMin.position.y);</mark>
+				}
+			}
+		}
+	}
+	
+	protected override void FindVerticalCrossing (Voxel yMin, Voxel yMax) {
+		float x2 = yMin.position.x - centerX;
+		x2 *= x2;
+		if (yMin.state == fillType) {
+			float y = yMin.position.y - centerY;
+			if (y * y + x2 &lt;= sqrRadius) {
+				y = centerY + Mathf.Sqrt(sqrRadius - x2);
+				if (yMin.yEdge == float.MinValue || yMin.yEdge &lt; y) {
+					yMin.yEdge = y;
+					<mark>yMin.yNormal = ComputeNormal(yMin.position.x, y);</mark>
+				}
+			}
+		}
+		else if (yMax.state == fillType) {
+			float y = yMax.position.y - centerY;
+			if (y * y + x2 &lt;= sqrRadius) {
+				y = centerY - Mathf.Sqrt(sqrRadius - x2);
+				if (yMin.yEdge == float.MinValue || yMin.yEdge > y) {
+					yMin.yEdge = y;
+					<mark>yMin.yNormal = ComputeNormal(yMin.position.x, y);</mark>
+				}
+			}
+		}
+	}</pre>
+			
+			<div class="instructions">
+				<p>Although we're not seeing any of it, we're now storing Hermite data. The next step is to put it to good use.</p>
+			</div>
+			
+			<h2>Showing Sharp Features</h2>
+			
+			
+			<div class="instructions">
+				<p>The first question we should ask ourselves is what counts as a sharp feature. A 90&deg; angle and anything below that seems obvious, but what is the upper limit? 100&deg;? 120&deg;? Different maximum angles will produce different visual results. There isn't a single correct answer. So let's add a configuration option to <code>VoxelMap</code> and let's use a default of 135 degrees.</p>
+			</div>
+			
+			<figure>
+				<img src="02-00-angles.png" width="260" height="95">
+				<figcaption>What is still a sharp feature?</figcaption>
+			</figure>
+			
+			<pre translate="no">	<mark>public float maxFeatureAngle = 135f;</mark></pre>
+			
+			<figure>
+				<img src="02-00-max-feature-angle.png" width="320" height="166">
+				<figcaption>Configuring maximum sharp feature angle.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Of course the voxel map doesn't deal with cells directly, so it passes this data to its voxel grids.</p>
+			</div>
+			
+			<pre translate="no">	private void CreateChunk (int i, int x, int y) {
+		VoxelGrid chunk = Instantiate(voxelGridPrefab) as VoxelGrid;
+		chunk.Initialize(voxelResolution, chunkSize<mark>, maxFeatureAngle</mark>);
+		&hellip;
+	}</pre>
+			
+			<div class="instructions">
+				<p>Now <code>VoxelGrid</code> needs to remember it as well. But instead of storing the angle in degrees, we store its cosine.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-cosine" id="q-cosine">Why the cosine?</a></li>
+				</ul>
+			</aside>
+			
+			<figure>
+				<img src="02-00-cosines.png" width="575" height="100">
+				<figcaption>Degrees, radians, and cosines.</figcaption>
+			</figure>
+			
+			<pre translate="no">	<mark>private float sharpFeatureLimit;</mark>
+			
+	public void Initialize (int resolution, float size<mark>, float maxFeatureAngle</mark>) {
+		<mark>sharpFeatureLimit = Mathf.Cos(maxFeatureAngle * Mathf.Deg2Rad);</mark>
+		&hellip;
+	}</pre>
+			
+			<h3>Preparing for Sharp Features</h3>
+			
+			<div class="instructions">
+				<p>The detection of a sharp feature will have to happen when triangulating individual cells. Right now <code>TriangulateCell</code> does all the work directly in its large switch statement. However, it is about to become quite a bit more complicated. So let's introduce separate methods for each case, using the same method signature and just copy the code from the case blocks into their new methods.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-case-0-method" id="q-case-0-method">Why add a method for case 0?</a></li>
+				</ul>
+			</aside>
+			
+			<figure>
+				<img src="02-01-cell-types.png" width="370" height="155">
+				<figcaption>The sixteen cell configurations, grouped by type.</figcaption>
+			</figure>
+			
+			<pre translate="no">	private void TriangulateCell (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		&hellip;
+		switch (cellType) {
+		case 0: <mark>TriangulateCase0(i, a, b, c, d); break</mark>;
+		case 1: <mark>TriangulateCase1(i, a, b, c, d);</mark> break;
+		case 2: <mark>TriangulateCase2(i, a, b, c, d);</mark> break;
+		case 3: <mark>TriangulateCase3(i, a, b, c, d);</mark> break;
+		case 4: <mark>TriangulateCase4(i, a, b, c, d);</mark> break;
+		case 5: <mark>TriangulateCase5(i, a, b, c, d);</mark> break;
+		case 6: <mark>TriangulateCase6(i, a, b, c, d);</mark> break;
+		case 7: <mark>TriangulateCase7(i, a, b, c, d);</mark> break;
+		case 8: <mark>TriangulateCase8(i, a, b, c, d);</mark> break;
+		case 9: <mark>TriangulateCase9(i, a, b, c, d);</mark> break;
+		case 10: <mark>TriangulateCase10(i, a, b, c, d);</mark> break;
+		case 11: <mark>TriangulateCase11(i, a, b, c, d);</mark> break;
+		case 12: <mark>TriangulateCase12(i, a, b, c, d);</mark> break;
+		case 13: <mark>TriangulateCase13(i, a, b, c, d);</mark> break;
+		case 14: <mark>TriangulateCase14(i, a, b, c, d);</mark> break;
+		case 15: <mark>TriangulateCase15(i, a, b, c, d);</mark> break;
+		}
+	}
+	
+	<mark>private void TriangulateCase0 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {</mark>
+	<mark>}</mark>
+
+	<mark>private void TriangulateCase15 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {</mark>
+		AddQuad(rowCacheMin[i], rowCacheMax[i], rowCacheMax[i + 2], rowCacheMin[i + 2]);
+	<mark>}</mark>
+	
+	<mark>private void TriangulateCase1 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {</mark>
+		AddTriangle(rowCacheMin[i], edgeCacheMin, rowCacheMin[i + 1]);
+	<mark>}</mark>
+	
+	&hellip;</pre>
+			
+			<div class="instructions">
+				<p>Actually, let's go a step further and add additional methods that add triangles, quads, and pentagons given a cache index. Then the new case methods can use those and won't have to deal with the complexity of the vertex cache directly.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-method-performance" id="q-method-performance">Isn't this bad for performance?</a></li>
+				</ul>
+			</aside>
+			
+			<figure>
+				<img src="02-01-vertex-cache.png" width="310" height="170">
+				<figcaption>Anatomy of a cell and its vertex cache.</figcaption>
+			</figure>
+	
+		<pre translate="no">	private void TriangulateCase15 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		<mark>AddQuadABCD(i);</mark>
+	}
+	
+	private void TriangulateCase1 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		<mark>AddTriangleA(i);</mark>
+	}
+	
+	<mark>private void TriangulateCase2 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {</mark>
+		<mark>AddTriangleB(i);</mark>
+	<mark>}</mark>
+
+	<mark>private void TriangulateCase4 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {</mark>
+		<mark>AddTriangleC(i);</mark>
+	<mark>}</mark>
+	
+	<mark>private void TriangulateCase8 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {</mark>
+		<mark>AddTriangleD(i);</mark>
+	<mark>}</mark>
+
+	<mark>private void TriangulateCase7 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {</mark>
+		<mark>AddPentagonABC(i);</mark>
+	<mark>}</mark>
+	
+	<mark>private void TriangulateCase11 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {</mark>
+		<mark>AddPentagonABD(i);</mark>
+	<mark>}</mark>
+	
+	<mark>private void TriangulateCase13 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {</mark>
+		<mark>AddPentagonACD(i);</mark>
+	<mark>}</mark>
+	
+	<mark>private void TriangulateCase14 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {</mark>
+		<mark>AddPentagonBCD(i);</mark>
+	<mark>}</mark>
+	
+	<mark>private void TriangulateCase3 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {</mark>
+		<mark>AddQuadAB(i);</mark>
+	<mark>}</mark>
+
+	<mark>private void TriangulateCase5 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {</mark>
+		<mark>AddQuadAC(i);</mark>
+	<mark>}</mark>
+
+	<mark>private void TriangulateCase10 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {</mark>
+		<mark>AddQuadBD(i);</mark>
+	<mark>}</mark>
+	
+	<mark>private void TriangulateCase12 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {</mark>
+		<mark>AddQuadCD(i);</mark>
+	<mark>}</mark>
+	
+	<mark>private void TriangulateCase6 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {</mark>
+		<mark>AddTriangleB(i);</mark>
+		<mark>AddTriangleC(i);</mark>
+	<mark>}</mark>
+
+	<mark>private void TriangulateCase9 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {</mark>
+		<mark>AddTriangleA(i);</mark>
+		<mark>AddTriangleD(i);</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>And so the code that started inside the <code>switch</code> statement ends up in their own methods.</p>
+			</div>
+	
+	<pre translate="no">	<mark>private void AddQuadABCD (int i) {</mark>
+		AddQuad(rowCacheMin[i], rowCacheMax[i], rowCacheMax[i + 2], rowCacheMin[i + 2]);
+	<mark>}</mark>
+
+	<mark>private void AddTriangleA (int i) {</mark>
+		AddTriangle(rowCacheMin[i], edgeCacheMin, rowCacheMin[i + 1]);
+	<mark>}</mark>
+	
+	<mark>private void AddTriangleB (int i) {</mark>
+		AddTriangle(rowCacheMin[i + 2], rowCacheMin[i + 1], edgeCacheMax);
+	<mark>}</mark>
+	
+	<mark>private void AddTriangleC (int i) {</mark>
+		AddTriangle(rowCacheMax[i], rowCacheMax[i + 1], edgeCacheMin);
+	<mark>}</mark>
+	
+	<mark>private void AddTriangleD (int i) {</mark>
+		AddTriangle(rowCacheMax[i + 2], edgeCacheMax, rowCacheMax[i + 1]);
+	<mark>}</mark>
+
+	<mark>private void AddPentagonABC (int i) {</mark>
+		AddPentagon(rowCacheMin[i], rowCacheMax[i], rowCacheMax[i + 1], edgeCacheMax, rowCacheMin[i + 2]);
+	<mark>}</mark>
+
+	<mark>private void AddPentagonABD (int i) {</mark>
+		AddPentagon(rowCacheMin[i + 2], rowCacheMin[i], edgeCacheMin, rowCacheMax[i + 1], rowCacheMax[i + 2]);
+	<mark>}</mark>
+
+	<mark>private void AddPentagonACD (int i) {</mark>
+		AddPentagon(rowCacheMax[i], rowCacheMax[i + 2], edgeCacheMax, rowCacheMin[i + 1], rowCacheMin[i]);
+	<mark>}</mark>
+
+	<mark>private void AddPentagonBCD (int i) {</mark>
+		AddPentagon(rowCacheMax[i + 2], rowCacheMin[i + 2], rowCacheMin[i + 1], edgeCacheMin, rowCacheMax[i]);
+	<mark>}</mark>
+
+	<mark>private void AddQuadAB (int i) {</mark>
+		AddQuad(rowCacheMin[i], edgeCacheMin, edgeCacheMax, rowCacheMin[i + 2]);
+	<mark>}</mark>
+
+	<mark>private void AddQuadAC (int i) {</mark>
+		AddQuad(rowCacheMin[i], rowCacheMax[i], rowCacheMax[i + 1], rowCacheMin[i + 1]);
+	<mark>}</mark>
+
+	<mark>private void AddQuadBD (int i) {</mark>
+		AddQuad(rowCacheMin[i + 1], rowCacheMax[i + 1], rowCacheMax[i + 2], rowCacheMin[i + 2]);
+	<mark>}</mark>
+	
+	<mark>private void AddQuadCD (int i) {</mark>
+		AddQuad(edgeCacheMin, rowCacheMax[i], rowCacheMax[i + 2], edgeCacheMax);
+	<mark>}</mark></pre>
+			
+			<h3>Detecting Sharp Features</h3>
+			
+			<div class="instructions">
+				<p>Cases 0 and 15 have no edge crossings so we don't need to change them. Case 1 is the first that might have a sharp feature. How to find out?</p>
+				<p>We have two lines crossing adjacent edges of the cell. If those lines cross at a sharp enough angle, we treat it as a sharp feature.</p>
+				<p>If you have two vectors of unit length, then their dot product is equal to the cosine of the angle between then. Our two lines don't have lengths, but we could use their normals. If we invert one of them, then we end up with the same angle. So we can use the normals to determine whether we have a sharp feature.</p>
+			</div>
+
+			<figure>
+				<img src="02-02-finding-angles.png" width="350" height="300">
+				<figcaption>Finding the angle of a feature.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Because the normals have unit length, their dot product is equal to the cosine of the absolute angle between them. If this ends up larger than the limit that we set, then we have a sharp feature. Let's create a method for that.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-dot-cosine" id="q-dot-cosine">Why does dot lead to cosine?</a></li>
+				</ul>
+			</aside>
+						<pre translate="no">	<mark>private bool IsSharpFeature (Vector2 n1, Vector2 n2) {</mark>
+		<mark>float dot = Vector2.Dot(n1, -n2);</mark>
+		<mark>return dot >= sharpFeatureLimit;</mark>
+	<mark>}</mark></pre>
+
+			<div class="instructions">
+				<p>However, we have to make sure that we exclude parallel lines. As the angle between such lines is 0&deg; &ndash; which cosine is 1 &ndash; we would count them as sharp. But we will run into trouble later when trying to find their intersection point. So disqualify line crossings that are close to 0&deg;.</p>
+			</div>
+
+			<pre translate="no">		return dot >= sharpFeatureLimit <mark>&amp;&amp; dot &lt; 0.9999f</mark>;</pre>
+
+			<div class="instructions">
+				<p>Now we can test whether case 1 has a sharp feature. Initially don't do anything yet if we find one, and add the usual triangle if there isn't a feature.</p>
+			</div>
+			
+	<pre translate="no">	private void TriangulateCase1 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		<mark>Vector2 n1 = a.xNormal;</mark>
+		<mark>Vector2 n2 = a.yNormal;</mark>
+		<mark>if (IsSharpFeature(n1, n2)) {</mark>
+
+		<mark>}</mark>
+		<mark>else {</mark>
+			AddTriangleA(i);
+		<mark>}</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>You can sculpt a sharp feature to try this out. Simply use the square stencil, or use the circle stencil to control the angle at which you cross edges. Fill a voxel and then cut away until you get the shape you want. It might take a while to get the hang of this, as you always have to include at least one voxel in your stencil.</p>
+			</div>
+			
+			<figure>
+				<img src="02-02-invisible-sharp.png" width="160" height="160">
+				<figcaption>An invisible sharp feature.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>The next step is to find the intersection point of two lines. How can we do that?</p>
+				<p>A line can be represented by a point and a direction. Any point on the line can be represented with the formula <b>P + D<i>u</i></b>, where <b><i>u</i></b> can be any number for an infinite line, both positive and negative. We have two such lines and they cross at some point <b>X</b>.</p>
+			</div>
+			
+			<figure>
+				<img src="02-02-two-lines.png" width="330" height="220">
+				<figcaption>Two lines crossing.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Looking at the first line, we know that the vectors <b>D<sub>1</sub></b> and <b>X - P<sub>1</sub></b> are parallel. Of course both are perpendicular to the line's normal vector <b>N<sub>1</sub></b>. This means that the dot product between them and the normal is zero. So we have <b>N<sub>1</sub> &middot; (X - P<sub>1</sub>) = 0</b>.</p>
+			</div>
+			
+			<figure>
+				<img src="02-02-from-p-to-x.png" width="330" height="220">
+				<figcaption>Going from P<sub>1</sub> to X, perpendicular to its normal.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>An alternative way to go from <b>P<sub>1</sub></b> to <b>X</b> is to take a detour and go to <b>P<sub>2</sub></b> first and then follow <b>D<sub>2</sub><i>u<sub>2</sub></i></b>. So we can replace <b>X - P<sub>1</sub></b> with <b>(P<sub>2</sub> - P<sub>1</sub>) + D<sub>2</sub><i>u<sub>2</sub></i></b>, which again ends up being parallel to <b>D<sub>1</sub></b> and thus is perpendicular to <b>N<sub>1</sub></b>.</p>
+			</div>
+			
+			<figure>
+				<img src="02-02-detour-to-x.png" width="330" height="220">
+				<figcaption>Taking a detour.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>So now we have <b>N<sub>1</sub> &middot; ((P<sub>2</sub> - P<sub>1</sub>) + D<sub>2</sub><i>u<sub>2</sub></i>) = 0</b>, which we can rewrite to extract the variable that we need, <b><i>u<sub>2</sub></i> = &minus;N<sub>1</sub> &middot; (P<sub>2</sub> - P<sub>1</sub>) / (N<sub>1</sub> &middot; D<sub>2</sub>)</b>.</p>
+				<p>This tells us how far along <b>D<sub>2</sub></b> we should walk, starting at <b>P<sub>2</sub></b>, so that the line between us a <b>P<sub>1</sub></b> becomes perpendicular to <b>N<sub>1</sub></b>. So we finally find <b>X</b> by calculating <b>P<sub>2</sub> + D<sub>2</sub><i>u<sub>2</sub></i></b>.</p>
+				<p>You can get <b>D<sub>2</sub></b> by rotating <b>N<sub>2</sub></b> by 90&deg; using the perp operator, which is the vector <b>(-N<sub>2</sub>.y, N<sub>2</sub>.x)</b>.
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-rewrite-dot" id="q-rewrite-dot">How to rewrite the dot product?</a></li>
+				</ul>
+				<ul>
+					<li><a href="index.html#a-static" id="q-static">Why a static method?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>private static Vector2 ComputeIntersection (Vector2 p1, Vector2 n1, Vector2 p2, Vector2 n2) {</mark>
+		<mark>Vector2 d2 = new Vector2(n2.y, -n2.x);</mark>
+		<mark>float u2 = -Vector2.Dot(n1, p2 - p1) / Vector2.Dot(n1, d2);</mark>
+		<mark>return p2 + d2 * u2;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now we just have to invoke this method to find our intersection point. To get the edge crossing points that we need for this, add two convenient properties to <code>Voxel</code>.</p>
+			</div>
+
+	<pre translate="no">	<mark>public Vector2 XEdgePoint {</mark>
+		<mark>get {</mark>
+			<mark>return new Vector2(xEdge, position.y);</mark>
+		<mark>}</mark>
+	<mark>}</mark>
+
+	<mark>public Vector2 YEdgePoint {</mark>
+		<mark>get {</mark>
+			<mark>return new Vector2(position.x, yEdge);</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Of course once we have the new point, we have to triangulate it. Instead of a triangle, we'll need to add a quad. And because the sharp feature could end up pointing inwards &ndash; forming a valley instead of a peak &ndash; we should add it as the first vertex, effectively creating a triangle fan centered on it. That way the triangulation should always be valid. Let's add a new method to <code>VoxelGrid</code> to take care of all this.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void AddQuadA (int i, Vector2 extraVertex) {</mark>
+		<mark>AddQuad(vertices.Count, rowCacheMin[i + 1], rowCacheMin[i], edgeCacheMin);</mark>
+		<mark>vertices.Add(extraVertex);</mark>
+	<mark>}</mark></pre>
+			
+			<figure>
+				<img src="02-02-triangulation.png" width="270" height="150">
+				<figcaption>Triangulating sharp features, valleys and peaks.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Now we can finally go back to <code>VoxelGrid.TriangulateCase1</code> to find the point and add the quad.</p>
+			</div>
+	
+			<pre translate="no">		if (IsSharpFeature(n1, n2)) {
+			<mark>Vector2 point = ComputeIntersection(a.XEdgePoint, n1, a.YEdgePoint, n2);</mark>
+			<mark>AddQuadA(i, point);</mark>
+		}</pre>
+			
+			<figure>
+				<img src="02-02-unconstrained.png" width="220" height="90">
+				<figcaption>Unconstrained sharp features.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>The result looks good for the square stencil, but while sculpting with circle stencil the feature point can end up outside the cell. We want to keep features local to the cell, which we can do by clamping to cell bounds. Create another handy method for that.</p>
+			</div>
+			
+			<figure>
+				<img src="02-02-clamped-peak.png" width="270" height="150">
+				<figcaption>Clamping a peak.</figcaption>
+			</figure>
+			
+			<pre translate="no">	<mark>private static Vector2 ClampToCell (Vector2 point, Voxel min, Voxel max) {</mark>
+		<mark>if (point.x &lt; min.position.x) {</mark>
+			<mark>point.x = min.position.x;</mark>
+		<mark>}</mark>
+		<mark>else if (point.x > max.position.x) {</mark>
+			<mark>point.x = max.position.x;</mark>
+		<mark>}</mark>
+		<mark>if (point.y &lt; min.position.y) {</mark>
+			<mark>point.y = min.position.y;</mark>
+		<mark>}</mark>
+		<mark>else if (point.y > max.position.y) {</mark>
+			<mark>point.y = max.position.y;</mark>
+		<mark>}</mark>
+		<mark>return point;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>And use it in <code>TriangulateCase1</code>.</p>
+			</div>
+			
+			<pre translate="no">		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = ComputeIntersection(a.XEdgePoint, n1, a.YEdgePoint, n2);
+			<mark>point = ClampToCell(point, a, d);</mark>
+			AddQuadA(i, point);
+		}</pre>
+			
+			<figure>
+				<img src="02-02-clamped.png" width="220" height="90">
+				<figcaption>Clamped sharp features.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Clamping works when the sharp feature is a peak, but not when it's a valley, as that can create degenerate triangles, which makes the grid structure painfully obvious. Better not have a sharp feature at all in that case.</p>
+			</div>
+			
+			<figure>
+				<img src="02-02-not-clamping-valley.png" width="400" height="150">
+				<figcaption>Better discard valleys that are out of bounds.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>To support this we could adjust our clamp method to only clamp on the maximum sides an indicate failure if a minimum side is passed. We now want to return two results, which is not possible. We solve this by turning the point into a reference parameter. That way we don't get a copy but a reference to the actual variable from the invoker's context. That means that we directly alter that variable, which allows us to return a boolean indicating success or failure.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-avoid-ref" id="q-avoid-ref">Shouldn't we avoid using <code>ref</code>?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	private static <mark>bool</mark> <mark>ClampToCellMaxMax</mark> (<mark>ref</mark> Vector2 point, Voxel min, Voxel max) {
+		<mark>if (point.x &lt; min.position.x || point.y &lt; min.position.y) {</mark>
+			<mark>return false;</mark>
+		<mark>}</mark>
+		<mark>if</mark> (point.x > max.position.x) {
+			point.x = max.position.x;
+		}
+		<mark>if</mark> (point.y > max.position.y) {
+			point.y = max.position.y;
+		}
+		<mark>return true;</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>Now we can adjust <code>TriangulateCase1</code> so it only adds the feature if the clamp succeeds, otherwise add the normal triangle.</p>
+			</div>
+			
+			<pre translate="no">	private void TriangulateCase1 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		Vector2 n1 = a.xNormal;
+		Vector2 n2 = a.yNormal;
+		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = ComputeIntersection(a.XEdgePoint, n1, a.YEdgePoint, n2);
+			<mark>if (ClampToCellMaxMax(ref</mark> point, a, d)<mark>) {</mark>
+				AddQuadA(i, point);
+			<mark>}</mark>
+			<mark>else {</mark>
+				<mark>AddTriangleA(i);</mark>
+			<mark>}</mark>
+		}
+		else {
+			AddTriangleA(i);
+		}
+	}</pre>
+			
+			<div class="instructions">
+				<p>Alternatively, by returning after adding the sharp feature we only need to write <code>AddTriangleA</code> once and can eliminate the <code>else</code> blocks.</p>
+			</div>
+			
+			<pre translate="no">	private void TriangulateCase1 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		Vector2 n1 = a.xNormal;
+		Vector2 n2 = a.yNormal;
+		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = ComputeIntersection(a.XEdgePoint, n1, a.YEdgePoint, n2);
+			if (ClampToCellMaxMax(ref point, a, d)) {
+				AddQuadA(i, point);
+				<mark>return;</mark>
+			}
+		}
+		<mark>AddTriangleA(i);</mark>
+	}</pre>
+			
+			<figure>
+				<img src="02-02-valid.png" width="220" height="90">
+				<figcaption>Valid triangulations, though not always sharp.</figcaption>
+			</figure>
+			
+			<h3>Checking the Other Three Corners</h3>
+			
+			<div class="instructions">
+				<p>Case 2 goes similar, but uses different edge points and other clamp criteria. And of course it needs to add different polygons. I marked the differences with case 1.</p>
+			</div>
+			
+			<pre translate="no">	private void <mark>TriangulateCase2</mark> (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		Vector2 n1 = a.xNormal;
+		Vector2 n2 = <mark>b</mark>.yNormal;
+		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = ComputeIntersection(a.XEdgePoint, n1, <mark>b</mark>.YEdgePoint, n2);
+			if (<mark>ClampToCellMinMax</mark>(ref point, a, d)) {
+				<mark>AddQuadB</mark>(i, point);
+				return;
+			}
+		}
+		<mark>AddTriangleB</mark>(i);
+	}</pre>
+			
+			<div class="instructions">
+				<p>Also add the required clamp and quad methods, and let's immediately do so for cases 4 and 8 as well.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private static bool ClampToCellMinMin (ref Vector2 point, Voxel min, Voxel max) {</mark>
+		<mark>if (point.x > max.position.x || point.y > max.position.y) {</mark>
+			<mark>return false;</mark>
+		<mark>}</mark>
+		<mark>if (point.x &lt; min.position.x) {</mark>
+			<mark>point.x = min.position.x;</mark>
+		<mark>}</mark>
+		<mark>if (point.y &lt; min.position.y) {</mark>
+			<mark>point.y = min.position.y;</mark>
+		<mark>}</mark>
+		<mark>return true;</mark>
+	<mark>}</mark>
+	
+	<mark>private static bool ClampToCellMinMax (ref Vector2 point, Voxel min, Voxel max) {</mark>
+		<mark>if (point.x > max.position.x || point.y &lt; min.position.y) {</mark>
+			<mark>return false;</mark>
+		<mark>}</mark>
+		<mark>if (point.x &lt; min.position.x) {</mark>
+			<mark>point.x = min.position.x;</mark>
+		<mark>}</mark>
+		<mark>if (point.y > max.position.y) {</mark>
+			<mark>point.y = max.position.y;</mark>
+		<mark>}</mark>
+		<mark>return true;</mark>
+	<mark>}</mark>
+
+	<mark>private static bool ClampToCellMaxMin (ref Vector2 point, Voxel min, Voxel max) {</mark>
+		<mark>if (point.x &lt; min.position.x || point.y > max.position.y) {</mark>
+			<mark>return false;</mark>
+		<mark>}</mark>
+		<mark>if (point.x > max.position.x) {</mark>
+			<mark>point.x = max.position.x;</mark>
+		<mark>}</mark>
+		<mark>if (point.y &lt; min.position.y) {</mark>
+			<mark>point.y = min.position.y;</mark>
+		<mark>}</mark>
+		<mark>return true;</mark>
+	<mark>}</mark>
+	
+	<mark>private void AddQuadB (int i, Vector2 extraVertex) {</mark>
+		<mark>AddQuad(vertices.Count, edgeCacheMax, rowCacheMin[i + 2], rowCacheMin[i + 1]);</mark>
+		<mark>vertices.Add(extraVertex);</mark>
+	<mark>}</mark>
+	
+	<mark>private void AddQuadC (int i, Vector2 extraVertex) {</mark>
+		<mark>AddQuad(vertices.Count, edgeCacheMin, rowCacheMax[i], rowCacheMax[i + 1]);</mark>
+		<mark>vertices.Add(extraVertex);</mark>
+	<mark>}</mark>
+	
+	<mark>private void AddQuadD (int i, Vector2 extraVertex) {</mark>
+		<mark>AddQuad(vertices.Count, rowCacheMax[i + 1], rowCacheMax[i + 2], edgeCacheMax);</mark>
+		<mark>vertices.Add(extraVertex);</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>The triangulation methods for case 4 and case 8 require similar simple adjustments.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-generalize" id="q-generalize">Can we generalize this code?</a></li>
+				</ul>
+			</aside>
+	
+		<pre translate="no">	private void <mark>TriangulateCase4</mark> (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		Vector2 n1 = <mark>c</mark>.xNormal;
+		Vector2 n2 = a.yNormal;
+		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = ComputeIntersection(<mark>c</mark>.XEdgePoint, n1, a.YEdgePoint, n2);
+			if (<mark>ClampToCellMaxMin</mark>(ref point, a, d)) {
+				<mark>AddQuadC</mark>(i, point);
+				return;
+			}
+		}
+		<mark>AddTriangleC</mark>(i);
+	}
+	
+	private void <mark>TriangulateCase8</mark> (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		Vector2 n1 = <mark>c</mark>.xNormal;
+		Vector2 n2 = <mark>b</mark>.yNormal;
+		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = ComputeIntersection(<mark>c</mark>.XEdgePoint, n1, <mark>b</mark>.YEdgePoint, n2);
+			if (<mark>ClampToCellMinMin</mark>(ref point, a, d)) {
+				<mark>AddQuadD</mark>(i, point);
+				return;
+			}
+		}
+		<mark>AddTriangleD</mark>(i);
+	}</pre>
+			
+			<figure>
+				<img src="02-03-sharp-corners.png" width="220" height="100">
+				<figcaption>Looking sharp.</figcaption>
+			</figure>
+		
+			<h3>Sharpening the Missing Corners</h3>
+			
+			<div class="instructions">
+				<p>Next up are cases 7, 11, 13, and 14. These are the opposites of the first four cases, having three filled corners. Without a sharp feature they require a pentagon, so we need to add a hexagon for the sharp features.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void AddHexagon (int a, int b, int c, int d, int e, int f) {</mark>
+		<mark>triangles.Add(a);</mark>
+		<mark>triangles.Add(b);</mark>
+		<mark>triangles.Add(c);</mark>
+		<mark>triangles.Add(a);</mark>
+		<mark>triangles.Add(c);</mark>
+		<mark>triangles.Add(d);</mark>
+		<mark>triangles.Add(a);</mark>
+		<mark>triangles.Add(d);</mark>
+		<mark>triangles.Add(e);</mark>
+		<mark>triangles.Add(a);</mark>
+		<mark>triangles.Add(e);</mark>
+		<mark>triangles.Add(f);</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>For these cases we don't want to clamp at all, because both peaks and valleys could produce degenerate triangles and ugly results. So instead of clamping, we simply check whether the point lies inside the cell.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private static bool IsInsideCell (Vector2 point, Voxel min, Voxel max) {</mark>
+		<mark>return</mark>
+			<mark>point.x > min.position.x &amp;&amp; point.y > min.position.y &amp;&amp;</mark>
+			<mark>point.x &lt; max.position.x &amp;&amp; point.y &lt; max.position.y;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Here's case 7, a modified case 8.</p>
+			</div>
+			
+			<pre translate="no">	private void <mark>TriangulateCase7</mark> (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		Vector2 n1 = c.xNormal;
+		Vector2 n2 = b.yNormal;
+		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = ComputeIntersection(c.XEdgePoint, n1, b.YEdgePoint, n2);
+			if (<mark>IsInsideCell(point</mark>, a, d)) {
+				<mark>AddHexagonABC</mark>(i, point);
+				return;
+			}
+		}
+		<mark>AddPentagonABC</mark>(i);
+	}
+	
+	<mark>private void AddHexagonABC (int i, Vector2 extraVertex) {</mark>
+		<mark>AddHexagon(</mark>
+			<mark>vertices.Count, edgeCacheMax, rowCacheMin[i + 2],</mark>
+			<mark>rowCacheMin[i], rowCacheMax[i], rowCacheMax[i + 1]);</mark>
+		<mark>vertices.Add(extraVertex);</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Likewise, cases 11, 13, and 14 are modifications of cases 4, 2, and 1.</p>
+			</div>
+			
+			<pre translate="no">	private void <mark>TriangulateCase11</mark> (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		Vector2 n1 = c.xNormal;
+		Vector2 n2 = a.yNormal;
+		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = ComputeIntersection(c.XEdgePoint, n1, a.YEdgePoint, n2);
+			if (<mark>IsInsideCell(point</mark>, a, d)) {
+				<mark>AddHexagonABD</mark>(, point);
+				return;
+			}
+		}
+		<mark>AddPentagonABD</mark>(i);
+	}
+	
+	private void <mark>TriangulateCase13</mark> (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		Vector2 n1 = a.xNormal;
+		Vector2 n2 = b.yNormal;
+		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = ComputeIntersection(a.XEdgePoint, n1, b.YEdgePoint, n2);
+			if (<mark>IsInsideCell(point</mark>, a, d)) {
+				<mark>AddHexagonACD</mark>(, point);
+				return;
+			}
+		}
+		<mark>AddPentagonACD</mark>(i);
+	}
+	
+	private void <mark>TriangulateCase14</mark> (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		Vector2 n1 = a.xNormal;
+		Vector2 n2 = a.yNormal;
+		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = ComputeIntersection(a.XEdgePoint, n1, a.YEdgePoint, n2);
+			if (<mark>IsInsideCell(point</mark>, a, d)) {
+				<mark>AddHexagonBCD</mark>(, point);
+				return;
+			}
+		}
+		<mark>AddPentagonBCD</mark>(i);
+	}
+	
+	<mark>private void AddHexagonABD (int i, Vector2 extraVertex) {</mark>
+		<mark>AddHexagon(</mark>
+			<mark>vertices.Count, rowCacheMax[i + 1], rowCacheMax[i + 2],</mark>
+			<mark>rowCacheMin[i + 2], rowCacheMin[i], edgeCacheMin);</mark>
+		<mark>vertices.Add(extraVertex);</mark>
+	<mark>}</mark>
+
+	<mark>private void AddHexagonACD (int i, Vector2 extraVertex) {</mark>
+		<mark>AddHexagon(</mark>
+			<mark>vertices.Count, rowCacheMin[i + 1], rowCacheMin[i],</mark>
+			<mark>rowCacheMax[i], rowCacheMax[i + 2], edgeCacheMax);</mark>
+		<mark>vertices.Add(extraVertex);</mark>
+	<mark>}</mark>
+
+	<mark>private void AddHexagonBCD (int i, Vector2 extraVertex) {</mark>
+		<mark>AddHexagon(</mark>
+			<mark>vertices.Count, edgeCacheMin, rowCacheMax[i],</mark>
+			<mark>rowCacheMax[i + 2], rowCacheMin[i + 2], rowCacheMin[i + 1]);</mark>
+		<mark>vertices.Add(extraVertex);</mark>
+	<mark>}</mark></pre>
+			
+			<figure>
+				<img src="02-04-sharp.png" width="180" height="180">
+				<figcaption>Cutting sharp corners.</figcaption>
+			</figure>
+			
+			<h3>Adding Features to Straight Edges</h3>
+			
+			<div class="instructions">
+				<p>Cases 3, 5, 10, and 12 connect opposite sides of a cell instead of adjacent ones, but we can still use the same approach. This time it's either quads without feature, and pentagons with feature. Once again clamping could produce bad results, so we won't.</p>
+			</div>
+			
+			<pre translate="no">	private void <mark>TriangulateCase3</mark> (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		Vector2 n1 = <mark>a.yNormal</mark>;
+		Vector2 n2 = <mark>b.yNormal</mark>;
+		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = ComputeIntersection(<mark>a.YEdgePoint</mark>, n1, <mark>b.YEdgePoint</mark>, n2);
+			if (IsInsideCell(point, a, d)) {
+				<mark>AddPentagonAB</mark>(i, point);
+				return;
+			}
+		}
+		<mark>AddQuadAB</mark>(i);
+	}
+
+	private void <mark>TriangulateCase5</mark> (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		Vector2 n1 = <mark>a.xNormal</mark>;
+		Vector2 n2 = <mark>c.xNormal</mark>;
+		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = ComputeIntersection(<mark>a.XEdgePoint</mark>, n1, <mark>c.XEdgePoint</mark>, n2);
+			if (IsInsideCell(point, a, d)) {
+				<mark>AddPentagonAC</mark>(i, point);
+				return;
+			}
+		}
+		<mark>AddQuadAC</mark>(i);
+	}
+
+	private void <mark>TriangulateCase10</mark> (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		Vector2 n1 = <mark>a.xNormal</mark>;
+		Vector2 n2 = <mark>c.xNormal</mark>;
+		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = ComputeIntersection(<mark>a.XEdgePoint</mark>, n1, <mark>c.XEdgePoint</mark>, n2);
+			if (IsInsideCell(point, a, d)) {
+				<mark>AddPentagonBD</mark>(i, point);
+				return;
+			}
+		}
+		<mark>AddQuadBD</mark>(i);
+	}
+	
+	private void <mark>TriangulateCase12</mark> (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		Vector2 n1 = <mark>a.yNormal</mark>;
+		Vector2 n2 = <mark>b.yNormal</mark>;
+		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = ComputeIntersection(<mark>a.YEdgePoint</mark>, n1, <mark>b.YEdgePoint</mark>, n2);
+			if (IsInsideCell(point, a, d)) {
+				<mark>AddPentagonCD</mark>(i, point);
+				return;
+			}
+		}
+		<mark>AddQuadCD</mark>(i);
+	}
+	
+	<mark>private void AddPentagonAB (int i, Vector2 extraVertex) {</mark>
+		<mark>AddPentagon(vertices.Count, edgeCacheMax, rowCacheMin[i + 2], rowCacheMin[i], edgeCacheMin);</mark>
+		<mark>vertices.Add(extraVertex);</mark>
+	<mark>}</mark>
+
+	<mark>private void AddPentagonAC (int i, Vector2 extraVertex) {</mark>
+		<mark>AddPentagon(vertices.Count, rowCacheMin[i + 1], rowCacheMin[i], rowCacheMax[i], rowCacheMax[i + 1]);</mark>
+		<mark>vertices.Add(extraVertex);</mark>
+	<mark>}</mark>
+
+	<mark>private void AddPentagonBD (int i, Vector2 extraVertex) {</mark>
+		<mark>AddPentagon(</mark>
+			<mark>vertices.Count, rowCacheMax[i + 1], rowCacheMax[i + 2], rowCacheMin[i + 2], rowCacheMin[i + 1]);</mark>
+		<mark>vertices.Add(extraVertex);</mark>
+	<mark>}</mark>
+
+	<mark>private void AddPentagonCD (int i, Vector2 extraVertex) {</mark>
+		<mark>AddPentagon(vertices.Count, edgeCacheMin, rowCacheMax[i], rowCacheMax[i + 2], edgeCacheMax);</mark>
+		<mark>vertices.Add(extraVertex);</mark>
+	<mark>}</mark></pre>
+			
+			<figure>
+				<img src="02-05-sharp.png" width="220" height="220">
+				<figcaption>More than straight edges.</figcaption>
+			</figure>
+			
+			<h3>Resolving Ambiguities</h3>
+			
+			<div class="instructions">
+				<p>The remaining two cases are those with ambiguities. Do they have a diagonal connection, or not? So far we decided to always keep both corners separate, but that is about to change. Let's  start simple, by copying the code of cases 2 and 4 into the method of case 6.</p>
+			</div>
+			
+			<pre translate="no">	private void TriangulateCase6 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		Vector2 n1 = a.xNormal;
+		Vector2 n2 = -b.yNormal;
+		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = ComputeIntersection(a.XEdgePoint, n1, b.YEdgePoint, n2);
+			if (ClampToCellMinMax(ref point, a, d)) {
+				AddQuadB(i, point);
+				return;
+			}
+		}
+		AddTriangleB(i);
+
+		<mark>n1</mark> = c.xNormal;
+		<mark>n2</mark> = -a.yNormal;
+		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = ComputeIntersection(c.XEdgePoint, n1, a.YEdgePoint, n2);
+			if (ClampToCellMaxMin(ref point, a, d)) {
+				AddQuadC(i, point);
+				return;
+			}
+		}
+		AddTriangleC(i);
+	}</pre>
+			
+			<div class="instructions">
+				<p>What we want to do depends of which sharp features exist. Instead of directly triangulating we should track whether we found features and where they are.</p>
+			</div>
+			
+			<pre translate="no">	private void TriangulateCase6 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		<mark>bool sharp1, sharp2;</mark>
+		<mark>Vector2 point1, point2;</mark>
+		
+		Vector2 n1 = a.xNormal;
+		Vector2 n2 = -b.yNormal;
+		if (IsSharpFeature(n1, n2)) {
+			<mark>point1</mark> = ComputeIntersection(a.XEdgePoint, n1, b.YEdgePoint, n2);
+			<mark>sharp1 =</mark> ClampToCellMinMax(ref point1, a, d)<mark>;</mark>
+		}
+		<mark>else {</mark>
+			<mark>point1.x = point1.y = 0f;</mark>
+			<mark>sharp1 = false;</mark>
+		<mark>}</mark>
+
+		n1 = c.xNormal;
+		n2 = -a.yNormal;
+		if (IsSharpFeature(n1, n2)) {
+			<mark>point2 =</mark> ComputeIntersection(c.XEdgePoint, n1, a.YEdgePoint, n2);
+			<mark>sharp2 =</mark> ClampToCellMaxMin(ref point2, a, d)<mark>;</mark>
+		}
+		<mark>else {</mark>
+			<mark>point2.x = point2.y = 0f;</mark>
+			<mark>sharp2 = false;</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>There are four possible outcomes. Either both corners have sharp features, only the first or the second corner has a sharp feature, or neither have a sharp feature.</p>
+			</div>
+			
+			<pre translate="no">	private void TriangulateCase6 (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		&hellip;
+		
+		<mark>if (sharp1) {</mark>
+			<mark>if (sharp2) {</mark>
+				<mark>// Both sharp.</mark>
+			<mark>}</mark>
+			<mark>else {</mark>
+				<mark>// First sharp.</mark>
+			<mark>}</mark>
+		<mark>} else if (sharp2) {</mark>
+			<mark>// Second sharp.</mark>
+		<mark>}</mark>
+		<mark>else {</mark>
+			<mark>// Neither sharp.</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<figure>
+				<img src="02-06-four-outcomes.png" width="300" height="75">
+				<figcaption>Four possible situations.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>As each possibility is an end point of our method, let's return as soon as we're done.</p>
+			</div>
+			
+			<pre translate="no">		if (sharp1) {
+			if (sharp2) {
+				// Both sharp.
+				<mark>return;</mark>
+			}
+			// First sharp.
+			<mark>return;</mark>
+		}
+		<mark>if</mark> (sharp2) {
+			// Second sharp.
+			<mark>return;</mark>
+		}
+		// Neither sharp.</pre>
+			
+			<div class="instructions">
+				<p>The simplest situation is when there are no sharp features. There can be no diagonal connection in this case, which is what we assumed until now.</p>
+			</div>
+			
+			<pre translate="no">		if (sharp1) {
+			if (sharp2) {
+				// Both sharp.
+				return;
+			}
+			// First sharp.
+			return;
+		}
+		if (sharp2) {
+			// Second sharp.
+			return;
+		}
+		<mark>AddTriangleB(i);</mark>
+		<mark>AddTriangleC(i);</mark></pre>
+			
+			<h4>Taking Care of One Sharp Feature</h4>
+			
+			<div class="instructions">
+				<p>Let's first deal with a single sharp feature. That means one side is a quad while the other is a triangle. If the sharp feature point of the quad ends up inside the triangle, then they overlap and both sides are connected. This boils down to checking whether a point lies below a line. How can we check this?</p>
+			</div>
+			
+			<figure>
+				<img src="02-06-overlap.png" width="150" height="75">
+				<figcaption>Disconnected vs. connected.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Suppose we have a horizontal line going through two points <b>L</b> and <b>R</b>, from left to right. We also have a point <b>P</b> somewhere. Then we can define two vectors, <b>R - L</b> and <b>P - L</b>, which describe how you can go from <b>L</b> to the two other points.</p>
+			</div>
+			
+			<figure>
+				<img src="02-06-below-line.png" width="330" height="130">
+				<figcaption>Is P below the line through L and R?</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We can use the determinant of these two vectors to figure out the relationship between the line and the point. If their determinant is negative, <b>P</b> lies below the line. If it is positive, <b>P</b> lies above the line. And if it is zero <b>P</b> lies exactly on the line.</p>
+				<p>Let's put this check in a helper method.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-determinant" id="q-determinant">What's the determinant?</a></li>
+				</ul>
+			</aside>
+			
+			<figure>
+				<img src="02-06-determinant.png" width="360" height="200">
+				<figcaption>Positive determinant above, negative determinant below.</figcaption>
+			</figure>
+			
+			<pre translate="no">	<mark>private static bool IsBelowLine (Vector2 p, Vector2 start, Vector2 end) {</mark>
+		<mark>float determinant = (end.x - start.x) * (p.y - start.y) - (end.y - start.y) * (p.x - start.x);</mark>
+		<mark>return determinant &lt; 0f;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Back to <code>TriangulateCase16</code>, lets deal with the second sharp feature first. The bottom and right edge points define our line. If the sharp feature ends up below it, we have a connection. If so, triangulate that connection and return, otherwise add a disconnected triangle and quad.</p>
+			</div>
+			
+			<pre translate="no">		if (sharp2) {
+			<mark>if (IsBelowLine(point2, a.XEdgePoint, b.YEdgePoint)) {</mark>
+				<mark>TriangulateCase6Connected(i, a, b, c, d);</mark>
+				<mark>return;</mark>
+			<mark>}</mark>
+			<mark>AddTriangleB(i);</mark>
+			<mark>AddQuadC(i, point2);</mark>
+			<mark>return;</mark>
+		}</pre>
+			
+			<div class="instructions">
+				<p>We add a separate method for the connected case, because we'll be using it in multiple places. Leave it empty for now.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void TriangulateCase6Connected (int i, Voxel a, Voxel b, Voxel c, Voxel d) {</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>When checking whether the first feature is below the other line, keep in mind that the situation is upside down from our point of view. That means the line should go from the top edge point to the left edge point, not the other way.</p>
+			</div>
+			
+			<pre translate="no">		if (sharp1) {
+			if (sharp2) {
+				// Both sharp.
+				return;
+			}
+			<mark>if (IsBelowLine(point1, c.XEdgePoint, a.YEdgePoint)) {</mark>
+				<mark>TriangulateCase6Connected(i, a, b, c, d);</mark>
+				<mark>return;</mark>
+			<mark>}</mark>
+			<mark>AddQuadB(i, point1);</mark>
+			<mark>AddTriangleC(i);</mark>
+			<mark>return;</mark>
+		}</pre>
+			
+			<h4>Investigating Two Sharp Features</h4>
+			
+			<div class="instructions">
+				<p>Lastly, we have two sharp features. Once again we can determine whether the two elements overlap by looking at points and lines, but this time it is more complicated. We're dealing with two points that can be above or below two lines each, so there are sixteen possible configurations.</p>
+				<p>Let's start considering two peaks that both end inside each other. There is clearly an overlap here. For this to be possible, both feature points must lie below the two lines formed by the other feature. Let's use the letters A through D to mark these point-below-line relationships. Then what we just described can be labeled with ABCD. Its complement would be the empty label, which cannot have an overlap.</p>
+			</div>
+			
+			<figure>
+				<img src="02-06-abcd.png" width="300" height="150">
+				<figcaption>Definitely connected, and definitely not.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>ABCD also covers the case when a peak pierces straight through the middle of a valley, in which also have a connection.</p>
+			</div>
+			
+			<figure>
+				<img src="02-06-abcd-valley.png" width="300" height="150">
+				<figcaption>ABCD is always connected, shape doesn't matter.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>What if only three of these relationships exist, which would be ABC, ABD, ACD, and BCD? Then one of the feature points has to lie inside the other shape, so there is still a guaranteed overlap.</p>
+			</div>
+			
+			<figure>
+				<img src="02-06-abc-abd-acd-bcd.png" width="300" height="300">
+				<figcaption>Still clearly overlapping.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>What if we only have two of these relationships? AB and CD means that one feature's point lies below both lines of the other. But then the other point must lie above both lines of the first one, which means it must lie in front of the first point. But then the first point cannot lie inside the other shape at all. This contradiction means that these two configurations are not possible, so we can ignore them.</p>
+			</div>
+			
+			<figure>
+				<img src="02-06-impossible.png" width="150" height="150">
+				<figcaption>No way to satisfy AB while avoiding C and D.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>AC and BD describe configurations for which both points are below one of the other's lines, in a symmetrical way. This means that the features aren't overlapping.</p>
+			</div>
+			
+			<figure>
+				<img src="02-06-ac-bd.png" width="300" height="150">
+				<figcaption>It's a miss.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>AD and BC are less straightforward. They can represent configurations in which two peaks go through each other, or a peak pierces one side of a valley. Of course this means that there is always a diagonal connection.</p>
+			</div>
+			
+			<figure>
+				<img src="02-06-ad-bc.png" width="450" height="300">
+				<figcaption>Peak or valley, there is a connection.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>The remaining options are A, B, C, and D in isolation. They are similar to AC and BD, never forming a connection.</p>
+				<p>So we must form a connection when we have ABCD, ABC, ABD, ACD, BCD, AD, or BC. We must not when we have AC, A, BD, B, C, D, or nothing. And we don't need to worry about AB or CD. Below is a graph that visualizes this. A check mark at an end points represents a connection, while a cross represents no connection. A check mark next to an arrow indicates that the relationship if comes out of exists.</p>
+			</div>
+			
+			<figure>
+				<img src="02-06-graph.png" width="670" height="480">
+				<figcaption>Drawing all possibilities.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>All we really care about is whether a path along the graph ends with a check mark or a cross. We can stop early if we already know what we'll end up with.</p>
+			</div>
+			
+			<figure>
+				<img src="02-06-graph-reduced.png" width="600" height="350">
+				<figcaption>Collapsing nodes.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>If we swap the C and D nodes in the bottom left of the graph, we can collapse that part also, leading to a minimal graph.</p>
+			</div>
+			
+			<figure>
+				<img src="02-06-graph-minimal.png" width="530" height="300">
+				<figcaption>Maximum simplification.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>This means that when we have A and either B or D, then there is a connection. Alternatively, when we do not have A but do have both B and C, then there is also a connection.</p>
+				<p>Now we finally know what to test for in <code>TriangulateCase16</code> when we have two sharp features.</p>
+			</div>
+		
+		<pre translate="no">		if (sharp1) {
+			if (sharp2) {
+				<mark>if (A) {</mark>
+					<mark>if (B || D) {</mark>
+						<mark>TriangulateCase6Connected(i, a, b, c, d);</mark>
+						<mark>return;</mark>
+					<mark>}</mark>
+				<mark>}</mark>
+				<mark>else if (B &amp;&amp; C) {</mark>
+					<mark>TriangulateCase6Connected(i, a, b, c, d);</mark>
+					<mark>return;</mark>
+				<mark>}</mark>
+				<mark>AddQuadB(i, point1);</mark>
+				<mark>AddQuadC(i, point2);</mark>
+				<mark>return;</mark>
+			}
+			if (IsBelowLine(point1, c.XEdgePoint, a.YEdgePoint)) {
+				TriangulateCase6Connected(i, a, b, c, d);
+				return;
+			}
+			AddQuadB(i, point1);
+			AddTriangleC(i);
+			return;
+		}</pre>
+			
+			<div class="instructions">
+				<p>Of course you have to replace the labels with their corresponding point-below-line checks.</p>
+			</div>
+			
+			<pre translate="no">			if (sharp2) {
+				if (<mark>IsBelowLine(point2, a.XEdgePoint, point1)</mark>) {
+					if (
+						<mark>IsBelowLine(point2, point1, b.YEdgePoint)</mark> ||
+						<mark>IsBelowLine(point1, point2, a.YEdgePoint)</mark>) {
+						TriangulateCase6Connected(i, a, b, c, d);
+						return;
+					}
+				}
+				else if (
+					<mark>IsBelowLine(point2, point1, b.YEdgePoint)</mark> &amp;&amp;
+					<mark>IsBelowLine(point1, c.XEdgePoint, point2)</mark>) {
+					TriangulateCase6Connected(i, a, b, c, d);
+					return;
+				}
+				AddQuadB(i, point1);
+				AddQuadC(i, point2);
+				return;
+			}</pre>
+			
+			<h4>Triangulating the Connection</h4>
+			
+			<div class="instructions">
+				<p>When there is a diagonal connection, we could just connect both corners of the cell with a hexagon. However, there could be sharp features here as well, which can form shapes that are hard to triangulate. If we only allow sharp features inside their own triangular half of the cell, we eliminate hard cases and can triangulate each side independently.</p>
+				<p>First consider the case that's like case 14, except that we only triangulate half of the cell. This time we cannot directly return from the method, because we have other half of the cell to take care of. Also note that both halves triangulate the BC diagonal, so we need some way to distinguish the polygon methods. Let's add the cell corner towards which they point.</p>
+			</div>
+			
+			<pre translate="no">	private void TriangulateCase6Connected (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		Vector2 n1 = a.xNormal;
+		Vector2 n2 = -a.yNormal;
+		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = ComputeIntersection(a.XEdgePoint, n1, a.YEdgePoint, n2);
+			if (IsInsideCell(point, a, d) &amp;&amp; <mark>IsBelowLine(point, c.position, b.position)</mark>) {
+				<mark>AddPentagonBCToA</mark>(i, point);
+			}
+			<mark>else {</mark>
+				<mark>AddQuadBCToA</mark>(i);
+			<mark>}</mark>
+		<mark>}</mark>
+		<mark>else {</mark>
+			<mark>AddQuadBCToA(i);</mark>
+		<mark>}</mark>
+	}
+	
+	<mark>private void AddQuadBCToA (int i) {</mark>
+		<mark>AddQuad(edgeCacheMin, rowCacheMax[i], rowCacheMin[i + 2], rowCacheMin[i + 1]);</mark>
+	<mark>}</mark>
+	
+	<mark>private void AddPentagonBCToA (int i, Vector2 extraVertex) {</mark>
+		<mark>AddPentagon(vertices.Count, edgeCacheMin, rowCacheMax[i], rowCacheMin[i + 2], rowCacheMin[i + 1]);</mark>
+		<mark>vertices.Add(extraVertex);</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Then follow up with the other half of the cell, which is based on case 7. As it's the last part, this time we can return early.</p>
+			</div>
+			
+			<pre translate="no">	private void TriangulateCase6Connected (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		&hellip;
+		
+		<mark>n1</mark> = c.xNormal;
+		<mark>n2</mark> = -b.yNormal;
+		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = ComputeIntersection(c.XEdgePoint, n1, b.YEdgePoint, n2);
+			if (IsInsideCell(point, a, d) &amp;&amp; <mark>IsBelowLine(point, b.position, c.position)</mark>) {
+				<mark>AddPentagonBCToD</mark>(i, point);
+				return;
+			}
+		}
+		<mark>AddQuadBCToD</mark>(i);
+	}
+	
+	<mark>private void AddQuadBCToD (int i) {</mark>
+		<mark>AddQuad(edgeCacheMax, rowCacheMin[i + 2], rowCacheMax[i], rowCacheMax[i + 1]);</mark>
+	<mark>}</mark>
+
+	<mark>private void AddPentagonBCToD (int i, Vector2 extraVertex) {</mark>
+		<mark>AddPentagon(vertices.Count, edgeCacheMax, rowCacheMin[i + 2], rowCacheMax[i], rowCacheMax[i + 1]);</mark>
+		<mark>vertices.Add(extraVertex);</mark>
+	<mark>}</mark></pre>
+			
+			<h4>Doing the Other Diagonal</h4>
+			
+			<div class="instructions">
+				<p>Case 9 is done in a similar fashion. First detect features similar to cases 1 and 8. I marked the differences with case 6.</p>
+			</div>
+			
+			<pre translate="no">	private void <mark>TriangulateCase9</mark> (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		bool sharp1, sharp2;
+		Vector2 point1, point2;
+		Vector2 n1 = a.xNormal;
+		Vector2 n2 = <mark>a</mark>.yNormal;
+
+		if (IsSharpFeature(n1, n2)) {
+			point1 = ComputeIntersection(a.XEdgePoint, n1, <mark>a</mark>.YEdgePoint, n2);
+			sharp1 = <mark>ClampToCellMaxMax</mark>(ref point1, a, d);
+		}
+		else {
+			point1.x = point1.y = 0f;
+			sharp1 = false;
+		}
+
+		n1 = c.xNormal;
+		n2 = <mark>b</mark>.yNormal;
+		if (IsSharpFeature(n1, n2)) {
+			point2 = ComputeIntersection(c.XEdgePoint, n1, <mark>b</mark>.YEdgePoint, n2);
+			sharp2 = <mark>ClampToCellMinMin</mark>(ref point2, a, d);
+		}
+		else {
+			point2.x = point2.y = 0f;
+			sharp2 = false;
+		}
+	}</pre>
+			
+			<div class="instructions">
+				<p>Then again act on which features are present. The double sharp feature overlap check is the same as for case 16, but rotated.</p>
+			</div>
+			
+			<pre translate="no">		if (sharp1) {
+			if (sharp2) {
+				if (IsBelowLine(<mark>point1</mark>, <mark>b.YEdgePoint</mark>, <mark>point2</mark>)) {
+					if (
+						IsBelowLine(<mark>point1</mark>, <mark>point2</mark>, <mark>c.XEdgePoint</mark>) ||
+						IsBelowLine(<mark>point2</mark>, <mark>point1</mark>, a.<mark>XEdgePoint</mark>)) {
+						<mark>TriangulateCase9Connected</mark>(i, a, b, c, d);
+						return;
+					}
+				}
+				else if (
+					IsBelowLine(<mark>point1</mark>, <mark>point2</mark>, <mark>c.XEdgePoint</mark>) &amp;&amp;
+					IsBelowLine(<mark>point2</mark>, <mark>a.YEdgePoint</mark>, <mark>point1</mark>)) {
+					<mark>TriangulateCase9Connected</mark>(i, a, b, c, d);
+					return;
+				}
+				<mark>AddQuadA</mark>(i, point1);
+				<mark>AddQuadD</mark>(i, point2);
+				return;
+			}
+			if (IsBelowLine(point1, <mark>b.YEdgePoint</mark>, <mark>c.XEdgePoint</mark>)) {
+				<mark>TriangulateCase9Connected</mark>(i, a, b, c, d);
+				return;
+			}
+			<mark>AddQuadA</mark>(i, point1);
+			<mark>AddTriangleD</mark>(i);
+			return;
+		}
+		if (sharp2) {
+			if (IsBelowLine(point2, a.<mark>YEdgePoint</mark>, <mark>a.XEdgePoint</mark>)) {
+				<mark>TriangulateCase9Connected</mark>(i, a, b, c, d);
+				return;
+			}
+			<mark>AddTriangleA</mark>(i);
+			<mark>AddQuadD</mark>(i, point2);
+			return;
+		}
+		<mark>AddTriangleA</mark>(i);
+		<mark>AddTriangleD</mark>(i);</pre>
+	
+			<div class="instructions">
+				<p>And we end with triangulating the connected case.</p>
+			</div>
+			
+			<pre translate="no">	private void TriangulateCase9Connected (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		Vector2 n1 = a.xNormal;
+		Vector2 n2 = <mark>b</mark>.yNormal;
+		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = ComputeIntersection(a.XEdgePoint, n1, <mark>b</mark>.YEdgePoint, n2);
+			if (IsInsideCell(point, a, d) &amp;&amp; IsBelowLine(point, <mark>a</mark>.position, <mark>d</mark>.position)) {
+				<mark>AddPentagonADToB</mark>(i, point);
+			}
+			else {
+				<mark>AddQuadADToB</mark>(i);
+			}
+		}
+		else {
+			<mark>AddQuadADToB</mark>(i);
+		}
+		
+		n1 = c.xNormal;
+		n2 = <mark>a</mark>.yNormal;
+		if (IsSharpFeature(n1, n2)) {
+			Vector2 point = ComputeIntersection(c.XEdgePoint, n1, <mark>a</mark>.YEdgePoint, n2);
+			if (IsInsideCell(point, a, d) &amp;&amp; IsBelowLine(point, <mark>d</mark>.position, <mark>a</mark>.position)) {
+				<mark>AddPentagonADToC</mark>(i, point);
+				return;
+			}
+		}
+		<mark>AddQuadADToC</mark>(i);
+	}
+	
+	<mark>private void AddQuadADToB (int i) {</mark>
+		<mark>AddQuad(rowCacheMin[i + 1], rowCacheMin[i], rowCacheMax[i + 2], edgeCacheMax);</mark>
+	<mark>}</mark>
+	
+	<mark>private void AddPentagonADToB (int i, Vector2 extraVertex) {</mark>
+		<mark>AddPentagon(vertices.Count, rowCacheMin[i + 1], rowCacheMin[i], rowCacheMax[i + 2], edgeCacheMax);</mark>
+		<mark>vertices.Add(extraVertex);</mark>
+	<mark>}</mark>
+	
+	<mark>private void AddQuadADToC (int i) {</mark>
+		<mark>AddQuad(rowCacheMax[i + 1], rowCacheMax[i + 2], rowCacheMin[i], edgeCacheMin);</mark>
+	<mark>}</mark>
+	
+	<mark>private void AddPentagonADToC (int i, Vector2 extraVertex) {</mark>
+		<mark>AddPentagon(vertices.Count, rowCacheMax[i + 1], rowCacheMax[i + 2], rowCacheMin[i], edgeCacheMin);</mark>
+		<mark>vertices.Add(extraVertex);</mark>
+	<mark>}</mark></pre>
+	
+			<figure>
+				<img src="02-06-diagonal.png" width="290" height="250">
+				<figcaption>Diagonal connections, or not.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Finally we can keep the sharp angles intact! Of course it is not perfect, but for most cases we can produce a reasonable approximation. If you find yourself in a situation where the results are not good enough, you can always increase the grid resolution.</p>
+				<p>Enjoyed the tutorial? <a href="https://www.patreon.com/catlikecoding">Help me make more by becoming a patron!</a></p>
+			</div>
+			
+			<aside class="share"></aside>
+			
+			<h2>Downloads</h2>
+
+			<dl>
+				<dt><a href="marching-squares-3-01.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Marching Squares 3', '01']);" target="_blank" download rel="nofollow">marching-squares-3-01.unitypackage</a></dt>
+				<dd>The project after Hermite Data.</dd>
+				<dt><a href="marching-squares-3-finished.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Marching Squares 3', 'Final']);" target="_blank" download rel="nofollow">marching-squares-3-finished.unitypackage</a></dt>
+				<dd>The finished project.</dd>
+			</dl>
+		</article>
+		
+		<dl class="questions-answers">
+			<dt><a href="index.html#q-hermite-data" id="a-hermite-data">What's Hermite data?</a></dt>
+			<dd>
+				<p>Using Hermite data means that you not only store data points of some function, but also derivatives of that function at those points. This data can then be used to approximate the real function through Hermite interpolation. As the normals can be interpreted as the derivatives of a density field, it qualifies as Hermite data. It's named after Charles Hermite, a French mathematician.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-cosine" id="a-cosine">Why the cosine?</a></dt>
+			<dd>
+				<p>While people are used to working with degrees, when doing math with them you typically end up converting to radians. And when performing trigonometry to find angles, you end up working with sines and cosines of angles.</p>
+				<p>When you have two lines crossing at an angle, you can always add a third line so you end up with a right triangle. If you place it so that the hypotenuse of that triangle has unit length, then the lengths of its other sides are equal to the sine and the cosine of the angle at which the lines cross. This is thanks to the Pythagorean theorem. That we end up using the cosine instead of the sine is because of the way the math is performed.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-case-0-method" id="a-case-0-method">Why add a method for case 0?</a></dt>
+			<dd>
+				<p>For the sake of consistency. And to hint that in a later tutorial we might end up doing something in this case as well.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-method-performance" id="a-method-performance">Isn't this bad for performance?</a></dt>
+			<dd>
+				<p>We've inserted two method invocations into the code path traversed when triangulating a cell. Does this make our code less efficient?</p>
+				<p>Taken at face value, it does. Whether it ends up being significant is questionable. However, good compilers should inline most of this, eliminating the call overhead while keeping the advantage while programming. This won't happen in debug builds though, and neither inside the Unity editor.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-dot-cosine" id="a-dot-cosine">Why does dot lead to cosine?</a></dt>
+			<dd>
+				<p>It follows from the geometric definition of the dot product of two vectors, which states that it is equal to the length of both vectors and the cosine of the angle between them, all multiplied.</p>
+				<p>To visualize that this is so, remember that for 2D vectors <b>A &middot; B</b> is equal to <b>A.x &times; B.x + A.y &times; B.y</b> and define <b>A</b> as <b>(1, 0)</b>. You have now simply eliminated the Y component of <b>B</b>, ending up with the length of its X component. If <b>B</b> was a vector with unit length, then the result must be equal to the cosine of the angle between <b>B</b> and the X axis. And in this case that's also the angle between <b>A</b> and <b>B</b>.</p>
+				<p>This also works for vectors with any orientation. You're effectively projecting one vector straight down to the other. In doing so you end up with a right triangle of which the bottom side's length is the result of the dot product. And if both vectors were unit length, that's the cosine of their angle.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-rewrite-dot" id="a-rewrite-dot">How to rewrite the dot product?</a></dt>
+			<dd>
+				<p>First you need to know that the dot product is distributive, which means that <b>A &middot; (B + C)</b> is equal to <b>A &middot; B + A &middot; C</b>. This is because you can split a vector into any number of sub-vectors, the intermediate steps do not matter. So we can rewrite to <b>N<sub>1</sub> &middot; (P<sub>2</sub> - P<sub>1</sub>) + N<sub>1</sub> &middot; D<sub>2</sub><i>u<sub>2</sub></i> = 0</b>, which means that <b>N<sub>1</sub> &middot; D<sub>2</sub><i>u<sub>2</sub></i> = &minus;N<sub>1</sub> &middot; (P<sub>2</sub> - P<sub>1</sub>)</b>.</p>
+				<p>Next, we can pull <b><i>u<sub>2</sub></i></b> out of the dot product because we're doing nothing but multiplying, for which the order doesn't matter. So we get <b><i>u<sub>2</sub></i>(N<sub>1</sub> &middot; D<sub>2</sub>) = &minus;N<sub>1</sub> &middot; (P<sub>2</sub> - P<sub>1</sub>)</b> and thus <b><i>u<sub>2</sub></i> = &minus;N<sub>1</sub> &middot; (P<sub>2</sub> - P<sub>1</sub>) / (N<sub>1</sub> &middot; D<sub>2</sub>)</b>.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-static" id="a-static">Why a static method?</a></dt>
+			<dd>
+				<p>If a method doesn't need any object state to do its job, I make it static. Just to point out that it's a bit of functionality that stands on its own.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-avoid-ref" id="a-avoid-ref">Shouldn't we avoid using <code>ref</code>?</a></dt>
+			<dd>
+				<p>As mentioned in the <a href="../curves-and-splines/index.html">Curves and Splines</a> tutorial, it is generally best to avoid using reference parameters. In that tutorial we used a <code>System.Array</code> method, in this tutorial we're creating such a method ourselves.</p>
+				<p>You should be very careful with reference parameters because their behavior is atypical, they are rarely used, and as such are not well understood by many programmers. It is easy to make mistakes or create needlessly complex code. Especially if you're creating a public API, avoid using any.</p>
+				<p>Having said that, we are only using it as a helper method inside one class so its reach is very limited. Convenience beats caution in this case, plus it is a good opportunity to demonstrate its usage. An alternative solution to returning two results would be to create a special struct just for that purpose, but that's rather unwieldy.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-generalize" id="a-generalize">Can we generalize this code?</a></dt>
+			<dd>
+				<p>We're basically doing the same thing four times here, with just a few differences. It makes sense to generalize this and create a single method for it. However, in this case it's not that straightforward to do. The resulting method needs to know which voxels to use, how to clamp, and how to triangulate. Parameterizating that is possible, but it's unwieldy and quickly leads to murky code. In this tutorial I prefer clarity over code reduction.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-determinant" id="a-determinant">What's the determinant?</a></dt>
+			<dd>
+				<p>The determinant is a value associated with square matrices. It involves multiplying along diagonals in both directions. If you put two 2D vectors <b>A</b> and <b>B</b> under each other, you end up with a matrix.</p>
+				<table>
+					<tr><td><b>A.x</b></td><td><b>A.y</b></td></tr>
+					<tr><td><b>B.x</b></td><td><b>B.y</b></td></tr>
+				</table>
+				<p>The determinant of this matrix is equal to <b>A.x &times; B.y - A.y &times; B.x</b>. This is equal to the oriented area of the parallelogram defined by the two vectors. It's oriented because the sign of the value is determined by the relative direction of the vectors. It is this orientation that we can use to determine on which side of a line a point lies.</p>
+			</dd>
+		</dl>
+		
+		<footer></footer>
+		<script src="../../jquery.js"></script>
+		<script src="../../default.js"></script>
+	</body>
+</html>

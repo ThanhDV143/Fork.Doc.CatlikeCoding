@@ -1,0 +1,2209 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/prototypes/bouncy-ball-shooter/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/prototypes/bouncy-ball-shooter/tutorial-image.jpg">
+		<meta property="og:title" content="Bouncy Ball Shooter">
+		<meta property="og:description" content="A Unity C# Prototypes tutorial about creating a simple 2D ball-shooting action game.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Bouncy Ball Shooter</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/prototypes/bouncy-ball-shooter/#article",
+				"headline": "Bouncy Ball Shooter",
+				"alternativeHeadline": "Bouncing in a Wrapping 2D World",
+				"datePublished": "2023-07-31",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity C# Prototypes tutorial about creating a simple 2D ball-shooting action game.",
+				"image": "https://catlikecoding.com/unity/tutorials/prototypes/bouncy-ball-shooter/tutorial-image.jpg",
+				"dependencies": "Unity 2022.3.4f1",
+				"proficiencyLevel": "Advanced"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/prototypes/", "name": "Prototypes" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				Area2D : 1,
+				BallManager : 1,
+				BallState : 1,
+				BallVisualization : 1,
+				BounceBallsJob : 1,
+				BulletManager : 1,
+				BulletState : 1,
+				BulletVisualization : 1,
+				Game : 1,
+				HealthBar : 1,
+				HitJob : 1,
+				Player : 1,
+				PrefabInstancePool : 1,
+				UpdateBallJob : 1,
+				UpdateBulletJob : 1,
+				T: 1,
+				VerifySpawnPositionJob : 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Prototypes</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Bouncy Ball Shooter</h1>
+					<p>Bouncing in a Wrapping 2D World</p>
+					<ul>
+						<li>Spawn balls and bullets in a wrapping 2D world.</li>
+						<li>Synchronize native data and prefab instances.</li>
+						<li>Implement wrapping 2D physics with soft bounces.</li>
+						<li>Smooth animation with time extrapolation and interpolation.</li>
+						<li>Make the player follow the cursor and shoot backwards.</li>
+					</ul>
+				</header>
+				
+				<p>This is the seventh tutorial in a series about <a href="../index.html">prototypes</a>. In it we will create a simple 2D ball-shooting action game.</p>
+				
+				<p>This tutorial is made with Unity 2022.3.4f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Navigating through bouncing and exploding balls.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>The Game</h2>
+					
+					<p>The game prototype that we'll make in this tutorial is a hybrid of the classical <em translate="no">Asteroids</em> game and a simple modern bullet-hell shooter. It's something like a clone of <em translate="no">Death vs Monstars</em> but with a wrapping world. As an extra twist we replace the asteroids with soft bouncing balls, which requires custom 2D physics.</p>
+					
+					<p>As usual we begin with duplicating the <a href="../paddle-square/index.html">Paddle Square</a> project and removing everything that we don't need. In this case we keep the text and particles prefabs and materials. We'll put the 2D game on the XY plane, so clear the camera rotation and set its position to (0, 0, &minus;20). Its clipping planes can be narrowed to something like 16 and 24. I set the main light's rotation to (50, 45, 0).</p>
+					
+					<p>Remove all the scripts, only keeping an empty <code>Game</code> component type attached to a game object to control our game. Note that I do not mark the initial contents of a script, which would be fully marked otherwise.</p>
+					
+					<pre translate="no">using Unity.Jobs;
+using TMPro;
+using UnityEngine;
+
+public class Game : MonoBehaviour { }</pre>
+					
+					<p>We're going to use prefab instances for both balls and bullets, so we also reuse the <code>PrefabInstancePool</code> from <a href="../match-3/index.html">Match 3</a>. Even though it can deal with hot reloads we won't support it in this tutorial, as the games sessions are short and we rely on native data.</p>
+					
+					<pre translate="no">using System.Collections.Generic;
+using UnityEngine;
+
+public struct PrefabInstancePool&lt;T> where T : MonoBehaviour
+{
+	Stack&lt;T> pool;
+
+	public T GetInstance (T prefab)
+	{
+		if (pool == null)
+		{
+			pool = new();
+		}
+#if UNITY_EDITOR
+		else if (pool.TryPeek(out T i) &amp;&amp; !i)
+		{
+			// Instances destroyed, assuming due to exiting play mode.
+			pool.Clear();
+		}
+#endif
+
+		if (pool.TryPop(out T instance))
+		{
+			instance.gameObject.SetActive(true);
+		}
+		else
+		{
+			instance = Object.Instantiate(prefab);
+		}
+		return instance;
+	}
+
+	public void Recycle (T instance)
+	{
+#if UNITY_EDITOR
+		if (pool == null)
+		{
+			// Pool lost, assuming due to hot reload.
+			Object.Destroy(instance.gameObject);
+			return;
+		}
+#endif
+		pool.Push(instance);
+		instance.gameObject.SetActive(false);
+	}
+}</pre>
+					
+					<p>We'll use the particle system for explosions. I adjusted it a bit to create effects that work with the different view distance and made them more varied. Its shape module should be set to sphere mode. Also increase the intensity of the particles material to 20.</p>
+					
+					<figure>
+						<img src="the-game/particle-system.png" width="390" height="490">
+						<figcaption>Explosion Particle System.</figcaption>
+					</figure>
+					
+					<p>Also create a new unlit opaque shader graph with an HDR color property. We'll use it for a dark red world edge and a bright yellow health bar later. We don't use the standard unlit material because it doesn't support HDR colors.</p>
+					
+					<p>Finally, clear the rotation of the text prefab and reduce its font size to 8.</p>
+					
+					<section>
+						<h3>Balls</h3>
+						
+						<p>Our game uses balls, but I'm still limiting myself to only using cubes, quads, and text. So our bouncy balls will look like roughly-hewn foam blocks. Create an empty game object prefab and give it three cube children&mdash;without colliders&mdash;that each have an arbitrary rotation. To make it roughly match the size of a sphere with radius &frac12; reduce the cube scales to &radic;&frac12;, roughly 0.7071. That makes the cube edges touch the sphere surface while their corners will poke out. Note that this is the scale of the cild cubes, the root object's scale should be 1.</p>
+						
+						<figure>
+							<img src="the-game/ball.png" width="150" height="150" alt="without sphere">
+							<img src="the-game/ball-sphere.png" width="150" height="150" alt="with sphere">
+							<figcaption>Ball prefab; without and with default &frac12; radius sphere.</figcaption>
+						</figure>
+						
+						<p>This prefab only represents a visualization of a ball. It won't contain essential game logic nor state. Our physics system will not be aware of it. Attach a <code>BallVisualization</code> component to its root game object, with methods to spawn and despawn a pooled instance.</p>
+						
+						<pre translate="no">using Unity.Mathematics;
+using UnityEngine;
+
+using Random = UnityEngine.Random;
+
+public class BallVisualization : MonoBehaviour
+{
+	PrefabInstancePool&lt;BallVisualization> pool;
+
+	public BallVisualization Spawn()
+	{
+		BallVisualization instance = pool.GetInstance(this);
+		instance.pool = pool;
+		return instance;
+	}
+
+	public void Despawn() => pool.Recycle(this);
+}</pre>
+						
+						<p>Duplicate the prefab a few times and give each a different material to provide a little visual variety. I made gray, red, and green variants, all with low saturation to not be distracting.</p>
+						
+						<figure>
+							<img src="the-game/ball-materials.png" width="222" height="70">
+							<figcaption>Ball materials.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Bullet</h3>
+						
+						<p>We'll also use prefabs to visualize bullets, in this case using a single cube, without collider. Give it a duplicate of the ball's component with its type changed to <code>BulletVisualization</code>.</p>
+						
+						<pre translate="no">using UnityEngine;
+
+public class <ins>BulletVisualization</ins> : MonoBehaviour
+{
+	PrefabInstancePool&lt;<ins>BulletVisualization</ins>> pool;
+
+	public <ins>BulletVisualization</ins> Spawn()
+	{
+		<ins>BulletVisualization</ins> instance = pool.GetInstance(this);
+		instance.pool = pool;
+		return instance;
+	}
+
+	public void Despawn() => pool.Recycle(this);
+}</pre>
+						
+						<p>Make the bullet small and a little elongated, using (0.2, 0.3, 0.2) for its scale.</p>
+						
+						<p>We'll change the bullet's color based on its age and will use instanced rendering to make this simple and efficient. Create an unlit transparent additive shader graph&mdash;like for the particles&mdash;with properties for a bright HDR cyan color and an 0&mdash;1 life factor that gets squared and used for alpha. The life factor should have <code>_LifeFactor</code> as its <em translate="no">Reference</em>. Enable <em translate="no">Override Property Declaration</em> for it and set its <em translate="no">Shader Declaration</em> to <em translate="no">Hybrid Per Instance</em>. Keep it exposed with a default of 1 so the material is visible in the editor.</p>
+						
+						<figure>
+							<img src="the-game/bullet-prefab.png" width="150" height="150" alt="prefab">
+							<img src="the-game/bullet-instance.png" width="150" height="150" alt="instance">
+							<figcaption>Bullet prefab and instance in the scene.</figcaption>
+						</figure>
+						
+					</section>
+					
+					<section>
+						<h3>Player</h3>
+						
+						<p>Create a small visualization for the player, roughly fitting a sphere with radius &frac12;. It can be either a prefab or made directly in the scene as we only need a single instance of it. I designed it as a small cyan pointy thing with an extrusion at the bottom, which is where bullets will be fired from. Once again we don't need any colliders. It also doesn't need to be pooled so we don't give it a component yet. If you put it directly in the scene deactivate it for now.</p>
+						
+						<figure>
+							<img src="the-game/player.png" width="230" height="260" alt="without sphere">
+							<img src="the-game/player-sphere.png" width="230" height="260" alt="with sphere">
+							<figcaption>Player prefab; without and with radius &frac12; sphere.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Wrapping 2D World</h3>
+						
+						<p>Our game will wrap its 2D world as if it were a torus, like <em translate="no">Asteroids</em> does. Create an <code>Area2D</code> struct type for this with a <code>float2</code> extents field to store the world extents. Give it a <code>RandomVector2</code> property to retrieve a random position as a <code>Vector2</code>, which we'll use to spawn ball instances. Also give it a <code>Wrap</code> method that wraps a position, teleporting it to the other side of the area when needed. This method will be used by our physics system, for which we'll use Burst jobs, so make it use the <code>Mathematics</code> library. End with a static <code>FromView</code> method that produces an area that fills XY plane for a perspective camera, assuming it sits on and looks down the Z axis.</p>
+						
+						<pre translate="no">using Unity.Mathematics;
+using UnityEngine;
+
+using Random = UnityEngine.Random;
+
+using static Unity.Mathematics.math;
+
+public struct Area2D
+{
+	public float2 extents;
+
+	public Vector2 RandomVector2 =>
+		new(Random.Range€(-extents.x, extents.x), Random.Range€(-extents.y, extents.y));
+
+	public float2 Wrap(float2 position) => position + extents *
+		select(select(0f, 2f, position &lt; -extents), -2f, position > extents);
+
+	public static Area2D FromView(Camera camera)
+	{
+		Area2D area;
+		area.extents.y =
+			-Mathf.Tan(camera.fieldOfView * 0.5f * Mathf.Deg2Rad) *
+			camera.transform.localPosition.z;
+		area.extents.x = area.extents.y * camera.aspect;
+		return area;
+	}
+}</pre>
+						
+						<p>Now we can get the world area when <code>Game</code> awakens and store it in a field. We could show duplicate balls when they partially cross an edge, but we'll keep thing simple and show only a single instance, teleporting it when needed. To hide this sudden teleportation we introduce an opaque boundary region. It needs to contain the largest ball's visualization. We'll use 1 as the maximum radius, so its child cubes can extend up to `sqrt(3/2)`, roughly 1.24. We use that as the world bounds radius, but make it configurable as well. Then we position simple cube prefab instances on the edges scaled to fill the view.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>Transform worldBoundsPrefab;</ins>
+
+	<ins>[SerializeField, Min(0f)]</ins>
+	<ins>float worldBoundsRadius = 1.24f;</ins>
+
+	<ins>Area2D worldArea;</ins>
+
+	<ins>void Awake()</ins>
+	<ins>{</ins>
+		<ins>worldArea = Area2D.FromView(Camera.main);</ins>
+		<ins>Transform</ins>
+			<ins>boundsT = Instantiate(worldBoundsPrefab),</ins>
+			<ins>boundsB = Instantiate(worldBoundsPrefab),</ins>
+			<ins>boundsL = Instantiate(worldBoundsPrefab),</ins>
+			<ins>boundsR = Instantiate(worldBoundsPrefab);</ins>
+		<ins>boundsT.localPosition = new Vector3(0f, worldArea.extents.y);</ins>
+		<ins>boundsB.localPosition = new Vector3(0f, -worldArea.extents.y);</ins>
+		<ins>boundsL.localPosition = new Vector3(-worldArea.extents.x, 0f);</ins>
+		<ins>boundsR.localPosition = new Vector3(worldArea.extents.x, 0f);</ins>
+		<ins>boundsT.localScale = boundsB.localScale =</ins>
+			<ins>new Vector3(worldArea.extents.x, worldBoundsRadius, worldBoundsRadius) * 2f;</ins>
+		<ins>boundsL.localScale = boundsR.localScale =</ins>
+			<ins>new Vector3(worldBoundsRadius, worldArea.extents.y, worldBoundsRadius) * 2f;</ins>
+	<ins>}</ins></pre>
+
+						<figure>
+							<img src="the-game/world-boundary.png" width="400" height="250">
+							<figcaption>World boundary; bright red.</figcaption>
+						</figure>
+						
+						<p>I used bright red in the screenshot above to make the boundary clearly visible, but use a dark red value of 16/255 for the rest of this tutorial. You could also make the boundary black, but a visible boundary act as a warning sign that balls might be hiding there.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Balls</h2>
+					
+					<p>Our game will have a lot of balls. We visualize them with prefab instances, but we also need a physical representation of them for our physics engine. We keep the two separate, so it's possible to easily change their representation. For example, instead of prefabs we could use procedural drawing or 2D sprites instead of 3D models. Also, to make our physics engine fast we will just jobs and thus need to store the ball state in structs that we want to keep as small as possible.</p>
+					
+					<section>
+						<h3>Ball Manager</h3>
+						
+						<p> To keep track of the balls and keep their physics states and visualizations synchronized we introduce a <code>BallManager</code> component type. Give it an <code>Initialize</code> method with a parameter for the world area, a <code>Dispose</code> method, and a <code>StartNewGame</code> method. Follow that with an <code>UpdateBalls</code> job that takes a time delta and returns a job handle, and a <code>ResolveBalls</code> that takes a job handle dependency. The first method will take care of linear motion, after which other things like ball destruction could happen, after which we'll resolve the balls to take care of bounces and spawning. The last method that we need is <code>UpdateVisualization</code>, which has a parameter for an extrapolated time delta.</p>
+						
+						<pre translate="no">using System.Collections.Generic;
+using Unity.Collections;
+using Unity.Jobs;
+using UnityEngine;
+
+public class BallManager : MonoBehaviour
+{
+	public void Initialize(Area2D worldArea) { }
+
+	public void Dispose() { }
+
+	public void StartNewGame() { }
+
+	public JobHandle UpdateBalls(float dt)
+	{
+		return default;
+	}
+
+	public void ResolveBalls(JobHandle dependency)
+	{
+		dependency.Complete();
+	}
+
+	public void UpdateVisualization(float dtExtrapolated) { }
+}</pre>
+						
+						<p>Add a configuration field for the ball manager to <code>Game</code>. Initialize it when the game awakens and dispose it when the game is disabled. We won't invoke <code>StartNewGame</code> at this time, instead letting the game immediately run from its initial state.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>BallManager ballManager;</ins>
+
+	&hellip;
+
+	void Awake()
+	{
+		&hellip;
+
+		<ins>ballManager.Initialize(worldArea);</ins>
+	}
+
+	<ins>void OnDisable()</ins>
+	<ins>{</ins>
+		<ins>ballManager.Dispose();</ins>
+	<ins>}</ins></pre>
+						
+						<p>Like Unity's physics we'll use a fixed delta time for our simulation to make it independent of the frame rate. Make the fixed delta time configurable and let's set it to 0.01, half Unity's default. That makes our physics system update 100 times per second.</p>
+						
+						<p>Keep track of the accumulated time delta in a field, increase it each update, invoke a new <code>UpdateGameState</code> method as often as needed, and then update the ball visualization with the remaining time delta.</p>
+						
+						<p><code>UpdateGameState</code> updates and then immediately resolves the balls with a given time delta. We make the time delta a parameter of the method to make it simple to switch to a variable time delta, so you could compare both approaches.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Min(0.001f)]</ins>
+	<ins>float fixedDeltaTime = 0.01f;</ins>
+	
+	<ins>float dt;</ins>
+	
+	&hellip;
+	
+	<ins>void Update()</ins>
+	<ins>{</ins>
+		<ins>dt += Time.deltaTime;</ins>
+		<ins>while (dt > fixedDeltaTime)</ins>
+		<ins>{</ins>
+			<ins>UpdateGameState(fixedDeltaTime);</ins>
+			<ins>dt -= fixedDeltaTime;</ins>
+		<ins>}</ins>
+
+		<ins>ballManager.UpdateVisualization(dt);</ins>
+	<ins>}</ins>
+
+	<ins>void UpdateGameState(float dt)</ins>
+	<ins>{</ins>
+		<ins>JobHandle handle = ballManager.UpdateBalls(dt);</ins>
+		<ins>ballManager.ResolveBalls(handle);</ins>
+	<ins>}</ins></pre>
+						
+						<p>You could add the <code>BallManager</code> component to the same object that has the <code>Game</code> component or give it its own game object.</p>
+					</section>
+					
+					<section>
+						<h3>Ball State</h3>
+						
+						<p>Create a <code>BallState</code> struct to contain the state of a ball. It needs a 2D position and velocity, a mass, a current radius, and a target radius. Also give it integers to define a stage and type for it, plus a boolean to indicate whether the ball is alive.
+						
+						<p>We'll support three ball states, from small to large their masses are &frac14;, &frac12;, and 1, with accompanying radii &frac12;, &radic;&frac12;, and 1. Store these in separate static readonly arrays that can be used by Burst jobs, along with a constant integer that designates the largest as the initial stage. The idea is that when balls are hit by a bullet they split in two balls that have the next smaller stage.</p>
+						
+						<pre translate="no">using Unity.Mathematics;
+
+public struct BallState
+{
+	public const int initialStage = 2;
+
+	public static readonly float[] masses =
+	{
+		0.25f, 0.5f, 1f
+	};
+
+	public static readonly float[] radii =
+	{
+		0.5f, 0.7071067812f, 1f
+	};
+
+	public float2 position, velocity;
+
+	public float mass, radius, targetRadius;
+
+	public int stage, type;
+
+	public bool alive;
+}</pre>
+						
+						<aside>
+							<h3>How do those masses and radii relate?</h3>
+							<div>
+								<p>As our balls are 2D they are effectively discs, so I made their mass relative to their surface area, which is `pir^2`. I chose a mass of 1 for radius 1, so `m=r^2` and `r=sqrt(m)`.</p>
+							</div>
+						</aside>
+						
+						<aside>
+							<h3>Can Burst jobs access static arrays from different types?</h3>
+							<div>
+								<p>It doesn't matter where the readonly static arrays are defined, but the Burst compiler will hard-code them in the job at compile time. So changing the arrays via code won't affect the jobs.</p>
+							</div>
+						</aside>
+						
+						<p>As the amount of balls is highly variable <code>BallManager</code> will store their states in a native list, with initial capacity set to 100. Make sure that you have the <em translate="no">Collections</em> package imported and restart your IDE if it doesn't detect it immediately. The manager also tracks the visualization instances with a regular list. When a new game is started all existing instances need to be despawned before clearing the lists.</p>
+						
+						<pre translate="no">	<ins>NativeList&lt;BallState> states;</ins>
+
+	<ins>List&lt;BallVisualization> visualizations;</ins>
+
+	public void Initialize(Area2D worldArea) {
+		<ins>states = new(100, Allocator.Persistent);</ins>
+		<ins>visualizations = new(states.Capacity);</ins>
+	}
+
+	public void Dispose() {
+		<ins>states.Dispose();</ins>
+	}
+
+	public void StartNewGame() {
+		<ins>for (int i = 0; i &lt; visualizations.Count; i++)</ins>
+		<ins>{</ins>
+			<ins>visualizations[i].Despawn();</ins>
+		<ins>}</ins>
+		<ins>visualizations.Clear();</ins>
+		<ins>states.Clear();</ins>
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Spawning Balls</h3>
+						
+						<p>The manager will spawn balls based on a cooldown. Give it a configurable starting cooldown of 4 with at configurable persistence set to 0.96. That will speed up the spawning as the game progresses. We decrease the cooldown in <code>UpdateBalls</code> but will delay spawning a new ball until the end of <code>ResolveBalls</code>, when all jobs are completed. At that point we add a single new randomized ball state if needed, with mass and target radius matching the initial stage and a random type, which is simply the index of a configurable prefab array, which will contain references to our prefabs. Make sure that the ball is alive and omit its position and velocity.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>BallVisualization[] ballPrefabs;</ins>
+	
+	<ins>[SerializeField, Min(0f)]</ins>
+	<ins>float startingCooldown = 4f;</ins>
+
+	<ins>[SerializeField, Range(0.1f, 1f)]</ins>
+	<ins>float cooldownPersistence = 0.96f;</ins>
+
+	<ins>float cooldown, cooldownDuration;</ins>
+
+	public void Initialize(Area2D worldArea) {
+		&hellip;
+		<ins>cooldown = cooldownDuration = startingCooldown;</ins>
+	}
+	
+	public void StartNewGame() {
+		&hellip;
+		<ins>cooldown = cooldownDuration = startingCooldown;</ins>
+	}
+
+	public JobHandle UpdateBalls(float dt)
+	{
+		<ins>cooldown -= dt;</ins>
+		updateBallJob.dt = dt;
+		return updateBallJob.Schedule(states.Length, default);
+	}
+
+	public void ResolveBalls(JobHandle dependency)
+	{
+		dependency.Complete();
+
+		<ins>if (cooldown &lt;= 0f)</ins>
+		<ins>{</ins>
+			<ins>cooldown += cooldownDuration;</ins>
+			<ins>cooldownDuration *= cooldownPersistence;</ins>
+			<ins>states.Add(new BallState</ins>
+			<ins>{</ins>
+				<ins>mass = BallState.masses[BallState.initialStage],</ins>
+				<ins>targetRadius = BallState.radii[BallState.initialStage],</ins>
+				<ins>stage = BallState.initialStage,</ins>
+				<ins>type = Random.Range€(0, ballPrefabs.Length),</ins>
+				<ins>alive = true</ins>
+			<ins>});</ins>
+		}
+	}</pre>
+						
+						<p>The spawning of the visualization is done in <code>UpdateVisualization</code>. Add as many visualizations as needed, using the ball type to select the appropriate prefab.</p>
+						
+						<pre translate="no">	public void UpdateVisualization(float dtExtrapolated)
+	{
+		<ins>for (int i = visualizations.Count; i &lt; states.Length; i++)</ins>
+		<ins>{</ins>
+			<ins>visualizations.Add(ballPrefabs[states[i].type].Spawn());</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>At this point we will see overlapping balls spawn at the origin after we enter play mode. To speed this up you can temporarily reduce the starting cooldown to 0.1. These balls are small, because the prefab represents a ball with radius &frac12;.</p>
+						
+						<p>To make the visualization match the ball state, add an <code>UpdateVisualization</code> method to <code>BallVisualization</code> with parameters for its 2D position and target radius. Setting the position is straightforward, but the starting radius of our balls is zero. We'll grow it to the target radius by simply adding the time since it was spawned. To make the visualization's radius match this we have to set its scale to double the indicated radius. We can avoid adjusting the scale each update by keeping track of the visualization's own radius and only rescaling when needed.</p>
+						
+						<pre translate="no">	<ins>float radius;</ins>
+
+	public BallVisualization Spawn()
+	{
+		BallVisualization instance = pool.GetInstance(this);
+		instance.pool = pool;
+		<ins>instance.radius = -1f;</ins>
+		return instance;
+	}
+
+	public void Despawn() => pool.Recycle(this);
+
+	<ins>public void UpdateVisualization(float2 position, float targetRadius)</ins>
+	<ins>{</ins>
+		<ins>transform.localPosition = new Vector3(position.x, position.y);</ins>
+		<ins>if (radius != targetRadius)</ins>
+		<ins>{</ins>
+			<ins>radius = targetRadius;</ins>
+			<ins>transform.localScale = Vector3.one * (2f * targetRadius);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now <code>BallManager.UpdateVisualization</code> has to update all its visualizations. We could directly pass through the state's position and radius, but that would introduce visual stuttering when the actual and fixed time deltas don't match. So we use the extrapolated time delta to move the visualization forward in time relative to its simulated state to match the actual elapsed time. This is just a linear guess that fails when balls are about to bounce, but that mistake will only be obvious at such low frame rates that the game would be unplayable anyway.</p>
+						
+						<pre translate="no">	public void UpdateVisualization(float dtExtrapolated)
+	{
+		&hellip;
+
+		<ins>for (int i = 0; i &lt; visualizations.Count; i++)</ins>
+		<ins>{</ins>
+			<ins>BallState state = states[i];</ins>
+			<ins>visualizations[i].UpdateVisualization(</ins>
+				<ins>state.position + state.velocity * dtExtrapolated,</ins>
+				<ins>Mathf.Min€(state.radius + dtExtrapolated, state.targetRadius)</ins>
+			<ins>);</ins>
+		<ins>}</ins>
+	}</pre>
+						<p>Now the balls will no longer be visible, because their radii are nearly zero.</p>
+						
+					</section>
+					
+					<section>
+						<h3>Updating Balls</h3>
+						
+						<p>To update the balls introduce an <code>UpdateBallJob</code> Burst job that takes care of updating a single ball. It performs simple linear motion and grows the radius by adding the time delta to it. The new position has to be wrapped to keep it inside the world area. Also enforce a max speed when needed to ensure that balls won't move too fast to keep the game playable.</p>
+						
+						<pre translate="no">using Unity.Burst;
+using Unity.Collections;
+using Unity.Jobs;
+
+using static Unity.Mathematics.math;
+
+[BurstCompile(FloatPrecision.Standard, FloatMode.Fast)]
+public struct UpdateBallJob : IJobFor
+{
+	public NativeList&lt;BallState> balls;
+
+	public Area2D worldArea;
+
+	public float dt, maxSpeed;
+
+	public void Execute(int i)
+	{
+		BallState ball = balls[i];
+		if (dot(ball.velocity, ball.velocity) > maxSpeed * maxSpeed)
+		{
+			ball.velocity = normalize(ball.velocity) * maxSpeed;
+		}
+		ball.position = worldArea.Wrap(ball.position + ball.velocity * dt);
+		ball.radius = min(ball.targetRadius, ball.radius + dt);
+		balls[i] = ball;
+	}
+}</pre>
+						
+						<aside>
+							<h3>Shouldn't <code>UpdateBallJob</code> only update living balls?</h3>
+							<div>
+								<p>Technically yes, but dead balls will be rare and updating dead balls has no side effects. I only check whether a ball is alive when needed for correctness.</p>
+							</div>
+						</aside>
+						
+						<p>We'll initialize this job once when the ball manager initializes and schedule it when the balls should be updated. Also add a configurable max speed set to 12.5 by default. That ensures that two of the smallest balls won't pass though each other when they would collide head-on at max speed. Also give the new balls a random start speed with a configurable max, set to 4 by default.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Min(0f)]</ins>
+	<ins>float maxSpeed = 12.5f, maxStartSpeed = 4f;</ins>
+
+	&hellip;
+	
+	<ins>UpdateBallJob updateBallJob;</ins>
+	
+	public void Initialize(Area2D worldArea) {
+		&hellip;
+		
+		<ins>updateBallJob = new UpdateBallJob</ins>
+		<ins>{</ins>
+			<ins>balls = states,</ins>
+			<ins>worldArea = worldArea,</ins>
+			<ins>maxSpeed = maxSpeed</ins>
+		<ins>};</ins>
+	}
+
+	&hellip;
+
+	public JobHandle UpdateBalls(float dt)
+	{
+		<ins>updateBallJob.dt = dt;</ins>
+		<ins>return updateBallJob.Schedule(states.Length, default);</ins>
+	}
+
+	public void ResolveBalls(Vector2 avoidSpawnPosition, JobHandle dependency)
+	{
+		&hellip;
+			states.Add(new BallState
+			{
+				<ins>velocity = Random.insideUnitCircle * maxStartSpeed,</ins>
+				&hellip;
+			});
+		&hellip;
+	}</pre>
+						
+						<aside>
+							<h3>Why not schedule parallel?</h3>
+							<div>
+								<p>There will be around 200 balls at maximum, which guarantees a game-over state. It isn't worth trying to spread so little work over multiple threads.</p>
+							</div>
+						</aside>
+						
+						<figure>
+							<img src="balls/many-balls.png" width="400" height="250">
+							<figcaption>Many balls; starting cooldown 0.1.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Spawning in Empty Space</h3>
+						
+						<p>All balls currently spawn at the origin and a low cooldown shows that they overlap. Let's make it so new balls are only spawned in an empty region that could contain them at their full size. Create a <code>VerifySpawnPositionJob</code> job for this that loops through all living balls to check whether they overlap a given spawn position and radius. This can be done by performing a point-inside-circle check relative to the spawn position, using the sum of both radii for the check. There is an overlap when `||p||^2&lt;r^2` where `p` is the spawn position relative to the ball and `r` is the radius sum. The relative position has to be wrapped to make this work correctly near the world boundary. Store the indication of success in a <code>NativeReference</code>.</p>
+						
+						<pre translate="no">using Unity.Burst;
+using Unity.Collections;
+using Unity.Jobs;
+using Unity.Mathematics;
+
+using static Unity.Mathematics.math;
+
+[BurstCompile(FloatPrecision.Standard, FloatMode.Fast)]
+public struct VerifySpawnPositionJob : IJob
+{
+	[ReadOnly]
+	public NativeList&lt;BallState> balls;
+
+	[WriteOnly]
+	public NativeReference&lt;bool> success;
+
+	public Area2D worldArea;
+
+	public float2 position;
+
+	public float radius;
+
+	public void Execute()
+	{
+		for (int i = 0; i &lt; balls.Length; i++)
+		{
+			BallState ball = balls[i];
+			if (ball.alive)
+			{
+				float2 p = worldArea.Wrap(position - ball.position);
+				float r = ball.radius + radius;
+				if (dot(p, p) &lt;= r * r)
+				{
+					success.Value = false;
+					return;
+				}
+			}
+		}
+
+		success.Value = true;
+	}
+}</pre>
+						
+						<aside>
+							<h3>What's a <code>NativeReference</code>?</h3>
+							<div>
+								<p>It is a convenient type from the <em translate="no">Collections</em> package that functions like a native array of length one.</p>
+							</div>
+						</aside>
+						
+						<p>Schedule the verification job in <code>ResolveBalls</code> if needed and check whether it was successful before spawning. If not we simply try again next physics step. Because we only access the success state directly after scheduling the job I didn't bother with a separate field for it and directly use the job's field.</p>
+						
+						<pre translate="no">	<ins>VerifySpawnPositionJob verifySpawnPositionJob;</ins>
+
+	public void Initialize(Area2D worldArea) {
+		&hellip;
+		<ins>verifySpawnPositionJob = new VerifySpawnPositionJob</ins>
+		<ins>{</ins>
+			<ins>balls = states,</ins>
+			<ins>success = new NativeReference&lt;bool>(Allocator.Persistent),</ins>
+			<ins>worldArea = worldArea,</ins>
+			<ins>radius = BallState.radii[BallState.initialStage]</ins>
+		<ins>};</ins>
+	}
+
+	public void Dispose() {
+		states.Dispose();
+		<ins>verifySpawnPositionJob.success.Dispose();</ins>
+	}
+
+	public void ResolveBalls(float dt, JobHandle dependency)
+	{
+		<ins>if (cooldown &lt;= 0f)</ins>
+		<ins>{</ins>
+			<ins>dependency = verifySpawnPositionJob.Schedule(dependency);</ins>
+		<ins>}</ins>
+		dependency.Complete();
+
+		if (cooldown &lt;= 0f <ins>&amp;&amp; verifySpawnPositionJob.success.Value</ins>)
+		{
+			cooldown += cooldownDuration;
+			&hellip;
+		}
+	}</pre>
+						
+						<p>The game now only spawns a new ball once the previous one has moved far enough away from the origin. Change this so the balls are randomly spawning in the entire world.</p>
+						
+						<pre translate="no">		if (cooldown &lt;= 0f)
+		{
+			<ins>verifySpawnPositionJob.position = updateBallJob.worldArea.RandomVector2;</ins>
+			dependency = verifySpawnPositionJob.Schedule(dependency);
+		}
+		dependency.Complete();
+
+		if (cooldown &lt;= 0f &amp;&amp; verifySpawnPositionJob.success.Value)
+		{
+			cooldown += cooldownDuration;
+			cooldownDuration *= cooldownPersistence;
+			states.Add(new BallState
+			{
+				<ins>position = verifySpawnPositionJob.position,</ins>
+				&hellip;
+			});
+		}</pre>
+						
+						<figure>
+							<img src="balls/spawning-everywhere.png" width="400" height="250">
+							<figcaption>Spawning everywhere.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Visual Ball Variety</h3>
+						
+						<p>We already have some visual variety by spawning different prefab versions, but all balls still have the same shape. To change this assign random rotations to all the visualization's children when it spawns.</p>
+						
+						<pre translate="no">	public BallVisualization Spawn()
+	{
+		&hellip;
+		<ins>for (int i = 0; i &lt; instance.transform.childCount; i++)</ins>
+		<ins>{</ins>
+			<ins>instance.transform.GetChild(i).localRotation = Random.rotation;</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<img src="balls/different-balls.png" width="400" height="250">
+							<figcaption>Different balls.</figcaption>
+						</figure>
+						
+						<p>To add even more variety and make it more lively let's also give each visualization a random rotation, with a configurable spin speed range set to 20&ndash;60 by default. Note that this is purely visual and thus bases on the regular time delta. The simulated balls don't spin.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Min(0f)]</ins>
+	<ins>float minSpinSpeed = 20f, maxSpinSpeed = 60f;</ins>
+
+	PrefabInstancePool&lt;BallVisualization> pool;
+
+	<ins>Vector3 rotationAxis;</ins>
+
+	float radius<ins>, rotationSpeed, rotationAngle</ins>;
+	
+	public BallVisualization Spawn()
+	{
+		BallVisualization instance = pool.GetInstance(this);
+		instance.pool = pool;
+		instance.radius = -1f;
+		<ins>instance.rotationAxis = Random.onUnitSphere;</ins>
+		<ins>instance.rotationSpeed = Random.Range€(minSpinSpeed, maxSpinSpeed);</ins>
+		&hellip;
+	}
+
+	public void Despawn() => pool.Recycle(this);
+	
+	public void UpdateVisualization(float2 position, float targetRadius)
+	{
+		<ins>rotationAngle += rotationSpeed * Time.deltaTime;</ins>
+		<ins>if (rotationAngle > 360f)</ins>
+		<ins>{</ins>
+			<ins>rotationAngle -= 360f;</ins>
+		<ins>}</ins>
+		<ins>transform.SetLocalPositionAndRotation(</ins>
+			<ins>new Vector3(position.x, position.y),</ins>
+			<ins>Quaternion.AngleAxis(rotationAngle, rotationAxis)</ins>
+		<ins>);</ins>
+		<del>//transform.localPosition = new Vector3(position.x, position.y);</del>
+		&hellip;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Bouncing</h3>
+						
+						<p>The last thing that the balls need is to bounce, for which we'll create a <code>BounceBallsJob</code> that loops though all pairs of balls. For each pair of living balls we perform a point-inside-circle check to see whether they overlap. Besides the balls and world area we also need to know the bounce strength and time delta to push them apart.</p>
+						
+						<pre translate="no">using Unity.Burst;
+using Unity.Collections;
+using Unity.Jobs;
+using Unity.Mathematics;
+
+using static Unity.Mathematics.math;
+
+[BurstCompile(FloatPrecision.Standard, FloatMode.Fast)]
+public struct BounceBallsJob : IJob
+{
+	public NativeList&lt;BallState> balls;
+
+	public Area2D worldArea;
+
+	public float bounceStrength, dt;
+
+	public void Execute()
+	{
+		for (int i = 0; i &lt; balls.Length; i++)
+		{
+			BallState a = balls[i];
+			if (!a.alive)
+			{
+				continue;
+			}
+
+			for (int j = i + 1; j &lt; balls.Length; j++)
+			{
+				BallState b = balls[j];
+				if (!b.alive)
+				{
+					continue;
+				}
+				
+				float2 p = worldArea.Wrap(b.position - a.position);
+				float r = a.radius + b.radius;
+				if (dot(p, p) &lt; r * r) { }
+			}
+		}
+	}
+}</pre>
+						
+						<aside>
+							<h3>Could we parallelize <code>BounceBallsJob</code>?</h3>
+							<div>
+								<p>Yes, by having every ball pair itself with all other balls and only adjusting itself. That would require `n^2` checks, where `n` is one less than the amount of living balls. That's 40,000 checks for 201 living balls and each bounce would have to be resolved twice.</p>
+								
+								<p>What we're doing instead is `1+2+...+n=sum_(k=1)^n k=(n+1)n/2` checks, resolving each bounce only once. That's 20,010 checks for 201 living balls, roughly half the work. It would require at least three threads running in parallel to outperform that, over which we have no direct control. In the worst case it all runs on the same thread.</p>
+							</div>
+						</aside>
+						
+						<p>We implement a simple soft deforming bounce, which is done by making the balls repel each other the more they overlap. We use the formula `a=s(||p||-r)hatp` where `a` is the bounce acceleration for the first ball and `s` is the bounce strength. The second ball accelerates in the opposite direction. This formula ignores the ball mass so all balls bounce the same.</p>
+						
+						<pre translate="no">				if (dot(p, p) &lt; r * r)
+				{
+					<ins>float2 v =</ins>
+						<ins>(1f - r * rsqrt(max(dot(p, p), 0.0001f))) *</ins>
+						<ins>bounceStrength * dt * p;</ins>
+					<ins>a.velocity += v;</ins>
+					<ins>b.velocity -= v;</ins>
+					<ins>balls[i] = a;</ins>
+					<ins>balls[j] = b;</ins>
+				}</pre>
+						
+						<aside>
+							<h3>How did you derive that computation from the formula?</h3>
+							<div>
+								<p>`a=s(||p||-r)hatp=s(||p||-r)p/||p||=s(1-r/||p||)p`</p>
+								
+								<p>Factor the time delta into that to get the velocity change.</p>
+							</div>
+						</aside>
+						
+						<p>Add this job to the ball manager with a configurable bounce strength set to 100 by default. Schedule it at the start of <code>ResolveBalls</code>.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Min(0f)]</ins>
+	<ins>float bounceStrength = 100f;</ins>
+
+	&hellip;
+	
+	<ins>BounceBallsJob bounceBallsJob;</ins>
+
+	VerifySpawnPositionJob verifySpawnPositionJob;
+
+	public void Initialize(Area2D worldArea) {
+		&hellip;
+		<ins>bounceBallsJob = new BounceBallsJob</ins>
+		<ins>{</ins>
+			<ins>balls = states,</ins>
+			<ins>worldArea = worldArea,</ins>
+			<ins>bounceStrength = bounceStrength</ins>
+		<ins>};</ins>
+		&hellip;
+	}
+	
+	&hellip;
+	
+	public JobHandle UpdateBalls(float dt)
+	{
+		cooldown -= dt;
+		<ins>bounceBallsJob.dt =</ins> updateBallJob.dt = dt;
+		return updateBallJob.Schedule(states.Length, default);
+	}
+
+	public void ResolveBalls(JobHandle dependency)
+	{
+		<ins>dependency = bounceBallsJob.Schedule(dependency);</ins>
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="balls/bouncing-balls.png" width="400" height="250">
+							<figcaption>Bouncing balls, around 200.</figcaption>
+						</figure>
+						
+						<p>This currently works correctly because all balls have the same mass. To also support different masses we have to change the bounce formula slightly, multiplying it with `(2m_b)/(m_a+m_b)` for the first ball and `(2m_b)/(m_a+m_b)` for the second ball, where `m_a` and `m_b` are their masses. This distributes the bounce strength according to relative mass, while balls of the same mass always bounce with the same strength, no matter how massive are.</p>
+						
+						<pre translate="no">					float2 v =
+						<ins>(2f / (a.mass + b.mass)) *</ins>
+						(1f - r * rsqrt(max(dot(p, p), 0.0001f))) *
+						bounceStrength * dt * p;
+					a.velocity += <ins>b.mass *</ins> v;
+					b.velocity -= <ins>a.mass *</ins> v;</pre>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Player</h2>
+					
+					<p>Now that the balls are functional we move on to the player.</p>
+					
+					<section>
+						<h3>Following the Cursor</h3>
+						
+						<p>Create a <code>Player</code> component and attach it to the player game object or prefab and activate it in the scene. Give the player a configurable radius set to 0.5, which should be publicly available. We make the player follow the cursor. Do this by giving it a <code>Vector2 TargetPosition</code> property that is publicly set and a <code>Position</code> property that is privately set. Set both to a given position in a <code>StartNewGame</code> method. It needs an <code>UpdateState</code> method that initially directly sets the current position to the target. Also give it <code>Initialize</code> and <code>Dispose</code> methods.</p>
+						
+						<p>As the player also gets updated using the fixed time step it will visually stutter. In this case extrapolation won't work because the player's movement is unpredictable and can be very fast. We'll instead keep track of its previous position and interpolate to its current position given an interpolator based on the time delta, provided via a parameter of <code>UpdateVisualization</code>. Thus the player will visually lag one step behind, but that isn't a problem with a small fixed time delta.</p>
+						
+						<pre translate="no">using TMPro;
+using Unity.Collections;
+using UnityEngine;
+
+public class Player : MonoBehaviour
+{
+	[SerializeField, Min(0f)]
+	float radius = 0.5f;
+	
+	Vector2 previousPosition;
+	
+	public float Radius => radius;
+
+	public Vector2 Position
+	{ get; private set; }
+
+	public Vector2 TargetPosition
+	{ private get; set; }
+
+	public void Initialize() { }
+
+	public void Dispose() { }
+
+	public void StartNewGame(Vector2 position)
+	{
+		Position = TargetPosition = previousPosition = position;
+	}
+
+	public void UpdateState(float dt)
+	{
+		previousPosition = Position;
+		Position = TargetPosition;
+	}
+
+	public void UpdateVisualization(float dtInterpolator)
+	{
+		transform.localPosition =
+			Vector2.LerpUnclamped(previousPosition, Position, dtInterpolator);
+	}
+}</pre>
+						
+						<p>Add a configuration field for the player to <code>Game</code>, initialize and dispose it, and also update it and its visualization. The interpolator is the remaining time delta divided by the fixed time delta.</p>
+						
+						<p>We also clamp the player position to the world area, because as it follows the cursor it won't wrap. To keep it visible we use a reduced player area, shrinking it by the world bound radius and the player radius. Set the target position at the start of <code>Update</code>, by using a new <code>GetTargetPoint</code> method that converts the mouse position to a clamped world position.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>Player player;</ins>
+
+	&hellip;
+	
+	Area2D worldArea<ins>, playerArea</ins>;
+
+	void Awake()
+	{
+		&hellip;
+		<ins>player.Initialize();</ins>
+		<ins>playerArea.extents = worldArea.extents - worldBoundsRadius - player.Radius;</ins>
+	}
+
+	void OnDisable()
+	{
+		ballManager.Dispose();
+		<ins>player.Dispose();</ins>
+	}
+
+	void Update()
+	{
+		<ins>player.TargetPosition = GetTargetPoint();</ins>
+		float dt = Time.deltaTime;
+		&hellip;
+
+		ballManager.UpdateVisualization();
+		<ins>player.UpdateVisualization(dt / fixedDeltaTime);</ins>
+	}
+
+	void UpdateGameState(float dt)
+	{
+		<ins>player.UpdateState(dt);</ins>
+		&hellip;
+	}
+
+	<ins>Vector2 GetTargetPoint()</ins>
+	<ins>{</ins>
+		<ins>Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);</ins>
+		<ins>Vector2 p = ray.origin - ray.direction * (ray.origin.z / ray.direction.z);</ins>
+		<ins>p.x = Mathf.Clamp(p.x, -playerArea.extents.x, playerArea.extents.x);</ins>
+		<ins>p.y = Mathf.Clamp(p.y, -playerArea.extents.y, playerArea.extents.y);</ins>
+		<ins>return p;</ins>
+	<ins>}</ins></pre>
+						
+						<p>This makes the player teleport each time its position changes, although its visualization linearly interpolates. To prevent teleportation through balls we slow down the player's movement by using <code>Vector2.SmoothDamp</code> in <code>Player.UpdateState</code>, but only when its distance to the target is greater than 0.01. We need to keep track of its velocity and give it a configurable cursor follow speed and cursor snap duration, set to 40 and 0.05 by default.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Min(0.01f)]</ins>
+	<ins>float cursorFollowSpeed = 40f, cursorSnapDuration = 0.05f;</ins>
+
+	Vector2 previousPosition<ins>, velocity</ins>;
+
+	&hellip;
+
+	public void StartNewGame(Vector2 position)
+	{
+		&hellip;
+		<ins>velocity = Vector2.zero;</ins>
+	}
+	
+	public void UpdateState(float dt)
+	{
+		previousPosition = Position;
+		<del>//Position = TargetPosition;</del>
+		<ins>Vector2 targetVector = TargetPosition - Position;</ins>
+		<ins>float squareTargetDistance = targetVector.sqrMagnitude;</ins>
+		<ins>if (squareTargetDistance > 0.0001f)</ins>
+		<ins>{</ins>
+			<ins>Position = Vector2.SmoothDamp(</ins>
+				<ins>Position, TargetPosition, ref velocity,</ins>
+				<ins>cursorSnapDuration, cursorFollowSpeed, dt</ins>
+			<ins>);</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>This makes the player smoothly stick close to the cursor if it changes a little, while if the cursor is moved at great speed the player will start to lag behind. The last step is to hide the cursor, by setting <code>Cursor.visible</code> to <code>false</code> when the game awakens. Note that this only affects the editor game window after you click or touch it.</p>
+						
+						<pre translate="no">	void Awake()
+	{
+		&hellip;
+		<ins>Cursor.visible = false;</ins>
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Avoiding Player When Spawning</h3>
+						
+						<p>The player should avoid touching balls, so we should also avoid spawning new balls that immediately overlap the player. So add a position and radius to avoid to <code>VerifySpawnPositionJob</code> and abort if the spawn position is too close.</p>
+						
+						<pre translate="no">	public float2 <ins>avoidPosition,</ins> position;
+
+	public float <ins>avoidRadius,</ins> radius;
+
+	public void Execute()
+	{
+		<ins>float2 p = worldArea.Wrap(position - avoidPosition);</ins>
+		<ins>float r = avoidRadius + radius;</ins>
+		<ins>if (dot(p, p) &lt;= r * r)</ins>
+		<ins>{</ins>
+			<ins>success.Value = false;</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+
+		for (int i = 0; i &lt; balls.Length; i++)
+		{
+			BallState ball = balls[i];
+			if (ball.alive)
+			{
+				<ins>p</ins> = worldArea.Wrap(position - ball.position);
+				<ins>r</ins> = radius + ball.radius;
+				if (dot(p, p) &lt;= r * r)
+				{
+					success.Value = false;
+					return;
+				}
+			}
+		}
+
+		success.Value = true;
+	}</pre>
+						
+						<p>Add a configurable spawn radius for avoidance to <code>BallManager</code>, set to 2 by default. Also add the position to avoid as a parameter to <code>ResolveBalls</code>.</p>
+						
+						<pre translate="no">	[SerializeField, Min(0f)]
+	float <ins>avoidSpawnRadius = 2f,</ins> startingCooldown = 4f;
+
+	&hellip;
+
+	public void Initialize(Area2D worldArea) {
+		&hellip;
+		verifySpawnPositionJob = new VerifySpawnPositionJob
+		{
+			&hellip;
+			<ins>avoidRadius = avoidSpawnRadius,</ins>
+			radius = BallState.radii[BallState.initialStage]
+		};
+	}
+	
+	public void ResolveBalls(<ins>Vector2 avoidSpawnPosition,</ins> JobHandle dependency)
+	{
+		dependency = bounceBallsJob.Schedule(dependency);
+		if (cooldown &lt;= 0f)
+		{
+			<ins>verifySpawnPositionJob.avoidPosition = avoidSpawnPosition;</ins>
+			verifySpawnPositionJob.position = updateBallJob.worldArea.RandomVector2;
+			dependency = verifySpawnPositionJob.Schedule(dependency);
+		}
+		&hellip;
+	}</pre>
+						
+						<p>Now <code>Game</code> can pass the player position when it asks the manager to resolve the balls.</p>
+						
+						<pre translate="no">		ballManager.ResolveBalls(<ins>player.Position,</ins> handle);</pre>
+					</section>
+					
+					<section>
+						<h3>Aiming</h3>
+						
+						<p>Make <code>Player</code> automatically aim itself based on its last movement delta, converting it to a direction angle. To make this appear smooth also apply visual interpolation to it.</p>
+						
+						<pre translate="no">	<ins>float directionAngle, previousDirectionAngle;</ins>
+
+	&hellip;
+
+	public void StartNewGame(Vector2 position)
+	{
+		Position = TargetPosition = position;
+		<ins>directionAngle = previousDirectionAngle = 0f;</ins>
+	}
+	
+	public void UpdateState(float dt)
+	{
+		previousPosition = Position;
+		previousDirectionAngle = directionAngle;
+		&hellip;
+		if (squareTargetDistance > 0.0001f)
+		{
+			Position = Vector2.SmoothDamp(
+				Position, TargetPosition, ref velocity,
+				cursorSnapDuration, cursorFollowSpeed, dt
+			);
+			<ins>directionAngle = Mathf.Atan2(targetVector.x, targetVector.y) * -Mathf.Rad2Deg;</ins>
+		}
+	}
+
+	public void UpdateVisualization(float dtInterpolator)
+	{
+		<del>//transform.localPosition =</del>
+		<ins>transform.SetLocalPositionAndRotation(</ins>
+			Vector2.LerpUnclamped(previousPosition, Position, dtInterpolator)<ins>,</ins>
+			<ins>Quaternion.Euler(</ins>
+				<ins>0f, 0f,</ins>
+				<ins>Mathf.LerpAngle(previousDirectionAngle, directionAngle, dtInterpolator)</ins>
+			<ins>)</ins>
+		<ins>)</ins>;
+	}</pre>
+						
+						<p><em translate="no">Death vs Monstars</em> allows locking the aim angle and we will support this as well, by only adjusting the aim angle when a public <code>FreeAim</code> property is set to <code>true</code>.</p>
+						
+						<pre translate="no">	<ins>public bool FreeAim</ins>
+	<ins>{ get; set; }</ins>
+
+	&hellip;
+
+	public void UpdateState(float dt)
+	{
+		&hellip;
+		if (squareTargetDistance > 0.0001f)
+		{
+			&hellip;
+			<ins>if (FreeAim)</ins>
+			<ins>{</ins>
+				directionAngle =
+					Mathf.Atan2(targetVector.x, targetVector.y) * -Mathf.Rad2Deg;
+			<ins>}</ins>
+		}
+	}</pre>
+						
+						<p>Lock the aim at the start of <code>Game.Update</code> while either the primary mouse button or the space bar is held down.</p>
+						
+						<pre translate="no">	void Update()
+	{
+		<ins>player.FreeAim = !Input.GetMouseButton(0) &amp;&amp; !Input.GetKey(KeyCode.Space);</ins>
+		player.TargetPosition = GetTargetPoint();
+		&hellip;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Firing</h3>
+						
+						<p>Now that we can aim, the player should be able to fire bullets, for which we need add a configurable fire cooldown duration set to 0.1 and also a fire spread angle set to 5, which randomizes the bullet direction a little. Also introduce a fire offset vector that makes bullets spawn on the player's radius in the appropriate direction instead of its center. Update the cooldown and fire at the end of <code>UpdateState</code>, but just log that we would do so for now because we don't have bullets to spawn yet. Finally, like <em translate="no">Death vs Monstars</em> we will shoot backwards, not forwards. So to aim at a ball you have to move away from it.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Min(0f)]</ins>
+	<ins>float fireCooldown = 0.1f, fireSpreadAngle = 5f;</ins>
+
+	Vector2 <ins>fireOffset,</ins> previousPosition, velocity;
+
+	float <ins>cooldown,</ins> directionAngle, previousDirectionAngle;
+
+	&hellip;
+
+	public void StartNewGame(Vector2 position)
+	{
+		&hellip;
+		<ins>fireOffset = new Vector2(0f, radius);</ins>
+	}
+
+	public void UpdateState(float dt)
+	{
+		&hellip;
+		if (squareTargetDistance > 0.0001f)
+		{
+			&hellip;
+			if (FreeAim)
+			{
+				<ins>fireOffset = targetVector * (radius / Mathf.Sqrt(squareTargetDistance));</ins>
+				directionAngle =
+					Mathf.Atan2(targetVector.x, targetVector.y) * -Mathf.Rad2Deg;
+			}
+		}
+
+		<ins>cooldown -= dt;</ins>
+		<ins>if (cooldown &lt;= 0f)</ins>
+		<ins>{</ins>
+			<ins>cooldown += fireCooldown;</ins>
+			<ins>Vector2 firePosition = Position - fireOffset;</ins>
+			<ins>float fireAngle =</ins>
+				<ins>directionAngle + 180f + Random.Range€(-fireSpreadAngle, fireSpreadAngle);</ins>
+			<ins>Debug.Log($"fire position {firePosition} angle {fireAngle}");</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<aside>
+							<h3>How does that string work?</h3>
+							<div>
+								<p>Using a string prefixed with <code>$</code> is known as string interpolation and allows us to directly reference fields by putting them inside curly brackets inside the string.</p>
+								
+								<p>We could've also written <code>"fire position " + firePower + " angle " + fireAngle</code>.
+							</div>
+						</aside>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Bullets</h2>
+					
+					<p>To make the player fire for real we have to manage bullets.</p>
+					
+					<section>
+						<h3>Bullet State</h3>
+						
+						<p>Introduce a <code>BulletState</code> struct with a position and a velocity. Bullets have limited lifetime so include a field for the time they have left. A bullet counts as alive while its remaining time is greater than zero, so add a convenient property to check that.</p>
+						
+						<pre translate="no">using Unity.Mathematics;
+
+public struct BulletState
+{
+	public float2 position, velocity;
+
+	public float timeRemaining;
+
+	public bool Alive => timeRemaining > 0f;
+}</pre>
+						
+						<p>Create an <code>UpdateBulletJob</code> that both moves and decreases the time remaining of a single bullet. Like balls bullets also wrap, so the player could shoot from one side of the world to the opposite side.</p>
+						
+						<pre translate="no">using Unity.Burst;
+using Unity.Collections;
+using Unity.Jobs;
+
+[BurstCompile(FloatPrecision.Standard, FloatMode.Fast)]
+public struct UpdateBulletJob : IJobFor
+{
+	public NativeList&lt;BulletState> bullets;
+
+	public Area2D worldArea;
+
+	public float dt;
+
+	public void Execute(int i)
+	{
+		BulletState bullet = bullets[i];
+		bullet.timeRemaining -= dt;
+		bullet.position = worldArea.Wrap(bullet.position + bullet.velocity * dt);
+		bullets[i] = bullet;
+	}
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Bullet Visualization</h3>
+						
+						<p>Give <code>BulletVisualization</code> an <code>UpdateVisualization</code> method with parameters for a <code>Vector2</code> position and a life factor. We need to pass the life factor to the GPU, for which we use a material property block, so we also need to keep track of the visualization's <code>MeshRenderer</code>. Finally, to correctly orientate the  bullet add a <code>Quaternion</code> parameter to its <code>Spawn</code> method.</p>
+						
+						<pre translate="no">using UnityEngine;
+
+public class BulletVisualization : MonoBehaviour
+{
+	<ins>static int lifeFactorID = Shader.PropertyToID("_LifeFactor");</ins>
+
+	<ins>static MaterialPropertyBlock materialPropertyBlock;</ins>
+
+	PrefabInstancePool&lt;BulletVisualization> pool;
+
+	<ins>MeshRenderer meshRenderer;</ins>
+
+	<ins>void Awake()</ins>
+	<ins>{</ins>
+		<ins>materialPropertyBlock ??= new MaterialPropertyBlock();</ins>
+		<ins>meshRenderer = GetComponent&lt;MeshRenderer>();</ins>
+	<ins>}</ins>
+	
+	public BulletVisualization Spawn(<ins>Quaternion rotation</ins>)
+	{
+		BulletVisualization instance = pool.GetInstance(this);
+		instance.pool = pool;
+		<ins>instance.transform.localRotation = rotation;</ins>
+		return instance;
+	}
+
+	public void Despawn() => pool.Recycle(this);
+
+	<ins>public void UpdateVisualization(Vector2 position, float lifeFactor)</ins>
+	<ins>{</ins>
+		<ins>transform.localPosition = position;</ins>
+		<ins>materialPropertyBlock.SetFloat(lifeFactorID, lifeFactor);</ins>
+		<ins>meshRenderer.SetPropertyBlock(materialPropertyBlock);</ins>
+	<ins>}</ins>
+}</pre>
+						
+						<aside>
+							<h3>What does <code>??=</code> do?</h3>
+							<div>
+								<p>It's a the null-coalescing operator that only performs the assignment in case of <code>null</code>. It is a shorter way of writing</p>
+								
+								<pre translate="no">		if (materialPropertyBlock == null)
+		{
+			materialPropertyBlock = new MaterialPropertyBlock();
+		}</pre>
+								
+								<p>Note that this won't work as expected with <code>UnityEngine.Object</code> types because it bypasses its overloaded equality check, but material property blocks are regular class types.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Bullet Manager</h3>
+						
+						<p>Create a <code>BulletManager</code> that works like <code>BallManager</code> but adjusted to work with bullets. It only needs an <code>UpdateBullets</code> method to schedule its single job and no resolve method. The player takes care of the fire cooldown so the manger has nothing to check and won't spawn bullets on its own. We do give it configuration options for the bullet speed and start lifetime, set to 12 and 1 by default.</p>
+						
+						<pre translate="no">using System.Collections.Generic;
+using Unity.Collections;
+using Unity.Jobs;
+using UnityEngine;
+
+public class BulletManager : MonoBehaviour
+{
+	[SerializeField]
+	BulletVisualization bulletPrefab;
+
+	[SerializeField, Min(0f)]
+	float speed = 12f, startLifetime = 1f;
+
+	NativeList&lt;BulletState> states;
+
+	List&lt;BulletVisualization> visualizations;
+
+	UpdateBulletJob updateBulletJob;
+
+	public void Initialize(Area2D worldArea) {
+		states = new(100, Allocator.Persistent);
+		visualizations = new(states.Capacity);
+		updateBulletJob = new UpdateBulletJob
+		{
+			bullets = states,
+			worldArea = worldArea
+		};
+	}
+
+	public void Dispose() {
+		states.Dispose();
+	}
+
+	public void StartNewGame() {
+		for (int i = 0; i &lt; visualizations.Count; i++)
+		{
+			visualizations[i].Despawn();
+		}
+		visualizations.Clear();
+		states.Clear();
+	}
+
+	public JobHandle UpdateBullets(float dt)
+	{
+		updateBulletJob.dt = dt;
+		return updateBulletJob.Schedule(states.Length, default);
+	}
+
+	public void UpdateVisualization(float dtExtrapolated)
+	{
+		for (int i = 0; i &lt; visualizations.Count; i++)
+		{
+			BulletState state = states[i];
+			if (state.Alive)
+			{
+				visualizations[i].UpdateVisualization(
+					state.position + state.velocity * dtExtrapolated,
+					Mathf.Max(0f, state.timeRemaining - dtExtrapolated) / startLifetime
+				);
+			}
+		}
+	}
+}</pre>
+						
+						<p>Add a configurable bullets manager to <code>Game</code> and treat it the same as the ball manager. As the balls and bullets don't depend on each other when updating we can schedule them in parallel. Whether they are indeed executed on separate threads and in parallel is up to Unity.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>BulletManager bulletManager;</ins>
+
+	&hellip;
+
+	void Awake()
+	{
+		&hellip;
+
+		ballManager.Initialize(worldArea);
+		<ins>bulletManager.Initialize(worldArea);</ins>
+		&hellip;
+	}
+
+	void OnDisable()
+	{
+		ballManager.Dispose();
+		<ins>bulletManager.Dispose();</ins>
+		player.Dispose();
+	}
+
+	void Update()
+	{
+		&hellip;
+
+		ballManager.UpdateVisualization(dt);
+		<ins>bulletManager.UpdateVisualization(dt);</ins>
+		player.UpdateVisualization(dt / fixedDeltaTime);
+	}
+
+	void UpdateGameState(float dt)
+	{
+		player.UpdateState(dt);
+		JobHandle handle = <ins>JobHandle.CombineDependencies(</ins>
+			ballManager.UpdateBalls(dt)<ins>,</ins>
+			<ins>bulletManager.UpdateBullets(dt)</ins>
+		<ins>)</ins>;
+		ballManager.ResolveBalls(handle);
+	}</pre>
+						
+						<p>To create bullets give <code>BulletManager</code> an <code>Add</code> method with position and angle parameters. This is the only place where bullets will be added, so we create both its state and visualization at the same time.</p>
+						
+						<pre translate="no">	<ins>public void Add(Vector2 position, float angle)</ins>
+	<ins>{</ins>
+		<ins>Quaternion rotation = Quaternion.Euler(0f, 0f, angle);</ins>
+		<ins>states.Add(new BulletState</ins>
+		<ins>{</ins>
+			<ins>position = position,</ins>
+			<ins>velocity = (Vector2)(rotation * new Vector3(0f, speed)),</ins>
+			<ins>timeRemaining = startLifetime</ins>
+		<ins>});</ins>
+		<ins>visualizations.Add(bulletPrefab.Spawn(rotation));</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now <code>Player</code> can fire bullets for real.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>BulletManager bulletManager;</ins>
+
+	&hellip;
+
+	public void UpdateState(float dt)
+	{
+		&hellip;
+		if (cooldown &lt;= 0f)
+		{
+			cooldown += fireCooldown;
+			<ins>bulletManager.Add(</ins>
+				<ins>Position - fireOffset,</ins>
+				directionAngle + 180f + Random.Range€(-fireSpreadAngle, fireSpreadAngle)
+			<ins>);</ins>
+			<del>//Debug.Log($"fire position {firePosition} angle {fireAngle}");</del>
+		}
+	}</pre>
+						
+						<figure>
+							<img src="bullets/firing-bullets.png" width="400" height="250">
+							<figcaption>Firing bullets.</figcaption>
+						</figure>
+						
+						<p>At this point dead bullets will become invisible but still stick around. We get rid of the dead ones in <code>BulletManager.UpdateVisualization</code>.</p>
+						
+						<pre translate="no">			if (state.Alive)
+			{
+				&hellip;
+			}
+			else
+			{
+				<ins>int lastIndex = states.Length - 1;</ins>
+				<ins>states[i] = states[lastIndex];</ins>
+				<ins>states.Length -= 1;</ins>
+
+				<ins>visualizations[i].Despawn();</ins>
+				<ins>visualizations[i] = visualizations[lastIndex];</ins>
+				<ins>visualizations.RemoveAt(lastIndex);</ins>
+				<ins>i -= 1;</ins>
+			}</pre>
+					</section>
+					
+				</section>
+				
+				<section>
+					<h2>Gameplay</h2>
+					
+					<p>We have bouncing balls and a shooting player, but they do not interact yet. To make the game playable we have to add this interaction and also track the player's health and score.</p>
+					
+					<section>
+						<h3>Health</h3>
+						
+						<p>We show the player's health by displaying a health bar at the bottom of the window. Create a cube with position (0,&minus;9.5, &minus;2) and scale (10, 0.1, 0.1), giving it the bright yellow material. Create a <code>HealthBar</code> component for it with a <code>Show</code> method that adjusts its X scale based on a given health percentage. Sets its with to zero when it awakens.</p>
+						
+						<pre translate="no">using UnityEngine;
+
+public class HealthBar : MonoBehaviour
+{
+	Vector3 scale;
+
+	float maxSize;
+
+	void Awake()
+	{
+		scale = transform.localScale;
+		maxSize = scale.x;
+		transform.localScale = Vector3.zero;
+	}
+
+	public void Show(float healthPercentage)
+	{
+		scale.x = Mathf.Max(maxSize * healthPercentage, 0f);
+		transform.localScale = scale;
+	}
+}</pre>
+						
+						<p>Give <code>Player</code> a configurable reference to the health bar and also a configurable max health set to 10. Track its current health via a <code>NativeReference</code> and also remember the last checked health value. Set everything to max in <code>StartNewGame</code> and update the last checked health in <code>UpdateVisualization</code> if needed. Have that method return whether the player's health has run out and if so also deactivate it. The player should also deactivate itself during initialization and activate itself again when a new game starts.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>HealthBar healthBar;</ins>
+
+	<ins>[SerializeField, Min(1)]</ins>
+	<ins>int maxHealth = 10;</ins>
+
+	<ins>int lastCheckedHealth;</ins>
+
+	<ins>NativeReference&lt;int> health;</ins>
+
+	&hellip;
+	
+	public void Initialize() {
+		<ins>health = new(Allocator.Persistent);</ins>
+		<ins>gameObject.SetActive(false);</ins>
+	}
+
+	public void Dispose() {
+		<ins>health.Dispose();</ins>
+	}
+
+	public void StartNewGame(Vector2 position)
+	{
+		&hellip;
+		<ins>health.Value = lastCheckedHealth = maxHealth;</ins>
+		<ins>healthBar.Show(1f);</ins>
+		<ins>gameObject.SetActive(true);</ins>
+	}
+
+	&hellip;
+
+	public <ins>bool</ins> UpdateVisualization(float dtInterpolator)
+	{
+		&hellip;
+
+		<ins>if (lastCheckedHealth == health.Value)</ins>
+		<ins>{</ins>
+			<ins>return false;</ins>
+		<ins>}</ins>
+
+		<ins>lastCheckedHealth = health.Value;</ins>
+		<ins>healthBar.Show((float)lastCheckedHealth / maxHealth);</ins>
+		<ins>bool isDestroyed = lastCheckedHealth &lt;= 0;</ins>
+		<ins>if (isDestroyed)</ins>
+		<ins>{</ins>
+			<ins>gameObject.SetActive(false);</ins>
+		<ins>}</ins>
+		<ins>return isDestroyed;</ins>
+	}</pre>
+						
+						<figure>
+							<img src="gameplay/health-bar.png" width="400" height="250">
+							<figcaption>Health bar at full size; invisible player.</figcaption>
+						</figure>
+						
+						<p>We now see a health bar but the player is invisible. To make this work correctly have <code>Game</code> track whether the game is currently playing, which is initially not the case. Give it a <code>StartNewGame</code> method that starts a new game and invoke it in update if we're not playing and the space bar is pressed. Only update the player is we're playing but update everything else always, so the initial game state will spawn balls for show and balls and bullets will keep moving even after the player has been destroyed.</p>
+						
+						<pre translate="no">	<ins>bool isPlaying;</ins>
+
+	&hellip;
+
+	<ins>void StartNewGame()</ins>
+	<ins>{</ins>
+		<ins>isPlaying = true;</ins>
+		<ins>ballManager.StartNewGame();</ins>
+		<ins>bulletManager.StartNewGame();</ins>
+		<ins>player.StartNewGame(GetTargetPoint());</ins>
+	<ins>}</ins>
+
+	void Update()
+	{
+		<ins>if (isPlaying)</ins>
+		<ins>{</ins>
+			player.FreeAim = !Input.GetMouseButton(0) &amp;&amp; !Input.GetKey(KeyCode.Space);
+			player.TargetPosition = GetTargetPoint();
+		<ins>}</ins>
+		<ins>else if (Input.GetKeyDown(KeyCode.Space))</ins>
+		<ins>{</ins>
+			<ins>StartNewGame();</ins>
+		<ins>}</ins>
+
+		&hellip;
+		<ins>if (isPlaying &amp;&amp;</ins> player.UpdateVisualization(dt / fixedDeltaTime)<ins>)</ins>
+		<ins>{</ins>
+			<ins>isPlaying = false;</ins>
+		<ins>}</ins>
+	}
+
+	void UpdateGameState(float dt)
+	{
+		<ins>if (isPlaying)</ins>
+		<ins>{</ins>
+			player.UpdateState(dt);
+		<ins>}</ins>
+		&hellip;
+	}</pre>
+						
+						<p>The game still starts spawning balls immediately but the player won't be active yet. A proper game begins after the space bar is pressed, which clears all the balls and bullets, then shows the player and its health bar.</p>
+					</section>
+					
+					<section>
+						<h3>Score</h3>
+						
+						<p>We'll also show the player's score, via a text game object positioned at (0, 9.5, &minus;2). Add a configuration field for it to <code>Player</code> and have it track its score via a <code>NativeReference</code>. Make the score initially score empty and update its text when needed in <code>UpdateVisualization</code>.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>TextMeshPro scoreDisplay;</ins>
+
+	&hellip;
+
+	int lastCheckedHealth<ins>, lastCheckedScore</ins>;
+
+	NativeReference&lt;int> health<ins>, score</ins>;
+
+	&hellip;
+	
+	public void Initialize() {
+		health = new(Allocator.Persistent);
+		<ins>score = new(Allocator.Persistent);</ins>
+		<ins>scoreDisplay.SetText("");</ins>
+		gameObject.SetActive(false);
+	}
+
+	public void Dispose() {
+		health.Dispose();
+		<ins>score.Dispose();</ins>
+	}
+
+	public void StartNewGame(Vector2 position)
+	{
+		&hellip;
+		<ins>score.Value = lastCheckedScore = 0;</ins>
+		<ins>scoreDisplay.SetText("0");</ins>
+		gameObject.SetActive(true);
+	}
+	
+	&hellip;
+	
+	public bool UpdateVisualization(float dtInterpolator)
+	{
+		&hellip;
+
+		<ins>if (lastCheckedScore != score.Value)</ins>
+		<ins>{</ins>
+			<ins>lastCheckedScore = score.Value;</ins>
+			<ins>scoreDisplay.SetText("{0}", lastCheckedScore);</ins>
+		<ins>}</ins>
+
+		if (lastCheckedHealth == health.Value)
+		{
+			return false;
+		}
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="gameplay/score-display.png" width="400" height="250">
+							<figcaption>Score display at top of window.</figcaption>
+						</figure>
+						
+						<p>This shows a small score value at the top of the window while playing, which is currenty always zero. The idea is that each time a ball gets destroyed we score one point.</p>
+					</section>
+					
+					<section>
+						<h3>Hit Job</h3>
+						
+						<p>To bring everything together we introduce a <code>HitJob</code> that takes care of resolving all hits of both bullets and the player. To do this it needs access to the balls, bullets, health, score, world area, player position, bullet radius, and player radius. It will check every living ball, first checking whether any of the bullets hit it and if not whether the player hits it. This is done via a <code>CheckHit</code> method that takes the ball and a position and radius to compare with as parameters, then performs the usual point-inside-circle check.</p>
+						
+						<p>If a bullet hits the ball then kill both the bullet and the ball and increment the score. If the player hits the ball then kill the ball, increment the score, and decrement the health. We cannot easily parallelize this job because we only want either a single bullet or only the player to hit a ball, so just run through it sequentially.</p>
+						
+						<pre translate="no">using Unity.Burst;
+using Unity.Collections;
+using Unity.Jobs;
+using Unity.Mathematics;
+
+using static Unity.Mathematics.math;
+
+[BurstCompile(FloatPrecision.Standard, FloatMode.Fast)]
+public struct HitJob : IJob
+{
+	public NativeList&lt;BallState> balls;
+
+	public NativeList&lt;BulletState> bullets;
+
+	public NativeReference&lt;int> health, score;
+
+	public Area2D worldArea;
+
+	public float2 playerPosition;
+
+	public float bulletRadius, playerRadius;
+
+	public void Execute()
+	{
+		for (int i = 0; i &lt; balls.Length; i++)
+		{
+			CheckBall(i);
+		}
+	}
+
+	void CheckBall (int i)
+	{
+		BallState ball = balls[i];
+		if (!ball.alive)
+		{
+			return;
+		}
+
+		for (int b = 0; b &lt; bullets.Length; b++)
+		{
+			BulletState bullet = bullets[b];
+			if (bullet.Alive &amp;&amp; CheckHit(ball, bullet.position, bulletRadius))
+			{
+				bullet.timeRemaining = 0f;
+				bullets[b] = bullet;
+				ball.alive = false;
+				balls[i] = ball;
+				score.Value += 1;
+				return;
+			}
+		}
+
+		if (health.Value > 0 &amp;&amp; CheckHit(ball, playerPosition, playerRadius))
+		{
+			ball.alive = false;
+			balls[i] = ball;
+			health.Value -= 1;
+			score.Value += 1;
+		}
+	}
+
+	bool CheckHit (BallState ball, float2 position, float radius)
+	{
+		float2 p = worldArea.Wrap(position - ball.position);
+		float r = ball.radius + radius;
+		if (dot(p, p) >= r)
+		{
+			return false;
+		}
+
+		return true;
+	}
+}</pre>
+						
+						<p>This jobs needs access to data stored in various places. To makes its configuration easy while hiding the details from <code>Game</code> we add a reference to it as an extra parameter to the <code>Initialize</code> methods. First, <code>BallManager</code> sets its balls.</p>
+						
+						<pre translate="no">	public void Initialize(Area2D worldArea<ins>, ref HitJob hitJob</ins>) {
+		&hellip;
+		<ins>hitJob.balls = states;</ins>
+	}</pre>
+						
+						<p>Second, <code>BulletManager</code> sets both the bullets and their radius. Give it a configuration field for the bullet radius, set to 0.15.</p>
+						
+						<pre translate="no">	[SerializeField, Min(0f)]
+	float speed = 12f, startLifetime = 1f<ins>, radius = 0.15f</ins>;
+
+	&hellip;
+
+	public void Initialize(Area2D worldArea<ins>, ref HitJob hitJob</ins>) {
+		&hellip;
+		<ins>hitJob.bullets = states;</ins>
+		<ins>hitJob.bulletRadius = radius;</ins>
+	}</pre>
+						
+						<p>Third, <code>Player</code> sets the health, score, and its radius. It doesn't set its position during initialization because it will change while playing.</p>
+						
+						<pre translate="no">	public void Initialize(<ins>ref HitJob hitJob</ins>) {
+		&hellip;
+		<ins>hitJob.health = health;</ins>
+		<ins>hitJob.score = score;</ins>
+		<ins>hitJob.playerRadius = radius;</ins>
+	}</pre>
+						
+						<p>Now we can initialize a hit job in <code>Game</code> and schedule it after updating the balls and bullets and before resolving the balls, setting the player's position is we're playing.</p>
+						
+						<pre translate="no">	<ins>HitJob hitJob;</ins>
+
+	void Awake()
+	{
+		&hellip;
+
+		<ins>hitJob.worldArea = worldArea;</ins>
+		ballManager.Initialize(worldArea<ins>, ref hitJob</ins>);
+		bulletManager.Initialize(worldArea<ins>, ref hitJob</ins>);
+		player.Initialize(<ins>ref hitJob</ins>);
+		&hellip;
+	}
+
+	&hellip;
+
+	void UpdateGameState(float dt)
+	{
+		if (isPlaying)
+		{
+			player.UpdateState(dt);
+			<ins>hitJob.playerPosition = player.Position;</ins>
+		}
+		JobHandle handle = JobHandle.CombineDependencies(
+			ballManager.UpdateBalls(dt),
+			bulletManager.UpdateBullets(dt)
+		);
+		<ins>handle = hitJob.Schedule(handle);</ins>
+		ballManager.ResolveBalls(player.Position, handle);
+	}</pre>
+						
+						<p>From now on we can have dead balls, so <code>BallManager.UpdateVisualization</code> should remove them, just like <code>BulletManager</code> does.</p>
+						
+						<pre translate="no">			if (state.alive)
+			{
+				&hellip;
+			}
+			<ins>else</ins>
+			<ins>{</ins>
+				<ins>int lastIndex = states.Length - 1;</ins>
+				<ins>states[i] = states[lastIndex];</ins>
+				<ins>states.Length -= 1;</ins>
+
+				<ins>visualizations[i].Despawn();</ins>
+				<ins>visualizations[i] = visualizations[lastIndex];</ins>
+				<ins>visualizations.RemoveAt(lastIndex);</ins>
+				<ins>i -= 1;</ins>
+			}</pre>
+						
+						<p>While playing we can now shoot balls for real and the player can also collide with balls, eventually causing the game to end. When the game ends balls will keep spawning and bouncing, just like before the first game begins. Remaining bullets could also cause more hits, but they won't show up in the score.</p>
+					</section>
+					
+					<section>
+						<h3>Splitting Balls</h3>
+						
+						<p>Because we kept the addition of a new ball state and spawning its visualization separate it is possible to spawn balls in jobs. We will use this to spawn ball fragments when a ball gets hit, adding two new balls of the same type with their stage reduced by one step, unless the stage was already zero. This is done in <code>HitJob.CheckHit</code>.</p>
+						
+						<p>The fragments must not be spawned on top of each other, so we push them apart perpendicular to the hit direction. The displacement distance is equal to their radius scaled by a fragment separation factor that we will pass to the job.</p>
+						
+						<pre translate="no">	public float bulletRadius, playerRadius<ins>, fragmentSeparation</ins>;
+
+	&hellip;
+
+	bool CheckHit (BallState ball, float2 position, float radius)
+	{
+		&hellip;
+
+		<ins>if (ball.stage > 0)</ins>
+		<ins>{</ins>
+			<ins>float2 direction = p * rsqrt(max(dot(p, p), 0.0001f));</ins>
+			<ins>float2 displacement =</ins>
+				<ins>fragmentSeparation * ball.radius * float2(direction.y, -direction.x);</ins>
+			
+			<ins>ball.stage -= 1;</ins>
+			<ins>ball.radius = ball.targetRadius = BallState.radii[ball.stage];</ins>
+			<ins>ball.mass = BallState.masses[ball.stage];</ins>
+			<ins>float2 originalPosition = ball.position;</ins>
+			<ins>ball.position = originalPosition + displacement;</ins>
+			<ins>balls.Add(ball);</ins>
+			<ins>ball.position = originalPosition - displacement;</ins>
+			<ins>balls.Add(ball);</ins>
+		<ins>}</ins>
+
+		return true;
+	}</pre>
+						
+						<p>Add a configuration field for the fragment separation to <code>BallManager</code> and pass it to the job. Set it to 0.6 so the fragments overlap a significant amount. Our physics engine will make them bounce apart.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Range(0.01f, 1f)]</ins>
+	<ins>float fragmentSeparation = 0.6f;</ins>
+
+	&hellip;
+
+	public void Initialize(Area2D worldArea, ref HitJob hitJob) {
+		&hellip;
+		hitJob.balls = states;
+		<ins>hitJob.fragmentSeparation = fragmentSeparation;</ins>
+	}</pre>
+						
+						<figure>
+							<img src="gameplay/fragments.png" width="400" height="250">
+							<figcaption>Ball fragments.</figcaption>
+						</figure>
+						
+						<p>The fragments bounce apart, but they also inherit the velocity of the original ball, which might've been moving toward the player. Let's also add an explosion strength to <code>HitJob</code> and use it to push the original ball away from either the bullet of the player. This is an instantaneous explosion force so time doesn't factor into it, only the ball's mass.</p>
+						
+						<pre translate="no">	public float bulletRadius, playerRadius, fragmentSeparation<ins>, explosionStrength</ins>;
+
+	bool CheckHit (BallState ball, float2 position, float radius)
+	{
+		&hellip;
+			<ins>ball.velocity -= direction * explosionStrength / ball.mass;</ins>
+			ball.stage -= 1;
+			ball.radius = ball.targetRadius = BallState.radii[ball.stage];
+			ball.mass = BallState.masses[ball.stage];
+		&hellip;
+	}</pre>
+					
+					<p>As this force only applies to ball behavior configure it in <code>BallManager</code>, setting it to 2.</p>
+					
+					<pre translate="no">	[SerializeField, Min(0f)]
+	float bounceStrength = 100f<ins>, explosionStrength = 2f</ins>;
+
+	&hellip;
+
+	public void Initialize(Area2D worldArea, ref HitJob hitJob) {
+		&hellip;
+		hitJob.fragmentSeparation = fragmentSeparation;
+		<ins>hitJob.explosionStrength = explosionStrength;</ins>
+	}</pre>
+						
+						<p>When balls explode their fragments are now pushed a bit away from the explosion point, which usually biases them to move away from the player or slows down their approach.</p>
+					</section>
+					
+					<section>
+						<h3>Explosions</h3>
+						
+						<p>As we treat hits as explosions we should show them as well, which is what we have a particle system for. First, add an indication whether a bullet exploded to <code>BulletState</code>. Also give it an <code>Explode</code> method that sets it and also kills the bullet by settings its remaining time to zero.</p>
+						
+						<pre translate="no">	<ins>public bool exploded;</ins>
+
+	public bool Alive => timeRemaining > 0f;
+
+	<ins>public void Explode()</ins>
+	<ins>{</ins>
+		<ins>exploded = true;</ins>
+		<ins>timeRemaining = 0f;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Only <code>HitJob</code> explodes bullets.</p>
+						
+						<pre translate="no">				<del>//bullet.timeRemaining = 0f;</del>
+				<ins>bullet.Explode();</ins></pre>
+						
+						<p>A configuration fields for the explosion particle system and how many particles to spawn to <code>BulletManager</code>, for which 50 is a decent amount. Emit those particles for each dead bullet that exploded and not just ran out of time.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>ParticleSystem explosionParticleSystem;</ins>
+
+	<ins>[SerializeField, Min(0)]</ins>
+	<ins>int explosionParticleCount = 50;</ins>
+
+	&hellip;
+
+	public void UpdateVisualization(float dtExtrapolated)
+	{
+		for (int i = 0; i &lt; visualizations.Count; i++)
+		{
+			BulletState state = states[i];
+			if (state.Alive)
+			{
+				&hellip;
+			}
+			else
+			{
+				<ins>if (state.exploded)</ins>
+				<ins>{</ins>
+					<ins>explosionParticleSystem.Emit(</ins>
+						<ins>new ParticleSystem.EmitParams</ins>
+						<ins>{</ins>
+							<ins>position = new Vector3(state.position.x, state.position.y),</ins>
+							<ins>applyShapeToPosition = true</ins>
+						<ins>},</ins>
+						<ins>explosionParticleCount</ins>
+					<ins>);</ins>
+				<ins>}</ins>
+
+				&hellip;
+			}
+		}
+	}</pre>
+						
+						<figure>
+							<img src="gameplay/explosions.png" width="400" height="250">
+							<figcaption>Explosions.</figcaption>
+						</figure>
+						
+						<p>Let's make <code>Player</code> emit explosions as well, spawning more particles when destroyed than when merely damaged, configured to 100 and 400. We could use a different particle system but I use the same one as for bullet explosions.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>ParticleSystem explosionParticleSystem;</ins>
+
+	<ins>[SerializeField, Min(1)]</ins>
+	<ins>int hitParticleCount = 100, destructionParticleCount = 400;</ins>
+
+	&hellip;
+
+	public bool UpdateVisualization(float dtInterpolator)
+	{
+		&hellip;
+		bool isDestroyed = lastCheckedHealth &lt;= 0;
+		<ins>explosionParticleSystem.Emit(</ins>
+			<ins>new ParticleSystem.EmitParams</ins>
+			<ins>{</ins>
+				<ins>position = Position,</ins>
+				<ins>applyShapeToPosition = true</ins>
+			<ins>},</ins>
+			<ins>isDestroyed ? destructionParticleCount : hitParticleCount</ins>
+		<ins>);</ins>
+		&hellip;
+	}</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Game Instructions</h3>
+						
+						<p>We wrap up this prototype by adding game instructions that also act as a game-over indicator. Create a text game object for this with position (0, 0, &minus;2) and set its text:</p>
+						
+						<pre translate="no">Press SPACE to start.
+Hold SPACE or mouse button to lock fire direction.</pre>
+						
+						<p>Give <code>Game</code> a configurable reference to it, deactivating it when starting a new game.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>TextMeshPro instructionsDisplay;</ins>
+
+	&hellip;
+
+	void StartNewGame()
+	{
+		&hellip;
+		<ins>instructionsDisplay.SetActive(false);</ins>
+	}</pre>
+						
+						<figure>
+							<img src="gameplay/game-instructions.png" width="400" height="250">
+							<figcaption>Game instructions.</figcaption>
+						</figure>
+						
+						<p>Use the same text to display <code>GAME OVER</code> when the player is destroyed.</p>
+						
+						<pre translate="no">		if (isPlaying && player.UpdateVisualization(dt / fixedDeltaTime))
+		{
+			isPlaying = false;
+			<ins>instructionsDisplay.SetText("GAME OVER");</ins>
+			<ins>instructionsDisplay.gameObject.SetActive(true);</ins>
+		}</pre>
+						
+						<figure>
+							<img src="gameplay/game-over.png" width="400" height="250">
+							<figcaption>Game over.</figcaption>
+						</figure>
+						
+						<p>Want to know when another tutorial gets released? Keep tabs on my <a href="https://www.patreon.com/catlikecoding">Patreon</a> page!</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/prototypes-07-bouncy-ball-shooter/" class="repository">repository</a>
+					<a href="Bouncy-Ball-Shooter.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

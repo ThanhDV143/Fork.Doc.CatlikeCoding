@@ -1,0 +1,1315 @@
+<!DOCTYPE html>
+<html>
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/marching-squares-2/">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/marching-squares-2/tutorial-image.jpg">
+		<meta property="og:image:width" content="750">
+		<meta property="og:image:height" content="750">
+		<meta property="og:description" content="A Unity C# scripting tutorial in which you will add vertex reuse and exact edge crossings to the Marching Squares algorithm.">
+		<meta name="description" content="A Unity C# scripting tutorial in which you will add vertex reuse and exact edge crossings to the Marching Squares algorithm.">
+		<meta property="og:title" content="Marching Squares 2, a Unity C# Tutorial">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<title>Marching Squares 2, a Unity C# Tutorial</title>
+		<link href="../../default.css" rel="stylesheet">
+		<script>
+			var customTypes = {
+				Voxel: 1,
+				VoxelGrid: 1,
+				VoxelMap: 1,
+				VoxelStencil: 1,
+				VoxelStencilCircle: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header data-type="tutorial"></header>
+
+		<article class="tutorial" itemscope="" itemtype="http://schema.org/TechArticle">
+			<h1 itemprop="name headline">Marching Squares 2<span>, sharing and crossing</span></h1>
+
+			<div class="instructions">
+				<span itemprop="about description">
+					<p>Now that you have a basic marching-squares canvas, it's time to improve its capabilities. This time we'll cover vertex reuse and how to find edge intersections.</p>
+				</span>
+				<p>You'll learn to</p>
+				<ul>
+					<li>Cache vertices to reduce mesh size;</li>
+					<li>Visualize stencils;</li>
+					<li>Make snapping to voxels optional;</li>
+					<li>Find exact edge crossings.</li>
+				</ul>
+				<p><span itemprop="dependencies">This tutorial is the second in a series about <a href="../marching-squares/index.html">Marching Squares</a>.</span></p>
+				<p>This tutorial has been made with Unity 4.5.2. It might not work for older versions.</p>
+			</div>
+			
+			<aside class="share"></aside>
+
+			<figure>
+				<img src="tutorial-image.jpg" width="375" height="375" itemprop="image">
+				<figcaption>Free-form painting on a regular grid.</figcaption>
+			</figure>
+			
+			<h2>Reusing Vertices</h2>
+			
+			<div class="instructions">
+				<p>When triangulating cells, we consider each cell in isolation. This keeps things simple, but results in quite a lot of vertices. For example, an isolated filled voxel results in four cells containing a single triangle, each with three vertices, for a total of twelve vertices.</p>
+			</div>
+			
+			<figure>
+				<img alt="triangulation" src="01-00-12-vertices.png" width="180" height="180">
+				<img alt="shared vertices" src="01-00-shared-vertices.png" width="160" height="160">
+				<figcaption>Made with twelve vertices, but only needs five.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>In this example there are really only five unique vertices, but the central vertex is included four times while the others are included twice each. So if we could let adjacent cells share vertices, we would reduce the vertex count considerably.</p>
+				<p>To reuse vertices, we have to keep track of them. The most straightforward approach would be to store a vertex index per voxel, but we don't really have to remember that many at once. As we triangulate the grids one row of cells at a time, we can suffice with caching the vertex indices for one row of cells. While this is a bit more involved, it means our cache size is linear instead of quadratic, so it scales better.</p>
+				<p>For a single row of cells, we need to keep track of two rows of vertex indices. These are the minimum and maximum vertex rows, or in our case the bottom and top rows. There is also a middle row, which is for all vertices along the vertical edges between cells of the row.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-sharing-vertices" id="q-sharing-vertices">Is sharing vertices worth it?</a></li>
+				</ul>
+				<ul>
+					<li><a href="index.html#a-cache-scale" id="q-cache-scale">How does the cache scale better?</a></li>
+				</ul>
+			</aside>
+			
+			<figure>
+				<img src="01-00-cache-rows.png" width="210" height="175">
+				<figcaption>Rows of cached vertices.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>After completing a row of cells, the current maximum row becomes the minimum row for the next row of cells. This shifting works the same as the shifting of dummy voxels used to fill the gaps between grids.</p>
+			</div>
+			
+			<h3>Filling the Cache</h3>
+			
+			<div class="instructions">
+				<p>Before filling the cache, we need to know its size. The minimum and maximum cache rows need room for one vertex index per voxel plus one for each X edge between those voxels. And vertices of the gap cell need to be cached too, which adds another two. So these caches have to be arrays with a length equal to twice the grid resolution plus one.</p>
+				<p>The middle row only needs room for one index per Y edge. Actually, as this part of the cache isn't needed for the next cell row, we don't need to remember the entire row. We can suffice by caching two indices and shifting those, as if they're two other minimum and maximum arrays of length one.</p>
+			</div>
+			
+			<figure>
+				<img src="01-01-cache-progression.png" width="185" height="175">
+				<figcaption>Progression through caches.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Now it's time to start coding again. Add two cache arrays and two cache integers to <code>VoxelGrid</code> and initialize the arrays in <code>Awake</code>.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-cache-per-grid" id="q-cache-per-grid">Need we store the caches per grid?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>private int[] rowCacheMax, rowCacheMin;</mark>
+	<mark>private int edgeCacheMin, edgeCacheMax;</mark>
+	
+	private void Awake () {
+		&hellip;
+
+		<mark>rowCacheMax = new int[resolution * 2 + 1];</mark>
+		<mark>rowCacheMin = new int[resolution * 2 + 1];</mark>
+		Refresh();
+	}</pre>
+			
+			<div class="instructions">
+				<p>When triangulating, we now have to fill the cache. To start the process, we have to fill the initial row.</p>
+			</div>
+			
+			<pre translate="no">	private void Triangulate () {
+		vertices.Clear();
+		triangles.Clear();
+		mesh.Clear();
+
+		if (xNeighbor != null) {
+			dummyX.BecomeXDummyOf(xNeighbor.voxels[0], gridSize);
+		}
+		<mark>FillFirstRowCache();</mark>
+		TriangulateCellRows();
+		if (yNeighbor != null) {
+			TriangulateGapRow();
+		}
+
+		mesh.vertices = vertices.ToArray();
+		mesh.triangles = triangles.ToArray();
+	}</pre>
+			
+			<div class="instructions">
+				<p>The first step of the first row is to check if the first corner needs a vertex, and if so cache it.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void FillFirstRowCache () {</mark>
+		<mark>CacheFirstCorner(voxels[0]);</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Caching the corner vertex means that we add it to the vertex list and store its index in our cache. As we're always working on the top row, we store it in the maximum cache row. Of course you should only add the vertex if the voxel is actually filled.</p>
+			</div>
+			
+	<pre translate="no">	<mark>private void CacheFirstCorner (Voxel voxel) {</mark>
+		<mark>if (voxel.state) {</mark>
+			<mark>rowCacheMax[0] = vertices.Count;</mark>
+			<mark>vertices.Add(voxel.position);</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>To cache the rest of the row, we have to visited successive pairs of edges and corners. We create another method for that, and besides passing the voxels we also pass it the cache index. As we visit two additional vertices per cell, the cache index increases twice as fast as the cell index.</p>
+			</div>
+			
+			<pre translate="no">	private void FillFirstRowCache () {
+		CacheFirstCorner(voxels[0]);
+		<mark>for (int i = 0; i &lt; resolution - 1; i++) {</mark>
+			<mark>CacheNextEdgeAndCorner(i * 2, voxels[i], voxels[i + 1]);</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>The edge only has to be cached if the two corner voxels are different, because that's when there is an edge crossing. Then the next corner, which is the second corner of the current cell, is cached. </p>
+			</div>
+
+	<pre translate="no">	<mark>private void CacheNextEdgeAndCorner (int i, Voxel xMin, Voxel xMax) {</mark>
+		<mark>if (xMin.state != xMax.state) {</mark>
+			<mark>rowCacheMax[i + 1] = vertices.Count;</mark>
+			<mark>vertices.Add(xMin.xEdgePosition);</mark>
+		<mark>}</mark>
+		<mark>if (xMax.state) {</mark>
+			<mark>rowCacheMax[i + 2] = vertices.Count;</mark>
+			<mark>vertices.Add(xMax.position);</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>After that we have to cache the vertices of the gap cell. Let's also move the dummy code into <code>FillFirstCacheRow</code> so its initialization and use are in the same place.</p>
+			</div>
+	
+			<pre translate="no">	private void Triangulate () {
+		vertices.Clear();
+		triangles.Clear();
+		mesh.Clear();
+
+		<mark>FillFirstRowCache();</mark>
+		TriangulateCellRows();
+		if (yNeighbor != null) {
+			TriangulateGapRow();
+		}
+
+		mesh.vertices = vertices.ToArray();
+		mesh.triangles = triangles.ToArray();
+	}
+
+	private void FillFirstRowCache () {
+		CacheFirstCorner(voxels[0]);
+		<mark>int i;</mark>
+		for (<mark>i = 0</mark>; i &lt; resolution - 1; i++) {
+			CacheNextEdgeAndCorner(i * 2, voxels[i], voxels[i + 1]);
+		}
+		<mark>if (xNeighbor != null) {</mark>
+			<mark>dummyX.BecomeXDummyOf(xNeighbor.voxels[0], gridSize);</mark>
+			<mark>CacheNextEdgeAndCorner(i * 2, voxels[i], dummyX);</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>Now we continue with triangulating the cell rows. Each row, we begin by swapping the cache rows so the previous maximum becomes the new minimum.</p>
+			</div>
+			
+			<pre translate="no">	private void TriangulateCellRows () {
+		int cells = resolution - 1;
+		for (int i = 0, y = 0; y &lt; cells; y++, i++) {
+			<mark>SwapRowCaches();</mark>
+			
+			for (int x = 0; x &lt; cells; x++, i++) {
+				TriangulateCell(
+					voxels[i],
+					voxels[i + 1],
+					voxels[i + resolution],
+					voxels[i + resolution + 1]);
+			}
+			if (xNeighbor != null) {
+				TriangulateGapCell(i);
+			}
+		}
+	}
+
+	<mark>private void SwapRowCaches () {</mark>
+		<mark>int[] rowSwap = rowCacheMin;</mark>
+		<mark>rowCacheMin = rowCacheMax;</mark>
+		<mark>rowCacheMax = rowSwap;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Each row, again start with the first corner and keep caching the next edge and corner. As we're working on the top vertices of the cells, we have to add the resolution to the current cell index.</p>
+			</div>
+			
+			<pre translate="no">	private void TriangulateCellRows () {
+		int cells = resolution - 1;
+		for (int i = 0, y = 0; y &lt; cells; y++, i++) {
+			SwapRowCaches();
+			<mark>CacheFirstCorner(voxels[i + resolution]);</mark>
+
+			for (int x = 0; x &lt; cells; x++, i++) {
+				<mark>CacheNextEdgeAndCorner(x * 2, voxels[i + resolution], voxels[i + resolution + 1]);</mark>
+				TriangulateCell(
+					voxels[i],
+					voxels[i + 1],
+					voxels[i + resolution],
+					voxels[i + resolution + 1]);
+			}
+			if (xNeighbor != null) {
+				TriangulateGapCell(i);
+			}
+		}
+	}</pre>
+			
+			<div class="instructions">
+				<p>Now we also have to cache the edge vertices of the middle row. We can use a single method for that which both shifts the cache and adds the vertex. This method needs to be called at the start of each row for the leftmost edge and once for the right edge of each cell. Because the same voxels will now be needed a couple of times in the inner loop, I put them in variables for clarity.</p>
+			</div>
+			
+			<pre translate="no">	private void TriangulateCellRows () {
+		int cells = resolution - 1;
+		for (int i = 0, y = 0; y &lt; cells; y++, i++) {
+			SwapRowCaches();
+			CacheFirstCorner(voxels[i + resolution]);
+			<mark>CacheNextMiddleEdge(voxels[i], voxels[i + resolution]);</mark>
+
+			for (int x = 0; x &lt; cells; x++, i++) {
+				<mark>Voxel</mark>
+					<mark>a</mark> = voxels[i],
+					<mark>b</mark> = voxels[i + 1],
+					<mark>c</mark> = voxels[i + resolution],
+					<mark>d</mark> = voxels[i + resolution + 1]<mark>;</mark>
+				CacheNextEdgeAndCorner(x * 2, <mark>c</mark>, <mark>d</mark>);
+				<mark>CacheNextMiddleEdge(b, d);</mark>
+				TriangulateCell(<mark>a, b, c, d</mark>);
+			}
+			if (xNeighbor != null) {
+				TriangulateGapCell(i);
+			}
+		}
+	}
+	
+	<mark>private void CacheNextMiddleEdge (Voxel yMin, Voxel yMax) {</mark>
+		<mark>edgeCacheMin = edgeCacheMax;</mark>
+		<mark>if (yMin.state != yMax.state) {</mark>
+			<mark>edgeCacheMax = vertices.Count;</mark>
+			<mark>vertices.Add(yMin.yEdgePosition);</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>And the gap cell at the end of each rows needs caching too.</p>
+			</div>
+			
+			<pre translate="no">	private void TriangulateGapCell (int i) {
+		Voxel dummySwap = dummyT;
+		dummySwap.BecomeXDummyOf(xNeighbor.voxels[i + 1], gridSize);
+		dummyT = dummyX;
+		dummyX = dummySwap;
+		<mark>CacheNextEdgeAndCorner((resolution - 1) * 2, voxels[i + resolution], dummyX);</mark>
+		<mark>CacheNextMiddleEdge(dummyT, dummyX);</mark>
+		TriangulateCell(voxels[i], dummyT, voxels[i + resolution], dummyX);
+	}</pre>
+			
+			<div class="instructions">
+				<p>The last step is to deal with the gap row at the top of each grid. The approach is the same, but with more dummies.</p>
+			</div>
+			
+			<pre translate="no">	private void TriangulateGapRow () {
+		dummyY.BecomeYDummyOf(yNeighbor.voxels[0], gridSize);
+		int cells = resolution - 1;
+		int offset = cells * resolution;
+		<mark>SwapRowCaches();</mark>
+		<mark>CacheFirstCorner(dummyY);</mark>
+		<mark>CacheNextMiddleEdge(voxels[cells * resolution], dummyY);</mark>
+
+		for (int x = 0; x &lt; cells; x++) {
+			Voxel dummySwap = dummyT;
+			dummySwap.BecomeYDummyOf(yNeighbor.voxels[x + 1], gridSize);
+			dummyT = dummyY;
+			dummyY = dummySwap;
+			<mark>CacheNextEdgeAndCorner(x * 2, dummyT, dummyY);</mark>
+			<mark>CacheNextMiddleEdge(voxels[x + offset + 1], dummyY);</mark>
+			TriangulateCell(voxels[x + offset], voxels[x + offset + 1], dummyT, dummyY);
+		}
+
+		if (xNeighbor != null) {
+			dummyT.BecomeXYDummyOf(xyNeighbor.voxels[0], gridSize);
+			<mark>CacheNextEdgeAndCorner(cells * 2, dummyY, dummyT);</mark>
+			<mark>CacheNextMiddleEdge(dummyX, dummyT);</mark>
+			TriangulateCell(voxels[voxels.Length - 1], dummyX, dummyY, dummyT);
+		}
+	}</pre>
+			
+			
+			<h3>Using the Cache</h3>
+			
+			<div class="instructions">
+				<p>Right now we're caching all vertices, but aren't actually using them yet. So we just end up with even more vertices. We need new versions of our polygon methods that use indices instead of vertices. They're the same as the old ones, except that the parameters are integers and they no longer add vertices to the vertex list themselves.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void AddTriangle (int a, int b, int c) {</mark>
+		<mark>triangles.Add(a);</mark>
+		<mark>triangles.Add(b);</mark>
+		<mark>triangles.Add(c);</mark>
+	<mark>}</mark>
+
+	<mark>private void AddQuad (int a, int b, int c, int d) {</mark>
+		<mark>triangles.Add(a);</mark>
+		<mark>triangles.Add(b);</mark>
+		<mark>triangles.Add(c);</mark>
+		<mark>triangles.Add(a);</mark>
+		<mark>triangles.Add(c);</mark>
+		<mark>triangles.Add(d);</mark>
+	<mark>}</mark>
+
+	<mark>private void AddPentagon (int a, int b, int c, int d, int e) {</mark>
+		<mark>triangles.Add(a);</mark>
+		<mark>triangles.Add(b);</mark>
+		<mark>triangles.Add(c);</mark>
+		<mark>triangles.Add(a);</mark>
+		<mark>triangles.Add(c);</mark>
+		<mark>triangles.Add(d);</mark>
+		<mark>triangles.Add(a);</mark>
+		<mark>triangles.Add(d);</mark>
+		<mark>triangles.Add(e);</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>To retrieve the cached vertices, we need to pass along the cache index to <code>TriangulateCell</code>, so give it another parameter.</p>
+			</div>
+			
+			<pre translate="no">	private void TriangulateCell (<mark>int i,</mark> Voxel a, Voxel b, Voxel c, Voxel d) {
+		&hellip;
+	}</pre>
+			
+			<div class="instructions">
+				<p>We already calculated the cache index while processing the cells, so if we remember it we can simply pass it to <code>TriangulateCell</code> as well.</p>
+			</div>
+	
+		<pre translate="no">	private void TriangulateCellRows () {
+		&hellip;
+				<mark>int cacheIndex =</mark> x * 2<mark>;</mark>
+				CacheNextEdgeAndCorner(<mark>cacheIndex</mark>, c, d);
+				CacheNextMiddleEdge(b, d);
+				TriangulateCell(<mark>cacheIndex,</mark> a, b, c, d);
+		&hellip;
+	}
+	
+	private void TriangulateGapCell (int i) {
+		&hellip;
+		<mark>int cacheIndex =</mark> (resolution - 1) * 2<mark>;</mark>
+		CacheNextEdgeAndCorner(<mark>cacheIndex</mark>, voxels[i + resolution], dummyX);
+		CacheNextMiddleEdge(dummyT, dummyX);
+		TriangulateCell(<mark>cacheIndex,</mark> voxels[i], dummyT, voxels[i + resolution], dummyX);
+	}
+	
+	private void TriangulateGapRow () {
+		&hellip;
+
+		for (int x = 0; x &lt; cells; x++) {
+			&hellip;
+			<mark>int cacheIndex =</mark> x * 2<mark>;</mark>
+			CacheNextEdgeAndCorner(<mark>cacheIndex</mark>, dummyT, dummyY);
+			CacheNextMiddleEdge(voxels[x + offset + 1], dummyY);
+			TriangulateCell(<mark>cacheIndex,</mark> voxels[x + offset], voxels[x + offset + 1], dummyT, dummyY);
+		}
+
+		if (xNeighbor != null) {
+			dummyT.BecomeXYDummyOf(xyNeighbor.voxels[0], gridSize);
+			<mark>int cacheIndex =</mark> cells * 2<mark>;</mark>
+			CacheNextEdgeAndCorner(<mark>cacheIndex</mark>, dummyY, dummyT);
+			CacheNextMiddleEdge(dummyX, dummyT);
+			TriangulateCell(<mark>cacheIndex,</mark> voxels[voxels.Length - 1], dummyX, dummyY, dummyT);
+		}
+	}</pre>
+			
+			<div class="instructions">
+				<p>Now we have to update the switch statement in <code>TriangulateCell</code>. Each vertex argument has to be replaced with the corresponding cache entry. Here is the complete mapping.</p>
+				<table>
+					<tr><td><code>a.position</code></td><td>becomes<td><code>rowCacheMin[i]</code></td></tr>
+					<tr><td><code>a.xEdgePosition</code></td><td>becomes<td><code>rowCacheMin[i + 1]</code></td></tr>
+					<tr><td><code>b.position</code></td><td>becomes<td><code>rowCacheMin[i + 2]</code></td></tr>
+					<tr><td><code>c.position</code></td><td>becomes<td><code>rowCacheMax[i]</code></td></tr>
+					<tr><td><code>c.xEdgePosition</code></td><td>becomes<td><code>rowCacheMax[i + 1]</code></td></tr>
+					<tr><td><code>d.position</code></td><td>becomes<td><code>rowCacheMax[i + 2]</code></td></tr>
+					<tr><td><code>a.yEdgePosition</code></td><td>becomes<td><code>edgeCacheMin</code></td></tr>
+					<tr><td><code>b.yEdgePosition</code></td><td>becomes<td><code>edgeCacheMax</code></td></tr>
+				</table>
+			</div>
+			
+			<pre translate="no">	private void TriangulateCell (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		int cellType = 0;
+		if (a.state) {
+			cellType |= 1;
+		}
+		if (b.state) {
+			cellType |= 2;
+		}
+		if (c.state) {
+			cellType |= 4;
+		}
+		if (d.state) {
+			cellType |= 8;
+		}
+		switch (cellType) {
+		case 0:
+			return;
+		case 1:
+			AddTriangle(<mark>rowCacheMin[i], edgeCacheMin, rowCacheMin[i + 1]</mark>);
+			break;
+		case 2:
+			AddTriangle(<mark>rowCacheMin[i + 2], rowCacheMin[i + 1], edgeCacheMax</mark>);
+			break;
+		case 3:
+			AddQuad(<mark>rowCacheMin[i], edgeCacheMin, edgeCacheMax, rowCacheMin[i + 2]</mark>);
+			break;
+		case 4:
+			AddTriangle(<mark>rowCacheMax[i], rowCacheMax[i + 1], edgeCacheMin</mark>);
+			break;
+		case 5:
+			AddQuad(<mark>rowCacheMin[i], rowCacheMax[i], rowCacheMax[i + 1], rowCacheMin[i + 1]</mark>);
+			break;
+		case 6:
+			AddTriangle(<mark>rowCacheMin[i + 2], rowCacheMin[i + 1], edgeCacheMax</mark>);
+			AddTriangle(<mark>rowCacheMax[i], rowCacheMax[i + 1], edgeCacheMin</mark>);
+			break;
+		case 7:
+			AddPentagon(
+				<mark>rowCacheMin[i], rowCacheMax[i], rowCacheMax[i + 1], edgeCacheMax, rowCacheMin[i + 2]</mark>);
+			break;
+		case 8:
+			AddTriangle(<mark>rowCacheMax[i + 2], edgeCacheMax, rowCacheMax[i + 1]</mark>);
+			break;
+		case 9:
+			AddTriangle(<mark>rowCacheMin[i], edgeCacheMin, rowCacheMin[i + 1]</mark>);
+			AddTriangle(<mark>rowCacheMax[i + 2], edgeCacheMax, rowCacheMax[i + 1]</mark>);
+			break;
+		case 10:
+			AddQuad(<mark>rowCacheMin[i + 1], rowCacheMax[i + 1], rowCacheMax[i + 2], rowCacheMin[i + 2]</mark>);
+			break;
+		case 11:
+			AddPentagon(
+			    <mark>rowCacheMin[i + 2], rowCacheMin[i], edgeCacheMin, rowCacheMax[i + 1], rowCacheMax[i + 2]</mark>);
+			break;
+		case 12:
+			AddQuad(<mark>edgeCacheMin, rowCacheMax[i], rowCacheMax[i + 2], edgeCacheMax</mark>);
+			break;
+		case 13:
+			AddPentagon(
+				<mark>rowCacheMax[i], rowCacheMax[i + 2], edgeCacheMax, rowCacheMin[i + 1], rowCacheMin[i]</mark>);
+			break;
+		case 14:
+			AddPentagon(
+				<mark>rowCacheMax[i + 2],rowCacheMin[i + 2], rowCacheMin[i + 1], edgeCacheMin, rowCacheMax[i]</mark>);
+			break;
+		case 15:
+			AddQuad(<mark>rowCacheMin[i], rowCacheMax[i], rowCacheMax[i + 2], rowCacheMin[i + 2]</mark>);
+			break;
+		}
+	}</pre>
+			
+			<div class="instructions">
+				<p>That should do it, your meshes should now contain considerably less vertices! You can now also get rid of the old polygon methods that have vertex parameters.</p>
+			</div>
+			
+			<h3>Reducing Edge Data</h3>
+			
+			<div class="instructions">
+				<p>Our new approach also allows for another simplification and optimization of <code>Voxel</code>. We used to store edge crossing as vectors, because that way we could directly pass them into our polygon methods. As we no longer do that, we can get rid of the redundant coordinates, storing only two edge floats per vertex instead of four.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-voxel-reduction" id="q-voxel-reduction">How much space does this save?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	public Vector2 position;
+
+	<mark>public float xEdge, yEdge;</mark>
+	
+	public Voxel (int x, int y, float size) {
+		position.x = (x + 0.5f) * size;
+		position.y = (y + 0.5f) * size;
+
+		<mark>xEdge = position.x + size * 0.5f;</mark>
+		<mark>yEdge = position.y + size * 0.5f;</mark>
+	}
+
+	public Voxel () {}
+
+	public void BecomeXDummyOf (Voxel voxel, float offset) {
+		state = voxel.state;
+		position = voxel.position;
+		position.x += offset;
+		<mark>xEdge = voxel.xEdge + offset;</mark>
+		<mark>yEdge = voxel.yEdge;</mark>
+	}
+
+	public void BecomeYDummyOf (Voxel voxel, float offset) {
+		state = voxel.state;
+		position = voxel.position;
+		position.y += offset;
+		<mark>xEdge = voxel.xEdge;</mark>
+		<mark>yEdge = voxel.yEdge + offset;</mark>
+	}
+
+	public void BecomeXYDummyOf (Voxel voxel, float offset) {
+		state = voxel.state;
+		position = voxel.position;
+		position.x += offset;
+		position.y += offset;
+		<mark>xEdge = voxel.xEdge + offset;</mark>
+		<mark>yEdge = voxel.yEdge + offset;</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>The only places where <code>VoxelGrid</code> needs the edge positions are in <code>CacheNextEdgeAndCorner</code> and <code>CacheNextMiddleEdge</code>. We have to update these methods so they construct the edge vertices when needed, retrieving the missing coordinate from the voxel's position.</p>
+			</div>
+			
+			<pre translate="no">	private void CacheNextEdgeAndCorner (int i, Voxel xMin, Voxel xMax) {
+		if (xMin.state != xMax.state) {
+			rowCacheMax[i + 1] = vertices.Count;
+			<mark>Vector3 p;</mark>
+			<mark>p.x = xMin.xEdge;</mark>
+			<mark>p.y = xMin.position.y;</mark>
+			<mark>p.z = 0f;</mark>
+			vertices.Add(<mark>p</mark>);
+		}
+		if (xMax.state) {
+			rowCacheMax[i + 2] = vertices.Count;
+			vertices.Add(xMax.position);
+		}
+	}
+	
+	private void CacheNextMiddleEdge (Voxel yMin, Voxel yMax) {
+		edgeCacheMin = edgeCacheMax;
+		if (yMin.state != yMax.state) {
+			edgeCacheMax = vertices.Count;
+			<mark>Vector3 p;</mark>
+			<mark>p.x = yMin.position.x;</mark>
+			<mark>p.y = yMin.yEdge;</mark>
+			<mark>p.z = 0f;</mark>
+			vertices.Add(<mark>p</mark>);
+		}
+	}</pre>
+			
+			<h2>Finding Edge Crossings</h2>
+			
+			<div class="instructions">
+				<p>The previous section was useful, but didn't result in any visual change. This section is different, we're going to work on edge crossings.</p>
+				<p>Until now we've fixed edge crossings to the midpoint between voxels, which produces very rigid visuals. It's time we loosen up and calculate the actual edge intersections. But first, let's visualize our stencils so we can better see what we're editing.</p>
+			</div>
+			
+			<h3>Visualizing Stencils</h3>
+			
+			<div class="instructions">
+				<p>To show the stencils we need objects. Create a default cube for the square stencil and a default cylinder for the circle stencil. The cylinder needs to be rotated 90 degrees around the X axis so it looks like a circle from our point of view. Remove the colliders from both of them, so they don't interfere with the input detection.</p>
+				<p>Give them some semitransparent material so you can both see the stencil shape and the grid while painting. I made a new <i>Stencil</i> material with the default <i>Transparent / Diffuse</i> shader and a red color with alpha set to 127.</p>
+				<p>Make them children of <i>Voxel Map</i> and deactivate them so they're not visible. Then add a public <code>Transform</code> array to <code>VoxelMap</code> and assign the shapes to them so they match the stencil options.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public Transform[] stencilVisualizations;</mark></pre>
+			
+			<figure>
+				<img src="02-01-stencil-visualizations.png" width="786" height="242">
+				<figcaption>Stencil Visualization objects.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We should show the visualization of the current stencil whenever the cursor hovers over the map, not only when drawing. To support this, swap and combine the if-statements in <code>VoxelMap.Update</code> and activate or deactivate the visualization as needed.</p>
+			</div>
+			
+			<pre translate="no">	private void Update () {
+		<mark>Transform visualization = stencilVisualizations[stencilIndex];</mark>
+		RaycastHit hitInfo;
+		<mark>if (</mark>Physics.Raycast(Camera.main.ScreenPointToRay(Input.mousePosition), out hitInfo) <mark>&amp;&amp;</mark>
+		    hitInfo.collider.gameObject == gameObject<mark>) {</mark>
+			<mark>if (</mark>Input.GetMouseButton(0)<mark>) {</mark>
+				EditVoxels(transform.InverseTransformPoint(hitInfo.point));
+			<mark>}</mark>
+			<mark>visualization.gameObject.SetActive(true);</mark>
+		<mark>}</mark>
+		<mark>else {</mark>
+			<mark>visualization.gameObject.SetActive(false);</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<figure>
+				<img src="02-01-visualization-centered.png" width="162" height="162">
+				<figcaption>Centered visualization when hovering.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>To correctly position and scale the visualization, we have perform the same calculations as in <code>EditVoxels</code>, so add those in. Because the calculation uses the bottom-left of the grid as its local origin, we have to undo this offset after figuring out the voxel's position.</p>
+			</div>
+			
+			<pre translate="no">			<mark>Vector2 center = transform.InverseTransformPoint(hitInfo.point);</mark>
+			<mark>center.x += halfSize;</mark>
+			<mark>center.y += halfSize;</mark>
+			<mark>center.x = ((int)(center.x / voxelSize) + 0.5f) * voxelSize;</mark>
+			<mark>center.y = ((int)(center.y / voxelSize) + 0.5f) * voxelSize;</mark>
+
+			if (Input.GetMouseButton(0)) {
+				EditVoxels(transform.InverseTransformPoint(hitInfo.point));
+			}
+
+			<mark>center.x -= halfSize;</mark>
+			<mark>center.y -= halfSize;</mark>
+			<mark>visualization.localPosition = center;</mark>
+			<mark>visualization.localScale = Vector3.one * ((radiusIndex + 0.5f) * voxelSize * 2f);</mark>
+			visualization.gameObject.SetActive(true);</pre>
+			
+			<figure>
+				<img src="02-01-positioned-and-scaled.png" width="162" height="162">
+				<figcaption>Positioned and scaled.</figcaption>
+			</figure>
+			
+			<h3>Going off the Grid</h3>
+			
+			<div class="instructions">
+				<p>Now we can see the stencil and can confirm that only the voxels inside its shape are affected. The next step is to no longer snap the stencil to exact voxel positions when editing. Because you might actually want to snap, let's make this optional. Add a configuration option and only snap the stencil's position when this is desired.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public bool snapToGrid;</mark>
+		
+	private void Update () {
+		&hellip;
+			center.x += halfSize;
+			center.y += halfSize;
+			<mark>if (snapToGrid) {</mark>
+				center.x = ((int)(center.x / voxelSize) + 0.5f) * voxelSize;
+				center.y = ((int)(center.y / voxelSize) + 0.5f) * voxelSize;
+			<mark>}</mark>
+
+			if (Input.GetMouseButton(0)) {
+				EditVoxels(transform.InverseTransformPoint(hitInfo.point));
+			}
+		&hellip;
+	}</pre>
+			
+			<figure>
+				<img alt="snap to grid" src="02-02-snap-to-grid.png" width="321" height="148">
+				<img alt="no snapping" src="02-02-no-snapping.png" width="127" height="127">
+				<figcaption>To snap or not.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Of course right now this only affects the stencil's visualization. To support this option for editing, <code>VoxelStencil</code> needs to work with actual positions instead of voxel coordinates. This means that we have to replace its integers with floats.</p>
+			</div>
+			
+			<pre translate="no">	protected <mark>float</mark> centerX, centerY, radius;
+
+	public <mark>float</mark> XStart {
+		get {
+			return centerX - radius;
+		}
+	}
+	
+	public <mark>float</mark> XEnd {
+		get {
+			return centerX + radius;
+		}
+	}
+	
+	public <mark>float</mark> YStart {
+		get {
+			return centerY - radius;
+		}
+	}
+	
+	public <mark>float</mark> YEnd {
+		get {
+			return centerY + radius;
+		}
+	}
+
+	public virtual void Initialize (bool fillType, <mark>float</mark> radius) {
+		this.fillType = fillType;
+		this.radius = radius;
+	}
+
+	public virtual void SetCenter (<mark>float</mark> x, <mark>float</mark> y) {
+		centerX = x;
+		centerY = y;
+	}</pre>
+			
+			<div class="instructions">
+				<p>Its <code>Apply</code> method now also needs to work with the actual position of a voxel. Let's adjust it so you provide it with a voxel  which it directly edits, instead of returning the new voxel state. To make sure the voxel lies inside the square area, we now have to check whether the voxel's position lies within the stencil bounds.</p>
+			</div>
+			
+			<pre translate="no">	public virtual <mark>void</mark> Apply (<mark>Voxel voxel</mark>) {
+		<mark>Vector2 p = voxel.position;</mark>
+		<mark>if (p.x >= XStart &amp;&amp; p.x &lt;= XEnd &amp;&amp; p.y >= YStart &amp;&amp; p.y &lt;= YEnd) {</mark>
+			<mark>voxel.state =</mark> fillType;
+		<mark>}</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>And <code>VoxelStencilCirle</code> needs to be adjusted as well. This stencil already performed an explicit bounds check, it just needs to use floats now.</p>
+			</div>
+			
+			<pre translate="no">	private <mark>float</mark> sqrRadius;
+	
+	public override void Initialize (bool fillType, <mark>float</mark> radius) {
+		base.Initialize (fillType, radius);
+		sqrRadius = radius * radius;
+	}
+	
+	public override <mark>void</mark> Apply (<mark>Voxel voxel</mark>) {
+		<mark>float</mark> x <mark>= voxel.position.x</mark> - centerX;
+		<mark>float</mark> y <mark>= voxel.position.y</mark> - centerY;
+		if (x * x + y * y &lt;= sqrRadius) {
+			<mark>voxel.state =</mark> fillType;
+		}
+	}</pre>
+			
+			<div class="instructions">
+				<p>Now let's change <code>EditVoxels</code> so it uses the center that we already calculated in <code>Update</code>. We used to add a one-voxel padding in the negative directions to make sure that gaps were updated property. As we now also have to make sure that edge crossings are updated at the edge of the stencil area, we have to add padding in the positive directions as well. Also note that we no longer need to worry about a voxel offset in the loops when updating the stencil center.</p>
+			</div>
+			
+			<pre translate="no">	private void Update () {
+		&hellip;
+			if (Input.GetMouseButton(0)) {
+				EditVoxels(<mark>center</mark>);
+			}
+		&hellip;
+	}
+
+	private void EditVoxels (Vector2 center) {
+		VoxelStencil activeStencil = stencils[stencilIndex];
+		activeStencil.Initialize(fillTypeIndex == 0, <mark>(radiusIndex + 0.5f) * voxelSize</mark>);
+		activeStencil.SetCenter(<mark>center.x</mark>, <mark>center.y</mark>);
+
+		int xStart = <mark>(int)((activeStencil.XStart - voxelSize) / chunkSize)</mark>;
+		if (xStart &lt; 0) {
+			xStart = 0;
+		}
+		int xEnd = <mark>(int)((activeStencil.XEnd + voxelSize) / chunkSize)</mark>;
+		if (xEnd >= chunkResolution) {
+			xEnd = chunkResolution - 1;
+		}
+		int yStart = <mark>(int)((activeStencil.YStart - voxelSize) / chunkSize)</mark>;
+		if (yStart &lt; 0) {
+			yStart = 0;
+		}
+		int yEnd = <mark>(int)((activeStencil.YEnd + voxelSize) / chunkSize)</mark>;
+		if (yEnd >= chunkResolution) {
+			yEnd = chunkResolution - 1;
+		}
+
+		for (int y = yEnd; y >= yStart; y--) {
+			int i = y * chunkResolution + xEnd;
+			for (int x = xEnd; x >= xStart; x--, i--) {
+				activeStencil.SetCenter(<mark>center.x - x * chunkSize</mark>, <mark>center.y - y * chunkSize</mark>);
+				chunks[i].Apply(activeStencil);
+			}
+		}
+	}</pre>
+			
+			<div class="instructions">
+				<p>The final change is to <code>VoxelGrid.Apply</code>, which needs to figure out which voxels are covered.</p>
+			</div>
+			
+			<pre translate="no">	public void Apply (VoxelStencil stencil) {
+		int xStart = <mark>(int)(</mark>stencil.XStart <mark>/ voxelSize)</mark>;
+		if (xStart &lt; 0) {
+			xStart = 0;
+		}
+		int xEnd = <mark>(int)(</mark>stencil.XEnd <mark>/ voxelSize)</mark>;
+		if (xEnd >= resolution) {
+			xEnd = resolution - 1;
+		}
+		int yStart = <mark>(int)(</mark>stencil.YStart <mark>/ voxelSize)</mark>;
+		if (yStart &lt; 0) {
+			yStart = 0;
+		}
+		int yEnd = <mark>(int)(</mark>stencil.YEnd <mark>/ voxelSize)</mark>;
+		if (yEnd >= resolution) {
+			yEnd = resolution - 1;
+		}
+
+		for (int y = yStart; y &lt;= yEnd; y++) {
+			int i = y * resolution + xStart;
+			for (int x = xStart; x &lt;= xEnd; x++, i++) {
+				<mark>stencil.Apply(voxels[i]);</mark>
+			}
+		}
+		Refresh();
+	}</pre>
+			
+			<figure>
+				<img src="02-02-free-editing.png" width="130" height="130">
+				<figcaption>Free editing.</figcaption>
+			</figure>
+			
+			<h3>Finding Edge Crossings</h3>
+			
+			<div class="instructions">
+				<p>Now we can edit without snapping, which results in new patterns, but it still doesn't look much like the stencil visualization. So now we're going to figure out exact edge crossings. We'll do this one step at a time.</p>
+				<p>Add a method to <code>VoxelStencil</code> to compute the horizontal crossing between two voxels. First check whether the voxels are different, which means that there is a crossing. If so, try to find it.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public void SetHorizontalCrossing (Voxel xMin, Voxel xMax) {</mark>
+		<mark>if (xMin.state != xMax.state) {</mark>
+			<mark>FindHorizontalCrossing(xMin, xMax);</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>How to calculate the exact intersection point depends on the stencil, so let's use a virtual method. As the basic stencil is a square, first check whether edge is inside the vertical bounds of the square. If not, the horizontal crossing isn't caused by this application of the stencil, it was already there.</p>
+			</div>
+			
+			<pre translate="no">	<mark>protected virtual void FindHorizontalCrossing (Voxel xMin, Voxel xMax) {</mark>
+		<mark>if (xMin.position.y &lt; YStart || xMin.position.y > YEnd) {</mark>
+			<mark>return;</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<figure>
+				<img src="02-03-eliminating-vertical.png" width="225" height="175">
+				<figcaption>Eliminating horizontal crossings outside the vertical bounds.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Now we need to check which of the two voxels might lie inside the stencil's area. First consider the case of the left voxel matching our fill type. This means that the edge might cross the right side of the stencil. We should actually check this, because it could also be an old crossing that lies somewhere to the right or left of our stencil. If we're sure that it's actually passing through our stencil's border, we can set its exact position.</p>
+			</div>
+			
+			<pre translate="no">		if (xMin.position.y &lt; YStart || xMin.position.y > YEnd) {
+			return;
+		}
+		<mark>if (xMin.state == fillType) {</mark>
+			<mark>if (xMin.position.x &lt;= XEnd &amp;&amp; xMax.position.x >= XEnd) {</mark>
+				<mark>xMin.xEdge = XEnd;</mark>
+			<mark>}</mark>
+		<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>We have to consider a possible crossing on the left side the of the stencil as well.</p>
+			</div>
+			
+			<pre translate="no">		if (xMin.state == fillType) {
+			if (xMin.position.x &lt;= XEnd &amp;&amp; xMax.position.x >= XEnd) {
+				xMin.xEdge = XEnd;
+			}
+		}
+		<mark>else if (xMax.state == fillType) {</mark>
+			<mark>if (xMin.position.x &lt;= XStart &amp;&amp; xMax.position.x >= XStart) {</mark>
+				<mark>xMin.xEdge = XStart;</mark>
+			<mark>}</mark>
+		<mark>}</mark></pre>
+			
+			<figure>
+				<img src="02-03-finding-crossings.png" width="225" height="175">
+				<figcaption>Finding actual horizontal crossings.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Next, do the same for vertical edge crossing.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public void SetVerticalCrossing (Voxel yMin, Voxel yMax) {</mark>
+		<mark>if (yMin.state != yMax.state) {</mark>
+			<mark>FindVerticalCrossing(yMin, yMax);</mark>
+		<mark>}</mark>
+	<mark>}</mark>
+	
+	<mark>protected virtual void FindVerticalCrossing (Voxel yMin, Voxel yMax) {</mark>
+		<mark>if (yMin.position.x &lt; XStart || yMin.position.x > XEnd) {</mark>
+			<mark>return;</mark>
+		<mark>}</mark>
+		<mark>if (yMin.state == fillType) {</mark>
+			<mark>if (yMin.position.y &lt;= YEnd &amp;&amp; yMax.position.y >= YEnd) {</mark>
+				<mark>yMin.yEdge = YEnd;</mark>
+			<mark>}</mark>
+		<mark>}</mark>
+		<mark>else if (yMax.state == fillType) {</mark>
+			<mark>if (yMin.position.y &lt;= YStart &amp;&amp; yMax.position.y >= YStart) {</mark>
+				<mark>yMin.yEdge = YStart;</mark>
+			<mark>}</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now <code>VoxelGrid</code> needs to actually set the edge crossing. This needs to be done after the stencil has been applied to the voxels.</p>
+			</div>
+			
+			<pre translate="no">	public void Apply (VoxelStencil stencil) {
+		&hellip;
+
+		for (int y = yStart; y &lt;= yEnd; y++) {
+			int i = y * resolution + xStart;
+			for (int x = xStart; x &lt;= xEnd; x++, i++) {
+				stencil.Apply(voxels[i]);
+			}
+		}
+		<mark>SetCrossings(stencil, xStart, xEnd, yStart, yEnd);</mark>
+		Refresh();
+	}</pre>
+			
+			<div class="instructions">
+				<p>We need to increase the calculated voxel area by one step in each direction to cover all potential edges. Also check whether we need to pass gaps and if we have to cover the last vertical row, because all these cases require special attention.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void SetCrossings (VoxelStencil stencil, int xStart, int xEnd, int yStart, int yEnd) {</mark>
+		<mark>bool crossHorizontalGap = false;</mark>
+		<mark>bool lastVerticalRow = false;</mark>
+		<mark>bool crossVerticalGap = false;</mark>
+
+		<mark>if (xStart > 0) {</mark>
+			<mark>xStart -= 1;</mark>
+		<mark>}</mark>
+		<mark>if (xEnd == resolution - 1) {</mark>
+			<mark>xEnd -= 1;</mark>
+			<mark>crossHorizontalGap = xNeighbor != null;</mark>
+		<mark>}</mark>
+		<mark>if (yStart > 0) {</mark>
+			<mark>yStart -= 1;</mark>
+		<mark>}</mark>
+		<mark>if (yEnd == resolution - 1) {</mark>
+			<mark>yEnd -= 1;</mark>
+			<mark>lastVerticalRow = true;</mark>
+			<mark>crossVerticalGap = yNeighbor != null;</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Then loop over all cells, setting their bottom horizontal edges.</p>
+			</div>
+			
+			<pre translate="no">		<mark>Voxel a, b;</mark>
+		<mark>for (int y = yStart; y &lt;= yEnd; y++) {</mark>
+			<mark>int i = y * resolution + xStart;</mark>
+			<mark>b = voxels[i];</mark>
+			<mark>for (int x = xStart; x &lt;= xEnd; x++, i++) {</mark>
+				<mark>a = b;</mark>
+				<mark>b = voxels[i + 1];</mark>
+				<mark>stencil.SetHorizontalCrossing(a, b);</mark>
+			<mark>}</mark>
+		<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Check the left vertical edges as well, and the vertical rightmost edge at the end of each row.</p>
+			</div>
+			
+			<pre translate="no">		for (int y = yStart; y &lt;= yEnd; y++) {
+			int i = y * resolution + xStart;
+			b = voxels[i];
+			for (int x = xStart; x &lt;= xEnd; x++, i++) {
+				a = b;
+				b = voxels[i + 1];
+				stencil.SetHorizontalCrossing(a, b);
+				<mark>stencil.SetVerticalCrossing(a, voxels[i + resolution]);</mark>
+			}
+			<mark>stencil.SetVerticalCrossing(b, voxels[i + resolution]);</mark>
+		}</pre>
+			
+			<div class="instructions">
+				<p>We need to visit the bottom horizontal edge of gaps cells as well.</p>
+			</div>
+			
+			<pre translate="no">		for (int y = yStart; y &lt;= yEnd; y++) {
+			int i = y * resolution + xStart;
+			b = voxels[i];
+			for (int x = xStart; x &lt;= xEnd; x++, i++) {
+				a = b;
+				b = voxels[i + 1];
+				stencil.SetHorizontalCrossing(a, b);
+				stencil.SetVerticalCrossing(a, voxels[i + resolution]);
+			}
+			stencil.SetVerticalCrossing(b, voxels[i + resolution]);
+			<mark>if (crossHorizontalGap) {</mark>
+				<mark>dummyX.BecomeXDummyOf(xNeighbor.voxels[y * resolution], gridSize);</mark>
+				<mark>stencil.SetHorizontalCrossing(b, dummyX);</mark>
+			<mark>}</mark>
+		}</pre>
+
+			<div class="instructions">
+				<p>And finally we have to do the same for the last vertical row, using a dummy to cross the vertical gap is there's a neighbor.</p>
+			</div>
+			
+			<pre translate="no">		<mark>if (includeLastVerticalRow) {</mark>
+			<mark>int i = voxels.Length - resolution + xStart;</mark>
+			<mark>b = voxels[i];</mark>
+			<mark>for (int x = xStart; x &lt;= xEnd; x++, i++) {</mark>
+				<mark>a = b;</mark>
+				<mark>b = voxels[i + 1];</mark>
+				<mark>stencil.SetHorizontalCrossing(a, b);</mark>
+				<mark>if (crossVerticalGap) {</mark>
+					<mark>dummyY.BecomeYDummyOf(yNeighbor.voxels[x], gridSize);</mark>
+					<mark>stencil.SetVerticalCrossing(a, dummyY);</mark>
+				<mark>}</mark>
+			<mark>}</mark>
+			<mark>if (crossVerticalGap) {</mark>
+				<mark>dummyY.BecomeYDummyOf(yNeighbor.voxels[xEnd + 1], gridSize);</mark>
+				<mark>stencil.SetVerticalCrossing(b, dummyY);</mark>
+			<mark>}</mark>
+			<mark>if (crossHorizontalGap) {</mark>
+				<mark>dummyX.BecomeXDummyOf(xNeighbor.voxels[voxels.Length - resolution], gridSize);</mark>
+				<mark>stencil.SetHorizontalCrossing(b, dummyX);</mark>
+			<mark>}</mark>
+		<mark>}</mark></pre>
+			
+			<figure>
+				<img alt="already more like painting" src="02-03-free-crossing.png" width="270" height="270">
+				<img alt="exact square crossings" src="02-03-exact-crossings.png" width="150" height="150">
+				<figcaption>Free crossings.</figcaption>
+			</figure>
+			
+			<h3>Keeping Crossings in Place</h3>
+			
+			<div class="instructions">
+				<p>Now we get exact edge crossing, at least when using the square stencil. But you'll notice that edge positions are always replaced when painting. It looks like the contour is pulled toward the stencil, which is not intuitive. It makes more sense to only adjust edge positions when doing so would increase the covered area, not when it would reduce it. To do so, we need to compare the new edge position to the previous one.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-gaps" id="q-gaps">Why can gaps appear in my line?</a></li>
+				</ul>
+			</aside>
+			
+			<figure>
+				<img src="02-04-only-growing.png" width="225" height="175">
+				<figcaption>Only set crossings that lie outside the old shape.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Comparing with the current edge position only makes sense if there actually was an edge crossing. So we need some way to indicate that there is no old edge data. As local positions are always positive inside a voxel grid, we could use a negative value for this purpose. We should make sure the number stays negative even when offset by a dummy. Using the minimum possible value for a float takes care of that.</p>
+				<p>As we start without edge crossings, each <code>Voxel</code> should initially have negative edge data.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-use-boolean" id="q-use-boolean">Shouldn't we use a boolean?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	public Voxel (int x, int y, float size) {
+		position.x = (x + 0.5f) * size;
+		position.y = (y + 0.5f) * size;
+
+		xEdge = <mark>float.MinValue</mark>;
+		yEdge = <mark>float.MinValue</mark>;
+	}</pre>
+			
+			<div class="instructions">
+				<p>As <code>VoxelStencil</code> knows how to figure out edge crossings, give it the responsibility of erasing old edge data when it finds that there's no crossing.</p>
+			</div>
+			
+			<pre translate="no">	public void SetHorizontalCrossing (Voxel xMin, Voxel xMax) {
+		if (xMin.state != xMax.state) {
+			FindHorizontalCrossing(xMin, xMax);
+		}
+		<mark>else {</mark>
+			<mark>xMin.xEdge = float.MinValue;</mark>
+		<mark>}</mark>
+	}
+
+	public void SetVerticalCrossing (Voxel yMin, Voxel yMax) {
+		if (yMin.state != yMax.state) {
+			FindVerticalCrossing(yMin, yMax);
+		}
+		<mark>else {</mark>
+			<mark>yMin.yEdge = float.MinValue;</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>Then it can check whether there's old edge data and if that should be replaced, before actually storing the new position.</p>
+			</div>
+			
+			<pre translate="no">	protected virtual void FindHorizontalCrossing (Voxel xMin, Voxel xMax) {
+		if (xMin.position.y &lt; YStart || xMin.position.y > YEnd) {
+			return;
+		}
+		if (xMin.state == fillType) {
+			if (xMin.position.x &lt;= XEnd &amp;&amp; xMax.position.x >= XEnd) {
+				<mark>if (xMin.xEdge == float.MinValue || xMin.xEdge &lt; XEnd) {</mark>
+					xMin.xEdge = XEnd;
+				<mark>}</mark>
+			}
+		}
+		else if (xMax.state == fillType) {
+			if (xMin.position.x &lt;= XStart &amp;&amp; xMax.position.x >= XStart) {
+				<mark>if (xMin.xEdge == float.MinValue || xMin.xEdge > XStart) {</mark>
+					xMin.xEdge = XStart;
+				<mark>}</mark>
+			}
+		}
+	}
+	
+	protected virtual void FindVerticalCrossing (Voxel yMin, Voxel yMax) {
+		if (yMin.position.x &lt; XStart || yMin.position.x > XEnd) {
+			return;
+		}
+		if (yMin.state == fillType) {
+			if (yMin.position.y &lt;= YEnd &amp;&amp; yMax.position.y >= YEnd) {
+				<mark>if (yMin.yEdge == float.MinValue || yMin.yEdge &lt; YEnd) {</mark>
+					yMin.yEdge = YEnd;
+				<mark>}</mark>
+			}
+		}
+		else if (yMax.state == fillType) {
+			if (yMin.position.y &lt;= YStart &amp;&amp; yMax.position.y >= YStart) {
+				<mark>if (yMin.yEdge == float.MinValue || yMin.yEdge > YStart) {</mark>
+					yMin.yEdge = YStart;
+				<mark>}</mark>
+			}
+		}
+	}</pre>
+			
+			<figure>
+				<img src="02-04-growing-edges.png" width="270" height="270">
+				<figcaption>Growing only, like paint.</figcaption>
+			</figure>
+			
+			<h3>Completing the Circle</h3>
+			
+			<div class="instructions">
+				<p>Finally, <code>VoxelStencilCircle</code> needs its own crossing logic, otherwise it produces nonsensical edges. That means we have to compute the intersection of a line and a circle, which fortunately is easy because we're working with strictly horizontal and vertical lines. First consider the horizontal right side.</p>
+			</div>
+			
+			<pre translate="no">	<mark>protected override void FindHorizontalCrossing (Voxel xMin, Voxel xMax) {</mark>
+		<mark>float y2 = xMin.position.y - centerY;</mark>
+		<mark>y2 *= y2;</mark>
+		<mark>if (xMin.state == fillType) {</mark>
+			<mark>float x = xMin.position.x - centerX;</mark>
+			<mark>if (x * x + y2 &lt;= sqrRadius) {</mark>
+				<mark>x = centerX + Mathf.Sqrt(sqrRadius - y2);</mark>
+				<mark>if (xMin.xEdge == float.MinValue || xMin.xEdge &lt; x) {</mark>
+					<mark>xMin.xEdge = x;</mark>
+				<mark>}</mark>
+			<mark>}</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Then the horizontal left side.</p>
+			</div>
+			
+			<pre translate="no">		float y2 = xMin.position.y - centerY;
+		y2 *= y2;
+		if (xMin.state == fillType) {
+			float x = xMin.position.x - centerX;
+			if (x * x + y2 &lt;= sqrRadius) {
+				x = centerX + Mathf.Sqrt(sqrRadius - y2);
+				if (xMin.xEdge == float.MinValue || xMin.xEdge &lt; x) {
+					xMin.xEdge = x;
+				}
+			}
+		}
+		<mark>else if (xMax.state == fillType) {</mark>
+			<mark>float x = xMax.position.x - centerX;</mark>
+			<mark>if (x * x + y2 &lt;= sqrRadius) {</mark>
+				<mark>x = centerX - Mathf.Sqrt(sqrRadius - y2);</mark>
+				<mark>if (xMin.xEdge == float.MinValue || xMin.xEdge > x) {</mark>
+					<mark>xMin.xEdge = x;</mark>
+				<mark>}</mark>
+			<mark>}</mark>
+		<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>And once again the same approach for vertical edges.</p>
+			</div>
+			
+			<pre translate="no">	<mark>protected override void FindVerticalCrossing (Voxel yMin, Voxel yMax) {</mark>
+		<mark>float x2 = yMin.position.x - centerX;</mark>
+		<mark>x2 *= x2;</mark>
+		<mark>if (yMin.state == fillType) {</mark>
+			<mark>float y = yMin.position.y - centerY;</mark>
+			<mark>if (y * y + x2 &lt;= sqrRadius) {</mark>
+				<mark>y = centerY + Mathf.Sqrt(sqrRadius - x2);</mark>
+				<mark>if (yMin.yEdge == float.MinValue || yMin.yEdge &lt; y) {</mark>
+					<mark>yMin.yEdge = y;</mark>
+				<mark>}</mark>
+			<mark>}</mark>
+		<mark>}</mark>
+		<mark>else if (yMax.state == fillType) {</mark>
+			<mark>float y = yMax.position.y - centerY;</mark>
+			<mark>if (y * y + x2 &lt;= sqrRadius) {</mark>
+				<mark>y = centerY - Mathf.Sqrt(sqrRadius - x2);</mark>
+				<mark>if (yMin.yEdge == float.MinValue || yMin.yEdge > y) {</mark>
+					<mark>yMin.yEdge = y;</mark>
+				<mark>}</mark>
+			<mark>}</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<figure>
+				<img src="02-05-circles.png" width="270" height="270">
+				<figcaption>Much better circles.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Our circle stencil finally produces something that looks like a circle! Of course a larger radius results in a better approximation, as that covers more voxels and edges. Unfortunately squares still don't have sharp corners, but we'll take care of that in the <a href="../marching-squares-3/index.html">next tutorial</a>.</p>
+				<p>Enjoyed the tutorial? <a href="https://www.patreon.com/catlikecoding">Help me make more by becoming a patron!</a></p>
+			</div>
+			
+			<aside class="share"></aside>
+			
+			<h2>Downloads</h2>
+
+			<dl>
+				<dt><a href="marching-squares-2-01.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Marching Squares 2', '01']);" target="_blank" download rel="nofollow">marching-squares-2-01.unitypackage</a></dt>
+				<dd>The project after Reusing Vertices.</dd>
+				<dt><a href="marching-squares-2-finished.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Marching Squares 2', 'Final']);" target="_blank" download rel="nofollow">marching-squares-2-finished.unitypackage</a></dt>
+				<dd>The finished project.</dd>
+			</dl>
+		</article>
+		
+		<dl class="questions-answers">
+			<dt><a href="index.html#q-sharing-vertices" id="a-sharing-vertices">Is sharing vertices worth it?</a></dt>
+			<dd>
+				<p>The theoretical worst cases would be if either the grid is empty or only the four corner voxels of the grid were filled. In those cases there is no vertex reduction at all, but they have only zero and twelve vertices in total anyway.</p>
+				<p>A nontrivial bad case is a grid with lots of isolated filled voxels. A voxel on the edge of the grid still has no reduction, but there will be at most four of those. Isolated voxels along the grid edge can be reduced from six to four vertices, which is a 33% reduction. If the voxel doesn't touch the edge it goes from twelve to five vertices, which is a 58% reduction. 33% is already a significant reduction, and as there are typically more internal than edge voxels in a grid we can expect the final savings to be around 50%, which is very good.</p>
+				<p>If we start considering clumps of filled voxels the results get even better. An isolated 3x3 block of filled voxels that doesn't touch the grid edge has twelve edge vertices and nine voxel vertices, a total of 21. Without sharing we would end up with 60 vertices, so the reduction is 65%. A 5x5 block is reduced from 140 to 45 vertices, which is 67%.</p>
+				<p>So let's use a conservative estimate that vertex reuse cuts the amount of vertices in half, which benefits both memory, the CPU, and the GPU. This is quite significant, especially as we don't have to store much extra data to make it possible.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-cache-scale" id="a-cache-scale">How does the cache scale better?</a></dt>
+			<dd>
+				<p>As the voxel grids are two-dimensional, their size is equal to the voxel resolution squared. Hence, they scale quadratically with the voxel resolution. That's why you cannot use a very high resolution. If we were to cache all vertices at once, the cache would also scale quadratically with the voxel resolution.</p>
+				<p>Deciding to only cache enough data to work on one cell row at a time allows us to use a one-dimensional cache, hence it scales linearly. As the voxel resolution increases, the cache size will quickly become insignificant compared to the voxel data.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-cache-per-grid" id="a-cache-per-grid">Need we store the caches per grid?</a></dt>
+			<dd>
+				<p>No, it is not needed to give each grid its own cache data. You could get away with storing the caches once as static data. This would no longer make the cache scale with the amount of grids, making its size practically a non-issue.</p>
+				<p>I didn't bother with this optimization because it's not needed at the scale of this tutorial. To properly do it, you'd have to ensure that the shared cache is large enough to support the largest grid size that you're using, in case you have multiple voxels maps with different grid resolutions. Besides that, a shared cache wouldn't work if you were to use multi-threading to triangulate multiple grids at the same time. It might seem like overkill to worry about those cases, but they're good examples of things that will cause obscure bugs in some future version of your program.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-voxel-reduction" id="a-voxel-reduction">How much space does this save?</a></dt>
+			<dd>
+				<p>As we remove two floats from the object, the short answer is that this optimization saves 8 bytes per voxel. But that doesn't say much if we don't know the total size of the object. Unfortunately the memory layout of an object is up to the compiler and depends on whether compiling for 32-bit or 64-bit systems. To get a general idea of size, let's assume we're building for 32-bit. In that case we start with 8 bytes for the object header. The three vectors add 24 bytes and the boolean adds another byte, so that's a total of 33 bytes. However, we can assume that the objects will be aligned to 4-byte boundaries, so we end up with 36 bytes per object. Besides that the voxel grids must also store a reference to the object, which effectively adds another 4 bytes somewhere else in memory, increasing the total to 40 bytes per voxel.</p>
+				<p>So we end up saving 8 bytes out of 40, reducing the total to 32 bytes. That's a 20% reduction, which is not bad at all.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-gaps" id="a-gaps">Why can gaps appear in my line?</a></dt>
+			<dd>
+				<p>Gaps can appear in thin lines when you happen to connect two voxels diagonally, because we decided to always disconnect voxels for those ambiguous cell types. That we're now figuring out edge connections does not change this, but it makes it more obvious that sometimes these voxel should actually have been connected. This is something that we'll deal with in the next tutorial.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-use-boolean" id="a-use-boolean">Shouldn't we use a boolean?</a></dt>
+			<dd>
+				<p>You could certainly use a boolean. The you have to add two additional boolean variables to <code>Voxel</code>. That might increase the memory size of the object, but due to the 4-byte alignment you could probably store up to three extra boolean variables without actually changing its size.</p>
+				<p>However, using a negative value to indicate a special case is also perfectly fine, as long as you know what you're doing. In this case negative values are clearly special, as local positions cannot be negative. Typically -1 is used, but we couldn't because a dummy offset could transform that into an invalid positive value.</p>
+			</dd>
+			
+		</dl>
+		
+		<footer></footer>
+		<script src="../../jquery.js"></script>
+		<script src="../../default.js"></script>
+	</body>
+</html>

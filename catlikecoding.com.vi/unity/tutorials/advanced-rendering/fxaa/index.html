@@ -1,0 +1,1506 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/advanced-rendering/fxaa/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/advanced-rendering/fxaa/tutorial-image.jpg">
+		<meta property="og:title" content="FXAA">
+		<meta property="og:description" content="A Unity Advanced Rendering tutorial about creating an FXAA effect.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>FXAA</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/advanced-rendering/fxaa/#article",
+				"headline": "FXAA",
+				"alternativeHeadline": "Smoothing Pixels",
+				"datePublished": "2018-03-30",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Advanced Rendering tutorial about creating an FXAA effect.",
+				"image": "https://catlikecoding.com/unity/tutorials/advanced-rendering/fxaa/tutorial-image.jpg",
+				"dependencies": "Unity 2017.3.0p3",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/advanced-rendering/", "name": "Advanced Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				EdgeData: 1,
+				FXAAEffect: 1,
+				LuminanceMode: 1,
+				LuminanceData: 1
+			};
+			
+			var defaultCodeClass = 'shader';
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Advanced Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>FXAA</h1>
+					<p>Smoothing Pixels</p>
+					<ul>
+						<li>Calculate image luminance.</li>
+						<li>Find high-contrast pixels.</li>
+						<li>Identify contrast edges.</li>
+						<li>Selectively blend.</li>
+						<li>Search for the end points of edges.</li>
+					</ul>
+				</header>
+				
+				<p>This tutorial takes a look at how to create the FXAA post effect. It comes after the <a href="../depth-of-field/index.html">Depth of Field</a> tutorial.
+				
+				<p>This tutorial is made with Unity 2017.3.0p3.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Master the art of FXAA to combat jaggies and fireflies.</figcaption>
+				</figure>
+				
+				<p><em>See <a href="../../custom-srp/fxaa/index.html">Custom SRP / FXAA</a> for a more recent FXAA tutorial.</em></p>
+				
+				<section>
+					<h2>Setting the Scene</h2>
+					
+					<p>Displays have a finite resolution. As a result, image features that do not align with the pixel grid suffer from aliasing. Diagonal and curved lines appear as staircases, commonly known as jaggies. Thin lines can become disconnected and turn into dashed lines. High-contrast features that are smaller than a pixel sometimes appear and sometimes don't, leading to flickering when things move, commonly known as fireflies. A collection of anti-aliasing techniques has been developed to mitigate these issues. This tutorial covers the classical FXAA solution.</p>
+					
+					<figure>
+						<img alt="lines" src="setting-the-scene/aliased-lines.png" width="240" height="240">
+						<img alt="pixels" src="setting-the-scene/aliased-pixels.png" width="240" height="240">
+						<figcaption>Thin lines and their aliased rasterization.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Test Scene</h3>
+						
+						<p>For this tutorial I've created a test scene similar to the one from <a href="../depth-of-field/index.html">Depth of Field</a>. It contains areas of both high and low contrast, brighter and darker regions, multiple straight and curved edges, and small features. As usual, we're using HDR and linear color space. All scene screenshots are zoomed in to make individual pixels easier to distinguish.</p>
+						
+						<figure>
+							<img src="setting-the-scene/aliased.png" width="470" height="300">
+							<figcaption>Test scene, zoomed in 4&times;, without any anti-aliasing.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Supersampling</h3>
+						
+						<p>The most straightforward way to get rid of aliasing is to render at a resolution higher than the display and downsample it. This is a spatial anti-aliasing method that makes it possible to capture and smooth out subpixel features that are too high-frequency for the display.</p>
+						
+						<figure>
+							<img alt="lines" src="setting-the-scene/ssaa-lines.png" width="240" height="240">
+							<img alt="pixels" src="setting-the-scene/ssaa-pixels.png" width="240" height="240">
+							<figcaption>Sampling at double resolution and averaging 2&times;2 blocks.</figcaption>
+						</figure>
+						
+						<p>Supersampling anti-aliasing (SSAA) does exactly that. At minimum, the scene is rendered to a buffer with double the final resolution and blocks of four pixels are averaged to produce the final image. Even higher resolutions and different sampling patterns can be used to further improve the effect. This approach removes aliasing, but also slightly blurs the entire image.</p>
+						
+						<figure>
+							<img src="setting-the-scene/ssaa2.png" width="470" height="300">
+							<figcaption>SSAA 2&times;.</figcaption>
+						</figure>
+						
+						<p>While SSAA works, it is a brute-force approach that is very expensive. Doubling the resolution quadruples the amount of pixels that both have to be stored in memory and shaded. Especially fill rate becomes a bottleneck. To mitigate this, multisample anti-aliasing (MSAA) was introduced. It also renders to a higher resolution and later downsamples, but changes how fragments are rendered. Instead of simply rendering all fragments of a higher-resolution block, it renders a single fragment per triangle that covers that block, effectively copying the result to the higher-resolution pixels. This keeps the fill rate manageable. It also means that only the edges of triangles are affected, everything else remains unchanged. That's why MSAA doesn't smooth the transparent edges created via cutout materials.</p>
+						
+						<figure>
+							<img alt="2" src="setting-the-scene/msaa2.png" width="470" height="300">
+							<img alt="8" src="setting-the-scene/msaa8.png" width="470" height="300">
+							<figcaption>MSAA 2&times; and 8&times;.</figcaption>
+						</figure>
+						
+						<p>MSAA works quite well and is used often, but it still requires a lot of memory and it doesn't combine with effects that depend on the depth buffer, like deferred rendering. That's why many games opt for different anti-aliasing techniques.</p>
+						
+						<aside>
+							<h3>What about CSAA?</h3>
+							<div>
+								<p>CSAA refers to coverage sampling anti-aliasing. It is a variant of MSAA, but I won't go into the details here.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Post Effect</h3>
+						
+						<p>A third way to perform anti-aliasing is via a post effect. These are full-screen passes like any other effect, so they don't require a higher resolution but might rely on temporary render textures. These techniques have to work at the final resolution, so they have no access to actual subpixel data. Instead, they have to analyse the image and selectively blur based on that interpretation.</p>
+						
+						<p>Multiple post-effect techniques have been developed. The first one was morphological anti-aliasing (MLAA). In this tutorial, we'll create our own version of fast approximate anti-aliasing (FXAA). It was developed by Timothy Lottes at NVIDIA and does exactly what its name suggests. Compared to MLAA, it trades quality for speed. While a common complaint of FXAA is that it blurs too much, that varies depending on which variant is used and how it is tuned. We'll create the latest version&mdash;FXAA 3.11&mdash;specifically the high-quality variant for PCs.</p>
+						
+						<p>We'll use the same setup for a new <em translate="no">FXAA</em> shader that we used for the <em translate="no">DepthOfField</em> shader. You can copy it and reduce it to a single pass that just performs a blit for now.</p>
+						
+						<pre translate="no">Shader "Hidden/FXAA" {
+	Properties {
+		_MainTex ("Texture", 2D) = "white" {}
+	}
+
+	CGINCLUDE
+		#include "UnityCG.cginc"
+
+		sampler2D _MainTex;
+		float4 _MainTex_TexelSize;
+
+		struct VertexData {
+			float4 vertex : POSITION;
+			float2 uv : TEXCOORD0;
+		};
+
+		struct Interpolators {
+			float4 pos : SV_POSITION;
+			float2 uv : TEXCOORD0;
+		};
+
+		Interpolators VertexProgram (VertexData v) {
+			Interpolators i;
+			i.pos = UnityObjectToClipPos(v.vertex);
+			i.uv = v.uv;
+			return i;
+		}
+	ENDCG
+
+	SubShader {
+		Cull Off
+		ZTest Always
+		ZWrite Off
+
+		Pass { // 0 blitPass
+			CGPROGRAM
+				#pragma vertex VertexProgram
+				#pragma fragment FragmentProgram
+
+				float4 FragmentProgram (Interpolators i) : SV_Target {
+					float4 sample = tex2D(_MainTex, i.uv);
+					return sample;
+				}
+			ENDCG
+		}
+	}
+}</pre>
+						
+						<p>Create a minimal <code>FXAAEffect</code> component, again using the same approach as for the depth-of-field effect.</p>
+						
+						<pre translate="no" class="csharp">using UnityEngine;
+using System;
+
+[ExecuteInEditMode, ImageEffectAllowedInSceneView]
+public class <ins>FXAAEffect</ins> : MonoBehaviour {
+
+	<ins>[HideInInspector]</ins>
+	public Shader <ins>fxaaShader</ins>;
+
+	[NonSerialized]
+	Material <ins>fxaaMaterial</ins>;
+
+	void OnRenderImage (RenderTexture source, RenderTexture destination) {
+		if (<ins>fxaaMaterial</ins> == null) {
+			<ins>fxaaMaterial</ins> = new Material(<ins>fxaaShader</ins>);
+			<ins>fxaaMaterial</ins>.hideFlags = HideFlags.HideAndDontSave;
+		}
+
+		Graphics.Blit(source, destination, dofMaterial);
+	}
+}</pre>
+						
+						<p>Setup the default shader reference for the component script.</p>
+						
+						<figure>
+							<img src="setting-the-scene/default-shader-reference.png" width="320" height="112">
+							<figcaption>Default shader reference.</figcaption>
+						</figure>
+						
+						<p>Attach our new effect as the only one to the camera. Once again, we assume that we're rendering in linear HDR space, so configure the project and camera accordingly. Also, because we perform our own anti-aliasing, make sure that MSAA is disabled.</p>
+						
+						<figure>
+							<img src="setting-the-scene/camera.png" width="320" height="160">
+							<figcaption>HDR camera without MSAA and with FXAA.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>I'm still getting MSAA in the scene view?</h3>
+							<div>
+								<p>The scene view camera use the MSAA settings from the quality settings, it doesn't mimic the main camera in this case.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="setting-the-scene/setting-the-scene.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Luminance</h2>
+					
+					<p>FXAA works by selectively reducing the contrast of the image, smoothing out visually obvious jaggies and isolated pixels. Contrast is determined by comparing the light intensity of pixels. The exact colors of pixels doesn't matter, it's their luminance that counts. Effectively, FXAA works on a grayscale image containing only the pixel brightness. This means that hard transitions between different colors won't be smoothed out much when their luminance is similar. Only visually obvious transitions are strongly affected.</p>
+					
+					<section>
+						<h3>Calculating Luminance</h3>
+						
+						<p>Let's begin by checking out what this monochrome luminance image looks like. As the green color component contributes most to a pixel's luminance, a quick preview can be created by simply using that, discarding the red and blue color data.</p>
+						
+						<pre translate="no">				float4 FragmentProgram (Interpolators i) : SV_Target {
+					float4 sample = tex2D(_MainTex, i.uv);
+					<ins>sample.rgb = sample.g;</ins>
+					return sample;
+				}</pre>
+						
+						<figure>
+							<img src="luminance/green-channel.png" width="470" height="300">
+							<figcaption>Using the green channel as luminance.</figcaption>
+						</figure>
+						
+						<p>This is a crude approximation of luminance. It's better to appropriately calculate luminance, for which we can use the <code>LinearRgbToLuminance</code> function from <em translate="no">UnityCG</em>.</p>
+						
+						<pre translate="no">					sample.rgb = <ins>LinearRgbToLuminance(sample.rgb)</ins>;</pre>
+						
+						<p>FXAA expects luminance values to lie in the 0&ndash;1 range, but this isn't guaranteed when working with HDR colors. Typically, anti-aliasing is done after tonemapping and color grading, which should have gotten rid of most if not all HDR colors. But we don't use those effects in this tutorial, use the clamped color to calculate luminance.</p>
+						
+						<pre translate="no">					sample.rgb = LinearRgbToLuminance(<ins>saturate(</ins>sample.rgb<ins>)</ins>);</pre>
+						
+						<figure>
+							<img src="luminance/luminance.png" width="470" height="300">
+							<figcaption>Luminance.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What does <code>LinearRgbToLuminance</code> look like?</h3>
+							<div>
+								<p>It's a simple weighed sum of the colors channels, with green being most important.</p>
+								
+								<pre translate="no">// Convert rgb to luminance
+// with rgb in linear space with sRGB primaries and D65 white point
+half LinearRgbToLuminance(half3 linearRgb) {
+	return dot(linearRgb, half3(0.2126729f,  0.7151522f, 0.0721750f));
+}</pre>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Supplying Luminance Data</h3>
+						
+						<p>FXAA doesn't calculate luminance itself. That would be expensive, because each pixel requires multiple luminance samples. Instead, the luminance data has to be put in the alpha channel by an earlier pass. Alternatively, FXAA can use green as luminance instead, for example when the alpha channel cannot be used for some reason. Unity's post effect stack v2 supports both approaches when FXAA is used.</p>
+						
+						<p>Let's support both options too, but because we're not using a post effect stack let's also support calculating luminance ourselves. Add an enumeration field to <code>FXAAEffect</code> to control this and set it to <em translate="no">Calculate</em> in the inspector.</p>
+						
+						<pre translate="no" class="csharp">	<ins>public enum LuminanceMode { Alpha, Green, Calculate }</ins>
+
+	<ins>public LuminanceMode luminanceSource;</ins></pre>
+						
+						<figure>
+							<img src="luminance/luminance-source.png" width="320" height="56">
+							<figcaption>Luminance source, set to calculate.</figcaption>
+						</figure>
+						
+						<p>When we have to calculate luminance ourselves, we'll do this with a separate pass, storing the original RGB plus luminance data in a temporary texture. The actual FXAA pass then uses that texture instead of the original source. Furthermore, the FXAA pass needs to know whether it should use the green or alpha channel for luminance. We'll indicate this via the <em translate="no">LUMINANCE_GREEN</em> shader keyword.</p>
+						
+						<pre translate="no" class="csharp">	<ins>const int luminancePass = 0;</ins>
+	<ins>const int fxaaPass = 1;</ins>
+	
+	&hellip;
+	
+	void OnRenderImage (RenderTexture source, RenderTexture destination) {
+		if (fxaaMaterial == null) {
+			fxaaMaterial = new Material(fxaaShader);
+			fxaaMaterial.hideFlags = HideFlags.HideAndDontSave;
+		}
+
+		<ins>if (luminanceSource == LuminanceMode.Calculate) {</ins>
+			<ins>fxaaMaterial.DisableKeyword("LUMINANCE_GREEN");</ins>
+			<ins>RenderTexture luminanceTex = RenderTexture.GetTemporary(</ins>
+				<ins>source.width, source.height, 0, source.format</ins>
+			<ins>);</ins>
+			<ins>Graphics.Blit(source, luminanceTex, fxaaMaterial, luminancePass);</ins>
+			<ins>Graphics.Blit(luminanceTex, destination, fxaaMaterial, fxaaPass);</ins>
+			<ins>RenderTexture.ReleaseTemporary(luminanceTex);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>if (luminanceSource == LuminanceMode.Green) {</ins>
+				<ins>fxaaMaterial.EnableKeyword("LUMINANCE_GREEN");</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>fxaaMaterial.DisableKeyword("LUMINANCE_GREEN");</ins>
+			<ins>}</ins>
+			Graphics.Blit(source, destination, fxaaMaterial<ins>, fxaaPass</ins>);
+		<ins>}</ins>
+	}</pre>
+						
+						<p>We can use our existing pass for the luminance pass. The only change is that luminance should be stored in the alpha channel, keeping the original RGB data. The new FXAA pass starts out as a simple blit pass, with a multi-compile option for <code>LUMINANCE_GREEN</code>.</p>
+						
+						<pre translate="no">		Pass { // 0 <ins>luminancePass</ins>
+			CGPROGRAM
+				#pragma vertex VertexProgram
+				#pragma fragment FragmentProgram
+
+				half4 FragmentProgram (Interpolators i) : SV_Target {
+					half4 sample = tex2D(_MainTex, i.uv);
+					sample.<ins>a</ins> = LinearRgbToLuminance(saturate(sample.rgb));
+					return sample;
+				}
+			ENDCG
+		}
+		
+		<ins>Pass { // 1 fxaaPass</ins>
+			<ins>CGPROGRAM</ins>
+				<ins>#pragma vertex VertexProgram</ins>
+				<ins>#pragma fragment FragmentProgram</ins>
+
+				<ins>#pragma multi_compile _ LUMINANCE_GREEN</ins>
+
+				<ins>float4 FragmentProgram (Interpolators i) : SV_Target {</ins>
+					<ins>return tex2D(_MainTex, i.uv);</ins>
+				<ins>}</ins>
+			<ins>ENDCG</ins>
+		<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Sampling Luminance</h3>
+						
+						<p>To apply the FXAA effect, we have to sample luminance data. This is done by sampling the main texture and selecting either its green or alpha channel. We'll create some convenient functions for this, putting them all in a <code>CGINCLUDE</code> block at the top of the shader file.</p>
+						
+						<pre translate="no">	CGINCLUDE
+		&hellip;
+		
+		<ins>float4 Sample (float2 uv) {</ins>
+			<ins>return tex2D(_MainTex, uv);</ins>
+		<ins>}</ins>
+
+		<ins>float SampleLuminance (float2 uv) {</ins>
+			<ins>#if defined(LUMINANCE_GREEN)</ins>
+				<ins>return Sample(uv).g;</ins>
+			<ins>#else</ins>
+				<ins>return Sample(uv).a;</ins>
+			<ins>#endif</ins>
+		<ins>}</ins>
+		
+		<ins>float4 ApplyFXAA (float2 uv) {</ins>
+			<ins>return SampleLuminance(uv);</ins>
+		<ins>}</ins>
+	ENDCG</pre>
+						
+						<p>Now our FXAA pass can simply invoke the <code>ApplyFXAA</code> function with only the fragment's texture coordinates as arguments.</p>
+						
+						<pre translate="no">				float4 FragmentProgram (Interpolators i) : SV_Target {
+					return <ins>ApplyFXAA(i.uv)</ins>;
+				}</pre>
+					</section>
+					
+					<a href="luminance/luminance.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Blending High-contrast Pixels</h2>
+					
+					<p>FXAA works by blending high-contrast pixels. This is not a straightforward blurring of the image. First, the local contrast has to be calculated. Second&mdash;if there is enough contrast&mdash;a blend factor has to be chosen based on the contrast. Third, the local contrast gradient has to be investigated to determine a blend direction. Finally, a blend is performed between the original pixel and one of its neighbors.</p>
+					
+					<section>
+						<h3>Determining Contrast With Adjacent Pixels</h3>
+						
+						<p>The local contrast is found by comparing the luminance of the current pixel and the luminance of its neighbors. To make it easy to sample the neighbors, add a <code>SampleLuminance</code> function variant that has offset parameters for the U and V coordinates, in texels. These should be scaled by the texel size and added to <code>uv</code> before sampling.</p>
+						
+						<pre translate="no">		float SampleLuminance (float2 uv) {
+			&hellip;
+		}
+
+		<ins>float SampleLuminance (float2 uv, float uOffset, float vOffset) {</ins>
+			<ins>uv += _MainTex_TexelSize * float2(uOffset, vOffset);</ins>
+			<ins>return SampleLuminance(uv);</ins>
+		<ins>}</ins></pre>
+						
+						<p>FXAA uses the direct horizontal and vertical neighbors&mdash;and the middle pixel itself&mdash;to determine the contrast. Because we'll use this luminance data multiple times, let's put it in a <code>LuminanceData</code> structure. We'll use compass directions to refer to the neighbor data, using north for positive V, east for position U, south for negative V, and west for negative U. Sample these pixels and initialize the luminance data in a separate function, and invoke it in <code>ApplyFXAA</code>.</p>
+						
+						<figure>
+							<img src="blending-high-contrast-pixels/nesw-cross.png" width="165" height="155">
+							<figcaption>NESW cross plus middle pixel.</figcaption>
+						</figure>
+						
+						<pre translate="no">		<ins>struct LuminanceData {</ins>
+			<ins>float m, n, e, s, w;</ins>
+		<ins>};</ins>
+
+		<ins>LuminanceData SampleLuminanceNeighborhood (float2 uv) {</ins>
+			<ins>LuminanceData l;</ins>
+			<ins>l.m = SampleLuminance(uv);</ins>
+			<ins>l.n = SampleLuminance(uv, 0,  1);</ins>
+			<ins>l.e = SampleLuminance(uv, 1,  0);</ins>
+			<ins>l.s = SampleLuminance(uv, 0, -1);</ins>
+			<ins>l.w = SampleLuminance(uv,-1,  0);</ins>
+			<ins>return l;</ins>
+		<ins>}</ins>
+		
+		float4 ApplyFXAA (float2 uv) {
+			<ins>LuminanceData l = SampleLuminanceNeighborhood(uv);</ins>
+			return <ins>l.m</ins>;
+		}</pre>
+						
+						<aside>
+							<h3>Shouldn't north and south be swapped?</h3>
+							<div>
+								<p>I'm using the OpenGL convention that UV coordinates go from left to right and bottom to top. The FXAA algorithm doesn't care about the relative direction though, it just has to be consistent.</p>
+							</div>
+						</aside>
+						
+						<p>The local contrast between these pixels is simply the difference between their highest and lowest luminance values. As luminance is defined in the 0&ndash;1 range, so is the contrast. We calculate the lowest, highest, and contrast values immediately after sampling the cross. Add them to the structure so we can access them later in <code>ApplyFXAA</code>. The contrast is most important, so let's see what that looks like.</p>
+						
+						<pre translate="no">		struct LuminanceData {
+			float m, n, e, s, w;
+			<ins>float highest, lowest, contrast;</ins>
+		};
+
+		LuminanceData SampleLuminanceNeighborhood (float2 uv) {
+			LuminanceData l;
+			&hellip;
+
+			<ins>l.highest = max(max(max(max(l.n, l.e), l.s), l.w), l.m);</ins>
+			<ins>l.lowest = min(min(min(min(l.n, l.e), l.s), l.w), l.m);</ins>
+			<ins>l.contrast = l.highest - l.lowest;</ins>
+			return l;
+		}
+
+		float4 ApplyFXAA (float2 uv) {
+			LuminanceData l = SampleLuminanceNeighborhood(uv);
+			return l.<ins>contrast</ins>;
+		}</pre>
+						
+						<figure>
+							<img src="blending-high-contrast-pixels/contrast.png" width="470" height="300">
+							<figcaption>Local contrast.</figcaption>
+						</figure>
+						
+						<p>The result is like a crude edge-detection filter. Because contrast doesn't care about direction, pixels on both sides of a contrast different end up with the same value. So we get edges that are at least two pixels thick, formed by north&ndash;south or east&ndash;west pixel pairs.</p>
+					</section>
+					
+					<section>
+						<h3>Skipping Low-contrast Pixels</h3>
+						
+						<p>We don't need to bother anti-aliasing those areas. Let's make this configurable via a contrast threshold slider. The original FXAA algorithm has this threshold as well, with the following code documentation:</p>
+						
+						<pre translate="no">	// Trims the algorithm from processing darks.
+	//   0.0833 - upper limit (default, the start of visible unfiltered edges)
+	//   0.0625 - high quality (faster)
+	//   0.0312 - visible limit (slower)</pre>
+						
+						<p>Although the documentation mentions that it trims dark areas, it actually trims based on contrast&mdash;not luminance&mdash;so regardless whether it's bright or dark. We will use the same range as indicated by the documentation, but with the low threshold as default.</p>
+						
+						<pre translate="no" class="csharp">	<ins>[Range(0.0312f, 0.0833f)]</ins>
+	<ins>public float contrastThreshold = 0.0312f;</ins>
+	
+	&hellip;
+	
+	void OnRenderImage (RenderTexture source, RenderTexture destination) {
+		if (fxaaMaterial == null) {
+			fxaaMaterial = new Material(fxaaShader);
+			fxaaMaterial.hideFlags = HideFlags.HideAndDontSave;
+		}
+
+		<ins>fxaaMaterial.SetFloat("_ContrastThreshold", contrastThreshold);</ins>
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="blending-high-contrast-pixels/contrast-threshold.png" width="320" height="74">
+							<figcaption>Contrast threshold.</figcaption>
+						</figure>
+						
+						<p>Inside the shader, simply return after sampling the neighborhood, if the contrast is below the threshold. To make it visually obvious which pixels are skipped, I made them red.</p>
+						
+						<pre translate="no">		<ins>float _ContrastThreshold;</ins>
+
+		&hellip;
+
+		float4 ApplyFXAA (float2 uv) {
+			LuminanceData l = SampleLuminanceNeighborhood(uv);
+			<ins>if (l.contrast &lt; _ContrastThreshold) {</ins>
+				<ins>return float4(1, 0, 0, 0);</ins>
+			<ins>}</ins>
+			return l.contrast;
+		}</pre>
+						
+						<figure>
+							<img src="blending-high-contrast-pixels/red-below-threshold.png" width="470" height="300">
+							<figcaption>Red pixels are skipped.</figcaption>
+						</figure>
+						
+						<p>Besides an absolute contrast threshold, FXAA also has a relative threshold. Here is the code documentation for it:</p>
+						
+						<pre translate="no">	// The minimum amount of local contrast required to apply algorithm.
+	//   0.333 - too little (faster)
+	//   0.250 - low quality
+	//   0.166 - default
+	//   0.125 - high quality 
+	//   0.063 - overkill (slower)</pre>
+						
+						<p>This sounds like the threshold that we just introduced, but in this case it's based on the maximum luminance of the neighborhood. The brighter the neighborhood, the higher the contrast must be to matter. We'll add a configuration slider for this relative threshold as well, using the indicated range, again with the lowest value as the default.</p>
+						
+						<pre translate="no" class="csharp">	<ins>[Range(0.063f, 0.333f)]</ins>
+	<ins>public float relativeThreshold = 0.063f;</ins>
+	
+	&hellip;
+	
+	void OnRenderImage (RenderTexture source, RenderTexture destination) {
+		&hellip;
+
+		fxaaMaterial.SetFloat("_ContrastThreshold", contrastThreshold);
+		<ins>fxaaMaterial.SetFloat("_RelativeThreshold", relativeThreshold);</ins>
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="blending-high-contrast-pixels/relative-threshold.png" width="320" height="92">
+							<figcaption>Relative contrast threshold.</figcaption>
+						</figure>
+						
+						<p>The threshold is relative because it's scaled by the contrast. Use that instead of the previous threshold to see the difference. This time, I've used green to indicate skipped pixels.</p>
+						
+						<pre translate="no">		float _ContrastThreshold<ins>, _RelativeThreshold</ins>;
+
+		&hellip;
+
+		float4 ApplyFXAA (float2 uv) {
+			LuminanceData l = SampleLuminanceNeighborhood(uv);
+			if (l.contrast &lt; <ins>_RelativeThreshold * l.highest</ins>) {
+				return float4(<ins>0, 1</ins>, 0, 0);
+			}
+
+			return l.contrast;
+		}</pre>
+						
+						<figure>
+							<img src="blending-high-contrast-pixels/green-below-threshold.png" width="470" height="300">
+							<figcaption>Green pixels are skipped.</figcaption>
+						</figure>
+						
+						<p>Overall, the <em translate="no">Contrast Threshold</em> most aggressively skips pixels, but the <em translate="no">Relative Threshold</em> can skip higher contrast pixels in brighter regions. For example, in the below screenshot I've combined both colors with both threshold at maximum. Yellow indicates pixels that are skipped using both criteria. In this scene, only some white shadowed regions and the white spheres are affected solely by the relative threshold.</p>
+						
+						<figure>
+							<img src="blending-high-contrast-pixels/red-and-green-below-threshold.png" width="470" height="300">
+							<figcaption>Both thresholds, at maximum.</figcaption>
+						</figure>
+						
+						<p>To apply both thresholds, simply compare the contrast with the maximum of both. For clarity, put this comparison in a separate function. For now, if a pixel is skipped, simply make it black by returning zero.</p>
+						
+						<pre translate="no">		<ins>bool ShouldSkipPixel (LuminanceData l) {</ins>
+			<ins>float threshold =</ins>
+				<ins>max(_ContrastThreshold, _RelativeThreshold * l.highest);</ins>
+			<ins>return l.contrast &lt; threshold;</ins>
+		}
+
+		float4 ApplyFXAA (float2 uv) {
+			LuminanceData l = SampleLuminanceNeighborhood(uv);
+<del>//			if (l.contrast &lt; _RelativeThreshold * l.highest) {</del>
+<del>//				return float4(0, 1, 0, 0);</del>
+<del>//			}</del>
+			<ins>if (ShouldSkipPixel(l)) {</ins>
+				<ins>return 0;</ins>
+			<ins>}</ins>
+			return l.contrast;
+		}</pre>
+						
+						<figure>
+							<img src="blending-high-contrast-pixels/contrast-with-skipped-pixels.png" width="470" height="300">
+							<figcaption>Contrast, with skipped pixels at zero.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Calculating Blend Factor</h3>
+						
+						<p>Now that we have the contrast value for pixels that we need, we can move on to determining the blend factor. Create a separate function for this, with the luminance data as parameter, and use that to determine the final result.</p>
+						
+						<pre translate="no">		<ins>float DeterminePixelBlendFactor (LuminanceData l) {</ins>
+			<ins>return 0;</ins>
+		<ins>}</ins>
+
+		float4 ApplyFXAA (float2 uv) {
+			LuminanceData l = SampleLuminanceNeighborhood(uv);
+			if (ShouldSkipPixel(l)) {
+				return 0;
+			}
+
+			<ins>float pixelBlend = DeterminePixelBlendFactor(l);</ins>
+			return <ins>pixelBlend</ins>;
+		}</pre>
+						
+						<p>How much we should blend depends on the contrast between the middle pixel and its entire neighborhood. Although we've used the NEWS cross to determine the local contrast, this isn't a sufficient representation of the neighborhood. We need the four diagonal neighbors for that as well. So add them to the luminance data. We can sample them directly in <code>SampleLuminanceNeighborhood</code> along with the other neighbors, even though we might end up skipping the pixel. The shader compiler takes care of optimizing our code so the extra sampling only happens when needed.</p>
+						
+						<figure>
+							<img src="blending-high-contrast-pixels/neighborhood.png" width="165" height="155">
+							<figcaption>Entire neighborhood.</figcaption>
+						</figure>
+						
+						<pre translate="no">		struct LuminanceData {
+			float m, n, e, s, w;
+			<ins>float ne, nw, se, sw;</ins>
+			float highest, lowest, contrast;
+		};
+
+		LuminanceData SampleLuminanceNeighborhood (float2 uv) {
+			LuminanceData l;
+			l.m = SampleLuminance(uv);
+			l.n = SampleLuminance(uv,  0,  1);
+			l.e = SampleLuminance(uv,  1,  0);
+			l.s = SampleLuminance(uv,  0, -1);
+			l.w = SampleLuminance(uv, -1,  0);
+
+			<ins>l.ne = SampleLuminance(uv,  1,  1);</ins>
+			<ins>l.nw = SampleLuminance(uv, -1,  1);</ins>
+			<ins>l.se = SampleLuminance(uv,  1, -1);</ins>
+			<ins>l.sw = SampleLuminance(uv, -1, -1);</ins>
+			
+			&hellip;
+		}</pre>
+						
+						<p>Now we can determine the average luminance of all adjacent neighbors. But because the diagonal neighbors are spatially further away from the middle, they should matter less. We factor this into our average by doubling the weights of the NESW neighbors, dividing the total by twelve instead of eight. The result is akin to a tent filter and acts as a low-pass filter.</p>
+						
+						<figure>
+							<img src="blending-high-contrast-pixels/low-pass-weights.png" width="140" height="140">
+							<figcaption>Neighbor weights.</figcaption>
+						</figure>
+						
+						<pre translate="no">		float DeterminePixelBlendFactor (LuminanceData l) {
+			<ins>float filter = 2 * (l.n + l.e + l.s + l.w);</ins>
+			<ins>filter += l.ne + l.nw + l.se + l.sw;</ins>
+			<ins>filter *= 1.0 / 12;</ins>
+			return <ins>filter</ins>;
+		}</pre>
+						
+						<figure>
+							<img src="blending-high-contrast-pixels/low-pass-filter.png" width="470" height="300">
+							<figcaption>Low-pass filter on high-contrast regions.</figcaption>
+						</figure>
+						
+						<p>Next, find the contrast between the middle and this average, via their absolute difference. The result has now become a high-pass filter.</p>
+						
+						<pre translate="no">		float DeterminePixelBlendFactor (LuminanceData l) {
+			float filter = 2 * (l.n + l.e + l.s + l.w);
+			filter += l.ne + l.nw + l.se + l.sw;
+			filter *= 1.0 / 12;
+			<ins>filter = abs(filter - l.m);</ins>
+			return filter;
+		}</pre>
+						
+						<figure>
+							<img src="blending-high-contrast-pixels/high-pass-filter.png" width="470" height="300">
+							<figcaption>High-pass filter.</figcaption>
+						</figure>
+						
+						<p>Next, the filter is normalized relative to the contrast of the NESW cross, via a division. Clamp the result to a maximum of 1, as we might end up with larger values thanks to the filter covering more pixels than the cross.</p>
+						
+						<pre translate="no">			filter = abs(filter - l.m);
+			<ins>filter = saturate(filter / l.contrast);</ins>
+			return filter;</pre>
+						
+						<figure>
+							<img src="blending-high-contrast-pixels/normalized-filter.png" width="470" height="300">
+							<figcaption>Normalized filter.</figcaption>
+						</figure>
+						
+						<p>The result is a rather harsh transition to use as a blend factor. Use the <code>smoothstep</code> function to smooth it out, then square the result of that to slow it down.</p>
+						
+						<figure>
+							<img src="blending-high-contrast-pixels/squared-smoothstep.png" width="200" height="200">
+							<figcaption>Linear vs. squared smoothstep.</figcaption>
+						</figure>
+						
+						<pre translate="no">			filter = saturate(filter / l.contrast);
+
+			<ins>float blendFactor = smoothstep(0, 1, filter);</ins>
+			return <ins>blendFactor * blendFactor</ins>;</pre>
+						
+						<figure>
+							<img src="blending-high-contrast-pixels/blend-factor.png" width="470" height="300">
+							<figcaption>Blend factor.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Blend Direction</h3>
+						
+						<p>Now that we have a blend factor, the next step is to decide which two pixels to blend. FXAA blends the middle pixel with one of its neighbors from the NESW cross. Which of those four pixels is selected depends on the direction of the contrast gradient. In the simplest case, the middle pixel touches either a horizontal or a vertical edge between two contrasting regions. In case of a horizontal edge, it should be either the north or the south neighbor, depending on whether the middle is below or above the edge. Otherwise, it should be either the east or the west neighbor, depending on whether the middle is on the left or right side of the edge.</p>
+						
+						<figure>
+							<img src="blending-high-contrast-pixels/blend-directions.png" width="280" height="280">
+							<figcaption>Blend directions. Red represents brightness difference, either darker or lighter.</figcaption>
+						</figure>
+						
+						<p>Edges often aren't perfectly horizontal or vertical, but we'll pick the best approximation. To determine that, we compare the horizontal and vertical contrast in the neighborhood. When there is a horizontal edge, there is strong vertical contrast, either above or below the middle. We measure this by adding north and south, subtracting the middle twice, and taking the absolute of that, so `|n+s-2m|`. The same logic is applies to vertical edges, but with east and west instead.</p>
+						
+						<p>This only gives us an indication of the vertical contrast inside the NESW cross. We can improve the quality of our edge orientation detection by including the diagonal neighbors as well. For the horizontal edge, we perform the same calculation for the three pixels one step to the east and the three pixels one step to the west, summing the results. Again, these additional values are further away from the middle, so we halve their relative importance. This leads to the final formula `2|n+s-2m|+|n e+se-2e|+|nw+sw-2w|` for the horizontal edge contrast, and similar for the vertical edge contrast. We don't need to normalize the results because we only care about which one is larger and they both use the same scale.</p>
+						
+						<p>If the horizontal edge contrast is greater or equal than the vertical one, then we have a horizontal edge. Create a struct to hold this edge data and put the calculation for it in a separate function. Then have <code>ApplyFXAA</code> invoke it. This allows us to visualize the detected edge direction, for example by making horizontal edges red.</p>
+						
+						<pre translate="no">		<ins>struct EdgeData {</ins>
+			<ins>bool isHorizontal;</ins>
+		<ins>};</ins>
+
+		<ins>EdgeData DetermineEdge (LuminanceData l) {</ins>
+			<ins>EdgeData e;</ins>
+			<ins>float horizontal =</ins>
+				<ins>abs(l.n + l.s - 2 * l.m) * 2 +</ins>
+				<ins>abs(l.ne + l.se - 2 * l.e) +</ins>
+				<ins>abs(l.nw + l.sw - 2 * l.w);</ins>
+			<ins>float vertical =</ins>
+				<ins>abs(l.e + l.w - 2 * l.m) * 2 +</ins>
+				<ins>abs(l.ne + l.nw - 2 * l.n) +</ins>
+				<ins>abs(l.se + l.sw - 2 * l.s);</ins>
+			<ins>e.isHorizontal = horizontal >= vertical;</ins>
+			<ins>return e;</ins>
+		<ins>}</ins>
+
+		float4 ApplyFXAA (float2 uv) {
+			LuminanceData l = SampleLuminanceNeighborhood(uv);
+			if (ShouldSkipPixel(l)) {
+				return 0;
+			}
+			float pixelBlend = DeterminePixelBlendFactor(l);
+			<ins>EdgeData e = DetermineEdge(l);</ins>
+			return <ins>e.isHorizontal ? float4(1, 0, 0, 0) : 1</ins>;
+		}</pre>
+						
+						<figure>
+							<img src="blending-high-contrast-pixels/red-horizontal.png" width="470" height="300">
+							<figcaption>Red pixels are on horizontal edges.</figcaption>
+						</figure>
+						
+						<p>Knowing the edge orientation tells us in what dimension we have to blend. If it's horizontal, then we'll blend vertically across the edge. How far it is to the next pixel in UV space depends on the texel size, and that depends on the blend direction. So let's add this step size to the edge data as well.</p>
+						
+						<pre translate="no">		struct EdgeData {
+			bool isHorizontal;
+			<ins>float pixelStep;</ins>
+		};
+
+		EdgeData DetermineEdge (LuminanceData l) {
+			&hellip;
+			e.isHorizontal = horizontal >= vertical;
+
+			<ins>e.pixelStep =</ins>
+				<ins>e.isHorizontal ? _MainTex_TexelSize.y : _MainTex_TexelSize.x;</ins>
+
+			return e;
+		}</pre>
+						
+						<p>Next, we have to determine whether we should blend in the positive or negative direction. We do this by comparing the contrast&mdash;the luminance gradient&mdash;on either side of the middle in the appropriate dimension. If we have a horizontal edge, then north is the positive neighbor and south is the negative one. If we have a vertical edge instead, then east is the positive neighbor and west is the negative one.</p>
+						
+						<pre translate="no">			<ins>float pLuminance = e.isHorizontal ? l.n : l.e;</ins>
+			<ins>float nLuminance = e.isHorizontal ? l.s : l.w;</ins>
+			
+			e.pixelStep =
+				e.isHorizontal ? _MainTex_TexelSize.y : _MainTex_TexelSize.x;</pre>
+						
+						<p>Compare the gradients. If the positive side has the highest contrast, then we can use the appropriate texel size unchanged. Otherwise, we have to step in the opposite direction, so we have to negate it.</p>
+						
+						<pre translate="no">			float pLuminance = e.isHorizontal ? l.n : l.e;
+			float nLuminance = e.isHorizontal ? l.s : l.w;
+			<ins>float pGradient = abs(pLuminance - l.m);</ins>
+			<ins>float nGradient = abs(nLuminance - l.m);</ins>
+			
+			e.pixelStep =
+				e.isHorizontal ? _MainTex_TexelSize.y : _MainTex_TexelSize.x;
+
+			<ins>if (pGradient &lt; nGradient) {</ins>
+				<ins>e.pixelStep = -e.pixelStep;</ins>
+			<ins>}</ins></pre>
+						
+						<p>To visualize this, I made all pixels with a negative step red. Because pixels should blend across the edge, this means that all pixels on the right or top side of edges become red.</p>
+						
+						<pre translate="no">		float4 ApplyFXAA (float2 uv) {
+			&hellip;
+			return <ins>e.pixelStep &lt; 0</ins> ? float4(1, 0, 0, 0) : 1;
+		}</pre>
+						
+						<figure>
+							<img src="blending-high-contrast-pixels/red-negative.png" width="470" height="300">
+							<figcaption>Red pixels blend in negative direction.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Blending</h3>
+						
+						<p>At this point we have both a blend factor and known in which direction to blend. The final result is obtained by using the blend factor to linearly interpolate between the middle pixel and its neighbor in the appropriate direction. We can do this by simply sampling the image with an offset equal to the pixel step scaled by the blend factor. Also, make sure to return the original pixel if we decided not to blend it. I kept the original luminance in the alpha channel, in case you want to use it for something else, but that's not necessary.</p>
+						
+						<pre translate="no">		float4 ApplyFXAA (float2 uv) {
+			LuminanceData l = SampleLuminanceNeighborhood(uv);
+			if (ShouldSkipPixel(l)) {
+				return <ins>Sample(uv)</ins>;
+			}
+			float pixelBlend = DeterminePixelBlendFactor(l);
+			EdgeData e = DetermineEdge(l);
+
+			<ins>if (e.isHorizontal) {</ins>
+				<ins>uv.y += e.pixelStep * pixelBlend;</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>uv.x += e.pixelStep * pixelBlend;</ins>
+			<ins>}</ins>
+			return <ins>float4(Sample(uv).rgb, l.m)</ins>;
+		}</pre>
+						
+						<p>Note that the final sample ends up with an offset in four possible directions and a variable distance, which can wildly vary from pixel to pixel. This confuses anisotropic texture filtering and mipmap selection. While we don't use mipmaps for our temporary texture and typically no other post-effect does this either, we haven't explicitly disabled anisotropic filtering, so that might distort the final sample. To guarantee that no amount of perspective filtering is applied, use <code>tex2Dlod</code> to access the texture without adjustment in <code>Sample</code>, instead of using <code>tex2D</code>.</p>
+						
+						<pre translate="no">		float4 Sample (float2 uv) {
+			return <ins>tex2Dlod</ins>(_MainTex, <ins>float4(</ins>uv<ins>, 0, 0)</ins>);
+		}</pre>
+						
+						<figure>
+							<img alt="with" src="blending-high-contrast-pixels/blended.png" width="470" height="300">
+							<img alt="without" src="setting-the-scene/aliased.png" width="470" height="300">
+							<figcaption>With and without blending.</figcaption>
+						</figure>
+						
+						<p>The result is an anti-aliased image using FXAA subpixel blending. It affects high-contrast edges, but also a lot of lower-contrast details in our textures. While this helps mitigate fireflies, the blurriness can be considered too much. The strength of this effect can by tuned via a 0&ndash;1 range factor to modulate the final offset. The original FXAA implementation allows this as well, with the following code documentation:</p>
+						
+						<pre translate="no">	// Choose the amount of sub-pixel aliasing removal.
+	// This can effect sharpness.
+	//   1.00 - upper limit (softer)
+	//   0.75 - default amount of filtering
+	//   0.50 - lower limit (sharper, less sub-pixel aliasing removal)
+	//   0.25 - almost off
+	//   0.00 - completely off</pre>
+						
+						<p>Add a slider for the subpixel blending to our effect. We'll use full-strength as the default, which Unity's post effect stack v2 does as well, although it doesn't allow you to adjust it.</p>
+						
+						<pre translate="no" class="csharp">	<ins>[Range(0f, 1f)]</ins>
+	<ins>public float subpixelBlending = 1f;</ins>
+
+	&hellip;
+
+	void OnRenderImage (RenderTexture source, RenderTexture destination) {
+		&hellip;
+		
+		fxaaMaterial.SetFloat("_ContrastThreshold", contrastThreshold);
+		fxaaMaterial.SetFloat("_RelativeThreshold", relativeThreshold);
+		<ins>fxaaMaterial.SetFloat("_SubpixelBlending", subpixelBlending);</ins>
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="blending-high-contrast-pixels/subpixel-blending-slider.png" width="320" height="110">
+							<figcaption>Slider for subpixel blending.</figcaption>
+						</figure>
+						
+						<p>Use <code>_SubpixelBlending</code> to modulate the blend factor before returning it in <code>DeterminePixelBlendFactor</code>. We can now control the strength of the FXAA effect.</p>
+						
+						<pre translate="no">		float _ContrastThreshold, _RelativeThreshold;
+		<ins>float _SubpixelBlending;</ins>
+
+		&hellip;
+
+		float DeterminePixelBlendFactor (LuminanceData l) {
+			&hellip;
+			return blendFactor * blendFactor <ins>* _SubpixelBlending</ins>;
+		}</pre>
+						
+						<figure>
+							<video width="470" height="300" controls loop muted>
+								<source src="blending-high-contrast-pixels/adjusting-amount.mp4" type="video/mp4">
+							</video>
+							<figcaption>Adjusting the amount of blending.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="blending-high-contrast-pixels/blending-high-contrast-pixels.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Blending Along Edges</h2>
+					
+					<p>Because the pixel blend factor is determined inside a 3&times;3 block, it can only smooth out features of that scale. But edges can be longer than that. A pixel can end up somewhere on a long step of an angled edge staircase. While locally the edge is either horizontal or vertical, the true edge is at an angle. If we knew this true edge then we could better match the blend factors of adjacent pixels, smoothing the edge across its entire length.</p>
+					
+					<figure>
+						<img src="blending-along-edges/edge-pixels.png" width="175" height="262">
+						<figcaption>No, current, and desired edge blending.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Edge Luminance</h3>
+						
+						<p>To figure out what kind of edge we're dealing with, we have to keep track of more information. We know that the middle pixel of the 3&times;3 block is on one side of the edge, and one of the other pixels is on the other side. To further identify the edge, we need to know its gradient&mdash;the contrast difference between the regions on either side of it. We already figured this out in <code>DetermineEdge</code>. Let's keep track of this gradient and the luminance on the other side as well.</p>
+						
+						<pre translate="no">		struct EdgeData {
+			bool isHorizontal;
+			float pixelStep;
+			<ins>float oppositeLuminance, gradient;</ins>
+		};
+
+		EdgeData DetermineEdge (LuminanceData l) {
+			&hellip;
+			
+			if (pGradient &lt; nGradient) {
+				e.pixelStep = -e.pixelStep;
+				<ins>e.oppositeLuminance = nLuminance;</ins>
+				<ins>e.gradient = nGradient;</ins>
+			}
+			<ins>else {</ins>
+				<ins>e.oppositeLuminance = pLuminance;</ins>
+				<ins>e.gradient = pGradient;</ins>
+			<ins>}</ins>
+
+			return e;
+		}</pre>
+						
+						<p>We'll use a separate function to determine a new blend factor for edges. For now, immediately return it after we've determined the edge, skipping the rest of the shader. Also set skipped pixels back to zero. At first, we'll just output the edge gradient.</p>
+						
+						<pre translate="no">		<ins>float DetermineEdgeBlendFactor (LuminanceData l, EdgeData e, float2 uv) {</ins>
+			<ins>return e.gradient;</ins>
+		<ins>}</ins>
+
+		float4 ApplyFXAA (float2 uv) {
+			LuminanceData l = SampleLuminanceNeighborhood(uv);
+			if (ShouldSkipPixel(l)) {
+				return <ins>0</ins>;
+			}
+
+			float pixelBlend = DeterminePixelBlendFactor(l);
+			EdgeData e = DetermineEdge(l);
+			<ins>return DetermineEdgeBlendFactor(l, e, uv);</ins>
+
+			if (e.isHorizontal) {
+				uv.y += e.pixelStep * pixelBlend;
+			}
+			else {
+				uv.x += e.pixelStep * pixelBlend;
+			}</pre>
+						
+						<figure>
+							<img src="blending-along-edges/edge-gradients.png" width="470" height="300">
+							<figcaption>Edge gradients.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Walking Along the Edge</h3>
+						
+						<p>We have to figure out the relative location of the pixel along the horizontal or vertical edge segment. To do so, we'll walk along the edge in both directions until we find its end points. We can do this by sampling pixel pairs along the edge and check whether their contrast gradient still matches that of the original edge.</p>
+						
+						<figure>
+							<img src="blending-along-edges/searching.png" width="280" height="105">
+							<figcaption>Searching for the ends of an edge.</figcaption>
+						</figure>
+						
+						<p>But we don't actually need to sample both pixels each step. We can make do with a single sample in between them. That gives us the average luminance exactly on the edge, which we can compare with the fist edge crossing.</p>
+						
+						<figure>
+							<img src="blending-along-edges/search-sampling.png" width="280" height="105">
+							<figcaption>Texture samples while searching (yellow) and 3&times;3 samples (black).</figcaption>
+						</figure>
+						
+						<p>So we begin by determining the UV coordinates on the edge, which is half a step away from the original UV coordinates.</p>
+						
+						<pre translate="no">		float DetermineEdgeBlendFactor (LuminanceData l, EdgeData e, float2 uv) {
+			<ins>float2 uvEdge = uv;</ins>
+			<ins>if (e.isHorizontal) {</ins>
+				<ins>uvEdge.y += e.pixelStep * 0.5;</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>uvEdge.x += e.pixelStep * 0.5;</ins>
+			<ins>}</ins>
+
+			return e.gradient;
+		}</pre>
+						
+						<p>Next, the UV offset for a single step along the edge depends on its orientation. It's either horizontal or vertical.</p>
+						
+						<pre translate="no">			float2 uvEdge = uv;
+			<ins>float2 edgeStep;</ins>
+			if (e.isHorizontal) {
+				uvEdge.y += e.pixelStep * 0.5;
+				<ins>edgeStep = float2(_MainTex_TexelSize.x, 0);</ins>
+			}
+			else {
+				uvEdge.x += e.pixelStep * 0.5;
+				<ins>edgeStep = float2(0, _MainTex_TexelSize.y);</ins>
+			}</pre>
+						
+						<p>We'll find the end point by comparing the luminance we sample while walking with the luminance at the original edge location, which is the average of the luminance pair that we already have. If the found luminance is similar enough to the original, then we're still on the edge and have to keep going. If it differs too much, then we've reached the end of the edge.</p>
+						
+						<p>We'll perform this comparison by taking the luminance delta along the edge&mdash;the sampled luminance minus the original edge luminance&mdash;and checking whether it meets a threshold. As threshold FXAA uses a quarter of the original gradient. Let's do this for one step in the positive direction, explicitly keeping track of the luminance delta and whether we've hit the end of the edge. I've shown which pixels are adjacent to their positive edge end by making them white and everything else black.</p>
+						
+						<pre translate="no">			<ins>float edgeLuminance = (l.m + e.oppositeLuminance) * 0.5;</ins>
+			<ins>float gradientThreshold = e.gradient * 0.25;</ins>
+			
+			<ins>float2 puv = uvEdge + edgeStep;</ins>
+			<ins>float pLuminanceDelta = SampleLuminance(puv) - edgeLuminance;</ins>
+			<ins>bool pAtEnd = abs(pLuminanceDelta) >= gradientThreshold;</ins>
+			
+			return <ins>pAtEnd</ins>;</pre>
+						
+						<figure>
+							<img src="blending-along-edges/one-positive-step.png" width="470" height="300">
+							<figcaption>One step to the positive end.</figcaption>
+						</figure>
+						
+						<p>We can see that isolated pixels are now mostly white, but some pixels along longer angled lines remain black. They are further than one step away from the positive end point of the locally horizontal or vertical edge. We have to keep walking along the edge for those pixels. So add a loop after the first search step, performing it up to nine more times, for a maximum of ten steps per pixel.</p>
+						
+						<pre translate="no">			float2 puv = uvEdge + edgeStep;
+			float pLuminanceDelta = SampleLuminance(puv) - edgeLuminance;
+			bool pAtEnd = abs(pLuminanceDelta) >= gradientThreshold;
+			
+			<ins>for (int i = 0; i &lt; 9 &amp;&amp; !pAtEnd; i++) {</ins>
+				<ins>puv += edgeStep;</ins>
+				<ins>pLuminanceDelta = SampleLuminance(puv) - edgeLuminance;</ins>
+				<ins>pAtEnd = abs(pLuminanceDelta) >= gradientThreshold;</ins>
+			<ins>}</ins>
+
+			return pAtEnd;</pre>
+						
+						<figure>
+							<img src="blending-along-edges/ten-positive-steps.png" width="470" height="300">
+							<figcaption>Up to ten steps.</figcaption>
+						</figure>
+						
+						<p>We are now able to find positive end points up to ten pixels away, and almost all pixels have become white in the example screenshot. We can visualize the distance to the end point in UV space by taking the relevant UV delta, and scaling it up by a factor of ten.</p>
+						
+						<pre translate="no">			<ins>float pDistance;</ins>
+			<ins>if (e.isHorizontal) {</ins>
+				<ins>pDistance = puv.x - uv.x;</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>pDistance = puv.y - uv.y;</ins>
+			<ins>}</ins>
+
+			return <ins>pDistance * 10</ins>;</pre>
+						
+						<figure>
+							<img src="blending-along-edges/positive-distance.png" width="470" height="300">
+							<figcaption>Positive end distance, up to ten pixels.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Walking in Both Directions</h3>
+						
+						<p>There is also an end point in the negative direction along the edge, so search for that one as well, using the sample approach. The final distance then becomes the shortest of the positive and negative distances.</p>
+						
+						<pre translate="no">			for (int i = 0; i &lt; 9 &amp;&amp; !pAtEnd; i++) {
+				&hellip;
+			}
+			
+			<ins>float2 nuv = uvEdge - edgeStep;</ins>
+			<ins>float nLuminanceDelta = SampleLuminance(nuv) - edgeLuminance;</ins>
+			<ins>bool nAtEnd = abs(nLuminanceDelta) >= gradientThreshold;</ins>
+
+			<ins>for (int i = 0; i &lt; 9 &amp;&amp; !nAtEnd; i++) {</ins>
+				<ins>nuv -= edgeStep;</ins>
+				<ins>nLuminanceDelta = SampleLuminance(nuv) - edgeLuminance;</ins>
+				<ins>nAtEnd = abs(nLuminanceDelta) >= gradientThreshold;</ins>
+			<ins>}</ins>
+
+			float pDistance<ins>, nDistance</ins>;
+			if (e.isHorizontal) {
+				pDistance = puv.x - uv.x;
+				<ins>nDistance = uv.x - nuv.x;</ins>
+			}
+			else {
+				pDistance = puv.y - uv.y;
+				<ins>nDistance = uv.y - nuv.y;</ins>
+			}
+			
+			<ins>float shortestDistance;</ins>
+			<ins>if (pDistance &lt;= nDistance) {</ins>
+				<ins>shortestDistance = pDistance;</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>shortestDistance = nDistance;</ins>
+			<ins>}</ins>
+
+			return <ins>shortestDistance</ins> * 10;</pre>
+						
+						<figure>
+							<img src="blending-along-edges/shortest-distance.png" width="470" height="300">
+							<figcaption>Distance to nearest edge end.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Determining Blend Factor</h3>
+						
+						<p>At this point we know the distance to the nearest end point of the edge&mdash;if it is in range&mdash;which we can use to determine the blend factor. We'll smooth out the staircases by blending more the closer we are to an end point. But we'll only do that in the direction where the edge is slanting towards the region that contains the middle pixel. We can find this out by comparing the signs of the luminance delta along the edge and the luminance delta across the edge.</p>
+						
+						<figure>
+							<img src="blending-along-edges/searching-sign.png" width="280" height="210">
+							<figcaption>Choosing the correct side.</figcaption>
+						</figure>
+						
+						<p>If the deltas go in opposite directions, then we're moving away from the edge and should skip blending, by using a blend factor of zero. This ensures that we only blend pixels on one side of the edge.</p>
+						
+						<pre translate="no">			float shortestDistance;
+			<ins>bool deltaSign;</ins>
+			if (pDistance &lt;= nDistance) {
+				shortestDistance = pDistance;
+				<ins>deltaSign = pLuminanceDelta >= 0;</ins>
+			}
+			else {
+				shortestDistance = nDistance;
+				<ins>deltaSign = nLuminanceDelta >= 0;</ins>
+			}
+
+			<ins>if (deltaSign == (l.m - edgeLuminance >= 0)) {</ins>
+				<ins>return 0;</ins>
+			<ins>}</ins>
+			return shortestDistance * 10;</pre>
+						
+						<figure>
+							<img src="blending-along-edges/only-relevant-edges.png" width="470" height="300">
+							<figcaption>Only pixels on the correct side of edges.</figcaption>
+						</figure>
+						
+						<p>If we have a valid pixel for blending, then we blend by a factor of 0.5 minus the relative distance to the nearest end point along the edge. This means that we blend more the closer we are to the end point and won't blend at all in the middle of the edge.</p>
+						
+						<pre translate="no">			return <ins>0.5 - shortestDistance / (pDistance + nDistance)</ins>;</pre>
+						
+						<figure>
+							<img src="blending-along-edges/edge-blend-factor.png" width="470" height="300">
+							<figcaption>Edge blend factor.</figcaption>
+						</figure>
+						
+						<p>To get an idea of which edges are found via this method that are missed when just considering the 3&times;3 region, subtract the pixel blend factor from the edge blend factor.</p>
+						
+						<pre translate="no">			return DetermineEdgeBlendFactor(l, e, uv) <ins>- pixelBlend</ins>;</pre>
+						
+						<figure>
+							<img src="blending-along-edges/edge-minus-pixel-blend.png" width="470" height="300">
+							<figcaption>Blending added by edge factor.</figcaption>
+						</figure>
+						
+						<p>The final blend factor of FXAA is simply the maximum of both blend factors. So it always uses the edge blend factor and you can control the strength of the pixel blend factor via the slider.</p>
+						
+						<pre translate="no">		float4 ApplyFXAA (float2 uv) {
+			LuminanceData l = SampleLuminanceNeighborhood(uv);
+			if (ShouldSkipPixel(l)) {
+				return <ins>Sample(uv)</ins>;
+			}
+
+			float pixelBlend = DeterminePixelBlendFactor(l);
+			EdgeData e = DetermineEdge(l);
+<del>//			return DetermineEdgeBlendFactor(l, e, uv) - pixelBlend;</del>
+			<ins>float edgeBlend = DetermineEdgeBlendFactor(l, e, uv);</ins>
+			<ins>float finalBlend = max(pixelBlend, edgeBlend);</ins>
+
+			if (e.isHorizontal) {
+				uv.y += e.pixelStep * <ins>finalBlend</ins>;
+			}
+			else {
+				uv.x += e.pixelStep * <ins>finalBlend</ins>;
+			}
+			return float4(Sample(uv).rgb, l.m);
+		}</pre>
+						
+						<figure>
+							<img alt="edge" src="blending-along-edges/blended-edges.png" width="470" height="300">
+							<img alt="aliased" src="setting-the-scene/aliased.png" width="470" height="300">
+							<figcaption>Only edge blending vs. original image.</figcaption>
+						</figure>
+						
+						<figure>
+							<img alt="edge" src="blending-along-edges/blended-edges.png" width="470" height="300">
+							<img alt="max" src="blending-along-edges/maximum-blend.png" width="470" height="300">
+							<figcaption>With subpixel blending at 0 vs. 1.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Quality</h3>
+						
+						<p>Right now we're always searching up to ten iterations to find the end of an edge. This is sufficient for many cases, but not for those edges that have staircase steps more than ten pixels wide. If we end up not finding an edge, then we know that the end point must be further away. Without taking more samples, the best we can do is guess how much further away the end is. This must be at least one more step away, so we can increase our UV offset one more time when that's the case. That will always be more accurate.</p>
+						
+						<pre translate="no">			for (int i = 0; i &lt; 9 &amp;&amp; !pAtEnd; i++) {
+				&hellip;
+			}
+			<ins>if (!pAtEnd) {</ins>
+				<ins>puv += edgeStep;</ins>
+			<ins>}</ins>
+
+			&hellip;
+
+			for (int i = 0; i &lt; 9 &amp;&amp; !nAtEnd; i++) {
+				&hellip;
+			}
+			<ins>if (!nAtEnd) {</ins>
+				<ins>nuv -= edgeStep;</ins>
+			<ins>}</ins></pre>
+						
+						<p>Besides that, we can vary how many steps we take. We can also vary the step size, skipping pixels to detect longer edges at the cost of precision. We don't need to use a constant step size either, we can increase it as we go, by defining them in an array. Finally, we can adjust the offset used to guess distances that are too large. Let's define these settings with macros, to make shader variants possible.</p>
+						
+						<pre translate="no">		<ins>#define EDGE_STEP_COUNT 10</ins>
+		<ins>#define EDGE_STEPS 1, 1, 1, 1, 1, 1, 1, 1, 1, 1</ins>
+		<ins>#define EDGE_GUESS 1</ins>
+
+		<ins>static const float edgeSteps[EDGE_STEP_COUNT] = { EDGE_STEPS };</ins>
+
+		float DetermineEdgeBlendFactor (LuminanceData l, EdgeData e, float2 uv) {
+			&hellip;
+			
+			float2 puv = uvEdge + edgeStep <ins>* edgeSteps[0]</ins>;
+			float pLuminanceDelta = SampleLuminance(puv) - edgeLuminance;
+			bool pAtEnd = abs(pLuminanceDelta) >= gradientThreshold;
+
+			for (int i = <ins>1</ins>; i &lt; <ins>EDGE_STEP_COUNT</ins> &amp;&amp; !pAtEnd; i++) {
+				puv += edgeStep <ins>* edgeSteps[i]</ins>;
+				pLuminanceDelta = SampleLuminance(puv) - edgeLuminance;
+				pAtEnd = abs(pLuminanceDelta) >= gradientThreshold;
+			}
+			if (!pAtEnd) {
+				puv += edgeStep <ins>* EDGE_GUESS</ins>;
+			}
+
+			float2 nuv = uvEdge - edgeStep <ins>* edgeSteps[0]</ins>;
+			float nLuminanceDelta = SampleLuminance(nuv) - edgeLuminance;
+			bool nAtEnd = abs(nLuminanceDelta) >= gradientThreshold;
+
+			for (int i = <ins>1</ins>; i &lt; <ins>EDGE_STEP_COUNT</ins> &amp;&amp; !nAtEnd; i++) {
+				nuv -= edgeStep <ins>* edgeSteps[i]</ins>;
+				nLuminanceDelta = SampleLuminance(nuv) - edgeLuminance;
+				nAtEnd = abs(nLuminanceDelta) >= gradientThreshold;
+			}
+			if (!nAtEnd) {
+				nuv -= edgeStep <ins>* EDGE_GUESS</ins>;
+			}
+			&hellip;
+		}</pre>
+						
+						<p>The original FXAA algorithm contains a list of quality defines. Unity's post effect stack v2 uses quality level 28 as the default. It has a step count of ten, with the second step at 1.5 instead of 1, and all following steps at 2, with the last one at 4. If that's not enough the find the end point, the final guess adds another 8.</p>
+						
+						<pre translate="no">		#define EDGE_STEPS <ins>1, 1.5, 2, 2, 2, 2, 2, 2, 2, 4</ins>
+		#define EDGE_GUESS <ins>8</ins></pre>
+						
+						<p>By including a half-pixel offset once, we end up sampling in between adjacent pixel pairs from then on, working on the average of four pixels at once instead of two. This isn't as accurate, but makes it possible to use step size 2 without skipping pixels.</p>
+						
+						<figure>
+							<img alt="quality 28" src="blending-along-edges/quality-28.png" width="470" height="300">
+							<img alt="single steps" src="blending-along-edges/edge-blend-factor.png" width="470" height="300">
+							<figcaption>Edge blend factors for quality 28 vs. single-pixel steps.</figcaption>
+						</figure>
+						
+						<p>Compared with using single-pixel search steps, the blend factors can be blockier and the quality suffers a bit, but in return fewer search iterations are needed for short edges, while much longer edges can be detected.</p>
+						
+						<figure>
+							<img alt="quality 28" src="blending-along-edges/qualit-28-blended.png" width="470" height="300">
+							<img alt="single steps" src="blending-along-edges/blended-edges.png" width="470" height="300">
+							<figcaption>Edge blend results for quality 28 vs. single-pixel steps.</figcaption>
+						</figure>
+						
+						<p>Of course you can define your own search quality settings, for example searching one pixel at a times a few step before transitioning to bigger averaged steps, to keep the best quality for short edges. Unity's post effect stack v2 has a single toggle for a lower-quality version, which among other things uses the original default FXAA quality level 12 for the edge search. Let's provide this option as well.</p>
+						
+						<pre translate="no">		<ins>#if defined(LOW_QUALITY)</ins>
+			<ins>#define EDGE_STEP_COUNT 4</ins>
+			<ins>#define EDGE_STEPS 1, 1.5, 2, 4</ins>
+			<ins>#define EDGE_GUESS 12</ins>
+		<ins>#else</ins>
+			#define EDGE_STEP_COUNT 10
+			#define EDGE_STEPS 1, 1.5, 2, 2, 2, 2, 2, 2, 2, 4
+			#define EDGE_GUESS 8
+		#endif</pre>
+						
+						<p>Add a multi-compile option to the FXAA pass.</p>
+						
+						<pre translate="no">				#pragma multi_compile _ LUMINANCE_GREEN
+				<ins>#pragma multi_compile _ LOW_QUALITY</ins></pre>
+						
+						<p>And a toggle to control it.</p>
+						
+						<pre translate="no" class="csharp">	<ins>public bool lowQuality;</ins>
+
+	&hellip;
+
+	void OnRenderImage (RenderTexture source, RenderTexture destination) {
+		&hellip;
+		fxaaMaterial.SetFloat("_SubpixelBlending", subpixelBlending);
+
+		<ins>if (lowQuality) {</ins>
+			<ins>fxaaMaterial.EnableKeyword("LOW_QUALITY");</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>fxaaMaterial.DisableKeyword("LOW_QUALITY");</ins>
+		<ins>}</ins>
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img alt="quality toggle" src="blending-along-edges/quality-toggle.png" width="320" height="180">
+							<img alt="blend factors" src="blending-along-edges/quality-12.png" width="470" height="300">
+							<img alt="result" src="blending-along-edges/quality-12-blending.png" width="470" height="300">
+							<figcaption>Low quality, edge blending only.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Performance</h3>
+						
+						<p>Finally, let's consider performance. Loops aren't ideal. The original FXAA code explicitly unrolled the loops, containing a long sequence of nested if-statements. Fortunately, we don't need to do this. We can simply tell the shader compiler to do this for us, via the <code>UNITY_UNROLL</code> attribute. In my case, unrolling the loops provided a significant performance boost, even though without that optimization FXAA is still very fast.</p>
+						
+						<pre translate="no">			<ins>UNITY_UNROLL</ins>
+			for (int i = 1; i &lt; EDGE_STEP_COUNT &amp;&amp; !pAtEnd; i++) {
+				&hellip;
+			}
+			&hellip;
+
+			<ins>UNITY_UNROLL</ins>
+			for (int i = 1; i &lt; EDGE_STEP_COUNT &amp;&amp; !nAtEnd; i++) {
+				&hellip;
+			}</pre>
+						
+						<p>Besides that, the original FXAA code also combined both loops in a single one, searching in both directions in lockstep. Each iteration, only the directions that haven't finished yet advance and sample again. This might be faster in some cases, but in my case the separate loops perform better than the fused one.</p>
+						
+						<p>If you inspect the original FXAA code&mdash;version 3.11&mdash; you'll find that it is dominated by aggressive low-level optimizations. Besides making the code hard to read, these optimizations might no longer make sense today. In our case, the shader compiler takes care of practically all such optimizations for us, better than we could do ourselves. Aggressive manual optimization might make it worse. Unity's post effect stack v2 uses the FXAA 3.11 code nearly verbatim, but in my case the clearer version presented in this tutorial actually performs better. Like always, if you want the absolute best performance, test it yourself, per project, per target platform.</p>
+					</section>
+					
+					<a href="blending-along-edges/blending-along-edges.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Color Space</h2>
+					
+					<p>In this test scene, we're using HDR lighting in linear space and feed the rendered image directly to FXAA without any color adjustments. This might not produce the best results.</p>
+					
+					<section>
+						<h3>LDR</h3>
+						
+						<p>Although we've clamped the color when calculating the luminance used to determine the blend factor, we haven't actually clamped the RGB channels used when blending. This means that we can end up blending HDR colors. When HDR color components blend, we won't see a difference because the result is still outside of the final displayed range. This isn't a problem, because the alternative would be a blend between 1 and 1. However, it does become a problem when LDR and HDR data is blended. If the HDR component is very bright, the result gets pulled into HDR as well. This brings the otherwise LDR pixel into HDR range, potentially increasing aliasing instead of decreasing it.</p>
+						
+						<p>Providing LDR data is the responsibility of whoever provided the input for the FXAA pass. In our case, we can ensure it when the luminance pass is used.</p>
+						
+						<pre translate="no">				float4 FragmentProgram (Interpolators i) : SV_Target {
+					float4 sample = tex2D(_MainTex, i.uv);
+<del>//					sample.a = LinearRgbToLuminance(saturate(sample.rgb));</del>
+					<ins>sample.rgb = saturate(sample.rgb);</ins>
+					<ins>sample.a = LinearRgbToLuminance(sample.rgb);</ins>
+					return sample;
+				}</pre>
+						
+						<figure>
+							<img alt="ldr" src="color-space/ldr.png" width="470" height="300">
+							<img alt="hdr" src="blending-along-edges/maximum-blend.png" width="470" height="300">
+							<figcaption>LDR vs. HDR blending.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Gamma</h3>
+						
+						<p>Linear space is used when shading because that can produce physically correct lighting. However, FXAA is about perception, not physics. As noted in the original FXAA code, blending in linear space can produce visually worse results compared to blending in gamma space. Unity's post effect stack v2 simply blends in linear space, so the results aren't that bad. But we can support both approaches.</p>
+						
+						<p>As we assume linear-space rendering, add a toggle for gamma-space blending to our effect, which controls a shader keyword.</p>
+						
+						<pre translate="no" class="csharp">	<ins>public bool gammaBlending;</ins>
+	
+	&hellip;
+	
+	void OnRenderImage (RenderTexture source, RenderTexture destination) {
+		&hellip;
+
+		if (lowQuality) {
+			fxaaMaterial.EnableKeyword("LOW_QUALITY");
+		}
+		else {
+			fxaaMaterial.DisableKeyword("LOW_QUALITY");
+		}
+
+		<ins>if (gammaBlending) {</ins>
+			<ins>fxaaMaterial.EnableKeyword("GAMMA_BLENDING");</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>fxaaMaterial.DisableKeyword("GAMMA_BLENDING");</ins>
+		<ins>}</ins>
+
+		&hellip;
+	}</pre>
+						
+						<p>In the luminance pass, convert the color to gamma space before outputting it, if desired. If this pass is skipped, it's up to whoever provides the FXAA input to make sure the colors are in gamma space.</p>
+						
+						<pre translate="no">				<ins>#pragma multi_compile _ GAMMA_BLENDING</ins>
+
+				float4 FragmentProgram (Interpolators i) : SV_Target {
+					float4 sample = tex2D(_MainTex, i.uv);
+					sample.rgb = saturate(sample.rgb);
+					sample.a = LinearRgbToLuminance(sample.rgb);
+					<ins>#if defined(GAMMA_BLENDING)</ins>
+						<ins>sample.rgb = LinearToGammaSpace(sample.rgb);</ins>
+					<ins>#endif</ins>
+					return sample;
+				}</pre>
+						
+						<p>At the end of the FXAA pass, once we have the final sample, convert it back to linear space, if appropriate. We have to do this because the rendering pipeline assumes that the output is in linear space.</p>
+						
+						<pre translate="no">				#pragma multi_compile _ LUMINANCE_GREEN
+				#pragma multi_compile _ LOW_QUALITY
+				<ins>#pragma multi_compile _ GAMMA_BLENDING</ins>
+
+				float4 FragmentProgram (Interpolators i) : SV_Target {
+<del>//					return ApplyFXAA(i.uv);</del>
+					<ins>float4 sample = ApplyFXAA(i.uv);</ins>
+					<ins>#if defined(GAMMA_BLENDING)</ins>
+						<ins>sample.rgb = GammaToLinearSpace(sample.rgb);</ins>
+					<ins>#endif</ins>
+					<ins>return sample;</ins>
+				}</pre>
+						
+						<figure>
+							<img alt="gamma" src="color-space/gamma-blending.png" width="470" height="300">
+							<img alt="linear" src="color-space/ldr.png" width="470" height="300">
+							<figcaption>Gamma vs. linear blending.</figcaption>
+						</figure>
+						
+						<p>Finally, we can reproduce the FXAA effect with its default settings, as designed. The settings are <em translate="no">Contrast Threshold</em> 0.0833, <em translate="no">Relative Threshold</em> 0.166, <em translate="no">Subpixel Blending</em> 0.75, and both <em translate="no">Low Quality</em> and <em translate="no">Gamma Blending</em> enabled.</p>
+						
+						<figure>
+							<img alt="fxaa" src="color-space/default.png" width="470" height="300">
+							<img alt="aliased" src="setting-the-scene/aliased.png" width="470" height="300">
+							<figcaption>FXAA with original default settings vs. aliased image.</figcaption>
+						</figure>
+						
+						<p>Of course this is just one of many ways to configure FXAA. You can tune it as you see fit. You might decide that you don't need any subpixel blending at all, relying solely on edge blending. In that case, you can speed up the effect by removing the <code>DeterminePixelBlendFactor</code> invocation, maybe as a shader variant. And when providing FXAA as an option in your game, you could expose some of its settings to the player, instead of only an FXAA on&ndash;off toggle.</p>
+					</section>
+					
+					<a href="color-space/color-space.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="FXAA.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

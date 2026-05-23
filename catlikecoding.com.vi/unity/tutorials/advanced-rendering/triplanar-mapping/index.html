@@ -1,0 +1,1828 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/advanced-rendering/triplanar-mapping/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/advanced-rendering/triplanar-mapping/tutorial-image.jpg">
+		<meta property="og:title" content="Triplanar Mapping">
+		<meta property="og:description" content="A Unity Advanced Rendering rendering tutorial about triplanar texture mapping.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Triplanar Mapping</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/advanced-rendering/triplanar-mapping/#article",
+				"headline": "Triplanar Mapping",
+				"alternativeHeadline": "Texturing Arbitrary Surfaces",
+				"datePublished": "2018-04-29",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Advanced Rendering rendering tutorial about triplanar texture mapping.",
+				"image": "https://catlikecoding.com/unity/tutorials/advanced-rendering/triplanar-mapping/tutorial-image.jpg",
+				"dependencies": "Unity 2017.4.1f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/advanced-rendering/", "name": "Advanced Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				MyBaseShaderGUI: 1,
+				MyLightingShaderGUI: 1,
+				MyTriplanarShaderGUI: 1,
+				SurfaceData: 1,
+				SurfaceParameters: 1,
+				TriplanarUV: 1
+			};
+			
+			var defaultCodeClass = 'shader';
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Advanced Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Triplanar Mapping</h1>
+					<p>Texturing Arbitrary Surfaces</p>
+					<ul>
+						<li>Remove dependency on UV and tangents.</li>
+						<li>Support a generic surface approach.</li>
+						<li>Use planar projections.</li>
+						<li>Blend between three mappings.</li>
+					</ul>
+				</header>
+				
+				<p>This tutorial is about supporting triplanar texture mapping. It uses the <a href="../fxaa/index.html">FXAA</a> tutorial project as its foundation.
+				
+				<p>This tutorial is made with Unity 2017.4.1f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Neither vertex UV coordinates nor tangent vectors required.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Texturing Without UV Coordinates</h2>
+					
+					<p>The usual way to perform texture mapping is by using the UV coordinates stored per-vertex in a mesh. But this is not the only way to do it. Sometimes, there are no UV coordinates available. For example, when working with procedural geometry of arbitrary shapes. When creating a terrain or cave systems at run-time, it usually isn't feasible to generate UV coordinates for an appropriate texture unwrap. In those cases, we have to use an alternative way to map textures onto our surfaces. One such way is triplanar mapping.</p>
+					
+					<p>Up to this point, we've always assumed that UV coordinates are available. Our <em translate="no">My Lighting Input</em> and <em translate="no">My Lighting</em> shader include files depend on them. While we could create alternatives that do not depend on vertex UV, it would be more convenient if our current files could be made to work both with and without UV. This requires a few changes.</p>
+					
+					<p>We keep the current approach as the default, but will switch to working without UV when <em translate="no">NO_DEFAULT_UV</em> is defined.</p>
+					
+					<section>
+						<h3>Doing Without Default UV</h3>
+						
+						<p>When the mesh data doesn't contain UV, then we don't have any UV to pass from the vertex to the fragment program. So make the existence of the UV interpolator in <em translate="no">My Lighting Input</em> dependent on <em translate="no">NO_DEFAULT_UV</em>.</p>
+						
+						<pre translate="no">struct InterpolatorsVertex {
+	&hellip;
+
+	<ins>#if !defined(NO_DEFAULT_UV)</ins>
+		float4 uv : TEXCOORD0;
+	<ins>#endif</ins>
+
+	&hellip;
+};
+
+struct Interpolators {
+	&hellip;
+
+	<ins>#if !defined(NO_DEFAULT_UV)</ins>
+		float4 uv : TEXCOORD0;
+	<ins>#endif</ins>
+
+	&hellip;
+};</pre>
+						
+						<p>There are multiple functions that assume the interpolators always contain UV, so we have to make sure that they keep working and compiling. We'll do that by introducing a new <code>GetDefaultUV</code> function below the interpolator declarations. When no UV are available, it will simply return zeros, otherwise the regular UV.</p>
+						
+						<p>We'll also make it possible to provide an alternative approach by defining <em translate="no">UV_FUNCTION</em>, in case that might be useful. This works like <em translate="no">ALBEDO_FUNCTION</em>, except that an override has to be defined before the inclusion of <em translate="no">My Lighting Input</em>.</p>
+						
+						<pre translate="no"><ins>float4 GetDefaultUV (Interpolators i) {</ins>
+	<ins>#if defined(NO_DEFAULT_UV)</ins>
+		<ins>return float4(0, 0, 0, 0);</ins>
+	<ins>#else</ins>
+		<ins>return i.uv;</ins>
+	<ins>#endif</ins>
+<ins>}</ins>
+
+<ins>#if !defined(UV_FUNCTION)</ins>
+	<ins>#define UV_FUNCTION GetDefaultUV</ins>
+<ins>#endif</ins></pre>
+						
+						<p>Now we can change all usage of <code>i.uv</code> with <code>UV_FUNCTION(i)</code>. I've only shown the change for <code>GetDetailMask</code>, but it applies to all getter functions.</p>
+						
+						<pre translate="no">float GetDetailMask (Interpolators i) {
+	#if defined (_DETAIL_MASK)
+		return tex2D(_DetailMask, <ins>UV_FUNCTION(i)</ins>.xy).a;
+	#else
+		return 1;
+	#endif
+}</pre>
+						
+						<p>Moving on to <em translate="no">My Lighting</em>, we must make sure that all UV-related work in the vertex program is skipped when no UV are available. This applies to the texture coordinate transformation, and also the default vertex displacement approach.</p>
+						
+						<pre translate="no">InterpolatorsVertex MyVertexProgram (VertexData v) {
+	&hellip;
+
+	<ins>#if !defined(NO_DEFAULT_UV)</ins>
+		i.uv.xy = TRANSFORM_TEX(v.uv, _MainTex);
+		i.uv.zw = TRANSFORM_TEX(v.uv, _DetailTex);
+
+		#if VERTEX_DISPLACEMENT
+			float displacement = tex2Dlod(_DisplacementMap, float4(i.uv.xy, 0, 0)).g;
+			displacement = (displacement - 0.5) * _DisplacementStrength;
+			v.normal = normalize(v.normal);
+			v.vertex.xyz += v.normal * displacement;
+		#endif
+	<ins>#endif</ins>
+
+	&hellip;
+}</pre>
+						
+						<p>The parallax effect also relies on default UV, so skip it when UV are not available.</p>
+						
+						<pre translate="no">void ApplyParallax (inout Interpolators i) {
+	#if defined(_PARALLAX_MAP) <ins>&amp;&amp; !defined(NO_DEFAULT_UV)</ins>
+		&hellip;
+	#endif
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Collecting Surface Properties</h3>
+						
+						<p>Without UV, there must be another way to determine the surface properties used for lighting. To make this as generic as possible, our include files shouldn't care how these properties are obtained. All we need is a universal way to provide surface properties. We can use an approach akin to Unity's surface shaders, relying on a function to set all surface properties.</p>
+						
+						<p>Create a new <em translate="no">MySurface.cginc</em> include file. In it, define a <code>SurfaceData</code> struct that contains all surface properties needed for lighting. That's albedo, emission, normal, alpha, metallic, occlusion, and smoothness.</p>
+						
+						<pre translate="no"><ins>#if !defined(MY_SURFACE_INCLUDED)</ins>
+<ins>#define MY_SURFACE_INCLUDED</ins>
+
+<ins>struct SurfaceData {</ins>
+	<ins>float3 albedo, emission, normal;</ins>
+	<ins>float alpha, metallic, occlusion, smoothness;</ins>
+<ins>};</ins>
+
+<ins>#endif</ins></pre>
+						
+						<p>We put it in a separate file, so other code can use it before including any other files. But our files will rely on it as well, so include it in <em translate="no">My Lighting Input</em>.</p>
+						
+						<pre translate="no">#include "UnityPBSLighting.cginc"
+#include "AutoLight.cginc"
+<ins>#include "MySurface.cginc"</ins></pre>
+						
+						<p>In <em translate="no">My Lighting</em>, setup a new <code>SurfaceData surface</code> variable with the default functions, at the beginning of <code>MyFragmentProgram</code>, after <code>ApplyParallax</code> and before alpha is used. Then change the alpha code to rely on <code>surface.alpha</code> instead of invoking <code>GetAlpha</code>. Also move <code>InitializeFragmentNormal</code> so the normal vector is handled before the surface is configured.</p>
+						
+						<pre translate="no">FragmentOutput MyFragmentProgram (Interpolators i) {
+	UNITY_SETUP_INSTANCE_ID(i);
+	#if defined(LOD_FADE_CROSSFADE)
+		UnityApplyDitherCrossFade(i.vpos);
+	#endif
+
+	ApplyParallax(i);
+	
+	<ins>InitializeFragmentNormal(i);</ins>
+
+	<ins>SurfaceData surface;</ins>
+	<ins>surface.normal = i.normal;</ins>
+	<ins>surface.albedo = ALBEDO_FUNCTION(i);</ins>
+	<ins>surface.alpha = GetAlpha(i);</ins>
+	<ins>surface.emission = GetEmission(i);</ins>
+	<ins>surface.metallic = GetMetallic(i);</ins>
+	<ins>surface.occlusion = GetOcclusion(i);</ins>
+	<ins>surface.smoothness = GetSmoothness(i);</ins>
+	
+	float alpha = <ins>surface.alpha</ins>;
+	#if defined(_RENDERING_CUTOUT)
+		clip(alpha - _Cutoff);
+	#endif
+	
+<del>//	InitializeFragmentNormal(i);</del>
+
+	&hellip;
+}</pre>
+						
+						<p>Now rely on <code>surface</code> instead of invoking the getter functions again when determining the fragment's color.</p>
+						
+						<pre translate="no">	float3 albedo = DiffuseAndSpecularFromMetallic(
+		<ins>surface.albedo</ins>, <ins>surface.metallic</ins>, specularTint, oneMinusReflectivity
+	);
+	
+	&hellip;
+	
+	float4 color = UNITY_BRDF_PBS(
+		albedo, specularTint,
+		oneMinusReflectivity, <ins>surface.smoothness</ins>,
+		i.normal, viewDir,
+		CreateLight(i), CreateIndirectLight(i, viewDir)
+	);
+	color.rgb += <ins>surface.emission</ins>;</pre>
+						
+						<p>And when filling the G-buffers for deferred rendering.</p>
+						
+						<pre translate="no">	#if defined(DEFERRED_PASS)
+		#if !defined(UNITY_HDR_ON)
+			color.rgb = exp2(-color.rgb);
+		#endif
+		output.gBuffer0.rgb = albedo;
+		output.gBuffer0.a = <ins>surface.occlusion</ins>;
+		output.gBuffer1.rgb = specularTint;
+		output.gBuffer1.a = <ins>surface.smoothness</ins>;
+		output.gBuffer2 = float4(i.normal * 0.5 + 0.5, 1);
+		output.gBuffer3 = color;
+
+		&hellip;
+	#endif</pre>
+						
+						<p>The <code>CreateIndirectLight</code> function also used the getter functions, so add a <code>SurfaceData</code> parameter to it and use that instead.</p>
+						
+						<pre translate="no">UnityIndirect CreateIndirectLight (
+	Interpolators i, float3 viewDir<ins>, SurfaceData surface</ins>
+) {
+	&hellip;
+
+	#if defined(FORWARD_BASE_PASS) || defined(DEFERRED_PASS)
+		&hellip;
+
+		float3 reflectionDir = reflect(-viewDir, i.normal);
+		Unity_GlossyEnvironmentData envData;
+		envData.roughness = 1 - <ins>surface.smoothness</ins>;
+		&hellip;
+
+		float occlusion = <ins>surface.occlusion</ins>;
+		&hellip;
+	#endif
+
+	return indirectLight;
+}</pre>
+						
+						<p>Then add <code>surface</code> as an argument to its invocation in <code>MyFragmentProgram</code>.</p>
+						
+						<pre translate="no">		CreateLight(i), CreateIndirectLight(i, viewDir<ins>, surface</ins>)</pre>
+					</section>
+					
+					<section>
+						<h3>Customized Surfaces</h3>
+						
+						<p>To make it possible to change how the surface data is obtained, we'll again allow the definition of a custom function. This function needs input to work with. By default, that would be the UV coordinates, both the main and detail UV packed in a single <code>float4</code>. Alternative inputs could be a position and a normal vector. Add a <code>SurfaceParameters</code> struct to our <code>Surface</code> file that contains all these inputs.</p>
+						
+						<pre translate="no">struct SurfaceData {
+	float3 albedo, emission, normal;
+	float alpha, metallic, occlusion, smoothness;
+};
+
+<ins>struct SurfaceParameters {</ins>
+	<ins>float3 normal, position;</ins>
+	<ins>float4 uv;</ins>
+<ins>};</ins></pre>
+						
+						<p>Back in <code>My Lighting</code>, adjust <code>MyFragmentProgram</code> so it uses a different way to setup the surface data when a <em translate="no">SURFACE_FUNCTION</em> is defined. When this is the case, fill <code>surface</code> with the normal vector and set all other values to their default. Then create the surface parameters and invoke the custom surface function. Its arguments are the surface&mdash;as an <code>inout</code> parameter&mdash;and the parameters struct.</p>
+						
+						<pre translate="no">	SurfaceData surface;
+	<ins>#if defined(SURFACE_FUNCTION)</ins>
+		<ins>surface.normal = i.normal;</ins>
+		<ins>surface.albedo = 1;</ins>
+		<ins>surface.alpha = 1;</ins>
+		<ins>surface.emission = 0;</ins>
+		<ins>surface.metallic = 0;</ins>
+		<ins>surface.occlusion = 1;</ins>
+		<ins>surface.smoothness = 0.5;</ins>
+
+		<ins>SurfaceParameters sp;</ins>
+		<ins>sp.normal = i.normal;</ins>
+		<ins>sp.position = i.worldPos.xyz;</ins>
+		<ins>sp.uv = UV_FUNCTION(i);</ins>
+
+		<ins>SURFACE_FUNCTION(surface, sp);</ins>
+	<ins>#else</ins>
+		surface.normal = i.normal;
+		surface.albedo = ALBEDO_FUNCTION(i);
+		surface.alpha = GetAlpha(i);
+		surface.emission = GetEmission(i);
+		surface.metallic = GetMetallic(i);
+		surface.occlusion = GetOcclusion(i);
+		surface.smoothness = GetSmoothness(i);
+	<ins>#endif</ins></pre>
+						
+						<p>As it might be possible that <em translate="no">SURFACE_FUNCTION</em> changes the surface normal, assign it back to <code>i.normal</code> afterwards. That way we don't need to change all the code that uses <code>i.normal</code>.</p>
+						
+						<pre translate="no">	SurfaceData surface;
+	#if defined(SURFACE_FUNCTION)
+		&hellip;
+	#else
+		&hellip;
+	#endif
+	<ins>i.normal = surface.normal;</ins></pre>
+					</section>
+					
+					<section>
+						<h3>No Tangent Space</h3>
+						
+						<p>Note that unlike Unity's surface shader approach, we're working with a normal vector in world space, not tangent space. If we want to use tangent-space normal mapping in <em translate="no">SURFACE_FUNCTION</em>, then we have to explicitly do this ourselves. We could also support more configuration options about how the normal should be treated both before and after invoking <em translate="no">SURFACE_FUNCTION</em>, but we won't do that in this tutorial.</p>
+						
+						<p>What we will do is make it possible to turn off the default tangent-space normal mapping approach. This saves work when tangents aren't used. We'll do this by only turning on tangent space when the default normal mapping or parallax mapping is active. Indicate this in <em translate="no">My Lighting Input</em> with a convenient <em translate="no">REQUIRES_TANGENT_SPACE</em> macro.</p>
+						
+						<pre translate="no"><ins>#if defined(_NORMAL_MAP) || defined(_DETAIL_NORMAL_MAP) || defined(_PARALLAX_MAP)</ins>
+	<ins>#define REQUIRES_TANGENT_SPACE 1</ins>
+	#define TESSELLATION_TANGENT 1
+<ins>#endif</ins>
+#define TESSELLATION_UV1 1
+#define TESSELLATION_UV2 1</pre>
+						
+						<p>Now we only have to include the tangent and binormal vector interpolators when needed.</p>
+						
+						<pre translate="no">struct InterpolatorsVertex {
+	&hellip;
+
+	<ins>#if REQUIRES_TANGENT_SPACE</ins>
+		#if defined(BINORMAL_PER_FRAGMENT)
+			float4 tangent : TEXCOORD2;
+		#else
+			float3 tangent : TEXCOORD2;
+			float3 binormal : TEXCOORD3;
+		#endif
+	<ins>#endif</ins>
+
+	&hellip;
+};
+
+struct Interpolators {
+	&hellip;
+
+	<ins>#if REQUIRES_TANGENT_SPACE</ins>
+		#if defined(BINORMAL_PER_FRAGMENT)
+			float4 tangent : TEXCOORD2;
+		#else
+			float3 tangent : TEXCOORD2;
+			float3 binormal : TEXCOORD3;
+		#endif
+	<ins>#endif</ins>
+
+	&hellip;
+};</pre>
+						
+						<p>In <em translate="no">My Lighting</em>, we could skip setting up these vectors in <code>MyVertexProgram</code>.</p>
+						
+						<pre translate="no">InterpolatorsVertex MyVertexProgram (VertexData v) {
+	&hellip;
+
+	<ins>#if REQUIRES_TANGENT_SPACE</ins>
+		#if defined(BINORMAL_PER_FRAGMENT)
+			i.tangent = float4(UnityObjectToWorldDir(v.tangent.xyz), v.tangent.w);
+		#else
+			i.tangent = UnityObjectToWorldDir(v.tangent.xyz);
+			i.binormal = CreateBinormal(i.normal, i.tangent, v.tangent.w);
+		#endif
+	<ins>#endif</ins>
+
+	&hellip;
+}</pre>
+						
+						<p>And without tangent space, <code>InitializeFragmentNormal</code> is reduced so simply normalizing the interpolated normal.</p>
+						
+						<pre translate="no">void InitializeFragmentNormal(inout Interpolators i) {
+	<ins>#if REQUIRES_TANGENT_SPACE</ins>
+		float3 tangentSpaceNormal = GetTangentSpaceNormal(i);
+		#if defined(BINORMAL_PER_FRAGMENT)
+			float3 binormal =
+				CreateBinormal(i.normal, i.tangent.xyz, i.tangent.w);
+		#else
+			float3 binormal = i.binormal;
+		#endif
+		
+		i.normal = normalize(
+			tangentSpaceNormal.x * i.tangent +
+			tangentSpaceNormal.y * binormal +
+			tangentSpaceNormal.z * i.normal
+		);
+	<ins>#else</ins>
+		<ins>i.normal = normalize(i.normal);</ins>
+	<ins>#endif</ins>
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Triplanar Shader</h3>
+						
+						<p>All our shaders still work, but it's now possible to use our include files without tangent space and with alternative surface data. Let's create a new shader to take advantage of this. First, create a new <em translate="no">MyTriplanarMapping.cginc</em> include file. Have it define <em translate="no">NO_DEFAULT_UV</em>, then include <em translate="no">Surface.cginc</em>. Actually, as we'll use the <em translate="no">_MainTex</em> property that's already defined in <em translate="no">My Lighting Input</em>, include that file instead. Then create a <code>MyTriplanarSurfaceFunction</code> with an <code>inout SurfaceData</code> parameter and a regular <code>SurfaceParameters</code> parameter. For now, just have it use the normal to set the albedo. Define this function as <code>SURFACE_FUNCTION</code>.</p>
+						
+						<pre translate="no"><ins>#if !defined(MY_TRIPLANAR_MAPPING_INCLUDED)</ins>
+<ins>#define MY_TRIPLANAR_MAPPING_INCLUDED</ins>
+
+<ins>#define NO_DEFAULT_UV</ins>
+
+<ins>#include "My Lighting Input.cginc"</ins>
+
+<ins>void MyTriPlanarSurfaceFunction (</ins>
+	<ins>inout SurfaceData surface, SurfaceParameters parameters</ins>
+<ins>) {</ins>
+	<ins>surface.albedo = parameters.normal * 0.5 + 0.5;</ins>
+<ins>}</ins>
+
+<ins>#define SURFACE_FUNCTION MyTriPlanarSurfaceFunction</ins>
+
+<ins>#endif</ins></pre>
+						
+						<p>Create a new shader that uses this include file, instead of <em translate="no">My Lighting Input</em>. We'll make a minimal shader without transparency, supporting just the usual rendering pipelines, plus fog and instancing. Here is the shader with the forward base and additive passes.</p>
+						
+						<pre translate="no">Shader "Custom/Triplanar Mapping" {
+
+	Properties {
+		_MainTex ("Albedo", 2D) = "white" {}
+	}
+
+	SubShader {
+
+		Pass {
+			Tags {
+				"LightMode" = "ForwardBase"
+			}
+
+			CGPROGRAM
+
+			#pragma target 3.0
+
+			#pragma multi_compile_fwdbase
+			#pragma multi_compile_fog
+			#pragma multi_compile_instancing
+
+			#pragma vertex MyVertexProgram
+			#pragma fragment MyFragmentProgram
+
+			#define FORWARD_BASE_PASS
+
+			#include "MyTriplanarMapping.cginc"
+			#include "My Lighting.cginc"
+
+			ENDCG
+		}
+
+		Pass {
+			Tags {
+				"LightMode" = "ForwardAdd"
+			}
+
+			Blend One One
+			ZWrite Off
+
+			CGPROGRAM
+
+			#pragma target 3.0
+
+			#pragma multi_compile_fwdadd_fullshadows
+			#pragma multi_compile_fog
+
+			#pragma vertex MyVertexProgram
+			#pragma fragment MyFragmentProgram
+
+			#include "MyTriplanarMapping.cginc"
+			#include "My Lighting.cginc"
+
+			ENDCG
+		}
+	}
+}</pre>
+						
+						<p>And here are the deferred and shadow passes. Note that the shadow pass doesn't need special treatment, because it doesn't care about surface properties of opaque geometry. We don't add support for lightmapping yet, so no meta pass at this point.</p>
+						
+						<pre translate="no">Shader "Custom/Triplanar Mapping" {
+
+	Properties {
+		_MainTex ("Albedo", 2D) = "white" {}
+	}
+
+	SubShader {
+
+		&hellip;
+
+		Pass {
+			Tags {
+				"LightMode" = "Deferred"
+			}
+
+			CGPROGRAM
+
+			#pragma target 3.0
+			#pragma exclude_renderers nomrt
+
+			#pragma multi_compile_prepassfinal
+			#pragma multi_compile_instancing
+
+			#pragma vertex MyVertexProgram
+			#pragma fragment MyFragmentProgram
+
+			#define DEFERRED_PASS
+
+			#include "MyTriplanarMapping.cginc"
+			#include "My Lighting.cginc"
+
+			ENDCG
+		}
+
+		Pass {
+			Tags {
+				"LightMode" = "ShadowCaster"
+			}
+
+			CGPROGRAM
+
+			#pragma target 3.0
+
+			#pragma multi_compile_shadowcaster
+			#pragma multi_compile_instancing
+
+			#pragma vertex MyShadowVertexProgram
+			#pragma fragment MyShadowFragmentProgram
+
+			#include "My Shadows.cginc"
+
+			ENDCG
+		}
+	}
+}</pre>
+						
+						<p>Create a material with our new shader and try it out. I've use the old test texture as the material's main texture, though it doesn't get used at this point.</p>
+						
+						<figure>
+							<img alt="material" src="texturing-without-uv-coordinates/material.png" width="320" height="194">
+							<img alt="scene" src="texturing-without-uv-coordinates/normal-albedo.jpg" width="380" height="250">
+							<figcaption>Triplanar Mapping material, using normal as albedo.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="texturing-without-uv-coordinates/texturing-without-uv-coordinates.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Texturing With Three Planes</h2>
+					
+					<p>How can we perform texture mapping when vertex UV coordinates are unavailable? We have to use a substitute. The only viable approach is to use the world position&mdash;or maybe the object-space position&mdash;as an alternative source of UV coordinates for texture mapping.</p>
+					
+					<section>
+						<h3>Texture Mapping Based on Position</h3>
+						
+						<p>The world position of a fragment is a 3D vector, but regular texture mapping is done in 2D. So we have to choose two dimensions to use as UV coordinates, which means that we map the texture onto a plane in 3D space. The most obvious choice is the use the XY coordinates.</p>
+						
+						<pre translate="no">	surface.albedo = <ins>tex2D(_MainTex, parameters.position.xy)</ins>;</pre>
+						
+						<figure>
+							<img src="texturing-with-three-planes/xy.jpg" width="380" height="250">
+							<figcaption>Using position XY for UV coordinates.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What about using 3D textures?</h3>
+							<div>
+								<p>That's also possible, but 3D textures require a lot more storage and are hard to make look good.</p>
+							</div>
+						</aside>
+						
+						<p>The result is that we see the texture projected along the Z axis. But this is not the only possible orientation. We could also project along the Y axis, by using the XZ coordinates instead. This corresponds to the planar texture mapping often used to texture terrains.</p>
+						
+						<pre translate="no">	surface.albedo = tex2D(_MainTex, parameters.position.<ins>xz</ins>);</pre>
+						
+						<figure>
+							<img src="texturing-with-three-planes/xz.jpg" width="380" height="250">
+							<figcaption>Using position XZ for UV coordinates.</figcaption>
+						</figure>
+						
+						<p>And the third option is to project along X, by using the YZ coordinates.</p>
+						
+						<pre translate="no">	surface.albedo = tex2D(_MainTex, parameters.position.<ins>yz</ins>);</pre>
+						
+						<figure>
+							<img src="texturing-with-three-planes/yz.jpg" width="380" height="250">
+							<figcaption>Using position YZ for UV coordinates.</figcaption>
+						</figure>
+						
+						<p>But when we use YZ we end up with the texture rotated 90&deg;. To keep the orientation as expected, we have to use ZY instead.</p>
+						
+						<pre translate="no">	surface.albedo = tex2D(_MainTex, parameters.position.<ins>zy</ins>);</pre>
+						
+						<figure>
+							<img src="texturing-with-three-planes/zy.jpg" width="380" height="250">
+							<figcaption>Using position ZY for UV coordinates.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Combining All Three Mappings</h3>
+						
+						<p>A single-planar mapping works well when a surface is mostly aligned with the projection axis, but looks horrible when it isn't. When the results are bad along one axis, they might be better along another axis. So it's useful to support all three mappings, which requires us to provide three different UV coordinate pairs.</p>
+						
+						<p>Let's keep the logic to determine these UV coordinates separate. Create a <code>TriplanarUV</code> struct with coordinate pairs for all three axes. Then make a <code>GetTriplanarUV</code> function that sets up the UV based on the surface parameters.</p>
+						
+						<pre translate="no"><ins>struct TriplanarUV {</ins>
+	<ins>float2 x, y, z;</ins>
+<ins>};</ins>
+
+<ins>TriplanarUV GetTriplanarUV (SurfaceParameters parameters) {</ins>
+	<ins>TriplanarUV triUV;</ins>
+	<ins>float3 p = parameters.position;</ins>
+	<ins>triUV.x = p.zy;</ins>
+	<ins>triUV.y = p.xz;</ins>
+	<ins>triUV.z = p.xy;</ins>
+	<ins>return triUV;</ins>
+<ins>}</ins></pre>
+						
+						<p>Use this function in <code>MyTriPlanarSurfaceFunction</code> and just sample using all three projections. The final albedo then becomes their average.</p>
+						
+						<pre translate="no">void MyTriPlanarSurfaceFunction (
+	inout SurfaceData surface, SurfaceParameters parameters
+) {
+	<ins>TriplanarUV triUV = GetTriplanarUV(parameters);</ins>
+	
+	<ins>float3 albedoX = tex2D(_MainTex, triUV.x).rgb;</ins>
+	<ins>float3 albedoY = tex2D(_MainTex, triUV.y).rgb;</ins>
+	<ins>float3 albedoZ = tex2D(_MainTex, triUV.z).rgb;</ins>
+	
+	surface.albedo = <ins>(albedoX + albedoY + albedoZ) / 3</ins>;
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="texturing-with-three-planes/three-mappings.jpg" width="380" height="250">
+							<figcaption>Averaging three mappings.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Blending Based on Normal</h3>
+						
+						<p>We now always get the best projection, but also the other two. We cannot only use the best one, because they we'd get seams where what's best suddenly changes. But what we can do is smoothly blend between them.</p>
+						
+						<p>The preferred mapping is the one that best aligns with the surface orientation, which is indicated by the surface normal. So we could use the normal to define the weights of all three projections. We have to use the absolute of the normal vector, because a surface can face a negative direction. Also, the total of the weights has to sum to 1, so we have to normalize them via division by their total. Create a new function to compute these weights.</p>
+						
+						<pre translate="no"><ins>float3 GetTriplanarWeights (SurfaceParameters parameters) {</ins>
+	<ins>float3 triW = abs(parameters.normal);</ins>
+	<ins>return triW / (triW.x + triW.y + triW.z);</ins>
+<ins>}</ins></pre>
+						
+						<p>Now we can modulate the contribution of each mapping by its weight.</p>
+						
+						<pre translate="no">void MyTriPlanarSurfaceFunction (
+	inout SurfaceData surface, SurfaceParameters parameters
+) {
+	&hellip;
+
+	<ins>float3 triW = GetTriplanarWeights(parameters);</ins>
+	
+	surface.albedo = <ins>albedoX * triW.x + albedoY * triW.y + albedoZ * triW.z</ins>;
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="texturing-with-three-planes/blending.jpg" width="380" height="250">
+							<figcaption>Blending three mappings.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Mirrored Mapping</h3>
+						
+						<p>The best possible projection is now strongest. On axis-aligned surfaces, we end up seeing only a single mapping. An axis-aligned cube looks good on all sides, except that half of them end up with a mirrored mapping.</p>
+						
+						<figure>
+							<img src="texturing-with-three-planes/mirrored-mapping.jpg" width="220" height="220">
+							<figcaption>Texture is mirrored on the other side.</figcaption>
+						</figure>
+						
+						<p>It isn't always a problem when a texture gets mirrored, but it's obvious when using our test texture with numbers on it. So let's make sure that textures are never mirrored. We do this by negating the U coordinate when appropriate. In case of the X mapping, that's when <code>normal.x</code> is negative. Likewise for the Y projection, when <code>normal.y</code> is negative. It's the opposite for Z.</p>
+						
+						<pre translate="no">TriplanarUV GetTriplanarUV (SurfaceParameters parameters) {
+	TriplanarUV triUV;
+	float3 p = parameters.position;
+	triUV.x = p.zy;
+	triUV.y = p.xz;
+	triUV.z = p.xy;
+	<ins>if (parameters.normal.x &lt; 0) {</ins>
+		<ins>triUV.x.x = -triUV.x.x;</ins>
+	<ins>}</ins>
+	<ins>if (parameters.normal.y &lt; 0) {</ins>
+		<ins>triUV.y.x = -triUV.y.x;</ins>
+	<ins>}</ins>
+	<ins>if (parameters.normal.z >= 0) {</ins>
+		<ins>triUV.z.x = -triUV.z.x;</ins>
+	<ins>}</ins>
+	return triUV;
+}</pre>
+						
+						<figure>
+							<img src="texturing-with-three-planes/unmirrored-mapping.jpg" width="220" height="220">
+							<figcaption>No longer mirrored.</figcaption>
+						</figure>
+						
+						<p>Note that this produces a seam in each mapping where its dimension is zero, but that's fine because their weight is zero there as well.</p>
+					</section>
+					
+					<section>
+						<h3>Offsetting Maps</h3>
+						
+						<p>Because we're projecting the same texture on a surface three times, we can end up with sudden repetitions. This can be quite obvious on a sphere. You can move it around until you end up with a texture alignment like in the below screenshot. From left to right, you can see the sequences 44, 45, 40, 44, 45, 40, even though the compete sequence is 40&ndash;45. And below that you can see 34, 35, 30, 34, 35, 30. And vertically you can see 44 and 45 repeated.</p>
+						
+						<figure>
+							<img src="texturing-with-three-planes/aligned-maps.jpg" width="220" height="220">
+							<figcaption>Aligned maps.</figcaption>
+						</figure>
+						
+						<p>We can eliminate such repetitions by offsetting the projections. If we shift the X mapping by &frac12; vertically, then we eliminate them between X and Z. Likewise for Y and Z if we shift X by &frac12; horizontally. The X and Y mappings aren't aligned, so we don't have to worry about those.</p>
+						
+						<pre translate="no">TriplanarUV GetTriplanarUV (SurfaceParameters parameters) {
+	&hellip;
+	<ins>triUV.x.y += 0.5;</ins>
+	<ins>triUV.z.x += 0.5;</ins>
+	return triUV;
+}</pre>
+						
+						<figure>
+							<img src="texturing-with-three-planes/offset-maps.jpg" width="220" height="220">
+							<figcaption>Offset maps.</figcaption>
+						</figure>
+						
+						<p>We used &frac12; as an offset because that's the maximum. In case of our test texture, it breaks the number sequences but keeps the blocks aligned. Had we used a texture with three instead of six obvious bands, offsetting by &frac13; would've looked better. Usually, triplanar mapping is done with terrain textures, for which you don't have to worry about exact alignment.</p>
+					</section>
+					
+					<a href="texturing-with-three-planes/texturing-with-three-planes.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Other Surface Properties</h2>
+					
+					<p>Besides albedo, there are more surface properties that could be stored in maps. For example, for our circuitry materials we also have metallic, occlusion, smoothness, and normal maps. Let's support those as well.</p>
+					
+					<figure>
+						<img src="other-surface-properties/circuitry-albedo.jpg" width="380" height="250">
+						<figcaption>Using circuitry albedo map only.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>MOS Maps</h3>
+						
+						<p>When using triplanar mapping, we sample maps using three different projections. This triples the amount of texture sampling in the shader. To keep this manageable, we should aim to minimize the amount of samples per projection. We can do this by storing multiple surface properties in a single map. We already have such a map for our circuitry material, storing metallic in the R channel, occlusion in G, and smoothness in A. So that's a Metallic-Occlusion-Smoothness map, or MOS map for short. We'll rely on such a MOS map in our triplanar shader, so add it as a property.</p>
+						
+						<pre translate="no">	Properties {
+		_MainTex ("Albedo", 2D) = "white" {}
+		<ins>[NoTilingOffset] _MOSMap ("MOS", 2D) = "white" {}</ins>
+	}</pre>
+						
+						<figure>
+							<img src="other-surface-properties/material-mos.png" width="320" height="148">
+							<figcaption>Material with circuitry MOS map.</figcaption>
+						</figure>
+						
+						<p>Add a variable for this map&mdash;as it is not defined in <em translate="no">My Lighting Input</em>&mdash;then sample it three times, just like the albedo map.</p>
+						
+						<pre translate="no"><ins>sampler2D _MOSMap;</ins>
+
+&hellip;
+
+void MyTriPlanarSurfaceFunction (
+	inout SurfaceData surface, SurfaceParameters parameters
+) {
+	TriplanarUV triUV = GetTriplanarUV(parameters);
+	
+	float3 albedoX = tex2D(_MainTex, triUV.x).rgb;
+	float3 albedoY = tex2D(_MainTex, triUV.y).rgb;
+	float3 albedoZ = tex2D(_MainTex, triUV.z).rgb;
+
+	<ins>float4 mosX = tex2D(_MOSMap, triUV.x);</ins>
+	<ins>float4 mosY = tex2D(_MOSMap, triUV.y);</ins>
+	<ins>float4 mosZ = tex2D(_MOSMap, triUV.z);</ins>
+	
+	&hellip;
+}</pre>
+						
+						<p>Blend the MOS data using the triplanar weights, then use the result to setup the surface.</p>
+						
+						<pre translate="no">	surface.albedo = albedoX * triW.x + albedoY * triW.y + albedoZ * triW.z;
+
+	<ins>float4 mos = mosX * triW.x + mosY * triW.y + mosZ * triW.z;</ins>
+	<ins>surface.metallic = mos.x;</ins>
+	<ins>surface.occlusion = mos.y;</ins>
+	<ins>surface.smoothness = mos.a;</ins></pre>
+						
+						<figure>
+							<img src="other-surface-properties/circuitry-mos.jpg" width="380" height="250">
+							<figcaption>Using circuitry MOS map.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Normal Maps</h3>
+						
+						<p>Add support for a normal map as well. We cannot pack that in another map, so it needs its own property.</p>
+						
+						<pre translate="no">	Properties {
+		_MainTex ("Albedo", 2D) = "white" {}
+		[NoTilingOffset] _MOSMap ("MOS", 2D) = "white" {}
+		<ins>[NoTilingOffset] _NormalMap ("Normals", 2D) = "white" {}</ins>
+	}</pre>
+						
+						<figure>
+							<img src="other-surface-properties/material-normals.png" width="320" height="220">
+							<figcaption>Material with circuitry normal map.</figcaption>
+						</figure>
+						
+						<p>Sample the map three times, and unpack the normal for each axis.</p>
+						
+						<pre translate="no">void MyTriPlanarSurfaceFunction (
+	inout SurfaceData surface, SurfaceParameters parameters
+) {
+	&hellip;
+
+	float4 mosX = tex2D(_MOSMap, triUV.x);
+	float4 mosY = tex2D(_MOSMap, triUV.y);
+	float4 mosZ = tex2D(_MOSMap, triUV.z);
+
+	<ins>float3 tangentNormalX = UnpackNormal(tex2D(_NormalMap, triUV.x));</ins>
+	<ins>float3 tangentNormalY = UnpackNormal(tex2D(_NormalMap, triUV.y));</ins>
+	<ins>float3 tangentNormalZ = UnpackNormal(tex2D(_NormalMap, triUV.z));</ins>
+	
+	&hellip;
+}</pre>
+						
+						<p>We can blend the normal the same way as the other data, we just have to normalize it too. However, that would only work for world-space normals, while what we sampled are tangent-space normals. Let's begin by assuming we can directly use them as world-space normals and see what happens. To make it more obvious, again use the normal for albedo as well.</p>
+						
+						<pre translate="no">	float3 tangentNormalX = UnpackNormal(tex2D(_NormalMap, triUV.x));
+	float3 tangentNormalY = UnpackNormal(tex2D(_NormalMap, triUV.y));
+	float3 tangentNormalZ = UnpackNormal(tex2D(_NormalMap, triUV.z));
+
+	<ins>float3 worldNormalX = tangentNormalX;</ins>
+	<ins>float3 worldNormalY = tangentNormalY;</ins>
+	<ins>float3 worldNormalZ = tangentNormalZ;</ins>
+	
+	float3 triW = GetTriplanarWeights(parameters);
+	
+	&hellip;
+
+	<ins>surface.normal = normalize(</ins>
+		<ins>worldNormalX * triW.x + worldNormalY * triW.y + worldNormalZ * triW.z</ins>
+	<ins>);</ins>
+	<ins>surface.albedo = surface.normal * 0.5 + 0.5;</ins></pre>
+						
+						<figure>
+							<img src="other-surface-properties/tangent-normals.jpg" width="380" height="250">
+							<figcaption>Projected normals in tangent space.</figcaption>
+						</figure>
+						
+						<p>The final normal vectors are incorrect. The tangent space normals are stored with their local up direction&mdash;away from the surface&mdash;in the Z channel, so the result is mostly blue. This matches the XYZ orientation of the Z projection, but not the other two.</p>
+						
+						<p>In the case of the Y projection, the up direction corresponds to Y, not Z. So we have to swap Y and Z to convert from tangent space to world space. Likewise, we have to swap X and Z for the X projection.</p>
+						
+						<pre translate="no">	float3 tangentNormalX = UnpackNormal(tex2D(_NormalMap, triUV.x));
+	float3 tangentNormalY = UnpackNormal(tex2D(_NormalMap, triUV.y));
+	float3 tangentNormalZ = UnpackNormal(tex2D(_NormalMap, triUV.z));
+
+	<ins>float3 worldNormalX = tangentNormalX.zyx;</ins>
+	<ins>float3 worldNormalY = tangentNormalY.xzy;</ins>
+	float3 worldNormalZ = tangentNormalZ;</pre>
+						
+						<figure>
+							<img src="other-surface-properties/projected-normals.jpg" width="380" height="250">
+							<figcaption>Projected normals in world space.</figcaption>
+						</figure>
+						
+						<p>Because we negated the X coordinates to prevent mirroring, we also have to do this for the tangent-space normal vectors. Otherwise those would still be mirrored.</p>
+						
+						<pre translate="no">	float3 tangentNormalX = UnpackNormal(tex2D(_NormalMap, triUV.x));
+	float3 tangentNormalY = UnpackNormal(tex2D(_NormalMap, triUV.y));
+	float3 tangentNormalZ = UnpackNormal(tex2D(_NormalMap, triUV.z));
+
+	<ins>if (parameters.normal.x &lt; 0) {</ins>
+		<ins>tangentNormalX.x = -tangentNormalX.x;</ins>
+	<ins>}</ins>
+	<ins>if (parameters.normal.y &lt; 0) {</ins>
+		<ins>tangentNormalY.x = -tangentNormalY.x;</ins>
+	<ins>}</ins>
+	<ins>if (parameters.normal.z >= 0) {</ins>
+		<ins>tangentNormalZ.x = -tangentNormalZ.x;</ins>
+	<ins>}</ins>
+
+	float3 worldNormalX = tangentNormalX.zyx;
+	float3 worldNormalY = tangentNormalY.xzy;
+	float3 worldNormalZ = tangentNormalZ;</pre>
+						
+						<p>In those cases we also have to flip the normal's up direction, as they're pointing inwards.</p>
+						
+						<pre translate="no">	if (parameters.normal.x &lt; 0) {
+		tangentNormalX.x = -tangentNormalX.x;
+		<ins>tangentNormalX.z = -tangentNormalX.z;</ins>
+	}
+	if (parameters.normal.y &lt; 0) {
+		tangentNormalY.x = -tangentNormalY.x;
+		<ins>tangentNormalY.z = -tangentNormalY.z;</ins>
+	}
+	if (parameters.normal.z >= 0) {
+		tangentNormalZ.x = -tangentNormalZ.x;
+	}
+	<ins>else {</ins>
+		<ins>tangentNormalZ.z = -tangentNormalZ.z;</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="other-surface-properties/mirrored-flipped-normals.jpg" width="380" height="250">
+							<figcaption>Unmirrored and flipped normals.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Blending With Surface Normal</h3>
+						
+						<p>Although the normal vectors are now correctly aligned with their projection, they have nothing to do with the actual surface normal. For example, a sphere ends up with normals like a cube. This isn't directly obvious because we're smoothly blending between these normals based on the actual surface normal, but it will become worse when we'll adjust the blending.</p>
+						
+						<p>Usually, we'd rely on a tangent-to-world transformation matrix to make the normals fit the geometry's surface. But we do not have such matrices for our three projections. What we can do instead is blend between each projected normal and the surface normal, using whiteout blending. We could use the <code>BlendNormals</code> function for this, but it also normalizes the result. That's a bit much, considering we blend the three results and then normalize that again. So let's make our own variant that doesn't normalize per projection.</p>
+						
+						<pre translate="no"><ins>float3 BlendTriplanarNormal (float3 mappedNormal, float3 surfaceNormal) {</ins>
+	<ins>float3 n;</ins>
+	<ins>n.xy = mappedNormal.xy + surfaceNormal.xy;</ins>
+	<ins>n.z = mappedNormal.z * surfaceNormal.z;</ins>
+	<ins>return n;</ins>
+<ins>}</ins></pre>
+						
+						<aside>
+							<h3>How does whiteout blending work?</h3>
+							<div>
+								<p>It's described in <a href="../../rendering/part-6.1.html">Rendering 6, Bumpiness</a>.</p>
+							</div>
+						</aside>
+						
+						<p>Whiteout blending assumes Z is pointing up. So convert the surface normal to the projected space, perform the blend in this tangent space, then convert the result to world space.</p>
+						
+						<pre translate="no">	float3 worldNormalX =
+		<ins>BlendTriplanarNormal(</ins>tangentNormalX<ins>, parameters.normal.zyx)</ins>.zyx;
+	float3 worldNormalY =
+		<ins>BlendTriplanarNormal(</ins>tangentNormalY<ins>, parameters.normal.xzy)</ins>.xzy;
+	float3 worldNormalZ =
+		<ins>BlendTriplanarNormal(</ins>tangentNormalZ<ins>, parameters.normal)</ins>;</pre>
+						
+						<figure>
+							<img src="other-surface-properties/normal-blend-incorrect.jpg" width="380" height="250">
+							<figcaption>Incorrect normal blending.</figcaption>
+						</figure>
+						
+						<p>This goes wrong for surfaces facing a negative direction, because then we end up multiplying two negative Z values, flipping the sign of the final Z. We can solve this by using the absolute of one of the Z values. But this is equivalent to not negating the sampled Z components to begin with, so we can just remove that code.</p>
+						
+						<pre translate="no">	if (parameters.normal.x &lt; 0) {
+		tangentNormalX.x = -tangentNormalX.x;
+<del>//		tangentNormalX.z = -tangentNormalX.z;</del>
+	}
+	if (parameters.normal.y &lt; 0) {
+		tangentNormalY.x = -tangentNormalY.x;
+<del>//		tangentNormalY.z = -tangentNormalY.z;</del>
+	}
+	if (parameters.normal.z >= 0) {
+		tangentNormalZ.x = -tangentNormalZ.x;
+	}
+<del>//	else {</del>
+<del>//		tangentNormalZ.z = -tangentNormalZ.z;</del>
+<del>//	}</del></pre>
+						
+						<figure>
+							<img src="other-surface-properties/normal-blend-correct.jpg" width="380" height="250">
+							<figcaption>Correct normal blending.</figcaption>
+						</figure>
+						
+						<p>The resulting normal vectors are now biased towards the original surface normal. Although this isn't perfect, it's usually sufficient. You could go a step further and completely drop the sampled Z components, only using the original Z component. That's known as UDN blending, which is cheaper when using DXT5nm compression because the Z component doesn't need to be reconstructed, but deceases the strength of the normals for non-aligned surfaces.</p>
+						
+						<p>With the normal maps functional, restore the original albedo so we can see the complete circuitry material.</p>
+						
+						<pre translate="no"><del>//	surface.albedo = surface.normal * 0.5 + 0.5;</del></pre>
+						
+						<figure>
+							<img src="other-surface-properties/all-maps.jpg" width="380" height="250">
+							<figcaption>Using all circuitry maps.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Scaling Maps</h3>
+						
+						<p>Finally, let's make it possible to scale the maps. Usually, this is done via the tiling and offset values of a single texture, but this doesn't make much sense for triplanar mapping. An offset isn't very useful and neither is a nonuniform scale. So let's use a single scale property instead.</p>
+						
+						<pre translate="no">	Properties {
+		<ins>[NoScaleOffset]</ins> _MainTex ("Albedo", 2D) = "white" {}
+		[NoScaleOffset] _MOSMap ("MOS", 2D) = "white" {}
+		[NoScaleOffset] _NormalMap ("Normals", 2D) = "white" {}
+		
+		<ins>_MapScale ("Map Scale", Float) = 1</ins>
+	}</pre>
+						
+						<figure>
+							<img src="other-surface-properties/map-scale.png" width="320" height="96">
+							<figcaption>Material with map scale.</figcaption>
+						</figure>
+						
+						<p>Add the required variable for the map scale and use it to scale the position when determining the UV coordinates.</p>
+						
+						<pre translate="no"><ins>float _MapScale;</ins>
+
+struct TriplanarUV {
+	float2 x, y, z;
+};
+
+TriplanarUV GetTriplanarUV (SurfaceParameters parameters) {
+	TriplanarUV triUV;
+	float3 p = parameters.position <ins>* _MapScale</ins>;
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="other-surface-properties/double-scale.jpg" width="380" height="250">
+							<figcaption>Using double map scale.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="other-surface-properties/other-surface-properties.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Adjusting Blend Weights</h2>
+					
+					<p>The final surface data is found by blending between the three mappings, using the original surface normal. So far we've use the normal directly, only taking its absolute value and normalizing the result so the weights sum to 1. That's the most straightforward approach, but it's also possible to tweak the weights in various ways.</p>
+					
+					<section>
+						<h3>Blend Offset</h3>
+						
+						<p>The first way to change how the weights are calculated is by introducing an offset. If we subtract the same amount from all weights, then smaller weights are affected more than larger weights, which changes their relative importance. They could even become negative. Add a blend offset property to make this possible.</p>
+						
+						<p>We must ensure that not all weights become negative, so the maximum offset should be less than the maximum possible smallest weight, which is when all three components of the normal vector are equal. That's &radic;&frac13; which is about 0.577, but let's just use 0.5 as the maximum, with 0.25 as the default.</p>
+						
+						<pre translate="no">		_MapScale ("Map Scale", Float) = 1
+
+		<ins>_BlendOffset ("Blend Offset", Range(0, 0.5)) = 0.25</ins></pre>
+						
+						<figure>
+							<img src="adjusting-blend-weights/blend-offset.png" width="320" height="42">
+							<figcaption>Material with blend offset.</figcaption>
+						</figure>
+						
+						<p>Subtract the offset from the weights before normalizing them, and see what that looks like.</p>
+						
+						<pre translate="no"><ins>float _BlendOffset;</ins>
+
+&hellip;
+
+float3 GetTriplanarWeights (SurfaceParameters parameters) {
+	float3 triW = abs(parameters.normal);
+	<ins>triW = triW - _BlendOffset;</ins>
+	return triW / (triW.x + triW.y + triW.z);
+}</pre>
+						
+						<figure>
+							<img src="adjusting-blend-weights/offset-incorrect.jpg" width="380" height="250">
+							<figcaption>Incorrect offset usage.</figcaption>
+						</figure>
+						
+						<p>It looks fine when blend weights remain positive, but negative weights end up subtracting from the final data. To prevent this, clamp the weights before normalizing.</p>
+						
+						<pre translate="no">	triW = <ins>saturate(</ins>triW - _BlendOffset<ins>)</ins>;</pre>
+						
+						<p>The result is that the higher the offset, the smaller the blend region becomes. To more clearly see how the blending changes, use the weights for albedo.</p>
+						
+						<pre translate="no">void MyTriPlanarSurfaceFunction (
+	inout SurfaceData surface, SurfaceParameters parameters
+) {
+	&hellip;
+	<ins>surface.albedo = triW;</ins>
+}</pre>
+						
+						<figure>
+							<video width="230" height="230" controls loop muted>
+								<source src="adjusting-blend-weights/offset.mp4" type="video/mp4">
+							</video>
+							<figcaption>Adjusting offset.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Blend Exponent</h3>
+						
+						<p>Another way to decrease the blend region is via exponentiation, by raising the weights to some power higher than 1 before normalizing. This works like an offset, but is nonlinear. Add a shader property for it, using an arbitrary maximum of 8 and a default of 2.</p>
+						
+						<pre translate="no">		_BlendOffset ("Blend Offset", Range(0, 0.5)) = 0.25
+		<ins>_BlendExponent ("Blend Exponent", Range(1, 8)) = 2</ins></pre>
+						
+						<figure>
+							<img src="adjusting-blend-weights/blend-exponent.png" width="320" height="60">
+							<figcaption>Material with blend exponent.</figcaption>
+						</figure>
+						
+						<p>Use the <code>pow</code> function to apply the exponent, after offsetting.</p>
+						
+						<pre translate="no">float _BlendOffset<ins>, _BlendExponent</ins>;
+
+&hellip;
+
+float3 GetTriplanarWeights (SurfaceParameters parameters) {
+	float3 triW = abs(parameters.normal);
+	triW = saturate(triW - _BlendOffset);
+	<ins>triW = pow(triW, _BlendExponent);</ins>
+	return triW / (triW.x + triW.y + triW.z);
+}</pre>
+						
+						<figure>
+							<video width="230" height="230" controls loop muted>
+								<source src="adjusting-blend-weights/exponent.mp4" type="video/mp4">
+							</video>
+							<figcaption>Adjusting exponent.</figcaption>
+						</figure>
+						
+						<p>You might end up using either of both approaches together to tune the blend weights. If you settle on a final exponent of 2, 4, or 8, you could hard-code this with a few multiplications instead of relying on <code>pow</code>.</p>
+					</section>
+					
+					<section>
+						<h3>Blending Based on Height</h3>
+						
+						<p>Besides relying on the original surface normal, we could also have the surface data influence the blend. If the surface data included height, then that could be factored into the weights. Our MOS maps still have an unused channel, so it's possible to turn them into MOHS maps, containing metallic, occlusion, height, and smoothness data. <a href="adjusting-blend-weights/circuitry-mohs.png">Here</a> is such a map for our circuitry material. It's the same as the MOS map, but with height data in the blue channel.</p>
+						
+						<figure>
+							<img src="adjusting-blend-weights/circuitry-mohs.png" width="256" height="256">
+							<figcaption>Circuitry MOHS map.</figcaption>
+						</figure>
+						
+						<p>Rename our MOS property to MOHS and assign the new texture. Make sure that its <em translate="no">sRGB</em> import checkbox is disabled.</p>
+						
+						<pre translate="no">		[NoScaleOffset] _MainTex ("Albedo", 2D) = "white" {}
+		[NoScaleOffset] <ins>_MOHSMap</ins> (<ins>"MOHS"</ins>, 2D) = "white" {}
+		[NoScaleOffset] _NormalMap ("Normals", 2D) = "white" {}</pre>
+						
+						<figure>
+							<img src="adjusting-blend-weights/material-mohs.png" width="320" height="144">
+							<figcaption>Material now with MOHS map.</figcaption>
+						</figure>
+						
+						<p>Also rename the variables.</p>
+						
+						<pre translate="no">sampler2D <ins>_MOHSMap</ins>;
+
+&hellip;
+
+void MyTriPlanarSurfaceFunction (
+	inout SurfaceData surface, SurfaceParameters parameters
+) {
+	&hellip;
+
+	float4 <ins>mohsX</ins> = tex2D(<ins>_MOHSMap</ins>, triUV.x);
+	float4 <ins>mohsY</ins> = tex2D(<ins>_MOHSMap</ins>, triUV.y);
+	float4 <ins>mohsZ</ins> = tex2D(<ins>_MOHSMap</ins>, triUV.z);
+
+	&hellip;
+
+	float4 <ins>mohs</ins> = <ins>mohsX</ins> * triW.x + <ins>mohsY</ins> * triW.y + <ins>mohsZ</ins> * triW.z;
+	surface.metallic = <ins>mohs</ins>.x;
+	surface.occlusion = <ins>mohs</ins>.y;
+	surface.smoothness = <ins>mohs</ins>.a;
+
+	&hellip;
+}</pre>
+						
+						<p>Add parameters for the three height values to <code>GetTriplanarWeights</code>. Let's begin by using the heights directly, replacing the normal vector, before exponentiation.</p>
+						
+						<pre translate="no">float3 GetTriplanarWeights (
+	SurfaceParameters parameters, <ins>float heightX, float heightY, float heightZ</ins>
+) {
+	float3 triW = abs(parameters.normal);
+	triW = saturate(triW - _BlendOffset);
+	<ins>triW = float3(heightX, heightY, heightZ);</ins>
+	triW = pow(triW, _BlendExponent);
+	return triW / (triW.x + triW.y + triW.z);
+}</pre>
+						
+						<p>Then add the heights as arguments when invoking the function.</p>
+						
+						<pre translate="no">	float3 triW = GetTriplanarWeights(parameters<ins>, mohsX.z, mohsY.z, mohsZ.z</ins>);</pre>
+						
+						<figure>
+							<img src="adjusting-blend-weights/height-blending.jpg" width="230" height="230">
+							<figcaption>Blending based on height only.</figcaption>
+						</figure>
+						
+						<p>Using only the heights doesn't give us a useful result, but makes it clear that the golden circuitry strips are highest and thus dominate the blend. Now multiply the heights with their respective weights.</p>
+						
+						<pre translate="no">	triW <ins>*=</ins> float3(heightX, heightY, heightZ);</pre>
+						
+						<figure>
+							<img src="adjusting-blend-weights/multiplying-height.jpg" width="230" height="230">
+							<figcaption>Multiplying with height.</figcaption>
+						</figure>
+						
+						<p>This looks much better, but the influence of the heights is still very strong. It's useful to modulate this, so add a <em translate="no">Blend Height Strength</em> property to our shader. At full strength it could completely eliminate some weights, which shouldn't happen. So limit the strength's range to 0&ndash;0.99, with a default of 0.5.</p>
+						
+						<pre translate="no">		_BlendOffset ("Blend Offset", Range(0, 0.5)) = 0.25
+		_BlendExponent ("Blend Exponent", Range(1, 8)) = 2
+		<ins>_BlendHeightStrength ("Blend Height Strength", Range(0, 0.99)) = 0.5</ins></pre>
+						
+						<figure>
+							<img src="adjusting-blend-weights/blend-height-strength.png" width="320" height="80">
+							<figcaption>Material with blend height strength.</figcaption>
+						</figure>
+						
+						<p>Apply the strength by interpolating between 1 and the heights, using the strength as the interpolator. Then multiply the weights with that.</p>
+						
+						<pre translate="no">float _BlendOffset, _BlendExponent<ins>, _BlendHeightStrength</ins>;
+
+&hellip;
+
+float3 GetTriplanarWeights (
+	SurfaceParameters parameters, float heightX, float heightY, float heightZ
+) {
+	float3 triW = abs(parameters.normal);
+	triW = saturate(triW - _BlendOffset);
+	triW *= <ins>lerp(1,</ins> float3(heightX, heightY, heightZ)<ins>, _BlendHeightStrength)</ins>;
+	triW = pow(triW, _BlendExponent);
+	return triW / (triW.x + triW.y + triW.z);
+}</pre>
+						
+						<p>Using heights works best in combination with an offset to limit the range of their influence. Besides that, a higher exponent makes the effect more pronounced.</p>
+						
+						<figure>
+							<video width="230" height="230" controls loop muted>
+								<source src="adjusting-blend-weights/height.mp4" type="video/mp4">
+							</video>
+							<figcaption>Adjusting height strength.</figcaption>
+						</figure>
+						
+						<p>Finally, restore the albedo to see the effect of the blend settings on the complete material.</p>
+						
+						<pre translate="no"><del>//	surface.albedo = triW;</del></pre>
+						
+						<figure>
+							<img alt="min" src="adjusting-blend-weights/settings-min.jpg" width="230" height="230">
+							<img alt="max" src="adjusting-blend-weights/settings-max.jpg" width="230" height="230">
+							<figcaption>All blend settings at minimum vs. at maximum.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="adjusting-blend-weights/adjusting-blend-weights.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Custom Shader GUI</h2>
+					
+					<p>We didn't use the shader GUI class that we created for our other shaders, because it wouldn't work with our triplanar shader. It relies on properties that our triplanar shader doesn't have. While we could make <code>MyLightingShaderGUI</code> also support this shader, it's better to keep it simple and create a new class.</p>
+					
+					<section>
+						<h3>Base Class</h3>
+						
+						<p>Instead of copying the base functionality of <code class="csharp">MyLightingShaderGUI</code> that we could reuse, we'll create a common base class that both our GUIs can extend. Let's name it <code class="csharp">MyBaseShaderGUI</code>. Put all general-purpose code from <code class="csharp">MyLightingShaderGUI</code> into it and omit the rest. Make everything that should be directly available to its subclasses <code class="csharp">protected</code>. That allows access by the class itself and its subclasses, but from nowhere else.</p>
+						
+						<pre translate="no" class="csharp">using UnityEngine;
+<del>//using UnityEngine.Rendering;</del>
+using UnityEditor;
+
+public class <ins>MyBaseShaderGUI</ins> : ShaderGUI {
+
+	static GUIContent staticLabel = new GUIContent();
+
+	<ins>protected</ins> Material target;
+	<ins>protected</ins> MaterialEditor editor;
+	
+	MaterialProperty[] properties;
+
+	public override void OnGUI (
+		MaterialEditor editor, MaterialProperty[] properties
+	) {
+		this.target = editor.target as Material;
+		this.editor = editor;
+		this.properties = properties;
+<del>//		DoRenderingMode();</del>
+<del>//		&hellip;</del>
+<del>//		DoAdvanced();</del>
+	}
+
+	<ins>protected</ins> MaterialProperty FindProperty (string name) {
+		return FindProperty(name, properties);
+	}
+
+	<ins>protected</ins> static GUIContent MakeLabel (string text, string tooltip = null) {
+		&hellip;
+	}
+
+	<ins>protected</ins> static GUIContent MakeLabel (
+		MaterialProperty property, string tooltip = null
+	) {
+		&hellip;
+	}
+
+	<ins>protected</ins> void SetKeyword (string keyword, bool state) {
+		&hellip;
+	}
+
+	<ins>protected</ins> bool IsKeywordEnabled (string keyword) {
+		return target.IsKeywordEnabled(keyword);
+	}
+
+	<ins>protected</ins> void RecordAction (string label) {
+		editor.RegisterPropertyChangeUndo(label);
+	}
+}</pre>
+						
+						<p>Have <code class="csharp">MyLightingShaderGUI</code> extend <code class="csharp">MyBaseShaderGUI</code> instead of <code class="csharp">ShaderGUI</code> directly. Then remove all code from it that is now part of its base class. Instead of setting up the variables itself in <code class="csharp">OnGUI</code>, delegate that to the <code class="csharp">OnGUI</code> method of its base class, by invoking <code class="csharp">base.OnGUI</code>.</p>
+						
+						<pre translate="no" class="csharp">public class MyLightingShaderGUI : <ins>MyBaseShaderGUI</ins> {
+
+	&hellip;
+
+	public override void OnGUI (
+		MaterialEditor editor, MaterialProperty[] properties
+	) {
+<del>//		this.target = editor.target as Material;</del>
+<del>//		this.editor = editor;</del>
+<del>//		this.properties = properties;</del>
+		<ins>base.OnGUI(editor, properties);</ins>
+		DoRenderingMode();
+		&hellip;
+		DoAdvanced();
+	}
+	
+	&hellip;
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Triplanar Shader GUI</h3>
+						
+						<p>Add a new <code class="csharp">MyTriplanarShaderGUI</code> class to create the GUI for our triplanar shader. Have it extend <code class="csharp">MyBaseShaderGUI</code>. Give it an <code class="csharp">OnGUI</code> method in which it invokes <code class="csharp">base.OnGUI</code> and then shows the map scale property. Use separate methods for the maps, blending, and other settings.</p>
+
+						<pre translate="no" class="csharp"><ins>using UnityEngine;</ins>
+<ins>using UnityEditor;</ins>
+
+<ins>public class MyTriplanarShaderGUI : MyBaseShaderGUI {</ins>
+
+	<ins>public override void OnGUI (</ins>
+		<ins>MaterialEditor editor, MaterialProperty[] properties</ins>
+	<ins>) {</ins>
+		<ins>base.OnGUI(editor, properties);</ins>
+		<ins>editor.ShaderProperty(FindProperty("_MapScale"), MakeLabel("Map Scale"));</ins>
+		<ins>DoMaps();</ins>
+		<ins>DoBlending();</ins>
+		<ins>DoOtherSettings();</ins>
+	<ins>}</ins>
+
+	<ins>void DoMaps () {}</ins>
+
+	<ins>void DoBlending () {}</ins>
+
+	<ins>void DoOtherSettings () {}</ins>
+<ins>}</ins></pre>
+						
+						<p>Declare this class to be the custom editor for our triplanar shader.</p>
+
+						<pre translate="no">Shader "Custom/Triplanar Mapping" {
+
+	&hellip;
+
+	<ins>CustomEditor "MyTriplanarShaderGUI"</ins>
+}</pre>
+						
+						<figure>
+							<img src="custom-shader-gui/map-scale.png" width="320" height="80">
+							<figcaption>Only map scale.</figcaption>
+						</figure>
+					</section>
+
+					<section>
+						<h3>Maps</h3>
+						
+						<p>Create a label for the map section and then show the three texture properties, each on a single line. Give the MOHS map a tooltip to explain what each channel should contain.</p>
+
+						<pre translate="no" class="chsarp">	void DoMaps () {
+		<ins>GUILayout.Label("Maps", EditorStyles.boldLabel);</ins>
+		
+		<ins>editor.TexturePropertySingleLine(</ins>
+			<ins>MakeLabel("Albedo"), FindProperty("_MainTex")</ins>
+		<ins>);</ins>
+		<ins>editor.TexturePropertySingleLine(</ins>
+			<ins>MakeLabel(</ins>
+				<ins>"MOHS",</ins>
+				<ins>"Metallic (R) Occlusion (G) Height (B) Smoothness (A)"</ins>
+			<ins>),</ins>
+			<ins>FindProperty("_MOHSMap")</ins>
+		<ins>);</ins>
+		<ins>editor.TexturePropertySingleLine(</ins>
+			<ins>MakeLabel("Normals"), FindProperty("_NormalMap")</ins>
+		<ins>);</ins>
+	}</pre>
+							
+						<figure>
+							<img src="custom-shader-gui/maps.png" width="320" height="108">
+							<figcaption>Maps GUI.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Blending</h3>
+						
+						<p>The blending section is simple, just a label and the three properties.</p>
+						
+						<pre translate="no" class="csharp">	void DoBlending () {
+		<ins>GUILayout.Label("Blending", EditorStyles.boldLabel);</ins>
+
+		<ins>editor.ShaderProperty(FindProperty("_BlendOffset"), MakeLabel("Offset"));</ins>
+		<ins>editor.ShaderProperty(</ins>
+			<ins>FindProperty("_BlendExponent"), MakeLabel("Exponent")</ins>
+		<ins>);</ins>
+		<ins>editor.ShaderProperty(</ins>
+			<ins>FindProperty("_BlendHeightStrength"), MakeLabel("Height Strength")</ins>
+		<ins>);</ins>
+	}</pre>
+						
+						<figure>
+							<img src="custom-shader-gui/blending.png" width="320" height="104">
+							<figcaption>Blending GUI.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Other Settings</h3>
+						
+						<p>For other settings, allow the customization of the render queue, by invoking <code class="csharp">MaterialEditor.RenderQueueField</code>. Also make it possible to toggle GPU instancing.</p>
+						
+						<pre translate="no" class="csharp">	void DoOtherSettings () {
+		<ins>GUILayout.Label("Other Settings", EditorStyles.boldLabel);</ins>
+
+		<ins>editor.RenderQueueField();</ins>
+		<ins>editor.EnableInstancingField();</ins>	}</pre>
+						
+						<figure>
+							<img src="custom-shader-gui/other-settings.png" width="320" height="82">
+							<figcaption>Other settings GUI.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="custom-shader-gui/custom-shader-gui.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Separate Top Maps</h2>
+					
+					<p>Often, you don't want a completely uniform appearance. The obvious case is terrain, where horizontal surfaces&mdash;those pointing up, not down&mdash;could be grass while all other surfaces could be rock. You might even want to combine triplanar mapping with texture splatting, but that's expensive because it would require a lot more texture sampling. Alternative approaches are to rely on decals, other detail objects, or vertex colors to add variety.</p>
+					
+					<section>
+						<h3>More Maps</h3>
+						
+						<p>To support a separate top map, we need to add three alternative map properties.</p>
+						
+						<pre translate="no">		[NoScaleOffset] _MainTex ("Albedo", 2D) = "white" {}
+		[NoScaleOffset] _MOHSMap ("MOHS", 2D) = "white" {}
+		[NoScaleOffset] _NormalMap ("Normals", 2D) = "white" {}
+
+		<ins>[NoScaleOffset] _TopMainTex ("Top Albedo", 2D) = "white" {}</ins>
+		<ins>[NoScaleOffset] _TopMOHSMap ("Top MOHS", 2D) = "white" {}</ins>
+		<ins>[NoScaleOffset] _TopNormalMap ("Top Normals", 2D) = "white" {}</ins></pre>
+						
+						<p>Separate top maps aren't always needed, so let's make that a shader feature, using the <em translate="no">_SEPARATE_TOP_MAP</em> keyword. Add support for it to all passes, except the shadow pass.</p>
+						
+						<pre translate="no">			#pragma target 3.0
+
+			<ins>#pragma shader_feature _SEPARATE_TOP_MAPS</ins></pre>
+						
+						<p>Add these extra maps to our shader GUI. Use the top albedo map to determine whether the keyword should be set.</p>
+						
+						<pre translate="no" class="csharp">	void DoMaps () {
+		<ins>GUILayout.Label("Top Maps", EditorStyles.boldLabel);</ins>
+
+		<ins>MaterialProperty topAlbedo = FindProperty("_TopMainTex");</ins>
+		<ins>Texture topTexture = topAlbedo.textureValue;</ins>
+		<ins>EditorGUI.BeginChangeCheck();</ins>
+		<ins>editor.TexturePropertySingleLine(MakeLabel("Albedo"), topAlbedo);</ins>
+		<ins>if (EditorGUI.EndChangeCheck() &amp;&amp; topTexture != topAlbedo.textureValue) {</ins>
+			<ins>SetKeyword("_SEPARATE_TOP_MAPS", topAlbedo.textureValue);</ins>
+		<ins>}</ins>
+		<ins>editor.TexturePropertySingleLine(</ins>
+			<ins>MakeLabel(</ins>
+				<ins>"MOHS",</ins>
+				<ins>"Metallic (R) Occlusion (G) Height (B) Smoothness (A)"</ins>
+			<ins>),</ins>
+			<ins>FindProperty("_TopMOHSMap")</ins>
+		<ins>);</ins>
+		<ins>editor.TexturePropertySingleLine(</ins>
+			<ins>MakeLabel("Normals"), FindProperty("_TopNormalMap")</ins>
+		<ins>);</ins>
+
+		GUILayout.Label("Maps", EditorStyles.boldLabel);
+
+		&hellip;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Using Marble</h3>
+						
+						<p>To see separate top maps in action, we need another set of textures. We can use the marble albedo and normal maps. <a href="separate-top-maps/marble-mohs.png">Here</a> is a matching MOHS map.</p>
+						
+						<figure>
+							<img src="separate-top-maps/marble-mohs.png" width="256" height="256">
+							<figcaption>Marble MOHS map.</figcaption>
+						</figure>
+						
+						<p>Use circuitry for the top&mdash;as it's green, so somewhat like grass&mdash;and marble for the rest.</p>
+						
+						<figure>
+							<img src="separate-top-maps/circuitry-marble-maps.png" width="320" height="166">
+							<figcaption>Circuitry for top, marble for rest.</figcaption>
+						</figure>
+						
+						<p>As the shader doesn't know about the top maps yet, we currently see only marble.</p>
+						
+						<figure>
+							<img src="separate-top-maps/marble-only.jpg" width="380" height="250">
+							<figcaption>Only marble is shown.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Enabling Top Maps</h3>
+						
+						<p>Add the required sampler variables to <em translate="no">MyTriplanarMapping</em>. Check whether the keyword is defined in <code>MyTriPlanarSurfaceFunction</code>, after all textures have been sampled. If so, add code to overwrite the data for the Y projection with samples from the top maps. But only do this for surfaces that point upward, so when the surface normal has a positive Y component.</p>
+						
+						<pre translate="no"><ins>sampler2D _TopMainTex, _TopMOHSMap, _TopNormalMap;</ins>
+&hellip;
+
+void MyTriPlanarSurfaceFunction (
+	inout SurfaceData surface, SurfaceParameters parameters
+) {
+	&hellip;
+	float3 tangentNormalZ = UnpackNormal(tex2D(_NormalMap, triUV.z));
+
+	<ins>#if defined(_SEPARATE_TOP_MAPS)</ins>
+		<ins>if (parameters.normal.y > 0) {</ins>
+			<ins>albedoY = tex2D(_TopMainTex, triUV.y).rgb;</ins>
+			<ins>mohsY = tex2D(_TopMOHSMap, triUV.y);</ins>
+			<ins>tangentNormalY = UnpackNormal(tex2D(_TopNormalMap, triUV.y));</ins>
+		<ins>}</ins>
+	<ins>#endif</ins>
+}</pre>
+						
+						<aside>
+							<h3>What if all surfaces point up?</h3>
+							<div>
+								<p>In case of a typical heightfield-based terrain mesh, all surface normals are guaranteed to point up. So checking whether the normal's Y component is positive is not needed and could be omitted.</p>
+							</div>
+						</aside>
+						
+						<p>This results in a shader that samples either the regular or the top maps for its Y projection. In our case, we get a circuitry layer on top of marble. Typically it would be grass, sand, or snow.</p>
+						
+						<figure>
+							<img src="separate-top-maps/circuitry-top.jpg" width="380" height="250">
+							<figcaption>Circuitry on top.</figcaption>
+						</figure>
+						
+						<p>The default blend settings produce a rather smooth blend between the projections, which doesn't look good where circuitry and marble meet. An exponent of 8 results in a much more sudden transition, which suits the materials better. It's also possible to support different blend settings for the top maps, but the height blending already allows a lot of control via the MOHS maps.</p>
+						
+						<figure>
+							<img src="separate-top-maps/exponent-8.jpg" width="380" height="250">
+							<figcaption>Exponent set to 8.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Unpacking Later</h3>
+						
+						<p>Although the shader compiler uses an if-else approach to smartly sample either the top or regular maps, it isn't smart about unpacking the normal. It cannot assume that both uses of <code>UnpackNormal</code> can be combined. To help the compiler, we can postpone unpacking the raw normal until after the choice of maps.</p>
+						
+						<pre translate="no">	float3 tangentNormalX = UnpackNormal(tex2D(_NormalMap, triUV.x));
+<del>//	float3 tangentNormalY = UnpackNormal(tex2D(_NormalMap, triUV.y));</del>
+	<ins>float4 rawNormalY = tex2D(_NormalMap, triUV.y);</ins>
+	float3 tangentNormalZ = UnpackNormal(tex2D(_NormalMap, triUV.z));
+
+	#if defined(_SEPARATE_TOP_MAPS)
+		if (parameters.normal.y > 0) {
+			albedoY = tex2D(_TopMainTex, triUV.y).rgb;
+			mohsY = tex2D(_TopMOHSMap, triUV.y);
+<del>//			tangentNormalY = UnpackNormal(tex2D(_TopNormalMap, triUV.y));</del>
+			<ins>rawNormalY = tex2D(_TopNormalMap, triUV.y);</ins>
+		}
+	#endif
+	<ins>float3 tangentNormalY = UnpackNormal(rawNormalY);</ins></pre>
+					</section>
+					
+					<a href="separate-top-maps/separate-top-maps.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Lightmapping</h2>
+					
+					<p>Our triplanar shader isn't finished, because it doesn't support lightmapping yet. It can receive baked light, but doesn't contribute to it. It's easiest to see this by making all objects static and switching the directional light to baked mode. Wait until baking is finished, then check the baked albedo, by switching the scene view mode from <em translate="no">Shaded</em> to <em translate="no">Baked Global Illumination / Albedo</em>. All objects that use triplanar mapping turn out to be black.</p>
+					
+					<figure>
+						<img src="lightmapping/black-albedo.jpg" width="380" height="250">
+						<figcaption>Lightmapping uses black albedo.</figcaption>
+					</figure>
+					
+					<p>To support lightmapping, we have to add a meta pass to our shader, which has to rely on <em translate="no">My Lightmapping</em> instead of <em translate="no">My Lighting</em>.</p>
+					
+					<pre translate="no">		<ins>Pass {</ins>
+			<ins>Tags {</ins>
+				<ins>"LightMode" = "Meta"</ins>
+			<ins>}</ins>
+
+			<ins>Cull Off</ins>
+
+			<ins>CGPROGRAM</ins>
+
+			<ins>#pragma vertex MyLightmappingVertexProgram</ins>
+			<ins>#pragma fragment MyLightmappingFragmentProgram</ins>
+
+			<ins>#pragma shader_feature _SEPARATE_TOP_MAPS</ins>
+
+			<ins>#include "MyTriplanarMapping.cginc"</ins>
+			<ins>#include "My Lightmapping.cginc"</ins>
+
+			<ins>ENDCG</ins>
+		<ins>}</ins></pre>
+					
+					<section>
+						<h3>Using Surface Data</h3>
+						
+						<p>To make <em translate="no">My Lightmapping</em> work with our triplanar approach, it also has to support the new surface approach. To make this easy, have it include <em translate="no">My Lighting Input</em> and delete all variables, the interpolators, and getter functions that are now duplicates.</p>
+						
+						<pre translate="no"><del>//#include "UnityPBSLighting.cginc"</del>
+<ins>#include "My Lighting Input.cginc"</ins>
+#include "UnityMetaPass.cginc"
+
+<del>//float4 _Color;</del>
+<del>//&hellip;</del>
+<del>//</del>
+<del>//float3 GetEmission (Interpolators i) {</del>
+<del>//	&hellip;</del>
+<del>//}</del>
+
+Interpolators MyLightmappingVertexProgram (VertexData v) {
+	&hellip;
+}
+
+float4 MyLightmappingFragmentProgram (Interpolators i) : SV_TARGET {
+	&hellip;
+}</pre>
+						
+						<p>Like <em translate="no">My Lighting</em>, it has to define the default albedo function. And it should use same surface approach in <code>MyLightmappingFragmentProgram</code>, except that it only cares about albedo, emission, metallic, and smoothness.</p>
+						
+						<pre translate="no"><ins>#if !defined(ALBEDO_FUNCTION)</ins>
+	<ins>#define ALBEDO_FUNCTION GetAlbedo</ins>
+<ins>#endif</ins>
+
+float4 MyLightmappingFragmentProgram (Interpolators i) : SV_TARGET {
+	<ins>SurfaceData surface;</ins>
+	<ins>surface.normal = normalize(i.normal);</ins>
+	<ins>surface.albedo = 1;</ins>
+	<ins>surface.alpha = 1;</ins>
+	<ins>surface.emission = 0;</ins>
+	<ins>surface.metallic = 0;</ins>
+	<ins>surface.occlusion = 1;</ins>
+	<ins>surface.smoothness = 0.5;</ins>
+	<ins>#if defined(SURFACE_FUNCTION)</ins>
+		<ins>SurfaceParameters sp;</ins>
+		<ins>sp.normal = i.normal;</ins>
+		<ins>sp.position = i.worldPos.xyz;</ins>
+		<ins>sp.uv = UV_FUNCTION(i);</ins>
+
+		<ins>SURFACE_FUNCTION(surface, sp);</ins>
+	<ins>#else</ins>
+		<ins>surface.albedo = ALBEDO_FUNCTION(i);</ins>
+		<ins>surface.emission = GetEmission(i);</ins>
+		<ins>surface.metallic = GetMetallic(i);</ins>
+		<ins>surface.smoothness = GetSmoothness(i);</ins>
+	<ins>#endif</ins>
+	
+	&hellip;
+}</pre>
+						
+						<p>Replace the old usage of the getter functions with the new surface data.</p>
+						
+						<pre translate="no">float4 MyLightmappingFragmentProgram (Interpolators i) : SV_TARGET {
+	&hellip;
+	
+	UnityMetaInput surfaceData;
+	surfaceData.Emission = <ins>surface.emission</ins>;
+	float oneMinusReflectivity;
+	surfaceData.Albedo = DiffuseAndSpecularFromMetallic(
+		<ins>surface.albedo</ins>, <ins>surface.metallic</ins>,
+		surfaceData.SpecularColor, oneMinusReflectivity
+	);
+
+	float roughness = SmoothnessToRoughness(<ins>surface.smoothness</ins>) * 0.5;
+	surfaceData.Albedo += surfaceData.SpecularColor * roughness;
+
+	return UnityMetaFragment(surfaceData);
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Including Relevant Input</h3>
+						
+						<p>The interpolators now also include the normal and world position vectors, so they should be set in <code>MyLightMappingVertexProgram</code>.</p>
+						
+						<pre translate="no">Interpolators MyLightmappingVertexProgram (VertexData v) {
+	Interpolators i;
+	i.pos = UnityMetaVertexPosition(
+		v.vertex, v.uv1, v.uv2, unity_LightmapST, unity_DynamicLightmapST
+	);
+	
+	<ins>i.normal = UnityObjectToWorldNormal(v.normal);</ins>
+	<ins>i.worldPos.xyz = mul(unity_ObjectToWorld, v.vertex);</ins>
+	
+	i.uv.xy = TRANSFORM_TEX(v.uv, _MainTex);
+	i.uv.zw = TRANSFORM_TEX(v.uv, _DetailTex);
+	return i;
+}</pre>
+						
+						<p>These vectors aren't usually needed, so we could skip computing them when not needed, just using dummy constants instead. We could define two macros, <em translate="no">META_PASS_NEEDS_NORMALS</em> and <em translate="no">META_PASS_NEEDS_POSITION</em>, to indicate whether they're needed.</p>
+						
+						<pre translate="no">	<ins>#if defined(META_PASS_NEEDS_NORMALS)</ins>
+		<ins>i.normal = UnityObjectToWorldNormal(v.normal);</ins>
+	<ins>#else</ins>
+		<ins>i.normal = float3(0, 1, 0);</ins>
+	<ins>#endif</ins>
+	<ins>#if defined(META_PASS_NEEDS_POSITION)</ins>
+		i.worldPos.xyz = mul(unity_ObjectToWorld, v.vertex);
+	<ins>#else</ins>
+		<ins>i.worldPos.xyz = 0;</ins>
+	<ins>#endif</ins></pre>
+						
+						<p>Also, only include the UV coordinates when required.</p>
+						
+						<pre translate="no">	<ins>#if !defined(NO_DEFAULT_UV)</ins>
+		i.uv.xy = TRANSFORM_TEX(v.uv, _MainTex);
+		i.uv.zw = TRANSFORM_TEX(v.uv, _DetailTex);
+	<ins>#endif</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Triplanar Lightmapping</h3>
+						
+						<p>All that's left to do is to declare that our triplanar shader needs both normals and position data in its meta pass. Once that's done and the lighting has baked again, the albedo will correctly show up in the scene view.</p>
+						
+						<pre translate="no">			#pragma shader_feature _SEPARATE_TOP_MAPS
+
+			<ins>#define META_PASS_NEEDS_NORMALS</ins>
+			<ins>#define META_PASS_NEEDS_POSITION</ins>
+
+			#include "MyTriplanarMapping.cginc"
+			#include "My Lightmapping.cginc"</pre>
+						
+						<figure>
+							<img src="lightmapping/correct-albedo.jpg" width="380" height="250">
+							<figcaption>Correctly lightmapped albedo.</figcaption>
+						</figure>
+						
+						<p>Now our triplanar shader is fully functional. You can use it as a basis for your own work, extending, tweaking, and tuning it as desired.</p>
+						
+						<aside>
+							<h3>The lightmapped data doesn't seem to depend on world space?</h3>
+							<div>
+								<p>Indeed, when lightmapping we end up using object space instead of world space. This happens because Unity doesn't setup an object-to-world transformation matrix for the meta pass. The result of this is that the meta pass only works correctly for objects that are positioned at the origin without rotation or scale adjustments. So it works fine for typical terrain, but not other things. It's still workable for other objects, as long as the material is mostly uniform and the top is correctly aligned, if separate maps are used.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="lightmapping/lightmapping.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Triplanar-Mapping.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

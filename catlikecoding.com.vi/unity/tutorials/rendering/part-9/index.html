@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/rendering/part-9/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/rendering/part-9/tutorial-image.jpg">
+		<meta property="og:title" content="Rendering 9">
+		<meta property="og:description" content="A Unity Rendering tutorial about creating complex materials. Part 9 of 20.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Rendering 9</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/rendering/part-9/#article",
+				"headline": "Rendering 9",
+				"alternativeHeadline": "Complex Materials",
+				"datePublished": "2016-10-31",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Rendering tutorial about creating complex materials. Part 9 of 20.",
+				"image": "https://catlikecoding.com/unity/tutorials/rendering/part-9/tutorial-image.jpg",
+				"dependencies": "Unity 5.4.1f3",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/rendering/", "name": "Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				MyLightingShaderGUI: 1,
+				SmoothnessSource: 1,
+				TangentSpaceVisualizer: 1
+			};
+			
+			var hasAnimations = false;
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Rendering 9</h1>
+					<p>Complex Materials</p>
+					<ul>
+						<li>Create a custom shader GUI.</li>
+						<li>Mix metals and nonmetals.</li>
+						<li>Use nonuniform smoothness.</li>
+						<li>Support emissive surfaces.</li>
+					</ul>
+				</header>
+
+				<p>This is the ninth part of a tutorial series about rendering. <a href="../part-8.1.html">Last time</a>, we added support for environmental maps. In this part we'll combine multiple textures to create complex materials. But before we get to that, we need a better GUI for our shader.</p>
+				
+				<p>This tutorial was made with Unity 5.4.1f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Same shader, different maps.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>User Interface</h2>
+					
+					<p>Up to this points, we've been using Unity's default material inspector for our material. It is serviceable, but Unity's standard shader has quite a different look. Let's create a custom inspector for our own shader, mimicking the standard shader.</p>
+					
+					<figure>
+						<img src="user-interface/default-inspector.png" width="320" height="386">
+						<img src="user-interface/standard-inspector.png" width="320" height="458">
+						<figcaption>Our default inspector vs. the standard shader inspector.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>ShaderGUI</h3>
+						
+						<p>We can create a custom inspector by adding a class that extends <code>UnityEditor.ShaderGUI</code>. As it is an editor class, place its script file in an <em translate="no">Editor</em> folder.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+<ins>using UnityEditor;</ins>
+
+<ins>public class MyLightingShaderGUI : ShaderGUI {</ins>
+<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Don't we need to extend <code>MaterialEditor</code>?</h3>
+							<div>
+								<p>Unity 4.1 added support for custom material inspectors, via extending <code>MaterialEditor</code>. You can still do this, but <code>ShaderGUI</code> was added as an alternative in 5.0. Its creation has something to do with Substance materials. Unity uses <code>ShaderGUI</code> for the standard shader, so we'll use it as well.</p>
+								
+								<p>Under the hood, Unity uses the default material editor for shaders that have a custom <code>ShaderGUI</code> associated with them. This editor instantiates the GUI and invokes its methods.</p>
+							</div>
+						</aside>
+						
+						<p>To use a custom GUI, you have to add the <code class="shader">CustomEditor</code> directive to a shader, followed by a string containing the name of the GUI class to use.</p>
+						
+						<pre translate="no" class="shader">Shader "Custom/My First Lighting Shader" {
+	&hellip;
+	
+	<ins>CustomEditor "MyLightingShaderGUI"</ins>
+}</pre>
+						
+						<aside>
+							<h3>Can <code>ShaderGUI</code> classes be put inside namespaces?</h3>
+							<div>
+								<p>Yes. You have to specify the fully-qualified class name in the shader.</p>
+								
+								<pre translate="no" class="shader">	CustomEditor "MyNamespace.MyShaderGUI"</pre>
+							</div>
+						</aside>
+						
+						<p>To replace the default inspector, we have to override the <code>ShaderGUI.OnGUI</code> method. This method has two parameters. First, a reference to a <code>MaterialEditor</code>. This object manages the inspector of the currently selected material. Second, an array containing that material's properties.</p>
+						
+						<pre translate="no">public class MyLightingShaderGUI : ShaderGUI {
+	
+	<ins>public override void OnGUI (</ins>
+		<ins>MaterialEditor editor, MaterialProperty[] properties</ins>
+	<ins>) {</ins>
+	<ins>}</ins>
+}</pre>
+						
+						<p>Inside this method, we can create our own GUI. As we're not doing so yet, the inspector has become empty.</p>
+					</section>
+					
+					<section>
+						<h3>Creating a Label</h3>
+						
+						<p>The standard shader GUI is split into two sections, one for the main maps, and another for the secondary maps. We'll use the same layout in our GUI. To keep the code clean, we'll use separate methods for distinct parts of the GUI. We start with the main section and its label.</p>
+						
+						<pre translate="no">	public override void OnGUI (
+		MaterialEditor editor, MaterialProperty[] properties
+	) {
+		<ins>DoMain();</ins>
+	}
+	
+	<ins>void DoMain() {</ins>
+		<ins>GUILayout.Label("Main Maps");</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="user-interface/label.png" width="320" height="70">
+							<figcaption>Main maps label.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>How does <code>GUILayout</code> work?</h3>
+							<div>
+								<p>The Unity Editor is created with Unity's immediate-mode UI. This is Unity's old UI system, which was also used for in-game UIs before the current canvas-based system.</p>
+								
+								<p>The basis of the immediate-mode UI is the <code>GUI</code> class. It contains methods which create UI widgets. You have to use rectangles to position each element explicitly. The <code>GUILayout</code> class provides the same functionality, while automatically positioning the widgets using a simple layout system.</p>
+								
+								<p>Besides that, the <code>EditorGUI</code> and <code>EditorGUILayout</code> classes provide access to widgets and features for editor UIs.</p>
+							</div>
+						</aside>
+						
+						<p>The standard shader has a bold label, so we want a bold label as well. This is done by adding a GUI style to the label, in this case <code>EditorStyles.boldLabel</code>.</p>
+						
+						<pre translate="no">		GUILayout.Label("Main Maps"<ins>, EditorStyles.boldLabel</ins>);</pre>
+						
+						<figure>
+							<img src="user-interface/label-bold.png" width="320" height="74">
+							<figcaption>Bold label.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Showing Albedo</h3>
+						
+						<p>To show the properties of our material, we have to access them in our methods. We could pass the parameters of <code>OnGUI</code> on to all other methods, but this would lead to a lot of repeated code. Instead, let's put them in fields.</p>
+						
+						<pre translate="no">	<ins>MaterialEditor editor;</ins>
+	<ins>MaterialProperty[] properties;</ins>
+
+	public override void OnGUI (
+		MaterialEditor editor, MaterialProperty[] properties
+	) {
+		<ins>this.editor = editor;</ins>
+		<ins>this.properties = properties;</ins>
+		DoMain();
+	}</pre>
+						
+						<aside>
+							<h3>Do we need to copy the references each time <code>OnGUI</code> is invoked?</h3>
+							<div>
+								<p><code>MaterialEditor</code> decides when a new <code>ShaderGUI</code> instance is created. This currently happens when a material is selected, as you might expect. But it also happens when an undo or redo action is performed. This means that you cannot rely on a <code>ShaderGUI</code> instance sticking around. Each time, it could be a new object instance. You could think of <code>OnGUI</code> as if it were a static method, even though it isn't.</p>
+							</div>
+						</aside>
+						
+						<p>The albedo map is shown first in the standard shader. This is the main texture. Its property sits somewhere inside the properties array. Its array index depends on the order in which the properties are defined in our shader. But it is more robust to search for it by name. <code>ShaderGUI</code> contains the <code>FindProperty</code> method, which does exactly that, given a name and a property array.</p>
+						
+						<pre translate="no">	void DoMain () {
+		GUILayout.Label("Main Maps", EditorStyles.boldLabel);
+
+		<ins>MaterialProperty mainTex = FindProperty("_MainTex", properties);</ins>
+	}
+</pre>
+						
+						<p>Besides the texture property, we also need to define the contents of a label. This is done with <code>GUIContent</code>, which is a simple container class.</p>
+						
+						<pre translate="no">		MaterialProperty mainTex = FindProperty("_MainTex", properties);
+		<ins>GUIContent albedoLabel = new GUIContent("Albedo");</ins>
+</pre>
+						
+						<p>But we've already named the main texture <em translate="no">Albedo</em> in our shader. We can just use that name, which we can access via the property.</p>
+						
+						<pre translate="no">		GUIContent albedoLabel = new GUIContent(<ins>mainTex.displayName</ins>);</pre>
+						
+						<p>To create one of those small texture widgets, we have to rely on the editor that we've been given a reference to. It has a collection of methods to draw such widgets.</p>
+						
+						<pre translate="no">		MaterialProperty mainTex = FindProperty("_MainTex", properties);
+		GUIContent albedoLabel = new GUIContent(mainTex.displayName);
+		<ins>editor.TexturePropertySingleLine(albedoLabel, mainTex);</ins>
+</pre>
+						
+						<figure>
+							<img src="user-interface/albedo-map.png" width="320" height="44">
+							<figcaption>Albedo map.</figcaption>
+						</figure>
+						
+						<p>This is beginning to look like the standard shader! But that inspector also has tooltips, when you hover over the property labels. In the case of the albedo map, it says <em translate="no">Albedo (RGB) and Transparency (A)</em>.</p>
+						
+						<p>We can add a tooltip as well, by simply adding it to the label content. As we don't support transparency yet, let's just use <em translate="no">Albedo (RGB)</em>.</p>
+						
+						<pre translate="no">		GUIContent albedoLabel =
+			new GUIContent(mainTex.displayName<ins>, "Albedo (RGB)"</ins>);</pre>
+						
+						<figure>
+							<img src="user-interface/tooltip.png" width="320" height="55">
+							<figcaption>Albedo with tooltip.</figcaption>
+						</figure>
+						
+						<p>The <code>TexturePropertySingleLine</code> method has variants that work with more than one property, up to three. The first should be a texture, but the others can be something else. They will all be put on the same line. We can use this to display the tint next to the texture.</p>
+						
+						<pre translate="no">		<ins>MaterialProperty tint = FindProperty("_Tint", properties);</ins>
+		editor.TexturePropertySingleLine(albedoLabel, mainTex<ins>, tint</ins>);
+</pre>
+						
+						<figure>
+							<img src="user-interface/albedo-tint.png" width="320" height="25">
+							<figcaption>Albedo map and tint.</figcaption>
+						</figure>
+						
+						<p>Let's skip ahead to the bottom of the main section. That's where the tiling and offset values of the main texture are shown. This is done with the <code>MaterialEditor.TextureScaleOffsetProperty</code> method.</p>
+						
+						<pre translate="no">		editor.TexturePropertySingleLine(albedoLabel, mainTex, tint);
+		<ins>editor.TextureScaleOffsetProperty(mainTex);</ins></pre>
+						
+						<figure>
+							<img src="user-interface/tiling-offset.png" width="320" height="60">
+							<figcaption>Tiling and offset.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Convenience Methods</h3>
+						
+						<p>Instead of using the existing <code>FindProperty</code> method, let's create one that only requires a name parameter, taking advantage of our <code>properties</code> field. This will make our code more legible.</p>
+						
+						<pre translate="no">	<ins>MaterialProperty FindProperty (string name) {</ins>
+		<ins>return FindProperty(name, properties);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Switch to using this method in <code>DoMain</code>. Also, we can directly pass the tint property to the <code>TexturePropertySingleLine</code> method. We're not using it anywhere else.</p>
+						
+						<pre translate="no">	void DoMain () {
+		GUILayout.Label("Main Maps", EditorStyles.boldLabel);
+
+		MaterialProperty mainTex = <ins>FindProperty("_MainTex")</ins>;
+<del>//		MaterialProperty tint = FindProperty("_Tint", properties);</del>
+		GUIContent albedoLabel =
+			new GUIContent(mainTex.displayName, "Albedo (RGB)");
+		editor.TexturePropertySingleLine(
+			albedoLabel, mainTex, <ins>FindProperty("_Tint")</ins>
+		);
+		editor.TextureScaleOffsetProperty(mainTex);
+	}</pre>
+						
+						<p>Let's also create a method to configure the contents of a label. We only need to use a single static <code>GUIContent</code> instance for this. We'll just replace its text and its tooltip. As we might not need a tooltip all the time, let's make it optional, with a default parameter value.</p>
+						
+						<pre translate="no">	<ins>static GUIContent staticLabel = new GUIContent();</ins>
+	
+	<ins>static GUIContent MakeLabel (string text, string tooltip = null) {</ins>
+		<ins>staticLabel.text = text;</ins>
+		<ins>staticLabel.tooltip = tooltip;</ins>
+		<ins>return staticLabel;</ins>
+	<ins>}</ins></pre>
+						
+						<p>It's even more convenient if we don't have to bother with extracting the display name from properties all the time. So create a <code>MakeLabel</code> variant that does this as well.</p>
+						
+						<pre translate="no">	<ins>static GUIContent MakeLabel (</ins>
+		<ins>MaterialProperty property, string tooltip = null</ins>
+	<ins>) {</ins>
+		<ins>staticLabel.text = property.displayName;</ins>
+		<ins>staticLabel.tooltip = tooltip;</ins>
+		<ins>return staticLabel;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now <code>DoMain</code> can become even smaller. The same goes for all our future methods.</p>
+						
+						<pre translate="no">	void DoMain () {
+		GUILayout.Label("Main Maps", EditorStyles.boldLabel);
+
+		MaterialProperty mainTex = FindProperty("_MainTex");
+<del>//		GUIContent albedoLabel =</del>
+<del>//			new GUIContent(mainTex.displayName, "Albedo (RGB)");</del>
+		editor.TexturePropertySingleLine(
+			<ins>MakeLabel(mainTex, "Albedo (RGB)")</ins>, mainTex, FindProperty("_Tint")
+		);
+		editor.TextureScaleOffsetProperty(mainTex);
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Showing Normals</h3>
+						
+						<p>The next texture to be displayed is the normal map. Instead of putting all the code in <code>DoMain</code>, delegate it to a separate <code>DoNormals</code> method. Invoke it after the albedo line, before the tiling and offset.</p>
+						
+						<pre translate="no">		<ins>DoNormals();</ins>
+		editor.TextureScaleOffsetProperty(mainTex);</pre>
+						
+						<p>The new <code>DoNormals</code> method simply retrieves the map property and displays it. The standard shader doesn't provide any extra tooltip info, so we won't either.</p>
+						
+						<pre translate="no">	<ins>void DoNormals () {</ins>
+		<ins>MaterialProperty map = FindProperty("_NormalMap");</ins>
+		<ins>editor.TexturePropertySingleLine(MakeLabel(map), map);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Of course there is a bump scale as well, so add it to the line.</p>
+						
+						<pre translate="no">		editor.TexturePropertySingleLine(
+			MakeLabel(map), map<ins>, FindProperty("_BumpScale")</ins>
+		);</pre>
+						
+						<figure>
+							<img src="user-interface/normal-map.png" width="320" height="80">
+							<figcaption>Normal map and bump scale.</figcaption>
+						</figure>
+						
+						<p>The standard shader only shows the bump scale when there is a normal map assigned to the material. We can do this too, by checking whether the property references a texture. If it does, show the bump scale. If not, just use <code>null</code> as an argument for <code>TexturePropertySingleLine</code>.</p>
+						
+						<pre translate="no">		editor.TexturePropertySingleLine(
+			MakeLabel(map), map<ins>,</ins>
+			<ins>map.textureValue ? FindProperty("_BumpScale") : null</ins>
+		);</pre>
+						
+						<figure>
+							<img src="user-interface/hidden-bump-scale.png" width="320" height="80">
+							<figcaption>Hidden bump scale.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Showing Metallic and Smoothness</h3>
+						
+						<p>The metallic and smoothness properties are simple float ranges. At least, for now. We can show them via the general-purpose <code>MaterialEditor.ShaderProperty</code> method. Unlike the texture methods, this method has the property as its first argument. The label contents come second.</p>
+						
+						<pre translate="no">	void DoMain () {
+		&hellip;
+		editor.TexturePropertySingleLine(
+			MakeLabel(mainTex, "Albedo (RGB)"), mainTex, FindProperty("_Tint")
+		);
+		<ins>DoMetallic();</ins>
+		<ins>DoSmoothness();</ins>
+		DoNormals();
+		editor.TextureScaleOffsetProperty(mainTex);
+	}
+	
+	&hellip;
+	
+	<ins>void DoMetallic () {</ins>
+		<ins>MaterialProperty slider = FindProperty("_Metallic");</ins>
+		<ins>editor.ShaderProperty(slider, MakeLabel(slider));</ins>
+	<ins>}</ins>
+
+	<ins>void DoSmoothness () {</ins>
+		<ins>MaterialProperty slider = FindProperty("_Smoothness");</ins>
+		<ins>editor.ShaderProperty(slider, MakeLabel(slider));</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="user-interface/metallic-smoothness.png" width="320" height="118">
+							<figcaption>Metallic and smoothness.</figcaption>
+						</figure>
+						
+						<p>We can make these properties line up with the other labels, by increasing the indent level of the editor. In this case, by two steps.</p>
+						
+						<p>The indent level can be adjusted via the static <code>EditorGUI.indentLevel</code> property. Make sure to reset it to its old value afterwards.</p>
+						
+						<pre translate="no">	void DoMetallic () {
+		MaterialProperty slider = FindProperty("_Metallic");
+		<ins>EditorGUI.indentLevel += 2;</ins>
+		editor.ShaderProperty(slider, MakeLabel(slider));
+		<ins>EditorGUI.indentLevel -= 2;</ins>
+	}
+
+	void DoSmoothness () {
+		MaterialProperty slider = FindProperty("_Smoothness");
+		<ins>EditorGUI.indentLevel += 2;</ins>
+		editor.ShaderProperty(slider, MakeLabel(slider));
+		<ins>EditorGUI.indentLevel -= 2;</ins>
+	}</pre>
+						<figure>
+							<img src="user-interface/indented.png" width="320" height="118">
+							<figcaption>Indented properties.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Showing the Secondary Maps</h3>
+						
+						<p>The secondary maps work just like the main maps. So create a <code>DoSecondary</code> method which takes care of the bold label, the detail texture, and its tiling and offset.</p>
+						
+						<pre translate="no">	public override void OnGUI (
+		MaterialEditor editor, MaterialProperty[] properties
+	) {
+		this.editor = editor;
+		this.properties = properties;
+		DoMain();
+		<ins>DoSecondary();</ins>
+	}
+	
+	&hellip;
+	
+	<ins>void DoSecondary () {</ins>
+		<ins>GUILayout.Label("Secondary Maps", EditorStyles.boldLabel);</ins>
+
+		<ins>MaterialProperty detailTex = FindProperty("_DetailTex");</ins>
+		<ins>editor.TexturePropertySingleLine(</ins>
+			<ins>MakeLabel(detailTex, "Albedo (RGB) multiplied by 2"), detailTex</ins>
+		<ins>);</ins>
+		<ins>editor.TextureScaleOffsetProperty(detailTex);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Adjust the display name of the detail texture in our shader, to match the standard shader.</p>
+						
+						<pre translate="no">		_DetailTex (<ins>"Detail Albedo"</ins>, 2D) = "gray" {}</pre>
+						
+						<figure>
+							<img src="user-interface/secondary-maps.png" width="320" height="75">
+							<figcaption>Secondary maps.</figcaption>
+						</figure>
+						
+						<p>The detail normal map works just like the main normal map. Curiously, the standard shader GUI doesn't hide the detail bump scale. But we're consistent, so we do hide it when there's no detail normal map.</p>
+						
+						<pre translate="no">	void DoSecondary () {
+		&hellip;
+		<ins>DoSecondaryNormals();</ins>
+		editor.TextureScaleOffsetProperty(detailTex);
+	}
+
+	<ins>void DoSecondaryNormals () {</ins>
+		<ins>MaterialProperty map = FindProperty("_DetailNormalMap");</ins>
+		<ins>editor.TexturePropertySingleLine(</ins>
+			<ins>MakeLabel(map), map,</ins>
+			<ins>map.textureValue ? FindProperty("_DetailBumpScale") : null</ins>
+		<ins>);</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="user-interface/complete-inspector.png" width="320" height="232">
+							<figcaption>Complete inspector.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="user-interface/user-interface.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Mixing Metal and Nonmetal</h2>
+					
+					<p>Because our shader uses a uniform value to determine how metallic something is, it cannot vary across a material's surface. This prevents us from creating complex materials that actually represent a mix of different materials. For example, here are the albedo and normal maps for an artistic impression of computer circuitry.</p>
+					
+					<figure>
+						<img alt="albedo" src="mixing-metal-and-nonmetal/circuitry-albedo.png" width="256" height="256">
+						<img alt="normals" src="mixing-metal-and-nonmetal/circuitry-normals.png" width="256" height="256">
+						<figcaption>Albedo and normal map for circuitry.</figcaption>
+					</figure>
+					
+					<p>The green parts form the base of the circuit board, while the blue parts represent lights. These are nonmetallic. The yellow gold parts represent conductive circuitry, which should be metallic. On top of that are some brown stains, for variety.</p>
+					
+					<p>Create a new material with these maps, using our lighting shader. Make it fairly smooth. Also, because the material isn't bright, it works with Unity's default ambient environment. So set the scene's <em translate="no">Ambient Intensity</em> back to 1, if you still had it lowered to zero.</p>
+					
+					<figure>
+						<img src="mixing-metal-and-nonmetal/material-inspector.png" width="320" height="186">
+						<figcaption>Circuitry material.</figcaption>
+					</figure>
+					
+					<p>Using the <em translate="no">Metallic</em> slider, we can make the whole surface either nonmetallic, metallic, or something in between. This is not sufficient for the circuitry.</p>
+					
+					<figure>
+						<img alt="nonmetal" src="mixing-metal-and-nonmetal/nonmetal.png" width="320" height="230">
+						<img alt="metal" src="mixing-metal-and-nonmetal/metal.png" width="320" height="230">
+						<figcaption>Uniform nonmetal vs. metal.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Metallic Maps</h3>
+						
+						<p>The standard shader has support for metallic maps. These maps define the metallic value per texel, instead of for the whole material at once. Here is a grayscale map which marks the circuitry as metallic, and the rest as nonmetallic. Stained metal is darker, because of the semitransparent dirty layer on top.</p>
+						
+						<figure>
+							<img src="mixing-metal-and-nonmetal/circuitry-metallic.png" width="256" height="256">
+							<figcaption>Metallic map.</figcaption>
+						</figure>
+						
+						<p>Add a property for such a map to our shader.</p>
+						
+						<pre translate="no" class="shader">	Properties {
+		_Tint ("Tint", Color) = (1, 1, 1, 1)
+		_MainTex ("Albedo", 2D) = "white" {}
+
+		[NoScaleOffset] _NormalMap ("Normals", 2D) = "bump" {}
+		_BumpScale ("Bump Scale", Float) = 1
+
+		<ins>[NoScaleOffset] _MetallicMap ("Metallic", 2D) = "white" {}</ins>
+		[Gamma] _Metallic ("Metallic", Range(0, 1)) = 0
+		_Smoothness ("Smoothness", Range(0, 1)) = 0.1
+
+		_DetailTex ("Detail Albedo", 2D) = "gray" {}
+		[NoScaleOffset] _DetailNormalMap ("Detail Normals", 2D) = "bump" {}
+		_DetailBumpScale ("Detail Bump Scale", Float) = 1
+	}</pre>
+						
+						<aside>
+							<h3>Do we still need the <code class="shader">NoScaleOffset</code> attributes?</h3>
+							<div>
+								<p>Those attributes are hints for the default shader GUI. So no, we don't need them anymore. I keep using them in this tutorial as hints for people inspecting the shader code.</p>
+							</div>
+						</aside>
+						
+						<p>Add the corresponding variable to our include file as well.</p>
+						
+						<pre translate="no" class="shader"><ins>sampler2D _MetallicMap;</ins>
+float _Metallic;
+</pre>
+						
+						<p>Let's create a function to retrieve the metallic value of a fragment, with the interpolators as a parameter. It simply samples the metallic map and multiplies it with the uniform metallic value. Unity uses the R channel of the map, so we use that channel as well.</p>
+						
+						<pre translate="no" class="shader">struct Interpolators {
+	&hellip;
+};
+
+<ins>float GetMetallic (Interpolators i) {</ins>
+	<ins>return tex2D(_MetallicMap, i.uv.xy).r * _Metallic;</ins>
+<ins>}</ins></pre>
+						
+						<p>Now we can retrieve the metallic value in <code class="shader">MyFragmentProgram</code>.</p>
+						
+						<pre translate="no" class="shader">float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+	&hellip;
+	
+	albedo = DiffuseAndSpecularFromMetallic(
+		albedo, <ins>GetMetallic(i),</ins> specularTint, oneMinusReflectivity
+	);
+	
+	&hellip;
+}</pre>
+						
+						<p>Note that the code of <code class="shader">MyFragmentProgram</code> doesn't care how the metallic value is obtained. If you want to determine the metallic value a different way, you only have to change <code class="shader">GetMetallic</code>.</p>
+					</section>
+					
+					<section>
+						<h3>Custom GUI</h3>
+						
+						<p>Had we still used the default shader GUI, the metallic map would've appeared in the inspector. But now we have to explicitly add it to <code>MyLightingShaderGUI</code>, by adjusting <code>DoMetallic</code>. Like the standard shader, we show the map and the slider on a single line.</p>
+						
+						<pre translate="no">	void DoMetallic () {
+		<ins>MaterialProperty map = FindProperty("_MetallicMap");</ins>
+		<ins>editor.TexturePropertySingleLine(</ins>
+			<ins>MakeLabel(map, "Metallic (R)"), map,</ins>
+			<ins>FindProperty("_Metallic")</ins>
+		<ins>);</ins>
+	}
+</pre>
+						
+						<figure>
+							<img alt="scene" src="mixing-metal-and-nonmetal/metallic-map.png" width="320" height="230">
+							<img alt="inspector" src="mixing-metal-and-nonmetal/metallic-map-inspector.png" width="320" height="80">
+							<figcaption>Using a metallic map.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Map or Slider</h3>
+						
+						<p>The GUI of the standard shader hides the slider when a metallic map is used. We can do so as well. It works like the bump scales, except that the value is shown when there's no texture.</p>
+						
+						<pre translate="no">		editor.TexturePropertySingleLine(
+			MakeLabel(map, "Metallic (R)"), map,
+			<ins>map.textureValue ? null :</ins> FindProperty("_Metallic")
+		);</pre>
+						
+						<figure>
+							<img src="mixing-metal-and-nonmetal/hidden-slider.png" width="320" height="80">
+							<figcaption>Hidden slider.</figcaption>
+						</figure>
+						
+					</section>
+					
+					<section>
+						<h3>Custom Shader Keywords</h3>
+						
+						<p>The metallic slider is hidden, because the standard shader uses either a map, or a uniform value. They aren't multiplied. When a metallic map is provided, the uniform value is ignored. To use the same approach, we have to distinguish between materials with and without a metallic map. This can be done by generating two shader variants, one with and one without the map.</p>
+						
+						<p>There are already multiple variants of our shader generated, due to the <code class="shader">#pragma multi_compile</code> directives in our shader. They're based on keywords provided by Unity. By defining our own shader keywords, we can create the variants that we need.</p>
+						
+						<p>You can name custom keywords however you like, but the convention is to use uppercase words with a leading underscore. In this case, we'll use <em translate="no">_METALLIC_MAP</em>.</p>
+						
+						<aside>
+							<h3>Where are custom keywords defined?</h3>
+							<div>
+								<p>Unity detects all custom keywords in a project, based on multi-compile statements and which keywords are added to materials. Internally, they are converted and combined into bit masks. Which identifier a keyword gets varies per project.</p>
+								
+								<p>In Unity 5.4, the bit mask contains 128 bits. Therefore, up to 128 keywords can exist per project. This includes Unity's keywords plus any custom keywords that are in use. This limit used to be lower, which made shaders with many keywords a potential hazard. Unity 5.5 will increase the limit to 256.</p>
+							</div>
+						</aside>
+						
+						<p>To add custom keywords to a material, we have to access the material directly in our GUI. We can get to the currently selected material via the <code>MaterialEditor.target</code> property. As this is actually an inherited property from the base <code>Editor</code> class, it has the generic <code>Object</code> type. So we have to cast it to <code>Material</code>.</p>
+						
+						<pre translate="no">	<ins>Material target;</ins>
+	MaterialEditor editor;
+	MaterialProperty[] properties;
+
+	public override void OnGUI (
+		MaterialEditor editor, MaterialProperty[] properties
+	) {
+		<ins>this.target = editor.target as Material;</ins>
+		this.editor = editor;
+		this.properties = properties;
+		DoMain();
+		DoSecondary();
+	}</pre>
+						
+						<p>Adding a keyword to a shader is done with the <code>Material.EnableKeyword</code> method, which has the keyword's name as a parameter. For removal of a keyword, there's <code>Material.DisableKeyword</code>. Let's create a convenient method that enables or disables a keyword based on a boolean parameter.</p>
+						
+						<pre translate="no">	<ins>void SetKeyword (string keyword, bool state) {</ins>
+		<ins>if (state) {</ins>
+			<ins>target.EnableKeyword(keyword);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>target.DisableKeyword(keyword);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can toggle our custom <em translate="no">_METALLIC_MAP</em> keyword, based on whether there's a texture assigned to the <em translate="no">_MetallicMap</em> material property.</p>
+						
+						<pre translate="no">	void DoMetallic () {
+		&hellip;
+		<ins>SetKeyword("_METALLIC_MAP", map.textureValue);</ins>
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Debugging Keywords</h3>
+						
+						<p>You can use the debug inspector to verify that our keyword gets added to or removed from the material. You can switch the inspector to debug mode via the dropdown menu at the top right of its tab bar. The custom keywords are shown as a list in the <em translate="no">Shader Keywords</em> text field.</p>
+						
+						<figure>
+							<img src="mixing-metal-and-nonmetal/debug-inspector.png" width="320" height="148">
+							<figcaption>Debug inspector.</figcaption>
+						</figure>
+						
+						<p>Any unexpected shader keywords you find here have been defined because of previous shaders that were assigned to the material. For example, as soon as you selected a new material, the standard shader GUI will add the _EMISSION keyword. They are useless to our shader, so remove them from the list.</p>
+					</section>
+					
+					<section>
+						<h3>Shader Features</h3>
+						
+						<p>To generate the shader variants, we have to add another multi-compile directive to our shader. Do this for both the base pass and the additive pass. The shadow pass doesn't need it.</p>
+						
+						<pre translate="no" class="shader">			#pragma target 3.0
+
+			<ins>#pragma multi_compile _ _METALLIC_MAP</ins></pre>
+						
+						<p>When showing the shader variants, you will see that our custom keyword has been included. The base pass now has a total of eight variants.</p>
+						
+						<pre translate="no" class="shader">// Total snippets: 3
+// -----------------------------------------
+// Snippet #0 platforms ffffffff:
+SHADOWS_SCREEN VERTEXLIGHT_ON _METALLIC_MAP
+
+8 keyword variants used in scene:
+
+&lt;no keywords defined>
+VERTEXLIGHT_ON
+SHADOWS_SCREEN
+SHADOWS_SCREEN VERTEXLIGHT_ON
+_METALLIC_MAP
+VERTEXLIGHT_ON _METALLIC_MAP
+SHADOWS_SCREEN _METALLIC_MAP
+SHADOWS_SCREEN VERTEXLIGHT_ON _METALLIC_MAP</pre>
+						
+						<p>When using a multi-compile directive, Unity generates shader variants for all possible combinations. Compiling all permutations can take a lot of time, when many keywords are used. All these variants are also included in builds, which might be unnecessary.</p>
+						
+						<p>An alternative is to define a shader feature, instead of a multi-compile directive. The difference is that permutations of shader features are only compiled when needed. If no material uses a certain keyword, then no shader variants for that keyword are compiled. Unity also checks which keywords are used in builds, only including the necessary shader variants.</p>
+						
+						<p>So let's used <code class="shader">#pragma shader_feature</code> for our custom keyword.</p>
+						
+						<pre translate="no" class="shader">			#pragma <ins>shader_feature</ins> _ _METALLIC_MAP</pre>
+						
+						<aside>
+							<h3>When can you use shader features?</h3>
+							<div>
+								<p>When materials are configured at design time &ndash; in the editor only &ndash; then you can use shader features without worry. But if you adjust the keywords of materials at run time, then you have to make sure that all variants are included. The simplest way is to stick to multi-compile directives for the relevant keywords. Alternatively, you can use a shader variant collection asset.</p>
+							</div>
+						</aside>
+						
+						<p>If the shader feature is a toggle for a single keyword, you can omit the single underscore.</p>
+						
+						<pre translate="no" class="shader">			#pragma shader_feature <ins>_METALLIC_MAP</ins></pre>
+						
+						<p>After making this change, all shader variants are still listed, although the order in which Unity lists them might be different.</p>
+						
+						<pre translate="no" class="shader">// Total snippets: 3
+// -----------------------------------------
+// Snippet #0 platforms ffffffff:
+_METALLIC_MAP
+SHADOWS_SCREEN VERTEXLIGHT_ON
+
+8 keyword variants used in scene:
+
+&lt;no keywords defined>
+_METALLIC_MAP
+VERTEXLIGHT_ON
+VERTEXLIGHT_ON _METALLIC_MAP
+SHADOWS_SCREEN
+SHADOWS_SCREEN _METALLIC_MAP
+SHADOWS_SCREEN VERTEXLIGHT_ON
+SHADOWS_SCREEN VERTEXLIGHT_ON _METALLIC_MAP</pre>
+						
+						<p>Finally, adjust the <code class="shader">GetMetallic</code> function in our include file. When <em translate="no">_METALLIC_MAP</em> is defined, sample the map. Otherwise, return the uniform value.</p>
+						
+						<pre translate="no" class="shader">float GetMetallic (Interpolators i) {
+	<ins>#if defined(_METALLIC_MAP)</ins>
+		return tex2D(_MetallicMap, i.uv.xy).r<ins>;</ins>
+	<ins>#else</ins>
+		<ins>return</ins> _Metallic;
+	<ins>#endif</ins>
+}</pre>
+						
+						<aside>
+							<h3>So either <code class="shader">_MetallicMap</code> or <code class="shader">_Metallic</code> is used, never both?</h3>
+							<div>
+								<p>That is correct. So the material will always have at least one useless property. It's a little bit of overhead for the sake of flexibility.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Only Setting Keywords When Needed</h3>
+						
+						<p>At the moment, we're setting the material's keyword every time <code>OnGUI</code> is invoked, which is often. Logically, we only have to do this when the map property has been edited. We can check whether something was changed by using the <code>EditorGUI.BeginChangeCheck</code> and <code>EditorGUI.EndChangeCheck</code> methods. The first method defines the point from which we want to begin tracking changes. The second method marks the end, and returns whether a change was made.</p>
+						
+						<p>By putting these methods before and after the invocation of <code>TexturePropertySingleLine</code>, we can easily detect whether the metallic line was edited. If so, we set the keyword.</p>
+						
+						<pre translate="no">	void DoMetallic () {
+		MaterialProperty map = FindProperty("_MetallicMap");
+		<ins>EditorGUI.BeginChangeCheck();</ins>
+		editor.TexturePropertySingleLine(
+			MakeLabel(map, "Metallic (R)"), map,
+			map.textureValue ? null : FindProperty("_Metallic")
+		);
+		<ins>if (EditorGUI.EndChangeCheck()) {</ins>
+			SetKeyword("_METALLIC_MAP", map.textureValue);
+		<ins>}</ins>
+	}</pre>
+						
+						<aside>
+							<h3>Doesn't this also trigger when <code class="shader">_Metallic</code> is changed?</h3>
+							<div>
+								<p>Yes, this code sets the keyword both when the map is changed and also when the uniform value is edited. That is more often than required, but still much better than all the time.</p>
+							</div>
+						</aside>
+						
+						<aside>
+							<h3>Does this work with undo and redo?</h3>
+							<div>
+								<p>Yes. The <code>MaterialEditor</code> methods that we're using to show properties take care of recording the old object's state.</p>
+							</div>
+						</aside>
+						
+					</section>
+					
+					<a href="mixing-metal-and-nonmetal/mixing-metals-and-nonmetals.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Smoothness Maps</h2>
+					
+					<p>Like the metallic map, smoothness can also be defined via a map. Here is a grayscale smoothness texture for the circuitry. The metal parts are the smoothest, followed by the lights. The rest is fairly rough. The stains are smoother than the board, so the texture is lighter there.</p>
+					
+					<figure>
+						<img src="smoothness-maps/circuitry-smoothness.png" width="256" height="256">
+						<figcaption>Smoothness map.</figcaption>
+					</figure>
+					
+					<p>Unity's standard shader expects smoothness to be stored in the alpha channel. In fact, it is expected that the metallic and smoothness maps are combined in the same texture. Because DXT5 compressed the RGB and the A channels separately, merging the maps into one DXT5 texture produces the same quality as using two DXT1 textures. This doesn't require less memory, but allows us to retrieve both metallic and smoothness from a single texture sample, instead of two.</p>
+					
+					<p>Here is a texture that combines both maps. Although metallic only needs the R channel, I still filled the RGB channels with the metallic value. Smoothness uses the alpha channel.</p>
+					
+					<figure>
+						<img src="smoothness-maps/circuitry-metallic-smoothness.png" width="256" height="256">
+						<figcaption>Metallic and smoothness map.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Determining Smoothness</h3>
+
+						<p>When there is a metallic map, we can get the smoothness from there. Otherwise, we use the uniform <em translate="no">_Smoothness</em> property. Add a <code class="shader">GetSmoothness</code> function to our include file to take care of this. It's almost exactly like <code class="shader">GetMetallic</code>.</p>
+
+						<pre translate="no" class="shader"><ins>float GetSmoothness (Interpolators i) {</ins>
+	<ins>#if defined(_METALLIC_MAP)</ins>
+		<ins>return tex2D(_MetallicMap, i.uv.xy).a;</ins>
+	<ins>#else</ins>
+		<ins>return _Smoothness;</ins>
+	<ins>#endif</ins>
+<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Aren't we still sampling the texture twice?</h3>
+							<div>
+								<p>Remember that the shader compiler gets rid of duplicate code. We're sampling the same texture in two different functions, but the compiled code will sample the texture only once. We don't have to explicitly cache these things.</p>
+							</div>
+						</aside>
+
+						<p>Actually, the standard shader has two different properties for smoothness. One is the stand-alone uniform value, like we have. The other is a scalar that modulates the smoothness map. Let's keep it simple and use the <em translate="no">_Smoothness</em> property for both purposes. This means that you have to set it to 1 to get the unmodified smoothness map values.</p>
+
+						<pre translate="no" class="shader">		return tex2D(_MetallicMap, i.uv.xy).a <ins>* _Smoothness</ins>;</pre>
+						
+						<p>Use this new function to get the smoothness in <code class="shader">MyFragmentProgram</code>.</p>
+					
+						<pre translate="no" class="shader">float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+	&hellip;
+
+	return UNITY_BRDF_PBS(
+		albedo, specularTint,
+		oneMinusReflectivity, <ins>GetSmoothness(i)</ins>,
+		i.normal, viewDir,
+		CreateLight(i), CreateIndirectLight(i, viewDir)
+	);
+}</pre>
+						
+						<p>But that's not the only place where we need the smoothness. <code class="shader">CreateIndirectLight</code> makes use of it as well. We could add a smoothness parameter to this function. But we can also just invoke <code class="shader">GetSmoothness</code> a second time. The shader compiler will detect the duplicate code and optimize it away.</p>
+					
+						<pre translate="no" class="shader">UnityIndirect CreateIndirectLight (Interpolators i, float3 viewDir) {
+	&hellip;
+		Unity_GlossyEnvironmentData envData;
+		envData.roughness = 1 - <ins>GetSmoothness(i)</ins>;
+	&hellip;
+}</pre>
+					
+						<figure>
+							<img alt="scene" src="smoothness-maps/mapped-smoothness.png" width="320" height="230">
+							<img alt="inspector" src="smoothness-maps/mapped-smoothness-inspector.png" width="320" height="98">
+							<figcaption>Mapped smoothness, at full strength.</figcaption>
+						</figure>
+
+						<aside>
+							<h3>What are those square artifacts along the edges of the metal strips?</h3>
+							<div>
+								<p>Those artifacts are caused by the DXT5nm texture compression of the normal map. Narrow ridges that are too thin cannot be approximated correctly, especially if they aren't aligned with the UV axes. The sharp diagonal edges in the circuitry are the worst case for this kind of compression. This limitation becomes clearly visible on surfaces that are metallic and very smooth. Otherwise, it isn't as obvious.</p>
+								
+								<figure>
+									<img src="smoothness-maps/mapped-smoothness-uncompressed.png" width="320" height="230">
+									<figcaption>Using an uncompressed normal map.</figcaption>
+								</figure>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Combining Smoothness with Albedo</h3>
+						
+						<p>Combining metallic and smoothness maps into a single texture is fine, when you need both of them. Metallic parts are nearly always smoother than the other bits. So when you need a metallic map, you practically always want a smoothness map too. But you might need a smoothness map, without mixing metals and nonmetals. In that case, the metallic map is useless.</p>
+						
+						<p>For opaque materials that don't require a metallic map, it is possible to store the smoothness in the alpha channel of the albedo map. As this practice is common, the standard shader supports packing smoothness in either the metallic map or the albedo map. Let's support this too.</p>
+					</section>
+					
+					<section>
+						<h3>Switching Between Keywords</h3>
+						
+						<p>Like the standard shader, we have to add an option to pick the smoothness source to our GUI. Although the standard shader only supports the choice between two maps, let's go ahead and include a uniform smoothness as a third option as well. To represent these options, define an enumeration type inside <code>MyLightingShaderGUI</code>.</p>
+						
+						<pre translate="no">	<ins>enum SmoothnessSource {</ins>
+		<ins>Uniform, Albedo, Metallic</ins>
+	<ins>}</ins></pre>
+						
+						<p>When the albedo map is used as the smoothness source, we'll add the <em translate="no">_SMOOTHNESS_ALBEDO</em> keyword to the material. When the metallic source is used, we'll add <em translate="no">_SMOOTHNESS_METALLIC</em> instead. The uniform option corresponds with no keyword.</p>
+						
+						<p>The standard shader also uses a float property to track which option a material uses, but we can make do with the keywords alone. The GUI can determine the current choice by checking which keyword is enabled. This can be done via the <code>Material.IsKeywordEnabled</code> method, for which we'll create a convenient wrapper.</p>
+						
+						<pre translate="no">	<ins>bool IsKeywordEnabled (string keyword) {</ins>
+		<ins>return target.IsKeywordEnabled(keyword);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now <code>DoSmoothness</code> can figure out the current smoothness source of the selected material.</p>
+						
+						<pre translate="no">	void DoSmoothness () {
+		<ins>SmoothnessSource source = SmoothnessSource.Uniform;</ins>
+		<ins>if (IsKeywordEnabled("_SMOOTHNESS_ALBEDO")) {</ins>
+			<ins>source = SmoothnessSource.Albedo;</ins>
+		<ins>}</ins>
+		<ins>else if (IsKeywordEnabled("_SMOOTHNESS_METALLIC")) {</ins>
+			<ins>source = SmoothnessSource.Metallic;</ins>
+		<ins>}</ins>
+		
+		&hellip;
+	}</pre>
+						
+						<p>To show the options, we can use the <code>EditorGUILayout.EnumPopup</code> method. Increase the indent level an additional step, to match the layout of the standard shader.</p>
+						
+						<pre translate="no">		EditorGUI.indentLevel += 2;
+		editor.ShaderProperty(slider, MakeLabel(slider));
+		<ins>EditorGUI.indentLevel += 1;</ins>
+		<ins>EditorGUILayout.EnumPopup(MakeLabel("Source"), source);</ins>
+		EditorGUI.indentLevel -= <ins>3</ins>;</pre>
+						
+						<figure>
+							<img src="smoothness-maps/source.png" width="320" height="116">
+							<figcaption>Smoothness source popup.</figcaption>
+						</figure>
+						
+						<p><code>EnumPopup</code> is a basic editor widget which creates a popup list for any enumeration. It returns the selected value. If the user doesn't choose a new option, this value is the same as the original choice. Otherwise, it is different. So to know which option was chosen, we have to assign it back to the source variable. As the method works with the generic enumeration type, we have to cast it to <code>SmoothnessSource</code>.</p>
+						
+						<pre translate="no">		<ins>source = (SmoothnessSource)</ins>EditorGUILayout.EnumPopup(
+			MakeLabel("Source"), source
+		);</pre>
+						
+						<p>If a change has been made, we can use the source variable to control which keyword should be set, if any.</p>
+						
+						<pre translate="no">		<ins>EditorGUI.BeginChangeCheck();</ins>
+		source = (SmoothnessSource)EditorGUILayout.EnumPopup(
+			MakeLabel("Source"), source
+		);
+		<ins>if (EditorGUI.EndChangeCheck()) {</ins>
+			<ins>SetKeyword("_SMOOTHNESS_ALBEDO", source == SmoothnessSource.Albedo);</ins>
+			<ins>SetKeyword(</ins>
+				<ins>"_SMOOTHNESS_METALLIC", source == SmoothnessSource.Metallic</ins>
+			<ins>);</ins>
+		<ins>}</ins></pre>
+						
+						<figure>
+							<img src="smoothness-maps/metallic-source.png" width="320" height="116">
+							<figcaption>Smoothness from the metallic map.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Supporting Undo</h3>
+						
+						<p>We can now change the smoothness source, but it doesn't support undo and redo actions yet. Because we're using a basic widget, we have to manually signal that we performed an action that should support undo. This can be done via the <code>MaterialEditor.RegisterPropertyChangeUndo</code> method, which has a descriptive label as a parameter. Create a wrapper for this method as well.</p>
+						
+						<pre translate="no">	<ins>void RecordAction (string label) {</ins>
+		<ins>editor.RegisterPropertyChangeUndo(label);</ins>
+	<ins>}</ins></pre>
+						
+						<p><code>RecordAction</code> must be invoked before the change that we're about to make. It creates a snapshot of the old state, so an undo action can revert to it.</p>
+						
+						<pre translate="no">		if (EditorGUI.EndChangeCheck()) {
+			<ins>RecordAction("Smoothness Source");</ins>
+			SetKeyword("_SMOOTHNESS_ALBEDO", source == SmoothnessSource.Albedo);
+			SetKeyword(
+				"_SMOOTHNESS_METALLIC", source == SmoothnessSource.Metallic
+			);
+		}</pre>
+					</section>
+					
+					<section>
+						<h3>Smoothness Variants</h3>
+						
+						<p>To support all three options, add a shader feature that selects between no keyword, <em translate="no">_SMOOTHNESS_ALBEDO</em>, and <em translate="no">_SMOOTHNESS_METALLIC</em>. As before, both the base and additive passes have to support it.</p>
+						
+						<pre translate="no" class="shader">			#pragma shader_feature _METALLIC_MAP
+			<ins>#pragma shader_feature _ _SMOOTHNESS_ALBEDO _SMOOTHNESS_METALLIC</ins></pre>
+						
+						<p>In <code class="shader">GetSmoothness</code>, start with a smoothness of 1. Then check whether the albedo source is chosen. If so, replace the 1 with the albedo map. Otherwise, check whether the metallic source is chosen, and if so use the metallic map instead. Of course this is only sensible when the material actually uses a metallic map, so check for that as well.</p>
+						
+						<p>After that, return whatever smoothness value we got, multiplied with the value of the <em translate="no">_Smoothness</em> property. If we end up with a variant that does not use a map, the compiler will optimize away the multiplication with 1.</p>
+						
+						<pre translate="no" class="shader">float GetSmoothness (Interpolators i) {
+	<ins>float smoothness = 1;</ins>
+	<ins>#if defined(_SMOOTHNESS_ALBEDO)</ins>
+		<ins>smoothness = tex2D(_MainTex, i.uv.xy).a;</ins>
+	<ins>#elif defined(_SMOOTHNESS_METALLIC) &amp;&amp; defined(_METALLIC_MAP)</ins>
+		<ins>smoothness = tex2D(_MetallicMap, i.uv.xy).a;</ins>
+	<ins>#endif</ins>
+	<ins>return smoothness * _Smoothness;</ins>
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Lava Material</h3>
+						
+						<p>Here are example albedo and normal maps for an artistic impression of cooled lava. The material isn't metallic, but does have varying smoothness. So the smoothness values are stored in the alpha channel of the albedo map.</p>
+						
+						<figure>
+							<img alt="albedo smoothness" src="smoothness-maps/lava-albedo-smoothness.png" width="256" height="256">
+							<img alt="normals" src="smoothness-maps/lava-normals.png" width="256" height="256">
+							<figcaption>Albedo with smoothness, and normals.</figcaption>
+						</figure>
+						
+						<p>Create a material with these maps, using the albedo source option for smoothness.</p>
+						
+						<figure>
+							<img src="smoothness-maps/lava-inspector.png" width="320" height="116">
+							<figcaption>Lava material.</figcaption>
+						</figure>
+						
+						<p>When using the albedo source, the grayish lumps turn out to be significantly smoother than the reddish gulleys.</p>
+						
+						<figure>
+							<img alt="uniform" src="smoothness-maps/lava-uniform.png" width="320" height="230">
+							<img alt="mapped" src="smoothness-maps/lava-mapped.png" width="320" height="230">
+							<figcaption>Uniform vs. mapped, using albedo alpha.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="smoothness-maps/smoothness-maps.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Emissive Surfaces</h2>
+					
+					<p>So far, we've only worked with materials that reflect light, via either diffuse or specular reflection. We need a light source to see such surfaces. But there are also surfaces that emit light themselves. For example, when something becomes hot enough, it starts to glow. You don't need a different light source to see that. The standard shader supports this via an emissive map and color, and so will we.</p>
+					
+					<section>
+						<h3>Mapped and Uniform</h3>
+						
+						<p>Add properties for an emission map and color to our shader. Both should be black by default, meaning that no light is emitted. As we only care about the RGB channels, we can omit the fourth component of the default color.</p>
+						
+						<pre translate="no" class="shader">		<ins>[NoScaleOffset] _EmissionMap ("Emission", 2D) = "black" {}</ins>
+		<ins>_Emission ("Emission", Color) = (0, 0, 0)</ins></pre>
+						
+						<p>Many materials won't have an emission map, so let's use a shader feature to create variants without and with an emission map. Because we only have to add the emitted light once, only include the feature in the base pass.</p>
+						
+						<pre translate="no" class="shader">			#pragma shader_feature _METALLIC_MAP
+			#pragma shader_feature _ _SMOOTHNESS_ALBEDO _SMOOTHNESS_METALLIC
+			<ins>#pragma shader_feature _EMISSION_MAP</ins></pre>
+						
+						<p>Add the required sampler and float variables to the include file.</p>
+						
+						<pre translate="no" class="shader"><ins>sampler2D _EmissionMap;</ins>
+<ins>float3 _Emission;</ins></pre>
+						
+						<p>Create a <code class="shader">GetEmission</code> function to retrieve the emitted color, if any. When there's a map, sample it and multiply with the uniform color. Otherwise, just return the uniform color. But only bother to do this in the base pass. In all other cases, the emission is zero, which the compiler will optimize away.</p>
+						
+						<pre translate="no" class="shader"><ins>float3 GetEmission (Interpolators i) {</ins>
+	<ins>#if defined(FORWARD_BASE_PASS)</ins>
+		<ins>#if defined(_EMISSION_MAP)</ins>
+			<ins>return tex2D(_EmissionMap, i.uv.xy) * _Emission;</ins>
+		<ins>#else</ins>
+			<ins>return _Emission;</ins>
+		<ins>#endif</ins>
+	<ins>#else</ins>
+		<ins>return 0;</ins>
+	<ins>#endif</ins>
+<ins>}</ins></pre>
+						
+						<p>As the emission comes from the object itself, it is independent of the reflected light. So just add it to the final color.</p>
+						
+						<pre translate="no" class="shader">float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+	&hellip;
+
+	<ins>float4 color =</ins> UNITY_BRDF_PBS(
+		albedo, specularTint,
+		oneMinusReflectivity, GetSmoothness(i),
+		i.normal, viewDir,
+		CreateLight(i), CreateIndirectLight(i, viewDir)
+	);
+	<ins>color.rgb += GetEmission(i);</ins>
+	<ins>return color;</ins>
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Adding Emission to the GUI</h3>
+						
+						<p>Create a <code>DoEmission</code> method inside <code>MyLightingShaderGUI</code>. The quickest way to do this is by duplicating <code>DoMetallic</code> and making a few changes.</p>
+						
+						<pre translate="no">	void <ins>DoEmission</ins> () {
+		MaterialProperty map = FindProperty(<ins>"_EmissionMap"</ins>);
+		EditorGUI.BeginChangeCheck();
+		editor.TexturePropertySingleLine(
+			MakeLabel(map, <ins>"Emission (RGB)"</ins>), map, <ins>FindProperty("_Emission")</ins>
+		);
+		if (EditorGUI.EndChangeCheck()) {
+			SetKeyword(<ins>"_EMISSION_MAP"</ins>, map.textureValue);
+		}
+	}</pre>
+						
+						<p>Include it in the main maps section.</p>
+						
+						<pre translate="no">	void DoMain () {
+		&hellip;
+		DoNormals();
+		<ins>DoEmission();</ins>
+		editor.TextureScaleOffsetProperty(mainTex);
+	}</pre>
+						
+						<figure>
+							<img src="emissive-surfaces/inspector.png" width="320" height="172">
+							<figcaption>Inspector with emission map and color.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>HDR Emission</h3>
+						
+						<p>The standard shader doesn't use a regular color for emission. Instead, it supports high-dynamic-range colors. This means that the RGB components of the color can be higher than 1. This way, you can represent extremely bright light.</p>
+						
+						<aside>
+							<h3>Can we see colors that are brighter than 1?</h3>
+							<div>
+								<p>In real life, there is no hard limit to the amount of photons that you can be bombarded with. The sun is very bright, blindingly so. However, computer displays are limited. You cannot go higher than 1. How bright that is depends on the brightness of the display.</p>
+								
+								<p>To use HDR colors in a meaningful wall, you have to perform tone mapping. This means that you convert one range of colors to another range. We'll investigate tone mapping in a future tutorial. HDR colors are also often used to create bloom effects.</p>
+							</div>
+						</aside>
+						
+						<p>As color properties are float vectors, we are not limited to just values in the 0&ndash;1 range. However, the standard color widget is designed with this limit in mind. Fortunately, <code>MaterialEditor</code> contains the <code>TexturePropertyWithHDRColor</code> method, which is specifically made for a texture plus an HDR color property. It requires two additional parameters. First, configuration options for the HDR range. Second, whether the alpha channel should be shown, which we do not want.</p>
+						
+						<pre translate="no">	void DoEmission () {
+		&hellip;
+		editor.<ins>TexturePropertyWithHDRColor</ins>(
+			MakeLabel("Emission (RGB)"), map, FindProperty("_Emission"),
+			<ins>emissionConfig, false</ins>
+		);
+		&hellip;
+	}</pre>
+						
+						<p>The HDR color widget is configured via a <code>ColorPickerHDRConfig</code> object. This object contains the allowed brightness and exposure range. The standard shader uses 0&ndash;99 for brightness, and nearly zero to 3 for exposure. We'll simply use the same ranges.</p>
+						
+						<pre translate="no">	<ins>static ColorPickerHDRConfig emissionConfig =</ins>
+		<ins>new ColorPickerHDRConfig(0f, 99f, 1f / 99f, 3f);</ins></pre>
+						
+						<figure>
+							<img src="emissive-surfaces/inspector-hdr.png" width="320" height="22">
+							<figcaption>Inspector with HDR emission.</figcaption>
+						</figure>
+						
+						<p>The extra value after the color picker corresponds with the brightness of the color. This is simply the largest of the RGB channels. A quick way to switch the emissive color to black or white is to set this value to 0 or 1.</p>
+					</section>
+					
+					<section>
+						<h3>Emissive Lava</h3>
+						
+						<p>Here is an emission map for the lava material. It makes the lava in the gulleys glowing hot. You can change the brightness and tint of the emission by adjusting the uniform color.</p>
+						
+						<figure>
+							<img alt="texture" src="emissive-surfaces/lava-emission.png" width="256" height="256">
+							<img alt="inspector" src="emissive-surfaces/lava-emission-inspector.png" width="320" height="136">
+							<figcaption>Emission map for lava.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>I assigned the emission map, but it doesn't show?</h3>
+							<div>
+								<p>In that case, the uniform emission color is still black. To see the map at full strength, set the color to white.</p>
+								
+								<p>The standard shader automatically sets the emission color to white, when a texture has been assigned while the color was black. You could add this functionality as well. However, that behavior is based on assumptions which might not be true for some people, which can lead to a lot of user frustration.</p>
+							</div>
+						</aside>
+						
+						<figure>
+							<img alt="uniform" src="emissive-surfaces/lava-lit.png" width="320" height="230">
+							<img alt="mapped" src="emissive-surfaces/lava-unlit.png" width="320" height="230">
+							<figcaption>Glowing lava, lit and unlit.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Emissive Circuitry</h3>
+						
+						<p>And here is an emission map for the circuitry lights.</p>
+						
+						<figure>
+							<img alt="texture" src="emissive-surfaces/circuitry-emission.png" width="256" height="256">
+							<img alt="inspector" src="emissive-surfaces/circuitry-emission-inspector.png" width="320" height="136">
+							<figcaption>Emission map for circuitry.</figcaption>
+						</figure>
+						
+						<p>The lights have varying brightness, and the stains affect them as well.</p>
+						
+						<figure>
+							<img alt="uniform" src="emissive-surfaces/circuitry-lit.png" width="320" height="230">
+							<img alt="mapped" src="emissive-surfaces/circuitry-unlit.png" width="320" height="230">
+							<figcaption>Circuitry with functioning lights, lit and unlit.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Does the emitted light illuminate other objects?</h3>
+							<div>
+								<p>The emission is part of the material only. It doesn't affect the rest of the scene. However, Unity's global illumination system can pick up this emitted light and add it to the indirect illumination data. We will investigate global illumination in a future tutorial.</p>
+							</div>
+						</aside>
+						
+						<p>The next tutorial is <a href="../part-10.1.html">More Complexity</a>.</p>
+					</section>
+					
+					<a href="emissive-surfaces/emissive-surfaces.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Rendering-9.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

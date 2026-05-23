@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/hex-map/part-14/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/hex-map/part-14/tutorial-image.jpg">
+		<meta property="og:title" content="Hex Map 14">
+		<meta property="og:description" content="A Unity Hex Map tutorial about supporting terrain textures. Part 14 of 27.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hex Map 14</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/hex-map/part-14/#article",
+				"headline": "Hex Map 14",
+				"alternativeHeadline": "Terrain Textures",
+				"datePublished": "2017-02-23",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Hex Map tutorial about supporting terrain textures. Part 14 of 27.",
+				"image": "https://catlikecoding.com/unity/tutorials/hex-map/part-14/tutorial-image.jpg",
+				"dependencies": "Unity 5.5.0",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/hex-map/", "name": "Hex Map" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				EdgeVertices: 1,
+				HexCell: 1,
+				HexEdgeType: 1,
+				HexCoordinates: 1,
+				HexCoordinatesDrawer: 1,
+				HexDirection: 1,
+				HexDirectionExtensions: 1,
+				HexFeatureCollection: 1,
+				HexFeatureManager: 1,
+				HexGrid: 1,
+				HexGridChunk: 1,
+				HexHash: 1,
+				HexMapCamera: 1,
+				HexMapEditor: 1,
+				HexMesh: 1,
+				HexMetrics: 1,
+				ListPool: 1,
+				NewMapMenu: 1,
+				OptionalToggle: 1,
+				SaveLoadItem: 1,
+				SaveLoadMenu: 1,
+				TextureArrayWizard: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Hex Map</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hex Map 14</h1>
+					<p>Terrain Textures</p>
+					<ul>
+						<li>Use vertex colors to design a splat map.</li>
+						<li>Create a texture array asset.</li>
+						<li>Add terrain indices to meshes.</li>
+						<li>Blend between terrain textures.</li>
+					</ul>
+				</header>
+
+				<p>This is part 14 of a tutorial series about <a href="../index.html">hexagon maps</a>. Up to this point, we've used solid colors to paint our maps. Now we're going to use textures instead.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Painting with textures.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Blending Three Types</h2>
+					
+					<p>While uniform colors are clear and get the job done, they're not very interesting to look at. Upgrading to textures can greatly increase the appeal of our maps. Of course, that requires that we blend textures, instead of just colors. The <a href="../../rendering/part-3.1.html">Rendering 3, Combining Textures</a> tutorial shows how you can blend multiple textures, by using a splat map. We can use a similar approach for our hex maps.</p>
+					
+					<p>The <a href="../../rendering/part-3.1.html">Rendering 3</a> tutorial only blends four textures, and could support up to five with a single splat map. We currently use five different colors, so that could work. However, we might want to add more types later. So we should support an arbitrary amount of terrain types. This isn't possible with explicit texture properties. Instead, we have to use a texture array. We'll create one later.</p>
+					
+					<p>When using texture arrays, we have to somehow tell the shader which textures to blend. The most complex blend is required for corner triangles, which can sit between three cells that each have a different terrain type. So we have to support blending between three different types per triangle.</p>
+					
+					<section>
+						<h3>Using Vertex Colors as Splat Maps</h3>
+						
+						<p>Assuming we can communicate which textures to blend, we can use vertex colors to create a splat map for each triangle. As there are at most three textures in play at a time, we only need three color channels. Red represents the first texture, green corresponds with the second, and blue is for the third.</p>
+						
+						<figure>
+							<img src="blending-three-types/splat-triangle.png" width="350" height="310">
+							<figcaption>Splat map triangle.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Does the splat map triangle always sum to one?</h3>
+							<div>
+								<p>Yes. The three color channels define a trilinear interpolation across the surface of the triangle. They function as barycentric coordinates. For example, you have the three possible permutations of (1, 0, 0) at the corners, variants of (&frac12;, &frac12;, 0) in the middle of the edges, and (&frac13;, &frac13;, &frac13;) at the center.</p>
+							</div>
+						</aside>
+						
+						<p>If a triangle requires only a single texture, we'll just use the first channel. So its color will be solid red. In the case of a blend between two different types, we'll use both the first and second channel. So that triangle's color will be a blend between red and green. And if all three types are in play, it's a blend between red, green, and blue.</p>
+						
+						<figure>
+							<img src="blending-three-types/splat-configurations.png" width="350" height="300">
+							<figcaption>Three splat map configurations.</figcaption>
+						</figure>
+						
+						<p>We'll use these splat map configurations no matter which textures are actually blended. So the splat map is always the same. It's the textures that vary. We'll figure out how to do that later.</p>
+						
+						<p>We have to update <code>HexGridChunk</code> so it creates these splat maps, instead of using the cell colors. Because we'll be using the three colors a lot, create static fields for them.</p>
+					
+						<pre translate="no">	<ins>static Color color1 = new Color(1f, 0f, 0f);</ins>
+	<ins>static Color color2 = new Color(0f, 1f, 0f);</ins>
+	<ins>static Color color3 = new Color(0f, 0f, 1f);</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Cell Centers</h3>
+						
+						<p>Start by replacing the color of the default cell centers. There is no blend going on here, so we simply use the first color, which is red.</p>
+						
+						<pre translate="no">	void TriangulateWithoutRiver (
+		HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e
+	) {
+		TriangulateEdgeFan(center, e, <ins>color1</ins>);
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="blending-three-types/red-center.png" width="320" height="230">
+							<figcaption>Red cell centers.</figcaption>
+						</figure>
+						
+						<p>The cell centers have now become red. They all use the first of the three textures, no matter which texture that happens to be. Their splat maps are identical, no matter which color you paint the cells.
+					</section>
+					
+					<section>
+						<h3>Adjacent to Rivers</h3>
+						
+						<p>We've only changed segments inside cells without rivers flowing through them. We have to do the same for segments that are adjacent to rivers. In this case, it's both an edge strip and an edge fan. Again, red is all we need.</p>
+						
+						<pre translate="no">	void TriangulateAdjacentToRiver (
+		HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e
+	) {
+		&hellip;
+
+		TriangulateEdgeStrip(m, <ins>color1</ins>, e, <ins>color1</ins>);
+		TriangulateEdgeFan(center, m, <ins>color1</ins>);
+
+		&hellip;
+	}</pre>
+						<figure>
+							<img src="blending-three-types/red-adjacent-to-river.png" width="320" height="230">
+							<figcaption>Red segments adjacent to rivers.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Rivers</h3>
+						
+						<p>Next, we have to take care of the river geometry inside the cells. They should all become red too. First, the parts at the beginning and end of rivers.</p>
+						
+						<pre translate="no">	void TriangulateWithRiverBeginOrEnd (
+		HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e
+	) {
+		&hellip;
+
+		TriangulateEdgeStrip(m, <ins>color1</ins>, e, <ins>color1</ins>);
+		TriangulateEdgeFan(center, m, <ins>color1</ins>);
+
+		&hellip;
+	}</pre>
+						
+						<p>And then the geometry that makes up the river banks and channel. I've also grouped the color method invocations, so the code is easier to read.</p>
+						
+						<pre translate="no">	void TriangulateWithRiver (
+		HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e
+	) {
+		&hellip;
+
+		TriangulateEdgeStrip(m, <ins>color1</ins>, e, <ins>color1</ins>);
+
+		terrain.AddTriangle(centerL, m.v1, m.v2);
+<del>//		terrain.AddTriangleColor(cell.Color);</del>
+		terrain.AddQuad(centerL, center, m.v2, m.v3);
+<del>//		terrain.AddQuadColor(cell.Color);</del>
+		terrain.AddQuad(center, centerR, m.v3, m.v4);
+<del>//		terrain.AddQuadColor(cell.Color);</del>
+		terrain.AddTriangle(centerR, m.v4, m.v5);
+<del>//		terrain.AddTriangleColor(cell.Color);</del>
+		
+		<ins>terrain.AddTriangleColor(color1);</ins>
+		<ins>terrain.AddQuadColor(color1);</ins>
+		<ins>terrain.AddQuadColor(color1);</ins>
+		<ins>terrain.AddTriangleColor(color1);</ins>
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="blending-three-types/red-rivers.png" width="320" height="230">
+							<figcaption>Red rivers across cells.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Edges</h3>
+						
+						<p>Edges are different, because they're between two cells, which could have different terrain types. We'll use the first color for the current cell's type, and the second color for its neighbor's type. As a result, the splat map is a red-green gradient, even if both cells happen to have the same type. If both cells use the same texture, then it will simply become a blend between the same texture on both ends.</p>
+						
+						<pre translate="no">	void TriangulateConnection (
+		HexDirection direction, HexCell cell, EdgeVertices e1
+	) {
+		&hellip;
+
+		if (cell.GetEdgeType(direction) == HexEdgeType.Slope) {
+			TriangulateEdgeTerraces(e1, cell, e2, neighbor, hasRoad);
+		}
+		else {
+			TriangulateEdgeStrip(e1, <ins>color1</ins>, e2, <ins>color2</ins>, hasRoad);
+		}
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="blending-three-types/red-green-edges.png" width="360" height="260">
+							<figcaption>Red-green edges, except for terraces.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Isn't the hard transition between red and green a problem?</h3>
+							<div>
+								<p>Although the edge transition is from red to green, the cell centers on both sides are red. So there appears to be a discontinuity on one side of the edge. However, this is just the splat map. The colors of adjacent triangles do not need to be linked to the same textures. In this case, what corresponds with green on one side corresponds with red on the other side.</p>
+								
+								<p>Note that this wouldn't be possible if the triangles shared vertices.</p>
+							</div>
+						</aside>
+						
+						<p>Edges with terraces are more complex, because they have extra vertices. Fortunately, the existing interpolation code works just fine with our splat map colors. Simply use the first and second colors, instead of those of the begin and end cells.</p>
+						
+						<pre translate="no">	void TriangulateEdgeTerraces (
+		EdgeVertices begin, HexCell beginCell,
+		EdgeVertices end, HexCell endCell,
+		bool hasRoad
+	) {
+		EdgeVertices e2 = EdgeVertices.TerraceLerp(begin, end, 1);
+		Color c2 = HexMetrics.TerraceLerp(<ins>color1</ins>, <ins>color2</ins>, 1);
+
+		TriangulateEdgeStrip(begin, <ins>color1</ins>, e2, c2, hasRoad);
+
+		for (int i = 2; i &lt; HexMetrics.terraceSteps; i++) {
+			EdgeVertices e1 = e2;
+			Color c1 = c2;
+			e2 = EdgeVertices.TerraceLerp(begin, end, i);
+			c2 = HexMetrics.TerraceLerp(<ins>color1</ins>, <ins>color2</ins>, i);
+			TriangulateEdgeStrip(e1, c1, e2, c2, hasRoad);
+		}
+
+		TriangulateEdgeStrip(e2, c2, end, <ins>color2</ins>, hasRoad);
+	}</pre>
+						
+						<figure>
+							<img src="blending-three-types/red-green-edge-terraces.png" width="360" height="260">
+							<figcaption>Red-green edge terraces.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Corners</h3>
+						
+						<p>Cell corners are the most complex, because they have to blend three different textures. We'll use red for the bottom vertex, green for the left vertex, and blue for the right vertex. We start with the single-triangle corners.</p>
+						
+						<pre translate="no">	void TriangulateCorner (
+		Vector3 bottom, HexCell bottomCell,
+		Vector3 left, HexCell leftCell,
+		Vector3 right, HexCell rightCell
+	) {
+		&hellip;
+		else {
+			terrain.AddTriangle(bottom, left, right);
+			terrain.AddTriangleColor(<ins>color1</ins>, <ins>color2</ins>, <ins>color3</ins>);
+		}
+
+		features.AddWall(bottom, bottomCell, left, leftCell, right, rightCell);
+	}</pre>
+						
+						<figure>
+							<img src="blending-three-types/red-green-blue-corners.png" width="360" height="260">
+							<figcaption>Red-green-blue corners, except for terraces.</figcaption>
+						</figure>
+						
+						<p>Again, we can use the existing color interpolation code for corners with terraces. It's just between three colors, instead of two. First, terraces that aren't next to cliffs.</p>
+						
+						<pre translate="no">	void TriangulateCornerTerraces (
+		Vector3 begin, HexCell beginCell,
+		Vector3 left, HexCell leftCell,
+		Vector3 right, HexCell rightCell
+	) {
+		Vector3 v3 = HexMetrics.TerraceLerp(begin, left, 1);
+		Vector3 v4 = HexMetrics.TerraceLerp(begin, right, 1);
+		Color c3 = HexMetrics.TerraceLerp(<ins>color1</ins>, <ins>color2</ins>, 1);
+		Color c4 = HexMetrics.TerraceLerp(<ins>color1</ins>, <ins>color3</ins>, 1);
+
+		terrain.AddTriangle(begin, v3, v4);
+		terrain.AddTriangleColor(color1, c3, c4);
+
+		for (int i = 2; i &lt; HexMetrics.terraceSteps; i++) {
+			Vector3 v1 = v3;
+			Vector3 v2 = v4;
+			Color c1 = c3;
+			Color c2 = c4;
+			v3 = HexMetrics.TerraceLerp(begin, left, i);
+			v4 = HexMetrics.TerraceLerp(begin, right, i);
+			c3 = HexMetrics.TerraceLerp(<ins>color1</ins>, <ins>color2</ins>, i);
+			c4 = HexMetrics.TerraceLerp(<ins>color1</ins>, <ins>color3</ins>, i);
+			terrain.AddQuad(v1, v2, v3, v4);
+			terrain.AddQuadColor(c1, c2, c3, c4);
+		}
+
+		terrain.AddQuad(v3, v4, left, right);
+		terrain.AddQuadColor(c3, c4, <ins>color2</ins>, <ins>color3</ins>);
+	}</pre>
+						
+						<figure>
+							<img src="blending-three-types/red-green-blue-corner-terraces.png" width="360" height="260">
+							<figcaption>Red-green-blue corner terraces, except along cliffs.</figcaption>
+						</figure>
+						
+						<p>When cliffs are involved, we have to use the <code>TriangulateBoundaryTriangle</code> method. This method used to have the begin and left cell as parameters. However, we now need the relevant splat colors instead, which can vary based on the topology. So change those parameters into colors.</p>
+						
+						<pre translate="no">	void TriangulateBoundaryTriangle (
+		Vector3 begin, <ins>Color beginColor</ins>,
+		Vector3 left, <ins>Color leftColor</ins>,
+		Vector3 boundary, Color boundaryColor
+	) {
+		Vector3 v2 = HexMetrics.Perturb(HexMetrics.TerraceLerp(begin, left, 1));
+		Color c2 = HexMetrics.TerraceLerp(<ins>beginColor</ins>, <ins>leftColor</ins>, 1);
+
+		terrain.AddTriangleUnperturbed(HexMetrics.Perturb(begin), v2, boundary);
+		terrain.AddTriangleColor(<ins>beginColor</ins>, c2, boundaryColor);
+
+		for (int i = 2; i &lt; HexMetrics.terraceSteps; i++) {
+			Vector3 v1 = v2;
+			Color c1 = c2;
+			v2 = HexMetrics.Perturb(HexMetrics.TerraceLerp(begin, left, i));
+			c2 = HexMetrics.TerraceLerp(<ins>beginColor</ins>, <ins>leftColor</ins>, i);
+			terrain.AddTriangleUnperturbed(v1, v2, boundary);
+			terrain.AddTriangleColor(c1, c2, boundaryColor);
+		}
+
+		terrain.AddTriangleUnperturbed(v2, HexMetrics.Perturb(left), boundary);
+		terrain.AddTriangleColor(c2, <ins>leftColor</ins>, boundaryColor);
+	}</pre>
+						
+						<p>Adjust <code>TriangulateCornerTerracesCliff</code> so it uses the correct colors.</p>
+						
+						<pre translate="no">	void TriangulateCornerTerracesCliff (
+		Vector3 begin, HexCell beginCell,
+		Vector3 left, HexCell leftCell,
+		Vector3 right, HexCell rightCell
+	) {
+		&hellip;
+		Color boundaryColor = Color.Lerp(<ins>color1</ins>, <ins>color3</ins>, b);
+
+		TriangulateBoundaryTriangle(
+			begin, <ins>color1</ins>, left, <ins>color2</ins>, boundary, boundaryColor
+		);
+
+		if (leftCell.GetEdgeType(rightCell) == HexEdgeType.Slope) {
+			TriangulateBoundaryTriangle(
+				left, <ins>color2</ins>, right, <ins>color3</ins>, boundary, boundaryColor
+			);
+		}
+		else {
+			terrain.AddTriangleUnperturbed(
+				HexMetrics.Perturb(left), HexMetrics.Perturb(right), boundary
+			);
+			terrain.AddTriangleColor(<ins>color2</ins>, <ins>color3</ins>, boundaryColor);
+		}
+	}</pre>
+						
+						<p>And do the same for <code>TriangulateCornerCliffTerraces</code>.</p>
+						
+						<pre translate="no">	void TriangulateCornerCliffTerraces (
+		Vector3 begin, HexCell beginCell,
+		Vector3 left, HexCell leftCell,
+		Vector3 right, HexCell rightCell
+	) {
+		&hellip;
+		Color boundaryColor = Color.Lerp(<ins>color1</ins>, <ins>color2</ins>, b);
+
+		TriangulateBoundaryTriangle(
+			right, <ins>color3</ins>, begin, <ins>color1</ins>, boundary, boundaryColor
+		);
+
+		if (leftCell.GetEdgeType(rightCell) == HexEdgeType.Slope) {
+			TriangulateBoundaryTriangle(
+				left, <ins>color2</ins>, right, <ins>color3</ins>, boundary, boundaryColor
+			);
+		}
+		else {
+			terrain.AddTriangleUnperturbed(
+				HexMetrics.Perturb(left), HexMetrics.Perturb(right), boundary
+			);
+			terrain.AddTriangleColor(<ins>color2</ins>, <ins>color3</ins>, boundaryColor);
+		}
+	}</pre>
+						
+						<figure>
+							<img src="blending-three-types/red-green-blue-corner-terraces-cliffs.png" width="360" height="260">
+							<figcaption>Complete terrain splat map.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="blending-three-types/blending-three-types.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Texture Arrays</h2>
+					
+					<p>Now that our terrain has a splat map, we have to supply our shader with a collection of textures. We can't just assign a C# array of textures to a shader, because the array has to exist as a single entity in GPU memory. We have to use a special <code>Texture2DArray</code> object, which has been supported by Unity since version 5.4.</p>
+					
+					<aside>
+						<h3>Do all GPUs support texture arrays?</h3>
+						<div>
+							<p>Modern GPUs support them, but older and some mobile ones might not. Here's the list of supported platforms, according to the <a href="https://docs.unity3d.com/Manual/SL-TextureArrays.html">Unity docs</a>.</p>
+							
+							<ul>
+								<li>Direct3D 11/12 (Windows, Xbox One)</li>
+								<li>OpenGL Core (Mac OS X, Linux)</li>
+								<li>Metal (iOS, Mac OS X)</li>
+								<li>OpenGL ES 3.0 (Android, iOS, WebGL 2.0)</li>
+								<li>PlayStation 4</li>
+							</ul>
+						</div>
+					</aside>
+					
+					<section>
+						<h3>Wizard</h3>
+						
+						<p>Unfortunately, Unity's editor support for texture arrays is minimal in version 5.5. We cannot simply create a texture array asset and assign textures to it. We have to do it manually. We could either create a texture array in play mode, or create an asset in the editor. Let's go for the asset.</p>
+						
+						<aside>
+							<h3>Why create an asset?</h3>
+							<div>
+								<p>The advantage of using an asset is that we don't have to spend time in play mode to create the texture array. We don't have to include the individual textures in builds, only to copy them and then no longer use them.</p>
+								
+								<p>The disadvantage is that the custom asset is fixed. Unity doesn't automatically change its texture format depending on the build target. So you have to make sure to create the asset with the correct texture format, and manually recreate it when you need a different format. Of course, you could automate this with a build script.</p>
+							</div>
+						</aside>
+						
+						<p>To create our texture array, we'll build a custom wizard. Create a <code>TextureArrayWizard</code> script and place it inside an <em translate="no">Editor</em> folder. Instead of <code>MonoBehaviour</code>, it should extend the <code>ScriptableWizard</code> type from the <code>UnityEditor</code> namespace.</p>
+						
+						<pre translate="no"><ins>using UnityEditor;</ins>
+<ins>using UnityEngine;</ins>
+
+<ins>public class TextureArrayWizard : ScriptableWizard {</ins>
+<ins>}</ins></pre>
+						
+						<p>We can open our wizard via the generic static <code>ScriptableWizard.DisplayWizard</code> method. Its parameters are the names of the wizard's window and its create button. Invoke this method in a static <code>CreateWizard</code> method.</p>
+						
+						<pre translate="no">	<ins>static void CreateWizard () {</ins>
+		<ins>ScriptableWizard.DisplayWizard&lt;TextureArrayWizard>(</ins>
+			<ins>"Create Texture Array", "Create"</ins>
+		<ins>);</ins>
+	<ins>}</ins></pre>
+						
+						<p>To access the wizard via the editor, we have to add this method to Unity's menu. This is done by adding the <code>MenuItem</code> attribute to the method. Let's add it to the <em translate="no">Assets</em> menu, specifically <em translate="no">Assets / Create / Texture Array</em>.</p>
+						
+						<pre translate="no">	<ins>[MenuItem("Assets/Create/Texture Array")]</ins>
+	static void CreateWizard () {
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="texture-arrays/wizard.png" width="330" height="266">
+							<figcaption>Our custom wizard.</figcaption>
+						</figure>
+						
+						<p>Using the new menu item, we get a popup window for our custom wizard. It's not pretty, but it will get the job done. However, it is still empty. To create the texture array, we need an array of textures. Add a public field for this to our wizard. The default wizard GUI will display it, just like a default inspector does.</p>
+						
+						<pre translate="no">	<ins>public Texture2D[] textures;</ins></pre>
+						
+						<figure>
+							<img src="texture-arrays/wizard-textures.png" width="330" height="64">
+							<figcaption>Wizard with textures.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Creating Something</h3>
+						
+						<p>When you press the wizard's <em translate="no">Create</em> button, it will disappear. Also, Unity will complain that there's no <code>OnWizardCreate</code> method. This is the method that gets invoked when the create button is pressed, so we should add it to our wizard.</p>
+						
+						<pre translate="no">	<ins>void OnWizardCreate () {</ins>
+	<ins>}</ins></pre>
+						
+						<p>Here is where we create our texture array. At least, if the user has added any textures to the wizard. If not, then there's nothing to create, so we should abort.</p>
+						
+						<pre translate="no">	void OnWizardCreate () {
+		<ins>if (textures.Length == 0) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>The next step is to ask the user where to save the texture array asset. We can open a save file panel via the <code>EditorUtility.SaveFilePanelInProject</code> method. Its parameters determine the panel name, default file name, the file extension, and description. Texture arrays use the generic <em translate="no">asset</em> file extension.</p>
+						
+						<pre translate="no">		if (textures.Length == 0) {
+			return;
+		}
+		<ins>EditorUtility.SaveFilePanelInProject(</ins>
+			<ins>"Save Texture Array", "Texture Array", "asset", "Save Texture Array"</ins>
+		<ins>);</ins></pre>
+						
+						<p><code>SaveFilePanelInProject</code> returns the file path that the user selected. If the user canceled the panel, then the path will be the empty string. So we should abort in that case.</p>
+						
+						<pre translate="no">		<ins>string path =</ins> EditorUtility.SaveFilePanelInProject(
+			"Save Texture Array", "Texture Array", "asset", "Save Texture Array"
+		);
+		<ins>if (path.Length == 0) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Creating a Texture Array</h3>
+						
+						<p>If we got a valid path, we can go on and create a new <code>Texture2DArray</code> object. Its constructor method requires the texture width and height, the array length, the texture format, and whether there are mipmaps. These settings have to be the same for all textures in the array. We'll use the first texture to configure the object. It's up to the user to make sure that all textures have the same format.</p>
+						
+						<pre translate="no">		if (path.Length == 0) {
+			return;
+		}
+
+		<ins>Texture2D t = textures[0];</ins>
+		<ins>Texture2DArray textureArray = new Texture2DArray(</ins>
+			<ins>t.width, t.height, textures.Length, t.format, t.mipmapCount > 1</ins>
+		<ins>);</ins></pre>
+						
+						<p>As the texture array is a single GPU resource, it uses the same filter and wrap modes for all textures. Once again, we'll use the first texture to configure this.</p>
+						
+						<pre translate="no">		Texture2DArray textureArray = new Texture2DArray(
+			t.width, t.height, textures.Length, t.format, t.mipmapCount > 1
+		);
+		<ins>textureArray.anisoLevel = t.anisoLevel;</ins>
+		<ins>textureArray.filterMode = t.filterMode;</ins>
+		<ins>textureArray.wrapMode = t.wrapMode;</ins></pre>
+						
+						<p>Now we can copy the textures to the array, using the <code>Graphics.CopyTexture</code> method. This method copies the raw texture data, one mip level at a time. So we have to loop through all textures and their mip levels. The parameters of the method are two sets consisting of a texture resource, index, and mip level. As the source textures aren't arrays, their index is always zero.</p>
+						
+						<pre translate="no">		textureArray.wrapMode = t.wrapMode;
+
+		<ins>for (int i = 0; i &lt; textures.Length; i++) {</ins>
+			<ins>for (int m = 0; m &lt; t.mipmapCount; m++) {</ins>
+				<ins>Graphics.CopyTexture(textures[i], 0, m, textureArray, i, m);</ins>
+			<ins>}</ins>
+		<ins>}</ins></pre>
+						
+						<p>At this point we have a valid texture array in memory, but it is not yet an asset. The final step is to invoke <code>AssetDatabase.CreateAsset</code> with the array and its path. That will write the data to a file in our project, and it will appear in the project window.</p>
+						
+						<pre translate="no">		for (int i = 0; i &lt; textures.Length; i++) {
+			&hellip;
+		}
+
+		<ins>AssetDatabase.CreateAsset(textureArray, path);</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Textures</h3>
+						
+						<p>To actually create a texture array, we need source textures. Here are five textures which correspond to the colors that we have been using up to this point. Yellow becomes sand, green becomes grass, blue becomes mud, orange becomes stone, and white becomes snow.</p>
+						
+						<figure>
+							<img alt="sand" src="texture-arrays/sand.png" width="256" height="256">
+							<img alt="grass" src="texture-arrays/grass.png" width="256" height="256">
+							<img alt="mud" src="texture-arrays/mud.png" width="256" height="256">
+							<img alt="stone" src="texture-arrays/stone.png" width="256" height="256">
+							<img alt="snow" src="texture-arrays/snow.png" width="256" height="256">
+							<figcaption>Sand, grass, mud, stone, and snow textures.</figcaption>
+						</figure>
+						
+						<p>Note that these textures aren't photos of actual terrain, they're subtle pseudorandom patterns. My goal was to suggest recognizable terrain types and details, without clashing with the abstract polygonal terrain. Photorealism would feel out of place. Also, while these patterns add variety, they lack distinct features which would make their tiling immediately obvious.</p>
+						
+						<p>Add these textures to the wizard's array, making sure that their order matches our colors. So sand first, followed by grass, mud, stone, and finally snow.</p>
+						
+						<figure>
+							<img alt="wizard" src="texture-arrays/wizard-texture-selection.png" width="330" height="154">
+							<img alt="hierarchy" src="texture-arrays/hierarchy.png" width="184" height="112">
+							<figcaption>Creating the texture array.</figcaption>
+						</figure>
+						
+						<p>After creating the texture array asset, select it and give it a look in the inspector.</p>
+						
+						<figure>
+							<img src="texture-arrays/inspector.png" width="320" height="230">
+							<figcaption>Texture array inspector.</figcaption>
+						</figure>
+						
+						<p>It's a bare-bones display of some of the data of the texture array. Note that there is an <em translate="no">Is Readable</em> toggle, which is initially enabled. As we don't need to read pixel data from the array, disable it. We couldn't do this via our wizard, because <code>Texture2DArray</code> has no method or property to access this setting.</p>
+						
+						<p>(There is a bug in Unity 5.6 that breaks texture arrays in builds on multiple platforms. The workaround is to keep <em translate="no">Is Readable</em> enabled. Also, in later versions of Unity you need to set the inspector to debug mode to see most of the data.)</p>
+						
+						<p>Also note that there is a <em translate="no">Color Space</em> field, which is set to 1. This means that the textures are assumed to be in gamma space, which is correct. If they had to be in linear space, we would have to set this field to 0. The constructor of <code>Texture2DArray</code> actually has an extra parameter to set the color space, however <code>Texture2D</code> doesn't expose whether it's in linear space or not, so you'd have to set it manually anyway.</p>
+					</section>
+					
+					<section>
+						<h3>Shader</h3>
+						
+						<p>Now that we have our texture array, it's time to make our shader work with it. We're currently using the <em translate="no">VertexColors</em> shader to render our terrain. As we'll switch to textures instead of colors, rename it to <em translate="no">Terrain</em>. Then turn its <em translate="no">_MainTex</em> parameter into a texture array, and assign our asset to it.</p>
+						
+						<pre translate="no" class="shader">Shader <ins>"Custom/Terrain"</ins> {
+	Properties {
+		_Color ("Color", Color) = (1,1,1,1)
+		_MainTex (<ins>"Terrain Texture Array"</ins>, <ins>2DArray</ins>) = "white" {}
+		_Glossiness ("Smoothness", Range(0,1)) = 0.5
+		_Metallic ("Metallic", Range(0,1)) = 0.0
+	}
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="texture-arrays/material.png" width="320" height="178">
+							<figcaption>Terrain material with texture array.</figcaption>
+						</figure>
+						
+						<p>To enable texture arrays on all platforms that support it, we have to increase our shader target level from 3.0 to 3.5.</p>
+						
+						<pre translate="no" class="shader">		#pragma target <ins>3.5</ins></pre>
+						
+						<p>As the <code class="shader">_MainTex</code> variable now references a texture array, we have to change its type. The exact type depends on the target platform, which is taken care of by the <code class="shader">UNITY_DECLARE_TEX2DARRAY</code> macro.</p>
+						
+						<pre translate="no" class="shader"><del>//		sampler2D _MainTex;</del>
+		<ins>UNITY_DECLARE_TEX2DARRAY(_MainTex);</ins></pre>
+						
+						<p>Like the other shaders, we'll need the XZ world coordinates to sample our terrain textures. So add the world position to the surface shader input structure. Also remove the default UV coordinates, as we don't need them.</p>
+						
+						<pre translate="no" class="shader">		struct Input {
+<del>//			float2 uv_MainTex;</del>
+			float4 color : COLOR;
+			<ins>float3 worldPos;</ins>
+		};</pre>
+						
+						<p>To sample the texture array, we have to use the <code class="shader">UNITY_SAMPLE_TEX2DARRAY</code> macro. It requires three coordinates to sample the array. The first two are regular UV coordinates. We'll use the world XZ coordinates, scaled by 0.02. That produces a good texture resolution when fully zoomed in, with textures tiling roughly every four cells.</p>
+						
+						<p>The third coordinate is used to index the texture array, just like a regular array. As the coordinates are floats, the GPU rounds them before indexing the array. As we don't yet know which texture is needed, let's always use the first one. Also, no longer factor the vertex color into the final result, as that's the splat map.</p>
+						
+						<pre translate="no" class="shader">		void surf (Input IN, inout SurfaceOutputStandard o) {
+			<ins>float2 uv = IN.worldPos.xz * 0.02;</ins>
+			fixed4 c = <ins>UNITY_SAMPLE_TEX2DARRAY(_MainTex, float3(uv, 0))</ins>;
+			o.Albedo = c.rgb * <ins>_Color</ins>;
+			o.Metallic = _Metallic;
+			o.Smoothness = _Glossiness;
+			o.Alpha = c.a;
+		}
+</pre>
+						
+						<figure>
+							<img src="texture-arrays/default-sand.png" width="320" height="230">
+							<figcaption>Everything is sand.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="texture-arrays/texture-arrays.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Selecting Textures</h2>
+					
+					<p>We have a terrain splat map which blends between three types per triangle. We have a texture array with a texture for each terrain type. We have a shader that can sample the texture array. But we do not yet have a means to tell the shader which textures to select, per triangle.</p>
+					
+					<p>As each triangle blends between up to three types, we need to associate three indices with every triangle. As we cannot store information per triangle, we'll have to store the indices per vertex instead. All three vertices of a triangle will simply store the same indices, just like a solid color.</p>
+					
+					<section>
+						<h3>Mesh Data</h3>
+						
+						<p>We can use one of the mesh's UV sets to store the indices. Because there are three indices per vertex, the existing 2D UV sets aren't sufficient. Fortunately, UV sets can contain up to four coordinates. So let's add a second <code>Vector3</code> list to <code>HexMesh</code>, which we'll refer to as the terrain types.</p>
+					
+						<pre translate="no">	public bool useCollider, useColors, useUVCoordinates, useUV2Coordinates;
+	<ins>public bool useTerrainTypes;</ins>
+
+	[NonSerialized] List&lt;Vector3> vertices<ins>, terrainTypes</ins>;</pre>
+						
+						<p>Enable the terrain types for the <em translate="no">Terrain</em> child object of the <em translate="no">Hex Grid Chunk</em> prefab.</p>
+						
+						<figure>
+							<img src="selecting-textures/using-terrain-types.png" width="320" height="134">
+							<figcaption>Using terrain types.</figcaption>
+						</figure>
+						
+						<p>Grab another <code>Vector3</code> list for the terrain types when clearing the mesh, if needed.</p>
+						
+						<pre translate="no">	public void Clear () {
+		&hellip;
+		<ins>if (useTerrainTypes) {</ins>
+			<ins>terrainTypes = ListPool&lt;Vector3>.Get();</ins>
+		<ins>}</ins>
+		triangles = ListPool&lt;int>.Get();
+	}</pre>
+						
+						<p>When applying the mesh data, store the terrain types in the third UV set. That way, it won't clash with the other two sets, if we were to ever use them together.</p>
+						
+						<pre translate="no">	public void Apply () {
+		&hellip;
+		<ins>if (useTerrainTypes) {</ins>
+			<ins>hexMesh.SetUVs(2, terrainTypes);</ins>
+			<ins>ListPool&lt;Vector3>.Add(terrainTypes);</ins>
+		<ins>}</ins>
+		hexMesh.SetTriangles(triangles, 0);
+		&hellip;
+	}</pre>
+						
+						<p>We'll use a <code>Vector3</code> to set the terrain types of a triangle. As they're uniform across a triangle, simply add the same data three times.</p>
+						
+						<pre translate="no">	<ins>public void AddTriangleTerrainTypes (Vector3 types) {</ins>
+		<ins>terrainTypes.Add(types);</ins>
+		<ins>terrainTypes.Add(types);</ins>
+		<ins>terrainTypes.Add(types);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Blending across a quad works the same way. All four vertices have the same types.</p>
+						
+						<pre translate="no">	<ins>public void AddQuadTerrainTypes (Vector3 types) {</ins>
+		<ins>terrainTypes.Add(types);</ins>
+		<ins>terrainTypes.Add(types);</ins>
+		<ins>terrainTypes.Add(types);</ins>
+		<ins>terrainTypes.Add(types);</ins>
+	<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Edge Fans</h3>
+						
+						<p>Now we have to add the types to the mesh data in <code>HexGridChunk</code>. Let's start with <code>TriangulateEdgeFan</code>. First, let's separate the vertex and color method invocations, for readability. Also recall that everywhere we invoke this method, we supply it with <code>color1</code>. So we can use that color directly, instead of relying on the parameter.</p>
+						
+						<pre translate="no">	void TriangulateEdgeFan (Vector3 center, EdgeVertices edge, Color color) {
+		terrain.AddTriangle(center, edge.v1, edge.v2);
+<del>//		terrain.AddTriangleColor(color);</del>
+		terrain.AddTriangle(center, edge.v2, edge.v3);
+<del>//		terrain.AddTriangleColor(color);</del>
+		terrain.AddTriangle(center, edge.v3, edge.v4);
+<del>//		terrain.AddTriangleColor(color);</del>
+		terrain.AddTriangle(center, edge.v4, edge.v5);
+<del>//		terrain.AddTriangleColor(color);</del>
+		
+		<ins>terrain.AddTriangleColor(color1);</ins>
+		<ins>terrain.AddTriangleColor(color1);</ins>
+		<ins>terrain.AddTriangleColor(color1);</ins>
+		<ins>terrain.AddTriangleColor(color1);</ins>
+	}</pre>
+						
+						<p>After the colors, we add the terrain types. As the type varies per triangle, it has to be a parameter, replacing the color. Use this single type to construct a <code>Vector3</code>. Only the first channel matters, because the splat map is always red in this case. As all three vector components need to be set to something, let's set them all to the same type.</p>
+						
+						<pre translate="no">	void TriangulateEdgeFan (Vector3 center, EdgeVertices edge, <ins>float type</ins>) {
+		&hellip;
+
+		<ins>Vector3 types;</ins>
+		<ins>types.x = types.y = types.z = type;</ins>
+		<ins>terrain.AddTriangleTerrainTypes(types);</ins>
+		<ins>terrain.AddTriangleTerrainTypes(types);</ins>
+		<ins>terrain.AddTriangleTerrainTypes(types);</ins>
+		<ins>terrain.AddTriangleTerrainTypes(types);</ins>
+	}</pre>
+						
+						<p>Now we have to adjust all invocations of this method, replacing the color argument with the cell's terrain type index. Make this adjustment in <code>TriangulateWithoutRiver</code>, <code>TriangulateAdjacentToRiver</code>, and <code>TriangulateWithRiverBeginOrEnd</code>.</p>
+						
+						<pre translate="no"><del>//		TriangulateEdgeFan(center, e, color1);</del>
+		TriangulateEdgeFan(center, e, <ins>cell.TerrainTypeIndex</ins>);</pre>
+						
+						<p>At this point, entering play mode will produce errors which say that the third UV sets of the meshes are out of bounds. That's because we're not yet adding the terrain types to every triangle and quad. So let's continue updating <code>HexGridChunk</code>.</p>
+					</section>
+					
+					<section>
+						<h3>Edge Strips</h3>
+						
+						<p>When creating an edge strip, we now have to know what the terrain types on both side are. So add them as parameters. Then construct a types vector with the first two channels set to these types. The third channel doesn't matter, just make it equal to the first. Add the types to the quads after adding the colors.</p>
+						
+						<pre translate="no">	void TriangulateEdgeStrip (
+		EdgeVertices e1, Color c1, <ins>float type1,</ins>
+		EdgeVertices e2, Color c2, <ins>float type2,</ins>
+		bool hasRoad = false
+	) {
+		terrain.AddQuad(e1.v1, e1.v2, e2.v1, e2.v2);
+		terrain.AddQuad(e1.v2, e1.v3, e2.v2, e2.v3);
+		terrain.AddQuad(e1.v3, e1.v4, e2.v3, e2.v4);
+		terrain.AddQuad(e1.v4, e1.v5, e2.v4, e2.v5);
+
+		terrain.AddQuadColor(c1, c2);
+		terrain.AddQuadColor(c1, c2);
+		terrain.AddQuadColor(c1, c2);
+		terrain.AddQuadColor(c1, c2);
+
+		<ins>Vector3 types;</ins>
+		<ins>types.x = types.z = type1;</ins>
+		<ins>types.y = type2;</ins>
+		<ins>terrain.AddQuadTerrainTypes(types);</ins>
+		<ins>terrain.AddQuadTerrainTypes(types);</ins>
+		<ins>terrain.AddQuadTerrainTypes(types);</ins>
+		<ins>terrain.AddQuadTerrainTypes(types);</ins>
+
+		if (hasRoad) {
+			TriangulateRoadSegment(e1.v2, e1.v3, e1.v4, e2.v2, e2.v3, e2.v4);
+		}
+	}</pre>
+						
+						<p>Now we have to update the invocations of <code>TriangulateEdgeStrip</code>. First, <code>TriangulateAdjacentToRiver</code>, <code>TriangulateWithRiverBeginOrEnd</code>, and <code>TriangulateWithRiver</code> have to use the cell's type for both sides of the edge strip.</p>
+						
+						<pre translate="no"><del>//		TriangulateEdgeStrip(m, color1, e, color1);</del>
+		<ins>TriangulateEdgeStrip(</ins>
+			<ins>m, color1, cell.TerrainTypeIndex,</ins>
+			<ins>e, color1, cell.TerrainTypeIndex</ins>
+		<ins>);</ins></pre>
+						
+						<p>Next, the simplest edge case of <code>TriangulateConnection</code> has to use the cell's type for the near edge, and the neighbor's type for the far edge. They might be the same, but could also be different.</p>
+						
+						<pre translate="no">	void TriangulateConnection (
+		HexDirection direction, HexCell cell, EdgeVertices e1
+	) {
+		&hellip;
+		if (cell.GetEdgeType(direction) == HexEdgeType.Slope) {
+			TriangulateEdgeTerraces(e1, cell, e2, neighbor, hasRoad);
+		}
+		else {
+<del>//			TriangulateEdgeStrip(e1, color1, e2, color2, hasRoad);</del>
+			<ins>TriangulateEdgeStrip(</ins>
+				<ins>e1, color1, cell.TerrainTypeIndex,</ins>
+				<ins>e2, color2, neighbor.TerrainTypeIndex, hasRoad</ins>
+			<ins>);</ins>
+		}
+		&hellip;
+	}</pre>
+						
+						<p>The same is true in <code>TriangulateEdgeTerraces</code>, which invokes <code>TriangulateEdgeStrip</code> three times. The types are uniform across the terraces.</p>
+						
+						<pre translate="no">	void TriangulateEdgeTerraces (
+		EdgeVertices begin, HexCell beginCell,
+		EdgeVertices end, HexCell endCell,
+		bool hasRoad
+	) {
+		EdgeVertices e2 = EdgeVertices.TerraceLerp(begin, end, 1);
+		Color c2 = HexMetrics.TerraceLerp(color1, color2, 1);
+		<ins>float t1 = beginCell.TerrainTypeIndex;</ins>
+		<ins>float t2 = endCell.TerrainTypeIndex;</ins>
+
+		TriangulateEdgeStrip(begin, color1, <ins>t1,</ins> e2, c2, <ins>t2,</ins> hasRoad);
+
+		for (int i = 2; i &lt; HexMetrics.terraceSteps; i++) {
+			EdgeVertices e1 = e2;
+			Color c1 = c2;
+			e2 = EdgeVertices.TerraceLerp(begin, end, i);
+			c2 = HexMetrics.TerraceLerp(color1, color2, i);
+			TriangulateEdgeStrip(e1, c1, <ins>t1,</ins> e2, c2, <ins>t2,</ins> hasRoad);
+		}
+
+		TriangulateEdgeStrip(e2, c2, <ins>t1,</ins> end, color2, <ins>t2,</ins> hasRoad);
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Corners</h3>
+						
+						<p>The simplest corner case is a single triangle. The bottom cell provides the first type, the left cell the second, and the right cell the third. Construct a types vector with them and add it to the triangle.</p>
+						
+						<pre translate="no">	void TriangulateCorner (
+		Vector3 bottom, HexCell bottomCell,
+		Vector3 left, HexCell leftCell,
+		Vector3 right, HexCell rightCell
+	) {
+		&hellip;
+		else {
+			terrain.AddTriangle(bottom, left, right);
+			terrain.AddTriangleColor(color1, color2, color3);
+			<ins>Vector3 types;</ins>
+			<ins>types.x = bottomCell.TerrainTypeIndex;</ins>
+			<ins>types.y = leftCell.TerrainTypeIndex;</ins>
+			<ins>types.z = rightCell.TerrainTypeIndex;</ins>
+			<ins>terrain.AddTriangleTerrainTypes(types);</ins>
+		}
+
+		features.AddWall(bottom, bottomCell, left, leftCell, right, rightCell);
+	}</pre>
+						
+						<p>We use the same approach in <code>TriangulateCornerTerraces</code>, except that we're creating a bunch of quads as well.</p>
+						
+						<pre translate="no">	void TriangulateCornerTerraces (
+		Vector3 begin, HexCell beginCell,
+		Vector3 left, HexCell leftCell,
+		Vector3 right, HexCell rightCell
+	) {
+		Vector3 v3 = HexMetrics.TerraceLerp(begin, left, 1);
+		Vector3 v4 = HexMetrics.TerraceLerp(begin, right, 1);
+		Color c3 = HexMetrics.TerraceLerp(color1, color2, 1);
+		Color c4 = HexMetrics.TerraceLerp(color1, color3, 1);
+		<ins>Vector3 types;</ins>
+		<ins>types.x = beginCell.TerrainTypeIndex;</ins>
+		<ins>types.y = leftCell.TerrainTypeIndex;</ins>
+		<ins>types.z = rightCell.TerrainTypeIndex;</ins>
+
+		terrain.AddTriangle(begin, v3, v4);
+		terrain.AddTriangleColor(color1, c3, c4);
+		<ins>terrain.AddTriangleTerrainTypes(types);</ins>
+
+		for (int i = 2; i &lt; HexMetrics.terraceSteps; i++) {
+			Vector3 v1 = v3;
+			Vector3 v2 = v4;
+			Color c1 = c3;
+			Color c2 = c4;
+			v3 = HexMetrics.TerraceLerp(begin, left, i);
+			v4 = HexMetrics.TerraceLerp(begin, right, i);
+			c3 = HexMetrics.TerraceLerp(color1, color2, i);
+			c4 = HexMetrics.TerraceLerp(color1, color3, i);
+			terrain.AddQuad(v1, v2, v3, v4);
+			terrain.AddQuadColor(c1, c2, c3, c4);
+			<ins>terrain.AddQuadTerrainTypes(types);</ins>
+		}
+
+		terrain.AddQuad(v3, v4, left, right);
+		terrain.AddQuadColor(c3, c4, color2, color3);
+		<ins>terrain.AddQuadTerrainTypes(types);</ins>
+	}</pre>
+						
+						<p>When terraces and cliffs mix, we need to use <code>TriangulateBoundaryTriangle</code>. Simply give it a types vector parameter, and add it to all its triangles.</p>
+						
+						<pre translate="no">	void TriangulateBoundaryTriangle (
+		Vector3 begin, Color beginColor,
+		Vector3 left, Color leftColor,
+		Vector3 boundary, Color boundaryColor<ins>, Vector3 types</ins>
+	) {
+		Vector3 v2 = HexMetrics.Perturb(HexMetrics.TerraceLerp(begin, left, 1));
+		Color c2 = HexMetrics.TerraceLerp(beginColor, leftColor, 1);
+
+		terrain.AddTriangleUnperturbed(HexMetrics.Perturb(begin), v2, boundary);
+		terrain.AddTriangleColor(beginColor, c2, boundaryColor);
+		<ins>terrain.AddTriangleTerrainTypes(types);</ins>
+
+		for (int i = 2; i &lt; HexMetrics.terraceSteps; i++) {
+			Vector3 v1 = v2;
+			Color c1 = c2;
+			v2 = HexMetrics.Perturb(HexMetrics.TerraceLerp(begin, left, i));
+			c2 = HexMetrics.TerraceLerp(beginColor, leftColor, i);
+			terrain.AddTriangleUnperturbed(v1, v2, boundary);
+			terrain.AddTriangleColor(c1, c2, boundaryColor);
+			<ins>terrain.AddTriangleTerrainTypes(types);</ins>
+		}
+
+		terrain.AddTriangleUnperturbed(v2, HexMetrics.Perturb(left), boundary);
+		terrain.AddTriangleColor(c2, leftColor, boundaryColor);
+		<ins>terrain.AddTriangleTerrainTypes(types);</ins>
+	}</pre>
+						
+						<p>In <code>TriangulateCornerTerracesCliff</code>, create a types vector using the provided cells. Then add it to the single triangle and pass it to <code>TriangulateBoundaryTriangle</code>.</p>
+						
+						<pre translate="no">	void TriangulateCornerTerracesCliff (
+		Vector3 begin, HexCell beginCell,
+		Vector3 left, HexCell leftCell,
+		Vector3 right, HexCell rightCell
+	) {
+		float b = 1f / (rightCell.Elevation - beginCell.Elevation);
+		if (b &lt; 0) {
+			b = -b;
+		}
+		Vector3 boundary = Vector3.Lerp(
+			HexMetrics.Perturb(begin), HexMetrics.Perturb(right), b
+		);
+		Color boundaryColor = Color.Lerp(color1, color3, b);
+		<ins>Vector3 types;</ins>
+		<ins>types.x = beginCell.TerrainTypeIndex;</ins>
+		<ins>types.y = leftCell.TerrainTypeIndex;</ins>
+		<ins>types.z = rightCell.TerrainTypeIndex;</ins>
+
+		TriangulateBoundaryTriangle(
+			begin, color1, left, color2, boundary, boundaryColor<ins>, types</ins>
+		);
+
+		if (leftCell.GetEdgeType(rightCell) == HexEdgeType.Slope) {
+			TriangulateBoundaryTriangle(
+				left, color2, right, color3, boundary, boundaryColor<ins>, types</ins>
+			);
+		}
+		else {
+			terrain.AddTriangleUnperturbed(
+				HexMetrics.Perturb(left), HexMetrics.Perturb(right), boundary
+			);
+			terrain.AddTriangleColor(color2, color3, boundaryColor);
+			<ins>terrain.AddTriangleTerrainTypes(types);</ins>
+		}
+	}</pre>
+						
+						<p>The same goes for <code>TriangulateCornerCliffTerraces</code>.</p>
+						
+						<pre translate="no">	void TriangulateCornerCliffTerraces (
+		Vector3 begin, HexCell beginCell,
+		Vector3 left, HexCell leftCell,
+		Vector3 right, HexCell rightCell
+	) {
+		float b = 1f / (leftCell.Elevation - beginCell.Elevation);
+		if (b &lt; 0) {
+			b = -b;
+		}
+		Vector3 boundary = Vector3.Lerp(
+			HexMetrics.Perturb(begin), HexMetrics.Perturb(left), b
+		);
+		Color boundaryColor = Color.Lerp(color1, color2, b);
+		<ins>Vector3 types;</ins>
+		<ins>types.x = beginCell.TerrainTypeIndex;</ins>
+		<ins>types.y = leftCell.TerrainTypeIndex;</ins>
+		<ins>types.z = rightCell.TerrainTypeIndex;</ins>
+
+		TriangulateBoundaryTriangle(
+			right, color3, begin, color1, boundary, boundaryColor<ins>, types</ins>
+		);
+
+		if (leftCell.GetEdgeType(rightCell) == HexEdgeType.Slope) {
+			TriangulateBoundaryTriangle(
+				left, color2, right, color3, boundary, boundaryColor<ins>, types</ins>
+			);
+		}
+		else {
+			terrain.AddTriangleUnperturbed(
+				HexMetrics.Perturb(left), HexMetrics.Perturb(right), boundary
+			);
+			terrain.AddTriangleColor(color2, color3, boundaryColor);
+			<ins>terrain.AddTriangleTerrainTypes(types);</ins>
+		}
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Rivers</h3>
+						
+						<p>The last method that requires an update is <code>TriangulateWithRiver</code>. As we're inside a cell center here, we're dealing with the current cell's type only. So create a vector for it and add it to the triangles and quads.</p>
+						
+						<pre translate="no">	void TriangulateWithRiver (
+		HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e
+	) {
+		&hellip;
+
+		terrain.AddTriangleColor(color1);
+		terrain.AddQuadColor(color1);
+		terrain.AddQuadColor(color1);
+		terrain.AddTriangleColor(color1);
+
+		<ins>Vector3 types;</ins>
+		<ins>types.x = types.y = types.z = cell.TerrainTypeIndex;</ins>
+		<ins>terrain.AddTriangleTerrainTypes(types);</ins>
+		<ins>terrain.AddQuadTerrainTypes(types);</ins>
+		<ins>terrain.AddQuadTerrainTypes(types);</ins>
+		<ins>terrain.AddTriangleTerrainTypes(types);</ins>
+
+		&hellip;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Blending the Types</h3>
+						
+						<p>By now the meshes contain the required terrain indices. All that's left is for the <em translate="no">Terrain</em> shader to actually use them. To get the indices to the fragment shader, we have to pass them through the vertex shader first. We can do so with a custom vertex function, just like we did in the <em translate="no">Estuary</em> shader. In this case, we add a <code class="shader">float3 terrain</code> field to the input structure and copy <code class="shader">v.texcoord2.xyz</code> to it.</p>
+						
+						<pre translate="no" class="shader">		#pragma surface surf Standard fullforwardshadows <ins>vertex:vert</ins>
+		#pragma target 3.5
+
+		&hellip;
+
+		struct Input {
+			float4 color : COLOR;
+			float3 worldPos;
+			<ins>float3 terrain;</ins>
+		};
+		
+		<ins>void vert (inout appdata_full v, out Input data) {</ins>
+			<ins>UNITY_INITIALIZE_OUTPUT(Input, data);</ins>
+			<ins>data.terrain = v.texcoord2.xyz;</ins>
+		<ins>}</ins></pre>
+						
+						<p>We have to sample the texture array three times per fragment. So let's create a convenient function to construct the texture coordinates, sample the array, and modulate the sample with the splat map for one index.</p>
+						
+						<pre translate="no" class="shader">		<ins>float4 GetTerrainColor (Input IN, int index) {</ins>
+			<ins>float3 uvw = float3(IN.worldPos.xz * 0.02, IN.terrain[index]);</ins>
+			<ins>float4 c = UNITY_SAMPLE_TEX2DARRAY(_MainTex, uvw);</ins>
+			<ins>return c * IN.color[index];</ins>
+		<ins>}</ins>
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			&hellip;
+		}</pre>
+						
+						<aside>
+							<h3>Can you treat a vector as an array?</h3>
+							<div>
+								<p>Yes. When using a constant index, <code class="shader">color[0]</code> is equivalent to <code class="shader">color.r</code>. And <code class="shader">color[1]</code> is equivalent to <code class="shader">color.g</code>, and so on.</p>
+							</div>
+						</aside>
+						
+						<p>Using this function, it's simple to sample the texture array three times and combine the results.</p>
+						
+						<pre translate="no" class="shader">		void surf (Input IN, inout SurfaceOutputStandard o) {
+<del>//			float2 uv = IN.worldPos.xz * 0.02;</del>
+			fixed4 c =
+				<ins>GetTerrainColor(IN, 0) +</ins>
+				<ins>GetTerrainColor(IN, 1) +</ins>
+				<ins>GetTerrainColor(IN, 2)</ins>;
+			o.Albedo = c.rgb * _Color;
+			o.Metallic = _Metallic;
+			o.Smoothness = _Glossiness;
+			o.Alpha = c.a;
+		}
+</pre>
+						
+						<figure>
+							<img src="selecting-textures/textured-terrain.png" width="530" height="360">
+							<figcaption>Textured terrain.</figcaption>
+						</figure>
+						
+						<p>We can now paint our terrain with textures. They blend just like the solid colors did. Because we're using the world position as UV coordinates, they don't change with altitude. As a result, the textures are stretched along steep cliffs. If the textures are neutral enough and have plenty of variety, the results can be acceptable. Otherwise, you'll get big ugly streaks. You could try to hide that with additional geometry or cliff textures, but that's not part of this tutorial.</p>
+					</section>
+					
+					<section>
+						<h3>Cleaning Up</h3>
+						
+						<p>Now that we're using textures instead of colors, it makes sense to adjust our editor panel. You could make a neat interface which even shows the terrain textures, but I'll settle for abbreviations that fit the existing layout.</p>
+						
+						<figure>
+							<img src="selecting-textures/terrain-choices.png" width="94" height="88">
+							<figcaption>Terrain choices.</figcaption>
+						</figure>
+						
+						<p>Also, <code>HexCell</code> no longer needs a color property, so delete it.</p>
+						
+						<pre translate="no"><del>//	public Color Color {</del>
+<del>//		get {</del>
+<del>//			return HexMetrics.colors[terrainTypeIndex];</del>
+<del>//		}</del>
+<del>//	}</del></pre>
+						
+						<p>The color array and associated code can also be removed from <code>HexGrid</code>.</p>
+						
+						<pre translate="no"><del>//	public Color[] colors;</del>
+
+	&hellip;
+
+	void Awake () {
+		HexMetrics.noiseSource = noiseSource;
+		HexMetrics.InitializeHashGrid(seed);
+<del>//		HexMetrics.colors = colors;</del>
+		CreateMap(cellCountX, cellCountZ);
+	}
+	
+	&hellip;
+
+	&hellip;
+
+	void OnEnable () {
+		if (!HexMetrics.noiseSource) {
+			HexMetrics.noiseSource = noiseSource;
+			HexMetrics.InitializeHashGrid(seed);
+<del>//			HexMetrics.colors = colors;</del>
+		}
+	}</pre>
+						
+						<p>And finally, <code>HexMetrics</code> no longer needs the color array either.</p>
+						
+						<pre translate="no"><del>//	public static Color[] colors;</del></pre>
+						
+						<p>The next tutorial is <a href="../part-15/index.html">Distances</a>.</p>
+					</section>
+					
+					<a href="selecting-textures/selecting-textures.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Hex-Map-14.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

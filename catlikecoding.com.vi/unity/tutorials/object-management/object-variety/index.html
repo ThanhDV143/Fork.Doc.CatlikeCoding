@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/object-management/object-variety/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/object-management/object-variety/tutorial-image.jpg">
+		<meta property="og:title" content="Object Variety">
+		<meta property="og:description" content="A Unity Object Management tutorial about supporting multiple shapes, materials, and colors.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Object Variety</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/object-management/object-variety/#article",
+				"headline": "Object Variety",
+				"alternativeHeadline": "Fabricating Shapes",
+				"datePublished": "2018-05-15",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Object Management tutorial about supporting multiple shapes, materials, and colors.",
+				"image": "https://catlikecoding.com/unity/tutorials/object-management/object-variety/tutorial-image.jpg",
+				"dependencies": "Unity 2017.4.1f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/object-management/", "name": "Object Management" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				Game: 1,
+				GameDataReader: 1,
+				GameDataWriter: 1,
+				PersistableObject: 1,
+				PersistentStorage: 1,
+				Shape: 1,
+				ShapeFactory: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Object Management</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Object Variety</h1>
+					<p>Fabricating Shapes</p>
+					<ul>
+						<li>Create a factory for shapes.</li>
+						<li>Save and load shape identifiers.</li>
+						<li>Support multiple materials and random colors.</li>
+						<li>Enable GPU instancing.</li>
+					</ul>
+				</header>
+				
+				<p>This is the second tutorial in a series about <a href="../index.html">Object Management</a>. In this part we'll add support for multiple shapes with varying materials and colors, while remaining backwards compatible with the previous version of our game.
+				
+				<p>This tutorial is made with Unity 2017.4.1f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>These cubes survived the termination of their game.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Shape Factory</h2>
+					
+					<p>The goal of this tutorial is to make our game more interesting, by allowing the creation of other shapes than just white cubes. Just like the position, rotation, and scale, we'll randomize what shape is created each time the player spawns a new one.</p>
+					
+					<section>
+						<h3>Shape Class</h3>
+						
+						<p>We're going to be specific about what kind of things our game spawns. It spawns shapes, not generic persistable objects. So create a new <code>Shape</code> class, which represents geometric 3D shapes. It just extends <code>PersistableObject</code>, without adding anything new, at least for now.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class Shape : PersistableObject {}</ins></pre>
+						
+						<p>Remove the <code>PersistableObject</code> component from the <em translate="no">Cube</em> prefab and give it a <code>Shape</code> component instead. It cannot have both, because we gave <code>PersistableObject</code> the <code>DisallowMultipleComponent</code> attribute, which also applies to <code>Shape</code>.</p>
+						
+						<figure>
+							<img src="shape-factory/cube-shape.png" width="320" height="212">
+							<figcaption>Cube with a Shape component.</figcaption>
+						</figure>
+						
+						<p>This breaks the reference that the <em translate="no">Game</em> object has to the prefab. But because <code>Shape</code> is also a <code>PersistableObject</code> we can assign it again.</p>
+						
+						<figure>
+							<img src="shape-factory/game-shape.png" width="320" height="72">
+							<figcaption>Game with prefab assigned again.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Multiple Different Shapes</h3>
+						
+						<p>Create a default sphere and capsule object, give each a <code>Shape</code> component, and turn them into prefabs too. These are the other shapes that our game will support.</p>
+						
+						<figure>
+							<img alt="sphere" src="shape-factory/sphere.png" width="320" height="212">
+							<img alt="capsule" src="shape-factory/capsule.png" width="320" height="212">
+							<figcaption>Sphere and capsule shape prefabs.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What about cylinders?</h3>
+							<div>
+								<p>You could also add a cylinder object, but I omitted it because cylinders don't have their own collider type. Instead, they use a capsule collider, which doesn't really fit. That isn't an issue right now, but might be later.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Factory Asset</h3>
+						
+						<p>Currently, <code>Game</code> can only spawn a single thing, because it only has one reference to a prefab. To support all three shapes, it would need three prefab references. This would require three fields, but that wouldn't be flexible. A better approach would be to use an array. But maybe we'll come up with a different way to create shapes later. That could make <code>Game</code> rather complex, as it is also responsible for user input, keeping track of objects, and triggering the saving and loading.</p>
+						
+						<p>To keep <code>Game</code> simple, we're going to put the responsibility for what shapes are supported in its own class. This class will act like a factory, creating shapes on demand, without its client having to know how those shapes are made or even how many different options there are. We will name this class <code>ShapeFactory</code>.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class ShapeFactory {}</ins></pre>
+						
+						<p>The factory's only responsibility is to deliver shape instances. It doesn't need a position, rotation, or scale, and neither does it need an <code>Update</code> method to change it state. So it doesn't need to be a component, which would have to be attached to a game object. Instead, it can exist on its own, not as part of a specific scene, but as part of the project. In other words, it is an asset. This is possible, by having it extend <code>ScriptableObject</code> instead of <code>MonoBehaviour</code>.</p>
+						
+						<pre translate="no">public class ShapeFactory <ins>: ScriptableObject</ins> {}</pre>
+						
+						<p>We now have a custom asset type. To add such an asset to our project, we'll have to add an entry for it to Unity's menu. The simplest way to do this is by adding the <code>CreateAssetMenu</code> attribute to our class.</p>
+						
+						<pre translate="no"><ins>[CreateAssetMenu]</ins>
+public class ShapeFactory : ScriptableObject {}</pre>
+						
+						<p>You can now create our factory via <em translate="no">Assets › Create › Shape Factory</em>. We only need one.</p>
+						
+						<figure>
+							<img src="shape-factory/shape-factory.png" width="320" height="70">
+							<figcaption>Shape factory asset.</figcaption>
+						</figure>
+						
+						<p>To let our factory know about the shape prefabs, give it a <code>Shape[] prefabs</code> array field. We don't want this field to be public, as its inner workings should not be exposed to other classes. So keep it private. To have the array show up in the inspector and be saved by Unity, add the <code>SerializeField</code> attribute to it.</p>
+						
+						<pre translate="no">public class ShapeFactory : ScriptableObject {
+	
+	<ins>[SerializeField]</ins>
+	<ins>Shape[] prefabs;</ins>
+}</pre>
+						
+						<p>After the field appears in the inspector, drag all three shape prefabs onto it, so references to them get added to the array. Make sure that the cube is the first element. Use the sphere for the second element and the capsule for the third.</p>
+						
+						<figure>
+							<img src="shape-factory/factory-prefabs.png" width="320" height="160">
+							<figcaption>Factory with references to the prefabs.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Getting Shapes</h3>
+						
+						<p>For the factory to be of any use, there must be a way to get shape instances out of it. So give it a public <code>Get</code> method. The client can indicate what kind of shape it wants via a shape identifier parameter. We'll simply use an integer for this purpose.</p>
+						
+						<pre translate="no">	<ins>public Shape Get (int shapeId) {}</ins></pre>
+						
+						<aside>
+							<h3>Why not use an enumeration?</h3>
+							<div>
+								<p>That is certainly possible, so you could do that instead. But we don't really care about identifying exact shape types in code, so an integer works fine. That makes it possible to control what shapes are supported purely by changing the factory's array contents, without having to change any code.</p>
+							</div>
+						</aside>
+						
+						<p>We can directly use the identifier as the index to find the appropriate shape prefab, instantiate it, and return it. This means that 0 identifies a cube, 1 a sphere, and 2 a capsule. Even if we change how the factory works later, we have to make sure that this identification remains the same, to remain backwards compatible.</p>
+						
+						<pre translate="no">	public Shape Get (int shapeId) {
+		<ins>return Instantiate(prefabs[shapeId]);</ins>
+	}</pre>
+						
+						<p>Besides requesting a specific shape, let's also make it possible to get a random shape instance out of the factory, via a <code>GetRandom</code> method. We can use the <code>Random.Range</code> method to select an index at random.</p>
+						
+						<pre translate="no">	<ins>public Shape GetRandom () {</ins>
+		<ins>return Get(Random.Range(0, prefabs.Length));</ins>
+	<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Shouldn't it be <code>Random.Range(0, prefab.Length - 1)</code> instead?</h3>
+							<div>
+								<p>Unity's <code>Random.Range</code> method with integer parameters uses an exclusive maximum. The output range is from the minimum to the maximum minus 1. This was done because the typical use case was expected to be getting a random array index, which is exactly what we're doing here.</p>
+								
+								<p>Note that <code>Random.Range</code> with float parameters uses an inclusive maximum instead.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Getting Shapes</h3>
+						
+						<p>Because we're now creating shapes in <code>Game</code>, let's be explicit and rename its list to <code>shapes</code>. So everywhere that <code>objects</code> is written, replace it with <code>shapes</code>. It is easiest to use your code editor's refactor functionality to change the field's name, and it will take care of renaming it everywhere that it is used. I only show the change of the field declaration, not all places where it is accessed.</p>
+						
+						<pre translate="no">	List&lt;PersistableObject> <ins>shapes</ins>;</pre>
+						
+						<p>Also change the list's item type to <code>Shape</code>, which is more specific.</p>
+						
+						<pre translate="no">	List&lt;<ins>Shape</ins>> shapes;
+	
+	void Awake () {
+		shapes = new List&lt;<ins>Shape</ins>>();
+	}</pre>
+						
+						<p>Next, remove the prefab field and add a <code>shapeFactory</code> field to hold a reference to the shape factory instead.</p>
+						
+						<pre translate="no"><del>//	public PersistableObject prefab;</del>
+	<ins>public ShapeFactory shapeFactory;</ins></pre>
+						
+						<p>In <code>CreateObject</code>, we'll now create an arbitrary shape by invoking <code>shapeFactory.GetRandom</code> instead of instantiating an explicit prefab.</p>
+						
+						<pre translate="no">	void CreateObject () {
+<del>//		PersistableObject o = Instantiate(prefab);</del>
+		<ins>Shape o = shapeFactory.GetRandom();</ins>
+		&hellip;
+	}</pre>
+						
+						<p>Let's also rename the instance's variable so it's very explicit that we're dealing with a shape instance, not a prefab reference that we still need to instantiate. Once again, you can use refactoring to quickly and consistently rename the variable.</p>
+						
+						<pre translate="no">	void <ins>CreateShape</ins> () {
+		Shape <ins>instance</ins> = shapeFactory.GetRandom();
+		Transform t = <ins>instance</ins>.transform;
+		t.localPosition = Random.insideUnitSphere * 5f;
+		t.localRotation = Random.rotation;
+		t.localScale = Vector3.one * Random.Range(0.1f, 1f);
+		shapes.Add(<ins>instance</ins>);
+	}</pre>
+						
+						<p>When loading, we now also have to use the shape factory. In this case, we do not want random shapes. We have only ever worked with cubes before, so we should get cubes, which is done by invoking <code>shapeFactory.Get(0)</code>.</p>
+						
+						<pre translate="no">	public override void Load (GameDataReader reader) {
+		int count = reader.ReadInt();
+		for (int i = 0; i &lt; count; i++) {
+<del>//			PersistableObject o = Instantiate(prefab);</del>
+			<ins>Shape o = shapeFactory.Get(0);</ins>
+			o.Load(reader);
+			shapes.Add(o);
+		}
+	}</pre>
+						
+						<p>Let's also make it explicit here that we're dealing with an instance.</p>
+						
+						<pre translate="no">			Shape <ins>instance</ins> = shapeFactory.Get(0);
+			<ins>instance</ins>.Load(reader);
+			shapes.Add(<ins>instance</ins>);</pre>
+						
+						<figure>
+							<img src="shape-factory/game-factory.png" width="320" height="72">
+							<figcaption>Game with factory instead of prefab.</figcaption>
+						</figure>
+						
+						<p>After giving <em translate="no">Game</em> a reference to our factory, it will now create random shapes each time the player spawns a new one, instead of always getting cubes.</p>
+						
+						<figure>
+							<img src="shape-factory/random-shapes.jpg" width="250" height="240">
+							<figcaption>Creating random shapes.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Remembering the Shapes</h2>
+					
+					<p>While it is now possible to create three different shapes, this information is not yet saved. So each time we load a saved game, we end up with nothing but cubes. This is correct for games that were saved earlier, but not for games that were saved after we added support for multiple shapes. We also have to add support for saving the different shapes, ideally while still being able to load the old save files as well.</p>
+					
+					<section>
+						<h3>Shape Identifier Property</h3>
+						
+						<p>To be able to save which shape an object has, the object has to remember this information. The most straightforward way to do this is by adding a shape identifier field to <code>Shape</code>.</p>
+						
+						<pre translate="no">public class Shape : PersistableObject {
+
+	<ins>int shapeId;</ins>
+}</pre>
+						
+						<p>Ideally, this field is read-only, because a shape instance is always of one type and doesn't change. But it has to be assigned a value somehow. We could mark the private field as serializable and assign it a value via the inspector of each prefab. However, this doesn't guarantee that the identifier matches the array index used by the factory. It might also be possible that we use a shape prefab somewhere else, which has nothing to do with the factory, or maybe even add it to another factory at some point. So the shape identifier depends on the factory, not the prefab. Thus, it's something to be tracked per instance, not per prefab.</p>
+						
+						<p>Private fields do not get serialized by default, so the prefab has nothing to do with it. A new instance will simply get the field's default value, which is 0 in this case, because we didn't gave it another default. To make the identifier publicly accessible, we'll add a <code>ShapeId</code> property to <code>Shape</code>. We use the same name, except the first letter is a capital. Properties are methods that pretend to be fields, so they need a code block.</p>
+						
+						<pre translate="no">	<ins>public int ShapeId {}</ins>
+
+	int shapeId;</pre>
+						
+						<p>Properties actually need two separate code blocks. One to get the value it represents, and one to set it. These are identified via the <code>get</code> and <code>set</code> keywords. It is possible to only use one of them, but we need both in this this case.</p>
+						
+						<pre translate="no">	<ins>public int ShapeId {</ins>
+		<ins>get {}</ins>
+		<ins>set {}</ins>
+	<ins>}</ins></pre>
+						
+						<p>The getter part simply returns the private field. The setter simply assigns to the private field. The setter has an implicit parameter of the appropriate type named <code>value</code> for this purpose.</p>
+						
+						<pre translate="no">	public int ShapeId {
+		get {
+			<ins>return shapeId;</ins>
+		}
+		set {
+			<ins>shapeId = value;</ins>
+		}
+	}</pre>
+						
+						<p>By using a property it becomes possible to add additional logic to what appears to be a simple retrieval or assignment. In our case, the shape identifier has to be set exactly once per instance, when it is instantiated by the factory. Setting it again after that would be a mistake.</p>
+						
+						<p>We can check whether the assignment is correct by verifying that the identifier still has its default value at the time of assignment. If so, the assignment is valid. If not, we log an error instead.</p>
+						
+						<pre translate="no">	public int ShapeId {
+		get {
+			return shapeId;
+		}
+		set {
+			<ins>if (shapeId == 0) {</ins>
+				shapeId = value;
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>Debug.LogError("Not allowed to change shapeId.");</ins>
+			<ins>}</ins>
+		}
+	}</pre>
+						
+						<p>However, 0 is a valid identifier. So we have to use something else as the default value. Let's use the minimum possible integer instead, <code>int.MinValue</code>, which is &minus;2147483648. Also, we should ensure that the identifier cannot be reset to its default value.</p>
+						
+						<pre translate="no">	public int ShapeId {
+		&hellip;
+		set {
+			if (shapeId == <ins>int.MinValue &amp;&amp; value != int.MinValue</ins>) {
+				shapeId = value;
+			}
+			&hellip;
+		}
+	}
+
+	int shapeId <ins>= int.MinValue</ins>;</pre>
+						
+						<aside>
+							<h3>Why not just use a <code>readonly</code> property?</h3>
+							<div>
+								<p>A <code>readonly</code> field or property can only be assigned a default value, or be assigned to in a constructor method. Unfortunately, we cannot use constructor methods when instantiating Unity objects. So we have to use an approach like this.</p>
+							</div>
+						</aside>
+						
+						<p>Adjust <code>ShapeFactory.Get</code> so it sets the identifier of the instance before returning it.</p>
+						
+						<pre translate="no">	public Shape Get (int shapeId) {
+<del>//		return Instantiate(prefabs[shapeId]);</del>
+		<ins>Shape instance = Instantiate(prefabs[shapeId]);</ins>
+		<ins>instance.ShapeId = shapeId;</ins>
+		<ins>return instance;</ins>
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Identifying the File Version</h3>
+						
+						<p>We didn't have shape identifiers before, so we didn't save them. If we save them from now on, we're using a different save file format. It's fine if the old version of our game&mdash;from the previous tutorial&mdash;cannot read this format, but we should ensure that the new game can still work with the old format.</p>
+						
+						<p>We'll use a save version number to identify the format used by a save file. As we introduce this concept now, we start with version 1. Add this as a constant integer to <code>Game</code>.</p>
+						
+						<pre translate="no">	<ins>const int saveVersion = 1;</ins></pre>
+						
+						<aside>
+							<h3>What does <code>const</code> mean?</h3>
+							<div>
+								<p>It declares a simple value to be a constant, not a field. It cannot be changed and doesn't exist in memory. Instead, it's only part of the code and its explicit value gets used wherever it is referenced, substituted during compilation.</p>
+							</div>
+						</aside>
+						
+						<p>When saving the game, start with writing the save version number. When loading, begin by reading the stored version. This tells us what version we're dealing with.</p>
+						
+						<pre translate="no">	public override void Save (GameDataWriter writer) {
+		<ins>writer.Write(saveVersion);</ins>
+		writer.Write(shapes.Count);
+		&hellip;
+	}
+	
+	public override void Load (GameDataReader reader) {
+		<ins>int version = reader.ReadInt();</ins>
+		int count = reader.ReadInt();
+		&hellip;
+	}</pre>
+						
+						<p>However, this only works for files that contain the save version. The old save files from the previous tutorial don't have this information. Instead, the first thing written to those files is the object count. So we'd end up interpreting the count as the version.</p>
+						
+						<p>The object count stored in old save files could be anything, but it will always be at least zero. We can use this to distinguish between the save version and the object count. This is done by not writing the save version verbatim. Instead, flip the sign of the version when writing it. As we start with 1, this means that the stored save version is always less than zero.</p>
+						
+						<pre translate="no">		writer.Write(<ins>-</ins>saveVersion);</pre>
+						
+						<p>When reading the version, flip its sign again to retrieve the original number. If we're reading and old save file, this ends up flipping the sign of the count, so it becomes either zero or negative. Thus, when we end up with a version less than or equal to zero, we know that we're dealing with an old file. In that case, we already have the count, just with a flipped sign. Otherwise, we still have to read the count.</p>
+						
+						<pre translate="no">		int version = <ins>-</ins>reader.ReadInt();
+		int count = <ins>version &lt;= 0 ? -version :</ins> reader.ReadInt();</pre>
+						
+						<aside>
+							<h3>What does the question mark mean?</h3>
+							<div>
+								<p>It is the ternary operator, <code>condition ? trueResult : falseResult</code>, which is a shorthand alternative for an if-else expression. In this case, the code is equivalent to the following:</p>
+								
+								<pre translate="no">		int version = -reader.ReadInt();
+		int count;
+		if (version &lt;= 0) {
+			count = -version;
+		}
+		else {
+			count = reader.ReadInt();
+		}</pre>
+							</div>
+						</aside>
+						
+						<p>This makes it possible for the new code to deal with the old save file format. But the old code cannot deal with the new format. We cannot do anything about that, because the old code has already been written. What we can do is make sure that from now on the game will refuse to load future save file formats that it doesn't know how to deal with. If the loaded version is higher than our current save version, log an error and return immediately.</p>
+						
+						<pre translate="no">		int version = -reader.ReadInt();
+		<ins>if (version > saveVersion) {</ins>
+			<ins>Debug.LogError("Unsupported future save version " + version);</ins>
+			<ins>return;</ins>
+		<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Saving the Shape Identifier</h3>
+						
+						<p>A shape should not write its own identifier, because it has to be read to determine which shape to instantiate, and only after that the shape can load itself. So it's the responsibility of <code>Game</code> to write the identifiers. Because we're storing all shapes in a single list, we have to write each shape's identifier before the shape saves itself.</p>
+						
+						<pre translate="no">	public override void Save (GameDataWriter writer) {
+		writer.Write(-saveVersion);
+		writer.Write(shapes.Count);
+		for (int i = 0; i &lt; shapes.Count; i++) {
+			<ins>writer.Write(shapes[i].ShapeId);</ins>
+			shapes[i].Save(writer);
+		}
+	}</pre>
+						
+						<p>Note that this is not the only way to save the shape identifiers. For example, it is also possible to use a separate list for each shape type. In that case, it would only be necessary to write each shape identifier once per list.</p>
+					</section>
+					
+					<section>
+						<h3>Loading the Shape Identifier</h3>
+						
+						<p>For each shape in the list, begin by loading its shape identifier, then use that to get the correct shape from the factory.</p>
+						
+						<pre translate="no">	public override void Load (GameDataReader reader) {
+		&hellip;
+		for (int i = 0; i &lt; count; i++) {
+			<ins>int shapeId = reader.ReadInt();</ins>
+			Shape instance = shapeFactory.Get(<ins>shapeId</ins>);
+			instance.Load(reader);
+			shapes.Add(instance);
+		}
+	}</pre>
+						
+						<p>But this is only valid for the new save version 1. If we're reading from an older save file, just get cubes instead.</p>
+						
+						<pre translate="no">			int shapeId = <ins>version > 0 ?</ins> reader.ReadInt() <ins>: 0</ins>;</pre>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Material Variants</h2>
+					
+					<p>Besides varying the shape of the objects that are spawned, we could also vary what they're made of. At the moment, all shapes use the same material, which is Unity's default material. Let's change that into a random selection of materials.</p>
+					
+					<section>
+						<h3>Three Materials</h3>
+						
+						<p>Create three new materials. Name the first <em translate="no">Standard</em>, leaving it unchanged so it matches Unity's default material. Name the second one <em translate="no">Shiny</em> and increase its <em translate="no">Smoothness</em> to 0.9. Name the third one <em translate="no">Metallic</em> and set both its <em translate="no">Metallic</em> and <em translate="no">Smoothness</em> to 0.9.</p>
+						
+						<figure>
+							<img src="material-variants/shape-materials.png" width="230" height="82">
+							<figcaption>Standard, shiny, and metallic.</figcaption>
+						</figure>
+						
+						<p>When getting a shape from the factory, it should now also be possible to specify what kind of material it has to be made of. This requires <code>ShapeFactory</code> to be aware of the allowed materials. So give it a material array&mdash;just like its prefab array&mdash;and assign the three materials to it. Make sure that the standard material is the first element. The second is the shiny material, and the third one is metallic.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>Material[] materials;</ins></pre>
+						
+						<figure>
+							<img src="material-variants/factory-materials.png" width="320" height="134">
+							<figcaption>Factory with materials.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Setting a Shape's Material</h3>
+						
+						<p>In order to save which material a shape has, we now also have to keep track of a material identifier. Add a property for this to <code>Shape</code>. However, instead of explicitly coding how the property works, omit the code blocks for the getter and setter. End each with a semicolon instead. This generates a default property, with an implicit hidden private field.</p>
+						
+						<pre translate="no">	<ins>public int MaterialId { get; set; }</ins></pre>
+						
+						<p>When setting a shape's material, we have to both give it the actual material as well as its identifier. This suggests that we have to use two parameters at once, but this is impossible for properties. So we're not going to rely on the property's setter. To disallow its use outside the <code>Shape</code> class itself, mark the setter as private.</p>
+						
+						<pre translate="no">	public int MaterialId { get; <ins>private</ins> set; }</pre>
+						
+						<p>Instead, we add a public <code>SetMaterial</code> method with the required parameters.</p>
+						
+						<pre translate="no">	<ins>public void SetMaterial (Material material, int materialId) {}</ins></pre>
+						
+						<p>This method can get the shape's <code>MeshRenderer</code> component by invoking the <code>GetComponent&lt;MeshRenderer></code> method. Note that this is a generic method, like <code>List</code> is a generic class. Set the renderer's material and also the material identifier property. Make sure that you assign the parameter to the property, the difference being whether M is a capital letter.</p>
+						
+						<pre translate="no">	public void SetMaterial (Material material, int materialId) {
+		<ins>GetComponent&lt;MeshRenderer>().material = material;</ins>
+		<ins>MaterialId = materialId;</ins>
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Getting Shapes with a Material</h3>
+						
+						<p>Now we can adjust <code>ShapeFactory.Get</code> to work with materials. Give it a second parameter to indicate which material should be used. Then use that to set the shape's material and its material identifier.</p>
+						
+						<pre translate="no">	public Shape Get (int shapeId<ins>, int materialId</ins>) {
+		Shape instance = Instantiate(prefabs[shapeId]);
+		instance.ShapeId = shapeId;
+		<ins>instance.SetMaterial(materials[materialId], materialId);</ins>
+		return instance;
+	}</pre>
+						
+						<p>It might be possible that whoever invokes <code>Get</code> doesn't care about materials and is satisfied with the standard material. We can support a variant of <code>Get</code> with a single shape identifier parameter. We can do this by assigning a default value to its <code>materialId</code> parameter, using 0. This makes it possible to omit the <code>materialId</code> parameter when invoking <code>Get</code>. As a result, the existing code compiles at this point without errors.</p>
+						
+						<pre translate="no">	public Shape Get (int shapeId, int materialId <ins>= 0</ins>) {
+		&hellip;
+	}</pre>
+						
+						<p>We could do the same for the <code>shapeId</code> parameter, giving it a default of 0 too.</p>
+						
+						<pre translate="no">	public Shape Get (int shapeId <ins>= 0</ins>, int materialId = 0) {
+		&hellip;
+	}</pre>
+						
+						<aside>
+							<h3>How do you indicate which default values you want?</h3>
+							<div>
+								<p>To omit <code>materialId</code>, simply omit it, so you invoke the method like <code>Get(0)</code>. You can also omit both arguments, by invoking <code>Get()</code>. However, if you want to omit <code>shapeId</code> but not <code>materialId</code>, then you have to be explicit about which arguments you are providing. You can do this by labeling your argument, by writing the parameter name in front of the argument value, followed by a colon. For example, <code>Get(materialId: 0)</code>.</p>
+							</div>
+						</aside>
+						
+						<p>The <code>GetRandom</code> method should now both select a random shape and a random material. So have it use <code>Random.Range</code> to pick a random material identifier as well.</p>
+						
+						<pre translate="no">	public Shape GetRandom () {
+		return Get(
+			Random.Range(0, prefabs.Length)<ins>,</ins>
+			<ins>Random.Range(0, materials.Length)</ins>
+		);
+	}</pre>
+						
+						<figure>
+							<img src="material-variants/random-materials.jpg" width="250" height="240">
+							<figcaption>Shapes with random materials.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Saving and Loading the Material Identifier</h3>
+						
+						<p>Saving the material identifier works the same as saving the shape identifier. Write it after the shape identifier of each shape.</p>
+						
+						<pre translate="no">	public override void Save (GameDataWriter writer) {
+		&hellip;
+		for (int i = 0; i &lt; shapes.Count; i++) {
+			writer.Write(shapes[i].ShapeId);
+			<ins>writer.Write(shapes[i].MaterialId);</ins>
+			shapes[i].Save(writer);
+		}
+	}</pre>
+						
+						<p>Loading works the same too. We won't bother incrementing the save version for this change, because we're still in the same tutorial, which symbolizes a single public release. So loading will fail for a save file that stores shape identifiers but not material identifiers.</p>
+						
+						<pre translate="no">	public override void Load (GameDataReader reader) {
+		&hellip;
+		for (int i = 0; i &lt; count; i++) {
+			int shapeId = version > 0 ? reader.ReadInt() : 0;
+			<ins>int materialId = version > 0 ? reader.ReadInt() : 0;</ins>
+			Shape instance = shapeFactory.Get(shapeId<ins>, materialId</ins>);
+			instance.Load(reader);
+			shapes.Add(instance);
+		}
+	}</pre>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Randomized Colors</h2>
+					
+					<p>Besides whole materials, we can also vary the color of our shapes. We do this by adjusting the color property of each shape instance's material.</p>
+					
+					<p>We could define a selection of valid colors and add them to the shape factory, but we'll use unrestricted colors in this case. That means that the factory doesn't have to be aware of shape colors. Instead, the color of a shape is set just like its position, rotation, and scale.</p>
+					
+					<section>
+						<h3>Shape Color</h3>
+						
+						<p>Add a <code>SetColor</code> method to <code>Shape</code> that makes it possible to adjust its color. It has to adjust the color property of whatever material it's using.</p>
+						
+						<pre translate="no">	<ins>public void SetColor (Color color) {</ins>
+		<ins>GetComponent&lt;MeshRenderer>().material.color = color;</ins>
+	<ins>}</ins></pre>
+						
+						<p>In order to save and load the shape's color, it has to keep track of it. We don't need to provide public access to the color, so a private field suffices, set via <code>SetColor</code>.</p>
+						
+						<pre translate="no">	<ins>Color color;</ins>
+
+	public void SetColor (Color color) {
+		<ins>this.color = color;</ins>
+		GetComponent&lt;MeshRenderer>().material.color = color;
+	}</pre>
+						
+						<p>Saving and loading the color is done by overriding the <code>Save</code> and <code>Load</code> methods of <code>PersistableObject</code>. First take care of the base, then the color data after that.</p>
+						
+						<pre translate="no">	<ins>public override void Save (GameDataWriter writer) {</ins>
+		<ins>base.Save(writer);</ins>
+		<ins>writer.Write(color);</ins>
+	<ins>}</ins>
+
+	<ins>public override void Load (GameDataReader reader) {</ins>
+		<ins>base.Load(reader);</ins>
+		<ins>SetColor(reader.ReadColor());</ins>
+	<ins>}</ins></pre>
+						
+						<p>But this assumes that there are methods to write and read a color, which is currently not the case. So let's add them. First a new <code>Write</code> method for <code>GameDataWriter</code>.</p>
+						
+						<pre translate="no">	<ins>public void Write (Color value) {</ins>
+		<ins>writer.Write(value.r);</ins>
+		<ins>writer.Write(value.g);</ins>
+		<ins>writer.Write(value.b);</ins>
+		<ins>writer.Write(value.a);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Then also a <code>ReadColor</code> method for <code>GameDataReader</code>.</p>
+						
+						<pre translate="no">	<ins>public Color ReadColor () {</ins>
+		<ins>Color value;</ins>
+		<ins>value.r = reader.ReadSingle();</ins>
+		<ins>value.g = reader.ReadSingle();</ins>
+		<ins>value.b = reader.ReadSingle();</ins>
+		<ins>value.a = reader.ReadSingle();</ins>
+		<ins>return value;</ins>
+	<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Do we need to store the color channels as floats?</h3>
+							<div>
+								<p>You could also decide to store them as bytes, but if you do so it's better to consistently use <code>Color32</code> everywhere. That ensures that the saved and loaded data is always the same. You don't need to bother with this just to save twelve less bytes per shape, unless you really need to minimize your save file size. Likewise, you could decide to skip the alpha channel as it's not needed for opaque materials, but it's also not something worth worrying about in general.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Remaining Backwards Compatible</h3>
+						
+						<p>While this approach makes it possible to store the shape color, it now assumes that the color is stored in the save file. This isn't the case for the old save format. To still support the old format, we have to skip loading the color. In <code>Game</code>, we use the read version to decide what to do. However, <code>Shape</code> doesn't know about the version. So we somehow have to communicate the version of the data we're reading to <code>Shape</code> when it is loading. It makes sense to define the version as a property of <code>GameDataReader</code>.</p>
+						
+						<p>Because the version of a read file doesn't change while reading it, the property should be set only once. As <code>GameDataReader</code> isn't a Unity object class, we can use a read-only property, by only giving it a <code>get</code> part. Such properties can be initialized via a constructor method. To do this we have to add the version as a constructor parameter.</p>
+						
+						<pre translate="no">	<ins>public int Version { get; }</ins>
+
+	BinaryReader reader;
+
+	public GameDataReader (BinaryReader reader<ins>, int version</ins>) {
+		this.reader = reader;
+		<ins>this.Version = version;</ins>
+	}</pre>
+						
+						<aside>
+							<h3>Can't we suffice with <code>Version = version</code>?</h3>
+							<div>
+								<p>Yes, but I added <code>this</code> for clarity.</p>
+							</div>
+						</aside>
+						
+						<p>Now writing and reading the version number has become the responsibility of <code>PersistentStorage</code>. The version has to be added as a parameter to its <code>Save</code> method, which must write it before anything else. And the <code>Load</code> method reads it while constructing the <code>GameDataReader</code>. It is also here that we will perform the sign-change trick to support reading version zero files.</p>
+						
+						<pre translate="no">	public void Save (PersistableObject o<ins>, int version</ins>) {
+		using (
+			var writer = new BinaryWriter(File.Open(savePath, FileMode.Create))
+		) {
+			<ins>writer.Write(-version);</ins>
+			o.Save(new GameDataWriter(writer));
+		}
+	}
+
+	public void Load (PersistableObject o) {
+		using (
+			var reader = new BinaryReader(File.Open(savePath, FileMode.Open))
+		) {
+			o.Load(new GameDataReader(reader<ins>, -reader.ReadInt32()</ins>));
+		}
+	}</pre>
+						
+						<p>This means that <code>Game</code> no longer needs to write the save version.</p>
+						
+						<pre translate="no">	public override void Save (GameDataWriter writer) {
+<del>//		writer.Write(-saveVersion);</del>
+		writer.Write(shapes.Count);
+		&hellip;
+	}</pre>
+						
+						<p>Instead, it must provide it as an argument when invoking <code>PersistentStorage.Save</code>.</p>
+						
+						<pre translate="no">	void Update () {
+		&hellip;
+		else if (Input.GetKeyDown(saveKey)) {
+			storage.Save(this<ins>, saveVersion</ins>);
+		}
+		&hellip;
+	}</pre>
+						
+						<p>In its <code>Load</code> method, it can now retrieve the version via <code>reader.Version</code>.</p>
+						
+						<pre translate="no">	public override void Load (GameDataReader reader) {
+		int version = <ins>reader.Version;</ins>
+		&hellip;
+	}</pre>
+						
+						<p>And we can now also check the version in <code>Shape.Load</code>. If we have at least version 1, then read the color. Otherwise, use white.</p>
+						
+						<pre translate="no">	public override void Load (GameDataReader reader) {
+		base.Load(reader);
+		SetColor(<ins>reader.Version > 0 ?</ins> reader.ReadColor() <ins>: Color.white</ins>);
+	}
+</pre>
+					</section>
+					
+					<section>
+						<h3>Choosing a Shape Color</h3>
+						
+						<p>To create shapes with arbitrary colors, simply invoke <code>SetColor</code> on the new instance in <code>Game.CreateShape</code>. We can use the <code>Random.ColorHVS</code> method to generate random colors. Without arguments, that method can create any valid color, which can get a bit messy. Let's limit ourselves to a colorful palette, by restricting the saturation range to 0.5&ndash;1 and the value range of 0.25&ndash;1. As we're not using alpha at this point, we'll always set it to 1.</p>
+						
+						<pre translate="no">	void CreateShape () {
+		Shape instance = shapeFactory.GetRandom();
+		Transform t = instance.transform;
+		t.localPosition = Random.insideUnitSphere * 5f;
+		t.localRotation = Random.rotation;
+		t.localScale = Vector3.one * Random.Range(0.1f, 1f);
+		<ins>instance.SetColor(Random.ColorHSV(0f, 1f, 0.5f, 1f, 0.25f, 1f, 1f, 1f));</ins>
+		shapes.Add(instance);
+	}</pre>
+						
+						<p>Using all eight parameters of <code>ColorHVS</code> makes it hard to understand, as it's not immediately clear which value controls what. You can make the code easier to read by explicitly naming the arguments.</p>
+						
+						<pre translate="no">		instance.SetColor(Random.ColorHSV(
+			<ins>hueMin:</ins> 0f, <ins>hueMax:</ins> 1f,
+			<ins>saturationMin:</ins> 0.5f, <ins>saturationMax:</ins> 1f,
+			<ins>valueMin:</ins> 0.25f, <ins>valueMax:</ins> 1f,
+			<ins>alphaMin:</ins> 1f, <ins>alphaMax:</ins> 1f
+		));</pre>
+						
+						<figure>
+							<img src="randomized-colors/colored-shapes.jpg" width="250" height="260">
+							<figcaption>Shapes with random colors.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Remembering the Renderer</h3>
+						
+						<p>We now need to access the <code>MeshRenderer</code> component of <code>Shape</code> both when setting its material and when setting its color. Using <code>GetComponent&lt;MeshRenderer></code> twice is not ideal, especially if we decide to change a shape's color multiple times in the future. So let's store the reference in a private field and initialize it in a new <code>Awake</code> method of <code>Shape</code>.</p>
+						
+						<pre translate="no">	<ins>MeshRenderer meshRenderer;</ins>
+
+	<ins>void Awake () {</ins>
+		<ins>meshRenderer = GetComponent&lt;MeshRenderer>();</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can use that field in <code>SetColor</code> and <code>SetMaterial</code>.</p>
+						
+						<pre translate="no">	public void SetColor (Color color) {
+		this.color = color;
+<del>//		GetComponent&lt;MeshRenderer>().material.color = color;</del>
+		<ins>meshRenderer.material.color = color;</ins>
+	}
+
+	public void SetMaterial (Material material, int materialId) {
+<del>//		GetComponent&lt;MeshRenderer>().material = material;</del>
+		<ins>meshRenderer.material = material;</ins>
+		MaterialId = materialId;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Using a Property Block</h3>
+						
+						<p>A downside of setting a material's color is that this results in the creation of a new material, unique to the shape. This happens each time its color is set. We can avoid this by using a <code>MaterialPropertyBlock</code> instead. Create a new property block, set a color property named <em translate="no">_Color</em>, then use it as the renderer's property block, by invoking <code>MeshRenderer.SetPropertyBlock</code>.</p>
+						
+						<pre translate="no">	public void SetColor (Color color) {
+		this.color = color;
+<del>//		meshRenderer.material.color = color;</del>
+		<ins>var propertyBlock = new MaterialPropertyBlock();</ins>
+		<ins>propertyBlock.SetColor("_Color", color);</ins>
+		<ins>meshRenderer.SetPropertyBlock(propertyBlock);</ins>
+	}</pre>
+						
+						<p>Instead of using a string to name the color property, it is also possible to use an identifier. These identifiers are setup by Unity. They can change, but remain constant per session. So we can suffice with getting the identifier of the color property once, storing it in a static field. The identifier is found by invoking  the <code>Shader.PropertyToID</code> method with a name.</p>
+						
+						<pre translate="no">	<ins>static int colorPropertyId = Shader.PropertyToID("_Color");</ins>
+
+	&hellip;
+	
+	public void SetColor (Color color) {
+		this.color = color;
+		var propertyBlock = new MaterialPropertyBlock();
+		propertyBlock.SetColor(<ins>colorPropertyId</ins>, color);
+		meshRenderer.SetPropertyBlock(propertyBlock);
+	}</pre>
+						
+						<p>it is also possible to reuse the whole property block. When setting a renderer's properties, the contents of the block are copied. So we do not have to create a new block per shape, we can keep changing the color of the same block for all shapes.</p>
+						
+						<p>We can again use a static field to keep track of the block, but it is not possible to create a block instance via static initialization. Unity doesn't allow it. Instead, we can check whether the block exists before we use it. If not, we create it at that point.</p>
+						
+						<pre translate="no">	<ins>static MaterialPropertyBlock sharedPropertyBlock;</ins>
+	
+	&hellip;
+
+	public void SetColor (Color color) {
+		this.color = color;
+<del>//		var propertyBlock = new MaterialPropertyBlock();</del>
+		<ins>if (sharedPropertyBlock == null) {</ins>
+			<ins>sharedPropertyBlock = new MaterialPropertyBlock();</ins>
+		<ins>}</ins>
+		<ins>sharedPropertyBlock</ins>.SetColor(colorPropertyId, color);
+		meshRenderer.SetPropertyBlock(<ins>sharedPropertyBlock</ins>);
+	}</pre>
+						
+						<p>Now we no longer get duplicate materials, which you can verify by adjusting one of the materials while shapes are using it in play mode. The shapes will adjust their appearance based on the changes, which wouldn't happen if they used duplicate materials. Of course this doesn't work when you adjust the material's color, because each shape uses its own color property, which overrides the material's color.</p>
+					</section>
+					
+					<section>
+						<h3>GPU Instancing</h3>
+						
+						<p>As we're using property blocks, it is possible to use GPU instancing to combine shapes that use the same material in a single draw call, even though they have different colors. However, this requires a shader that supports instanced colors. Here is such a shader, which you can find on the <a href="https://docs.unity3d.com/Manual/GPUInstancing.html">Unity GPU Instancing manual page</a>. The only differences are that I removed the comments and added the <code class="shader">#pragma instancing_options assumeuniformscaling</code> directive. Assuming uniform scaling makes instancing more efficient as it requires less data, and works because all our shapes use a uniform scale.</p>
+						
+						<pre class="shader" translate="no">Shader "Custom/InstancedColors" {
+	Properties {
+		_Color ("Color", Color) = (1,1,1,1)
+		_MainTex ("Albedo (RGB)", 2D) = "white" {}
+		_Glossiness ("Smoothness", Range(0,1)) = 0.5
+		_Metallic ("Metallic", Range(0,1)) = 0.0
+	}
+	SubShader {
+		Tags { "RenderType"="Opaque" }
+		LOD 200
+
+		CGPROGRAM
+		#pragma surface surf Standard fullforwardshadows
+		#pragma instancing_options assumeuniformscaling
+
+		#pragma target 3.0
+
+		sampler2D _MainTex;
+
+		struct Input {
+			float2 uv_MainTex;
+		};
+
+		half _Glossiness;
+		half _Metallic;
+
+		UNITY_INSTANCING_BUFFER_START(Props)
+			UNITY_DEFINE_INSTANCED_PROP(fixed4, _Color)
+		UNITY_INSTANCING_BUFFER_END(Props)
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			fixed4 c = tex2D (_MainTex, IN.uv_MainTex) *
+				UNITY_ACCESS_INSTANCED_PROP(Props, _Color);
+			o.Albedo = c.rgb;
+			o.Metallic = _Metallic;
+			o.Smoothness = _Glossiness;
+			o.Alpha = c.a;
+		}
+		ENDCG
+	}
+	FallBack "Diffuse"
+}</pre>
+						
+						<p>Change our three materials so they use this new shader instead of the standard one. It supports less features and has a different inspector interface, but it is sufficient for our needs. Then make sure that <em translate="no">Enable GPU Instancing</em> is checked for all materials.</p>
+						
+						<figure>
+							<img src="randomized-colors/instanced-colors-material.png" width="320" height="248">
+							<figcaption>Standard material with instanced colors.</figcaption>
+						</figure>
+						
+						<p>You can verify the difference via the <em translate="no">Stats</em> overlay of the <em translate="no">Game</em> window.</p>
+						
+						<figure>
+							<img alt="with" src="randomized-colors/with-instancing.png" width="310" height="214">
+							<img alt="without" src="randomized-colors/without-instancing.png" width="310" height="214">
+							<figcaption>With vs. without GPU instancing.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../reusing-objects/index.html">Reusing Objects</a>.</p>
+					</section>
+					
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/object-management-02-object-variety" class="repository">repository</a>
+					<a href="Object-Variety.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

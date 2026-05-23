@@ -1,0 +1,1640 @@
+<!DOCTYPE html>
+<html>
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/marching-squares/">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/marching-squares/tutorial-image.jpg">
+		<meta property="og:image:width" content="750">
+		<meta property="og:image:height" content="750">
+		<meta property="og:description" content="A Unity C# scripting tutorial in which you will build an editable 2D voxel grid, then triangulate it with the Marching Squares algorithm.">
+		<meta name="description" content="A Unity C# scripting tutorial in which you will build an editable 2D voxel grid, then triangulate it with the Marching Squares algorithm.">
+		<meta property="og:title" content="Marching Squares, a Unity C# Tutorial">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<title>Marching Squares, a Unity C# Tutorial</title>
+		<link href="../../default.css" rel="stylesheet">
+		<script>
+			var customTypes = {
+				Voxel: 1,
+				VoxelGrid: 1,
+				VoxelMap: 1,
+				VoxelStencil: 1,
+				VoxelStencilCircle: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header data-type="tutorial"></header>
+
+		<article class="tutorial" itemscope="" itemtype="http://schema.org/TechArticle">
+			<h1 itemprop="name headline">Marching Squares<span>, partitioning space</span></h1>
+
+			<div class="instructions">
+				<span itemprop="about description">
+					<p>Content creation is a big part of making games. Something special happens when editing is built right into the game itself. The player becomes a creator too.</p>
+					<p>In this tutorial you will create an editable 2D voxel grid, then use the Marching Squares algorithm to triangulate it.</p>
+				</span>
+				<p>You'll learn to</p>
+				<ul>
+					<li>Construct a 2D voxel grid;</li>
+					<li>Split a map into chunks;</li>
+					<li>Support editing of the voxels;</li>
+					<li>Triangulate the voxels.</li>
+				</ul>
+				<p><span itemprop="dependencies">This tutorial builds on the foundation laid by previous tutorials. If you've done the <a href="../curves-and-splines/index.html">Curves and Splines</a> tutorial you should be good to go. The <a href="https://catlikecoding.com/unity/tutorials/noise-derivatives/">Noise Derivatives</a> tutorial is also useful because it contains a basic introduction of meshes.</span></p>
+				<p>This tutorial has been made with Unity 4.5.2. It might not work for older versions.</p>
+			</div>
+			
+			<aside class="share"></aside>
+
+			<figure>
+				<img src="tutorial-image.jpg" width="375" height="375" itemprop="image">
+				<figcaption>Drawing angular shapes.</figcaption>
+			</figure>
+			
+			<h2>Showing a Bitmap</h2>
+			
+			<div class="instructions">
+				<p>What does it mean to edit or create something digital? Think of image editing software. Basically, you're manipulating a 2D grid of color data using various brushes, filters, and stencils. If you're using layers, you could be considered to work in three dimensions, even though the result is presented as a flat surface.</p>
+				<p>Applying this concept to games, you could be creating a level layout or world map instead of an image. Or you could even create a true 3D environment. However, there's a lot involved to get that working. Let's start with something simple.</p>
+				<p>As 2D is a lot easier to work with than 3D, we'll limit ourselves to a flat surface. We'll keep it square so the width and length are the same size. We fill this square area with a voxel grid. These voxels could contain any data we want, and the simplest is a single boolean to indicate whether it's empty or filled. So for now we'll work with a grid of 1-bit values.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-voxel" id="q-voxel">Aren't voxels 3D?</a></li>
+					<li><a href="index.html#a-boolean" id="q-boolean">Are booleans 1-bit?</a></li>
+				</ul>
+			</aside>
+			
+			<h3>Creating a Voxel Grid</h3>
+			
+			<div class="instructions">
+				<p>Create a new project. You can make it a 2D project, so you start with an orthographic camera and the scene view set to 2D mode by default. This is not essential though.</p>
+				<p>We need a custom component to contain our voxels. It needs a boolean array and a resolution. We could use a two-dimensional array, but a normal array works as well. It's both faster and makes it easier to linearly loop through all elements, in case we desire to do so.</p>
+			</div>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+
+<mark>public class VoxelGrid : MonoBehaviour {</mark>
+
+	<mark>public int resolution;</mark>
+
+	<mark>private bool[] voxels;</mark>
+
+	<mark>private void Awake () {</mark>
+		<mark>voxels = new bool[resolution * resolution];</mark>
+	<mark>}</mark>
+<mark>}</mark></pre>
+			
+			<figure>
+				<img src="01-01-voxel-grid.png" width="320" height="172">
+				<figcaption>A voxel grid object with resolution 8.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We have to use something to visualize the voxels. Let's use a default quad object, with its collider removed because we don't need that. Create one and turn it into a prefab.</p>
+			</div>
+			
+			<figure>
+				<img src="01-01-voxel-prefab.png" width="320" height="220">
+				<figcaption>Voxel Prefab quad.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>To make use of the prefab, the grid needs to get a reference to it. So add a <code>voxelPrefab</code> variable and drag the prefab onto it. Also add a directional light and clear its rotation, so quad instances will be fully lit.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public GameObject voxelPrefab;</mark></pre>
+			
+			<figure>
+				<img src="01-01-project.png" width="786" height="134">
+				<figcaption>Ready for visualization.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>For now we use a 1-unit area. So the size of the area covered by one voxel is equal to one divided by the resolution. Let's remember it.</p>
+			</div>
+	
+			<pre translate="no">	<mark>private float voxelSize;</mark>
+
+	private void Awake () {
+		<mark>voxelSize = 1f / resolution;</mark>
+		voxels = new bool[resolution * resolution];
+	}</pre>
+			
+			<div class="instructions">
+				<p>After the array has been initialized, we can create the individual voxels. We'll loop through the X and Y direction such that our array gets filled with consecutive rows of voxels along the X axis.</p>
+			</div>
+			
+			<pre translate="no">		<mark>for (int i = 0, y = 0; y &lt; resolution; y++) {</mark>
+			<mark>for (int x = 0; x &lt; resolution; x++, i++) {</mark>
+				<mark>CreateVoxel(i, x, y);</mark>
+			<mark>}</mark>
+		<mark>}</mark>
+</pre>
+			
+			<figure>
+				<img src="01-01-array.png" width="250" height="250">
+				<figcaption>Storing a 3x3 voxel grid in a 1D array.</figcaption>
+			</figure>
+	
+			<div class="instructions">
+				<p>Creating a voxel right now just requires us to instantiate, position, and scale a prefab. As the quads are centered, we set the voxel positions at the center of their area. So we have to offset by half the voxel size.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void CreateVoxel (int i, int x, int y) {</mark>
+		<mark>GameObject o = Instantiate(voxelPrefab) as GameObject;</mark>
+		<mark>o.transform.parent = transform;</mark>
+		<mark>o.transform.localPosition = new Vector3((x + 0.5f) * voxelSize, (y + 0.5f) * voxelSize);</mark>
+		<mark>o.transform.localScale = Vector3.one * voxelSize;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now you should see a white square show up when entering play mode, although it's actually a grid of quads. You'll probably have to adjust the orthographic camera's size property to get a good look at it.</p>
+			</div>
+			
+			<figure>
+				<img alt="scene view" src="01-01-scene.png" width="170" height="170">
+				<img alt="game view" src="01-01-game.png" width="170" height="170">
+				<figcaption>A grid of quads.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Right now, selecting the grid of quads in the scene view selects whichever quad is under the cursor. As we'll be interested in selecting the grid as a whole, this is inconvenient. We can add the <code>SelectionBase</code> attribute to our component to instruct Unity to select it instead of its children.</p>
+			</div>
+			
+			<pre translate="no"><mark>[SelectionBase]</mark>
+public class VoxelGrid : MonoBehaviour {
+	&hellip;
+}</pre>
+			
+			<div class="instructions">
+				<p>Finally, to make the grid structure visible, we can reduce quad size a bit.</p>
+			</div>
+			
+			<pre translate="no">		Vector3 voxelScale = Vector3.one * voxelSize <mark>* 0.9f</mark>;</pre>
+			
+			
+			<figure>
+				<img src="01-01-grid.png" width="170" height="170">
+				<figcaption>It's a grid, not a single quad.</figcaption>
+			</figure>
+			
+			<h3>Partitioning the Voxels</h3>
+			
+			<div class="instructions">
+				<p>Now we have a square voxel grid, which we can make as large as we want. However, extremely large or technically infinite worlds will become a problem, especially once you start using more complex voxels and visualizations. Sooner or later, you'll have to partition your world into individual chunks to work around some technical limitation. Instead of refactoring our code once we reach that point, let's support chunking from the start. To do so, we need an overarching object that manages the individual grid chunks.</p>
+				<p>Assuming that we're working on some world or level map, we introduce a <code>VoxelMap</code> component. We give it a size so we can easily control to dimensions of the entire map. We also give it a voxel resolution, which we pass along to the individual voxel grids. Finally, we give it a chunk resolution, which determines the size of our chunk grid.</p>
+			</div>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+
+<mark>public class VoxelMap : MonoBehaviour {</mark>
+
+	<mark>public float size = 2f;</mark>
+
+	<mark>public int voxelResolution = 8;</mark>
+	<mark>public int chunkResolution = 2;</mark>
+
+	<mark>public VoxelGrid voxelGridPrefab;</mark>
+<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>After adding an object with this component to the scene, turn our voxel grid into a prefab and assign it to the new map object.</p>
+			</div>
+			
+			<figure>
+				<img src="01-02-voxel-map.png" width="786" height="170">
+				<figcaption>Voxel map instead of a single voxel grid.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>As the map will create the grids and pass along their resolution and size, we turn <code>VoxelGrid.Awake</code> into an initialization method.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public</mark> void <mark>Initialize</mark> (<mark>int resolution, float size</mark>) {
+		<mark>this.resolution = resolution;</mark>
+		voxelSize = <mark>size</mark> / resolution;
+		voxels = new bool[resolution * resolution];
+
+		for (int i = 0, y = 0; y &lt; resolution; y++) {
+			for (int x = 0; x &lt; resolution; x++, i++) {
+				CreateVoxel(i, x, y);
+			}
+		}
+	}</pre>
+			
+			<div class="instructions">
+				<p><code>VoxelMap</code> now has to instantiate its voxel grid children when it awakens. It works similar to how voxel grids are initialized. Let's center the map around zero, so it always stays in the center of our view, no matter its size. Let's also compute and remember some convenient size values, as we might need them later.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private VoxelGrid[] chunks;</mark>
+		
+	<mark>private float chunkSize, voxelSize, halfSize;</mark>
+	
+	<mark>private void Awake () {</mark>
+		<mark>halfSize = size * 0.5f;</mark>
+		<mark>chunkSize = size / chunkResolution;</mark>
+		<mark>voxelSize = chunkSize / voxelResolution;</mark>
+		
+		<mark>chunks = new VoxelGrid[chunkResolution * chunkResolution];</mark>
+		<mark>for (int i = 0, y = 0; y &lt; chunkResolution; y++) {</mark>
+			<mark>for (int x = 0; x &lt; chunkResolution; x++, i++) {</mark>
+				<mark>CreateChunk(i, x, y);</mark>
+			<mark>}</mark>
+		<mark>}</mark>
+	<mark>}</mark>
+
+	<mark>private void CreateChunk (int i, int x, int y) {</mark>
+		<mark>VoxelGrid chunk = Instantiate(voxelGridPrefab) as VoxelGrid;</mark>
+		<mark>chunk.Initialize(voxelResolution, chunkSize);</mark>
+		<mark>chunk.transform.parent = transform;</mark>
+		<mark>chunk.transform.localPosition = new Vector3(x * chunkSize - halfSize, y * chunkSize - halfSize);</mark>
+		<mark>chunks[i] = chunk;</mark>
+	<mark>}</mark></pre>
+			
+			<figure>
+				<img src="01-02-2x2.png" width="280" height="280">
+				<figcaption>Voxel map with top right grid selected.</figcaption>
+			</figure>
+			
+			<h3>Editing Voxels</h3>
+			
+			<div class="instructions">
+				<p>To be able to edit our map, we have to detect user input. So add a 3D box collider of the appropriate size to <code>VoxelMap</code> when it awakens.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-3d-collider" id="q-3d-collider">Why a 3D collider?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	private void Awake () {
+		&hellip;
+		<mark>BoxCollider box = gameObject.AddComponent&lt;BoxCollider>();</mark>
+		<mark>box.size = new Vector3(size, size);</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>We'll check each update whether the mouse button is currently pressed. If so, we perform a ray-cast from the cursor position. If it hits the map, we convert the point to local space and use it to edit our voxels.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void Update () {</mark>
+		<mark>if (Input.GetMouseButton(0)) {</mark>
+			<mark>RaycastHit hitInfo;</mark>
+			<mark>if(Physics.Raycast(Camera.main.ScreenPointToRay(Input.mousePosition), out hitInfo)) {</mark>
+				<mark>if (hitInfo.collider.gameObject == gameObject) {</mark>
+					<mark>EditVoxels(transform.InverseTransformPoint(hitInfo.point));</mark>
+				<mark>}</mark>
+			<mark>}</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			
+			<div class="instructions">
+				<p>Before doing some real editing, let's see if we can convert the input point into voxel coordinates.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void EditVoxels (Vector3 point) {</mark>
+		<mark>int voxelX = (int)(point.x / voxelSize);</mark>
+		<mark>int voxelY = (int)(point.y / voxelSize);</mark>
+		<mark>Debug.Log(voxelX + ", " + voxelY);</mark>
+	<mark>}</mark></pre>
+			
+			
+			<div class="instructions">
+				<p>Looks like the (0, 0) coordinate is located in the center of the map. For our finite map, it is more convenient to assign (0, 0) to the bottom left voxel, so let's offset it.</p>
+			</div>
+			
+			<pre translate="no">		int voxelX = (int)(<mark>(</mark>point.x <mark>+ halfSize)</mark> / voxelSize);
+		int voxelY = (int)(<mark>(</mark>point.y <mark>+ halfSize)</mark> / voxelSize);</pre>
+			
+			<div class="instructions">
+				<p>Next, we have to identify the chunk that contains the voxel.</p>
+			</div>
+			
+			<pre translate="no">		int voxelX = (int)((point.x + halfSize) / voxelSize);
+		int voxelY = (int)((point.y + halfSize) / voxelSize);
+		<mark>int chunkX = voxelX / voxelResolution;</mark>
+		<mark>int chunkY = voxelY / voxelResolution;</mark>
+		Debug.Log(voxelX + ", " + voxelY <mark>+ " in chunk " + chunkX + ", " + chunkY</mark>);
+</pre>
+			
+			
+			<div class="instructions">
+				<p>Now that we know which voxel grid was touched we can convert to the chunk's local voxel coordinates. Then instead of logging the coordinates we instruct the chunk to fill its voxel.</p>
+			</div>
+			
+			<pre translate="no">		<mark>voxelX -= chunkX * voxelResolution;</mark>
+		<mark>voxelY -= chunkY * voxelResolution;</mark>
+		<mark>chunks[chunkY * chunkResolution + chunkX].SetVoxel(voxelX, voxelY, true);</mark></pre>
+			
+			<div class="instructions">
+				<p>So we have to add this method to <code>VoxelGrid</code>, which is simple.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public void SetVoxel (int x, int y, bool state) {</mark>
+		<mark>voxels[y * resolution + x] = state;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>While we are now actually editing voxels when clicking and dragging across the map, there is no visual change yet. As the voxels start empty and white, let's change the color of filled voxels to black. To do so, <code>VoxelGrid</code> has to know which material belongs to a voxel. A simple solution is to add a material array and fill it while we instantiate our voxel quads. Once they're all created, we can set all the voxel colors at once.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-material-duplicates" id="q-material-duplicates">Won't this duplicate materials?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>private Material[] voxelMaterials;</mark>
+
+	public void Initialize (int resolution, float size) {
+		this.resolution = resolution;
+		voxelSize = size / resolution;
+		voxels = new bool[resolution * resolution];
+		<mark>voxelMaterials = new Material[voxels.Length];</mark>
+
+		for (int i = 0, y = 0; y &lt; resolution; y++) {
+			for (int x = 0; x &lt; resolution; x++, i++) {
+				CreateVoxel(i, x, y);
+			}
+		}
+		<mark>SetVoxelColors();</mark>
+	}
+
+	private void CreateVoxel (int i, int x, int y) {
+		GameObject o = Instantiate(voxelPrefab) as GameObject;
+		o.transform.parent = transform;
+		o.transform.localPosition = new Vector3((x + 0.5f) * voxelSize, (y + 0.5f) * voxelSize);
+		o.transform.localScale = Vector3.one * voxelSize * 0.9f;
+		<mark>voxelMaterials[i] = o.GetComponent&lt;MeshRenderer>().material;</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>Setting the voxel colors is done by simply looping through the voxels and looking at their state.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void SetVoxelColors () {</mark>
+		<mark>for (int i = 0; i &lt; voxels.Length; i++) {</mark>
+			<mark>voxelMaterials[i].color = voxels[i] ? Color.black : Color.white;</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>By also calling <code>SetVoxelColors</code> after editing a voxel in <code>SetVoxel</code>, our edits will finally become visible.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-set-all-colors" id="q-set-all-colors">Why set all colors?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	public void SetVoxel (int x, int y, bool state) {
+		voxels[y * resolution + x] = state;
+		<mark>SetVoxelColors();</mark>
+	}</pre>
+			
+			<figure>
+				<img src="01-03-colored.png" width="280" height="280">
+				<figcaption>Painting voxels.</figcaption>
+			</figure>
+			
+			<h2>Stenciling</h2>
+			
+			<div class="instructions">
+				<p>Right now we can only edit a single voxel at a time. It would be nice if we could support editing multiple voxels at once, using a stencil or brush with a configurable size. To do that, we need some kind of stencil object, so let's create a class for it. As it won't be a scene object, it won't inherit from <code>MonoBehaviour</code>.</p>
+				<p>Give the stencil a simple method to apply it to a voxel at a certain position. It should return the new voxel state, which for now will always be filled.</p>
+			</div>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+
+<mark>public class VoxelStencil {</mark>
+
+	<mark>public bool Apply (int x, int y) {</mark>
+		<mark>return true;</mark>
+	<mark>}</mark>
+<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now that we're applying stencils to voxels, change <code>VoxelGrid.SetVoxel</code> to <code>Apply</code> and have it accept a stencil instead of a voxel state.</p>
+			</div>
+			
+			<pre translate="no">	public void <mark>Apply</mark> (int x, int y, <mark>VoxelStencil stencil</mark>) {
+		voxels[y * resolution + x] = <mark>stencil.Apply(x, y)</mark>;
+		SetVoxelColors();
+	}</pre>
+			
+			<div class="instructions">
+				<p>Now we have to create a stencil in <code>VoxelMap.EditVoxels</code> so we can pass it to the chunk.</p>
+			</div>
+			
+			<pre translate="no">		<mark>VoxelStencil activeStencil = new VoxelStencil();</mark>
+		chunks[chunkY * chunkResolution + chunkX].<mark>Apply</mark>(voxelX, voxelY, <mark>activeStencil</mark>);</pre>
+			
+			<h3>Changing the Paint</h3>
+			
+			<div class="instructions">
+				<p>Though our approach has changed, editing still works the same from the user's or gamer's point of view. This changes once we add more features to our stencil. For example, we can set the stencil to either fill or empty the voxels it touches. To support this we add a fill type and initializer method to our stencil. Then we let <code>Apply</code> return this fill type.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private bool fillType;</mark>
+
+	<mark>public void Initialize (bool fillType) {</mark>
+		<mark>this.fillType = fillType;</mark>
+	<mark>}</mark>
+
+	public bool Apply (int x, int y) {
+		return <mark>fillType</mark>;
+	}</pre>
+			
+			<div class="instructions">
+				<p>Let's add a very basic UI to switch fill type, by adding an <code>OnGUI</code> method to <code>VoxelMap</code>. Create a small layout area at the top left of the screen, then put a label and a selection grid in it. We'll use a simple string array to fill the selection grid and we'll remember which index has been selected.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-ongui" id="q-ongui">How does <code>OnGUI</code> work?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>private static string[] fillTypeNames = {"Filled", "Empty"};</mark>
+	
+	<mark>private int fillTypeIndex;</mark>
+	
+	<mark>private void OnGUI () {</mark>
+		<mark>GUILayout.BeginArea(new Rect(4f, 4f, 150f, 500f));</mark>
+		<mark>GUILayout.Label("Fill Type");</mark>
+		<mark>fillTypeIndex = GUILayout.SelectionGrid(fillTypeIndex, fillTypeNames, 2);</mark>
+		<mark>GUILayout.EndArea();</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>We can then use <code>fillTypeIndex</code> to initialize the stencil in <code>ExitVoxels</code>. Now you can switch between filling and emptying voxels in play mode.</p>
+			</div>
+			
+			<pre translate="no">		VoxelStencil activeStencil = new VoxelStencil();
+		<mark>activeStencil.Initialize(fillTypeIndex == 0);</mark>
+		chunks[chunkY * chunkResolution + chunkX].Apply(voxelX, voxelY, activeStencil);
+</pre>
+			
+			<figure>
+				<img src="02-01-fill-type.png" width="160" height="55">
+				<figcaption>Select the fill type.</figcaption>
+			</figure>
+			
+			<h3>Increasing the Radius</h3>
+			
+			<div class="instructions">
+				<p>Next, let's make the size of the stencil configurable. We do this by adding a radius to it, measured in voxels. A zero-radius stencil only affects the voxel that was hit. A radius of one will also affect all voxels adjacent to it, and so on.</p>
+				<p>To support this, add center coordinates and a radius to the stencil. Also add a separate method to set the center, because we'll end up needing to call it more than once.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private int centerX, centerY, radius;</mark>
+
+	public void Initialize (bool fillType<mark>, int radius</mark>) {
+		this.fillType = fillType;
+		<mark>this.radius = radius;</mark>
+	}
+
+	<mark>public void SetCenter (int x, int y) {</mark>
+		<mark>centerX = x;</mark>
+		<mark>centerY = y;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now that our stencil knows its dimensions, we can ask it which voxels we should apply it too. We can do that by adding four properties that define the bounds of a rectangular area through which we have to to loop.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public int XStart {</mark>
+		<mark>get {</mark>
+			<mark>return centerX - radius;</mark>
+		<mark>}</mark>
+	<mark>}</mark>
+
+	<mark>public int XEnd {</mark>
+		<mark>get {</mark>
+			<mark>return centerX + radius;</mark>
+		<mark>}</mark>
+	<mark>}</mark>
+
+	<mark>public int YStart {</mark>
+		<mark>get {</mark>
+			<mark>return centerY - radius;</mark>
+		<mark>}</mark>
+	<mark>}</mark>
+
+	<mark>public int YEnd {</mark>
+		<mark>get {</mark>
+			<mark>return centerY + radius;</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Give our UI another selection grid so we can control the stencil's radius. A range from zero to five should be plenty for a small map.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private static string[] radiusNames = {"0", "1", "2", "3", "4", "5"};</mark>
+	
+	private int fillTypeIndex<mark>, radiusIndex</mark>;
+		
+	private void OnGUI () {
+		GUILayout.BeginArea(new Rect(4f, 4f, 150f, 500f));
+		GUILayout.Label("Fill Type");
+		fillTypeIndex = GUILayout.SelectionGrid(fillTypeIndex, fillTypeNames, 2);
+		<mark>GUILayout.Label("Radius");</mark>
+		<mark>radiusIndex = GUILayout.SelectionGrid(radiusIndex, radiusNames, 6);</mark>
+		GUILayout.EndArea();
+	}</pre>
+			
+			<figure>
+				<img src="02-02-radius.png" width="160" height="102">
+				<figcaption>Select the radius.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We now have to set the stencil's radius and center in <code>VoxelMap.EditVoxels</code>. Because the stencil holds all data that we need, we can remove the coordinates from the call to <code>VoxelGrid.Apply</code>. I've also renamed the coordinate variables so it's clear that we're working with a center.</p>
+			</div>
+			
+			<pre translate="no">	private void EditVoxels (Vector3 point) {
+		int <mark>centerX</mark> = (int)((point.x + halfSize) / voxelSize);
+		int <mark>centerY</mark> = (int)((point.y + halfSize) / voxelSize);
+		int chunkX = <mark>centerX</mark> / voxelResolution;
+		int chunkY = <mark>centerY</mark> / voxelResolution;
+		centerX -= chunkX * voxelResolution;
+		centerY -= chunkY * voxelResolution;
+
+		VoxelStencil activeStencil = new VoxelStencil();
+		activeStencil.Initialize(fillTypeIndex == 0<mark>, radiusIndex</mark>);
+		<mark>activeStencil.SetCenter(centerX, centerY);</mark>
+		chunks[chunkY * chunkResolution + chunkX].Apply<mark>(activeStencil)</mark>;
+	}</pre>
+			
+			<div class="instructions">
+				<p><code>VoxelGrid.Apply</code> has to loop over all voxels that are covered by the stencil. So we use the stencil's properties to perform a double loop and compute the array indices.</p>
+			</div>
+			
+			<pre translate="no">	public void Apply <mark>(VoxelStencil stencil)</mark> {
+		<mark>int xStart = stencil.XStart;</mark>
+		<mark>int xEnd = stencil.XEnd;</mark>
+		<mark>int yStart = stencil.YStart;</mark>
+		<mark>int yEnd = stencil.YEnd;</mark>
+
+		<mark>for (int y = yStart; y &lt;= yEnd; y++) {</mark>
+			<mark>int i = y * resolution + xStart;</mark>
+			<mark>for (int x = xStart; x &lt;= xEnd; x++, i++) {</mark>
+				voxels[<mark>i</mark>] = stencil.Apply(x, y);
+			<mark>}</mark>
+		<mark>}</mark>
+		SetVoxelColors();
+	}</pre>
+			
+			<div class="instructions">
+				<p>This seems to work, but only when we stay in the center of individual voxel grids, because otherwise we go out of bounds. We have to cut off the area that falls outside the voxel grid.</p>
+			</div>
+			
+			<pre translate="no">		int xStart = stencil.XStart;
+		<mark>if (xStart &lt; 0) {</mark>
+			<mark>xStart = 0;</mark>
+		<mark>}</mark>
+		int xEnd = stencil.XEnd;
+		<mark>if (xEnd >= resolution) {</mark>
+			<mark>xEnd = resolution - 1;</mark>
+		<mark>}</mark>
+		int yStart = stencil.YStart;
+		<mark>if (yStart &lt; 0) {</mark>
+			<mark>yStart = 0;</mark>
+		<mark>}</mark>
+		int yEnd = stencil.YEnd;
+		<mark>if (yEnd >= resolution) {</mark>
+			<mark>yEnd = resolution - 1;</mark>
+		<mark>}</mark></pre>
+			
+			<figure>
+				<img src="02-02-chunked.png" width="280" height="280">
+				<figcaption>Radius 1 stencil produces unexpected shapes.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We no longer get errors, but we get unexpected results when using a nonzero radius. This happens because we're currently only applying the stencil to the voxel grid that contains its center. So the stencil gets cut off by chunk boundaries.</p>
+				<p>To fix this, we basically have to do the same thing in <code>VoxelMap.EditVoxels</code> as we did in <code>VoxelGrid.Apply</code>. Instead of looping over covered voxels, we have to loop over covered chunks. So we define a voxel area and convert it into chunk bounds, then loop over those chunks. We also have to reset the stencil's center so it matches each chunk's local coordinates.</p>
+			</div>
+			
+			<pre translate="no">	private void EditVoxels (Vector3 point) {
+		int centerX = (int)((point.x + halfSize) / voxelSize);
+		int centerY = (int)((point.y + halfSize) / voxelSize);
+
+		<mark>int xStart = (centerX - radiusIndex) / voxelResolution;</mark>
+		<mark>if (xStart &lt; 0) {</mark>
+			<mark>xStart = 0;</mark>
+		<mark>}</mark>
+		<mark>int xEnd = (centerX + radiusIndex) / voxelResolution;</mark>
+		<mark>if (xEnd >= chunkResolution) {</mark>
+			<mark>xEnd = chunkResolution - 1;</mark>
+		<mark>}</mark>
+		<mark>int yStart = (centerY - radiusIndex) / voxelResolution;</mark>
+		<mark>if (yStart &lt; 0) {</mark>
+			<mark>yStart = 0;</mark>
+		<mark>}</mark>
+		<mark>int yEnd = (centerY + radiusIndex) / voxelResolution;</mark>
+		<mark>if (yEnd >= chunkResolution) {</mark>
+			<mark>yEnd = chunkResolution - 1;</mark>
+		<mark>}</mark>
+
+		VoxelStencil activeStencil = new VoxelStencil();
+		activeStencil.Initialize(fillTypeIndex == 0, radiusIndex);
+
+		<mark>int voxelYOffset = yStart * voxelResolution;</mark>
+		<mark>for (int y = yStart; y &lt;= yEnd; y++) {</mark>
+			<mark>int i = y * chunkResolution + xStart;</mark>
+			<mark>int voxelXOffset = xStart * voxelResolution;</mark>
+			<mark>for (int x = xStart; x &lt;= xEnd; x++, i++) {</mark>
+				activeStencil.SetCenter(centerX <mark>- voxelXOffset</mark>, centerY <mark>- voxelYOffset</mark>);
+				chunks[<mark>i</mark>].Apply(activeStencil);
+				<mark>voxelXOffset += voxelResolution;</mark>
+			<mark>}</mark>
+			<mark>voxelYOffset += voxelResolution;</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<figure>
+				<img src="02-02-correct.png" width="280" height="280">
+				<figcaption>Stencils working across chunks.</figcaption>
+			</figure>
+			
+			<h3>Adding a Circular Stencil</h3>
+			
+			<div class="instructions">
+				<p>Our current stencil is square, but that's not the only possible shape. Let's add the possibility to choose between a square and a circular stencil.</p>
+				<p>To easily support different stencils, we'll use inheritance. <code>VoxelStencil</code> will be the base class. First, make its fields protected instead of private, so subclasses can access them. Also declare its methods as virtual, so subclasses can override them if needed.</p>
+			</div>
+			
+			<pre translate="no">	<mark>protected</mark> bool fillType;
+
+	<mark>protected</mark> int centerX, centerY, radius;
+
+	public <mark>virtual</mark> void Initialize (bool fillType, int radius) {
+		this.fillType = fillType;
+		this.radius = radius;
+	}
+
+	public <mark>virtual</mark> void SetCenter (int x, int y) {
+		centerX = x;
+		centerY = y;
+	}
+
+	public <mark>virtual</mark> bool Apply (int x, int y) {
+		return fillType;
+	}</pre>
+			
+			<div class="instructions">
+				<p>Because a circular stencil won't touch all voxels covered by its rectangular bounds, we need to way to not change a voxel. We can do so by passing the original voxel value to the stencil's <code>Apply</code> method, so let's add it to the parameter list.</p>
+			</div>
+			
+			<pre translate="no">	public virtual bool Apply (int x, int y<mark>, bool voxel</mark>) {
+		return fillType;
+	}</pre>
+			
+			<div class="instructions">
+				<p>Of course we now have to pass along the voxel in <code>VoxelGrid.Apply</code>.</p>
+			</div>
+			
+			<pre translate="no">				voxels[i] = stencil.Apply(x, y<mark>, voxels[i]</mark>);</pre>
+			
+			<div class="instructions">
+				<p>We are now ready to add a new stencil class. We'll name it <code>VoxelStencilCircle</code>. To determine whether a voxel is inside the circle we can compare square radiuses. So let's override <code>Initialize</code> to store a precomputed square radius. Then inside <code>Apply</code> we check if the coordinates fall inside the circle. If so, we return the stencil's fill type, otherwise we return the original value.</p>
+			</div>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+
+<mark>public class VoxelStencilCircle : VoxelStencil {</mark>
+	
+	<mark>private int sqrRadius;</mark>
+	
+	<mark>public override void Initialize (bool fillType, int radius) {</mark>
+		<mark>base.Initialize (fillType, radius);</mark>
+		<mark>sqrRadius = radius * radius;</mark>
+	<mark>}</mark>
+	
+	<mark>public override bool Apply (int x, int y, bool voxel) {</mark>
+		<mark>x -= centerX;</mark>
+		<mark>y -= centerY;</mark>
+		<mark>if (x * x + y * y &lt;= sqrRadius) {</mark>
+			<mark>return fillType;</mark>
+		<mark>}</mark>
+		<mark>return voxel;</mark>
+	<mark>}</mark>
+<mark>}</mark></pre>
+			
+			<figure>
+				<img src="02-03-radius.png" width="200" height="200">
+				<figcaption>Using the Pythagorean theorem to determine inclusion.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Now we have to add a new configuration option to our UI.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private static string[] stencilNames = {"Square", "Circle"};</mark>
+	
+	private int fillTypeIndex, radiusIndex<mark>, stencilIndex;</mark>
+	
+	private void OnGUI () {
+		GUILayout.BeginArea(new Rect(4f, 4f, 150f, 500f));
+		GUILayout.Label("Fill Type");
+		fillTypeIndex = GUILayout.SelectionGrid(fillTypeIndex, fillTypeNames, 2);
+		GUILayout.Label("Radius");
+		radiusIndex = GUILayout.SelectionGrid(radiusIndex, radiusNames, 6);
+		<mark>GUILayout.Label("Stencil");</mark>
+		<mark>stencilIndex = GUILayout.SelectionGrid(stencilIndex, stencilNames, 2);</mark>
+		GUILayout.EndArea();
+	}
+</pre>
+			
+			<figure>
+				<img src="02-03-stencils.png" width="160" height="146">
+				<figcaption>Pick your stencil.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>And instead of creating a new stencil instance each time, we store an instance of each in an array.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private VoxelStencil[] stencils = {</mark>
+		<mark>new VoxelStencil(),</mark>
+		<mark>new VoxelStencilCircle()</mark>
+	<mark>};</mark></pre>
+			
+			<div class="instructions">
+				<p>So in <code>EditVoxels</code> we can use the currently selected one.</p>
+			</div>
+			
+			<pre translate="no">		VoxelStencil activeStencil = <mark>stencils[stencilIndex]</mark>;</pre>
+			
+			<div class="instructions">
+				<p>And now we can draw blocky circles!</p>
+			</div>
+			
+			<figure>
+				<img src="02-03-circles.png" width="280" height="280">
+				<figcaption>Playing with circle stencils.</figcaption>
+			</figure>
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			<h2>Marching the Squares</h2>
+			
+			<div class="instructions">
+				<p>So far we've been using individual quads to show a blocky grid. This is fine in some situations, but it is very useful to be able to produce a single mesh per grid chunk.</p>
+				<p>As the voxels are either filled or empty, the transition between those two states happens somewhere in between the voxels. To represent this with a mesh, we need to place triangles in the square areas between voxels. These areas are usually known as cells. You can see these square when you reduce the voxel quads to small dots. As they provide a handy visual aid, we'll keep them even after adding the mesh. To keep the dots visible, put them a bit closer to the camera.</p>
+			</div>
+			
+			<pre translate="no">		o.transform.localPosition = new Vector3((x + 0.5f) * voxelSize, (y + 0.5f) * voxelSize<mark>, -0.01f</mark>);
+		o.transform.localScale = Vector3.one * voxelSize * <mark>0.1f</mark>;</pre>
+			
+			<figure>
+				<img src="03-00-voxels.png" width="280" height="280">
+				<figcaption>A grid of squares that have voxels at their corners.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Recalling how the full-size quads filled the grid previously, you can work out that there were sixteen different ways that the square areas could be filled. If you then filter out patterns that are rotated version of each other together, you end up with six groups.</p>
+			</div>
+			
+			<figure>
+				<img src="03-00-squares.png" width="436" height="177">
+				<figcaption>Six ways to to fill the cells, ignoring rotation.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We're going to use the Marching Squares algorithm to triangulate these squares. We will reproduce the configurations that we discovered above, but we'll directly connect the square edges instead of going through the center. We're basically taking shortcuts along diagonals. This is known as primal contouring, while the alternative is dual contouring.</p>
+				<p>We still have the same six group types, but one of them is now ambiguous. When there are two filled voxels that both share empty neighbors, do we connect them diagonally or disconnect them? Neither option is better than the other, so let's just pick one and be consistent about it. I choose to keep them disconnected.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-primal-dual" id="q-primal-dual">What does primal and dual mean?</a></li>
+				</ul>
+			</aside>
+			
+			<figure>
+				<img src="03-00-marching-squares.png" width="436" height="177">
+				<figcaption>Marching Squares cell configurations, including both ambiguous cases.</figcaption>
+			</figure>
+			
+			<h3>Preparing for Triangulation</h3>
+			
+			<div class="instructions">
+				<p>Before we start with our mesh, first create simple flat shader that requires no uv and normal data, so we don't have to worry about that. Here's an adjusted default surface shader that takes care of this. I removed the texture, injected a fixed normal, and added a color property. The dummy is needed to prevent a compiler error.</p>
+			</div>
+			
+			<pre translate="no">Shader "Custom/2D Flat" {
+	Properties {
+		<mark>_Color ("Color", Color) = (1,1,1,1)</mark>
+	}
+	SubShader {
+		Tags { "RenderType"="Opaque" }
+		LOD 200
+		
+		CGPROGRAM
+		#pragma surface surf Lambert <mark>vertex:vert</mark>
+		
+		<mark>fixed4 _Color;</mark>
+
+		struct Input {
+			<mark>float dummy;</mark>
+		};
+		
+		<mark>void vert (inout appdata_full v) {</mark>
+			<mark>v.normal = float3(0, 0, -1);</mark>
+		<mark>}</mark>
+
+		void surf (Input IN, inout SurfaceOutput o) {
+			<mark>o.Albedo = _Color.rgb;</mark>
+		}
+		ENDCG
+	} 
+	FallBack "Diffuse"
+}</pre>
+			
+			<div class="instructions">
+				<p>Add a <code>MeshFilter</code> and <code>MeshRenderer</code> component to the <i>Voxel Grid</i> prefab, then create a new material that uses the custom shader and assign it to the prefab.</p>
+			</div>
+			
+			<figure>
+				<img src="03-01-mesh.png" width="554" height="210">
+				<figcaption>Preparing for triangulation.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Next, <code>VoxelGrid</code> needs a <code>Mesh</code> variable. We also need to accumulate vertices and triangle data somehow. Because we don't know ahead of time how many vertices and triangles will be generated, let's add two list variables so we don't have to worry about size limits.</p>
+			</div>
+			
+			<pre translate="no">using UnityEngine;
+<mark>using System.Collections.Generic;</mark>
+
+[SelectionBase]
+public class VoxelGrid : MonoBehaviour {
+
+	<mark>private Mesh mesh;</mark>
+
+	<mark>private List&lt;Vector3> vertices;</mark>
+	<mark>private List&lt;int> triangles</mark>
+	
+	&hellip;
+}</pre>
+			
+			<div class="instructions">
+				<p>Now we are no longer just setting voxel colors. Replace the call to <code>SetVoxelColors</code> at the end of <code>Initialize</code> with the initialization of our mesh data and a call to a new <code>Refresh</code> method. Also replace the call to <code>SetVoxelColors</code> in <code>Apply</code> with the invocation of <code>Refresh</code>.</p>
+			</div>
+			
+			<pre translate="no">	public void Initialize (int resolution, float size) {
+		&hellip;
+
+		<mark>GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();</mark>
+		<mark>mesh.name = "VoxelGrid Mesh";</mark>
+		<mark>vertices = new List&lt;Vector3>();</mark>
+		<mark>triangles = new List&lt;int>();</mark>
+		<mark>Refresh();</mark>
+	}
+	
+	public void Apply (VoxelStencil stencil) {
+		&hellip;
+		<mark>Refresh();</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>Refreshing now entails both setting the old colors and a new triangulation, for which we add a placeholder method.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void Refresh () {</mark>
+		SetVoxelColors();
+		<mark>Triangulate();</mark>
+	<mark>}</mark>
+
+	<mark>private void Triangulate () {</mark>
+	<mark>}</mark></pre>
+			
+			<h3>Adding a Voxel Class</h3>
+			
+			<div class="instructions">
+				<p>We will need to place vertices at voxel positions and halfway along the edge between two voxels. We could compute these positions each time we need to position a vertex, but it's more convenient to precompute and store them, so let's do that.</p>
+				<p>Storing voxel positions is easy, as we already compute those. We could either store the edge positions separately, or along with the voxel data. If we consider a voxel to define the bottom-left corner of a cell, then it is adjacent to the bottom and left edges of that cell as well. As this is true for all voxels, we can store these two edge positions along with the voxel position. This would mean that the rightmost and topmost voxels have edge data that's poking outside the grid, but we'll worry about that later.</p>
+			</div>
+			
+			<figure>
+				<img src="03-02-voxel-data.png" width="250" height="250">
+				<figcaption>Storing voxel and edge positions together.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>To store this data in a convenient way, let's upgrade our voxel booleans into full-fledged objects. Add a new <code>Voxel</code> class that contains the boolean voxel state, its position, and the edge positions for the X and Y directions. Also mark the class as serializable, so the voxel data can survive code compilation while Unity is in play mode.</p>
+			</div>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+<mark>using System;</mark>
+
+<mark>[Serializable]</mark>
+<mark>public class Voxel {</mark>
+
+	<mark>public bool state;</mark>
+
+	<mark>public Vector2 position, xEdgePosition, yEdgePosition;</mark>
+<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Give it a constructor method in which it calculates its positions values. It needs to know its coordinates and size to do so, though we don't need to store them.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public Voxel (int x, int y, float size) {</mark>
+		<mark>position.x = (x + 0.5f) * size;</mark>
+		<mark>position.y = (y + 0.5f) * size;</mark>
+
+		<mark>xEdgePosition = position;</mark>
+		<mark>xEdgePosition.x += size * 0.5f;</mark>
+		<mark>yEdgePosition = position;</mark>
+		<mark>yEdgePosition.y += size * 0.5f;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now we need need to modify <code>VoxelGrid</code> a bit. Change the voxel array's type, create new voxel instances, and access the voxel's state variable, instead of just working with booleans.</p>
+			</div>
+			
+			<pre translate="no">	private <mark>Voxel</mark>[] voxels;
+	
+	public void Initialize (int resolution, float size) {
+		this.resolution = resolution;
+		voxelSize = size / resolution;
+		voxels = new <mark>Voxel</mark>[resolution * resolution];
+		&hellip;
+	}
+	
+	private void CreateVoxel (int i, int x, int y) {
+		&hellip;
+		<mark>voxels[i] = new Voxel(x, y, voxelSize);</mark>
+	}
+	
+	private void SetVoxelColors () {
+		for (int i = 0; i &lt; voxels.Length; i++) {
+			voxelMaterials[i].color = voxels[i]<mark>.state</mark> ? Color.black : Color.white;
+		}
+	}
+	
+	public void Apply (VoxelStencil stencil) {
+		&hellip;
+				voxels[i]<mark>.state</mark> = stencil.Apply(x, y, voxels[i]<mark>.state</mark>);
+		&hellip;
+	}</pre>
+			
+			<h3>Triangulating</h3>
+			
+			<div class="instructions">
+				<p>It is now time to fill in the <code>Triangulate</code> method. We start by clearing the old data, then triangulate all cell rows, then assign new vertices and triangles to the mesh.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-temporary-arrays" id="q-temporary-arrays">Doesn't that create temporary arrays?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	private void Triangulate () {
+		<mark>vertices.Clear();</mark>
+		<mark>triangles.Clear();</mark>
+		<mark>mesh.Clear();</mark>
+
+		<mark>TriangulateCellRows();</mark>
+
+		<mark>mesh.vertices = vertices.ToArray();</mark>
+		<mark>mesh.triangles = triangles.ToArray();</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>Because cells sit between voxels, the cell resolution of a grid is one lower than its voxel resolution. That means our <code>TriangulateCellRows</code> method must perform a double loop one step shorter than for voxels, as it triangulates each cell.</p>
+				<p>As cells are identified by their lower-left voxel corner, we have to keep track of the voxel index. Also, because we're skipping the last voxel each row, we have to increase the index one more time per row, so we increment it in both loops.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void TriangulateCellRows () {</mark>
+		<mark>int cells = resolution - 1;</mark>
+		<mark>for (int i = 0, y = 0; y &lt; cells; y++, i++) {</mark>
+			<mark>for (int x = 0; x &lt; cells; x++, i++) {</mark>
+				<mark>TriangulateCell();</mark>
+			<mark>}</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>A cell is defined by its four corner voxels, so we have to provide them to <code>TriangulateCell</code>. Let's order them just in the same way the entire voxel grid is ordered, first along X, then along Y.</p>
+			</div>
+			
+			<figure>
+				<img src="03-03-cell-corners.png" width="251" height="171">
+				<figcaption>Cell corners, ordered like a 1x1 voxel grid.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>The A voxel is simply the voxel with the current index. The B voxel is one step further. The C voxel is on the next row, so we have to add the resolution to the index. And the D voxel is one step further than C.</p>
+			</div>
+			
+			<pre translate="no">	private void TriangulateCellRows () {
+		int cells = resolution - 1;
+		for (int i = 0, y = 0; y &lt; cells; y++, i++) {
+			for (int x = 0; x &lt; cells; x++, i++) {
+				TriangulateCell(
+					<mark>voxels[i],</mark>
+					<mark>voxels[i + 1],</mark>
+					<mark>voxels[i + resolution],</mark>
+					<mark>voxels[i + resolution + 1]</mark>);
+			}
+		}
+	}
+
+	<mark>private void TriangulateCell (Voxel a, Voxel b, Voxel c, Voxel d) {</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p><code>TriangulateCell</code> now needs to figure out the configuration of the cell's corners. We can identify the sixteen possible cases by assigning numbers to corners and combining them like bit masks. We assign the first bit to A, which is the number 1. The second bit goes to B, so its number is 2. C gets the third bit, which makes it 4. And D has the fourth bit, being 8.</p>
+			</div>
+			
+			<figure>
+				<img src="03-03-corner-bits.png" width="251" height="171">
+				<figcaption>Corners with their bits and numbers.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>If we combine the numbers of filled corners using the binary OR operator, we end up with a number in the 0&ndash;15 range. This number tells us which of the sixteen possible types our cell has.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-add" id="q-add">Can't you just add the numbers?</a></li>
+				</ul>
+			</aside>
+				
+
+			<pre translate="no">		<mark>int cellType = 0;</mark>
+		<mark>if (a.state) {</mark>
+			<mark>cellType |= 1;</mark>
+		<mark>}</mark>
+		<mark>if (b.state) {</mark>
+			<mark>cellType |= 2;</mark>
+		<mark>}</mark>
+		<mark>if (c.state) {</mark>
+			<mark>cellType |= 4;</mark>
+		<mark>}</mark>
+		<mark>if (d.state) {</mark>
+			<mark>cellType |= 8;</mark>
+		<mark>}</mark></pre>
+			
+			<figure>
+				<img src="03-03-cell-cases.png" width="437" height="183">
+				<figcaption>Sixteen possible cell types, rotations grouped.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Now we have to perform a different triangulation for each of the sixteen cases. We'll use a switch statement pick the right one.</p>
+				<p>First up is case 0, which is trivial as the cell is empty.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-switch" id="q-switch">How does a <code>switch</code> work?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">		<mark>switch (cellType) {</mark>
+		<mark>case 0:</mark>
+			<mark>return;</mark>
+		<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Case 1 requires placing one triangle at the bottom left of the cell, between A's position and its adjacent edges. Make sure to supply the points in a clockwise order, so the triangle will face the camera.</p>
+			</div>
+			
+			<pre translate="no">		switch (cellType) {
+		case 0:
+			return;
+		<mark>case 1:</mark>
+			<mark>AddTriangle(a.position, a.yEdgePosition, a.xEdgePosition);</mark>
+			<mark>break;</mark>
+		}</pre>
+			
+			<div class="instructions">
+				<p>We just assumed that we had an <code>AddTriangle</code> method, but we didn't so we have to create it now. First fetch the current vertex count, which equals the index of the next vertex to be added. Then just add the vertices to the vertex list and their indices to the triangle list.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void AddTriangle (Vector3 a, Vector3 b, Vector3 c) {</mark>
+		<mark>int vertexIndex = vertices.Count;</mark>
+		<mark>vertices.Add(a);</mark>
+		<mark>vertices.Add(b);</mark>
+		<mark>vertices.Add(c);</mark>
+		<mark>triangles.Add(vertexIndex);</mark>
+		<mark>triangles.Add(vertexIndex + 1);</mark>
+		<mark>triangles.Add(vertexIndex + 2);</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Try it out somewhere in the middle of a chunk. Filling a voxel should produce a single triangle. It won't seem to work right along chunk edges, but don't worry about that just yet.</p>
+			</div>
+			
+			<figure>
+				<img src="03-03-case-1.png" width="150" height="150">
+				<figcaption>Case 1 covered.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>The other three single-corner cases work the same way, they just require different points. I've grouped similar cases together here, but you can also sort them numerically.</p>
+			</div>
+			
+			<pre translate="no">		<mark>case 2:</mark>
+			<mark>AddTriangle(b.position, a.xEdgePosition, b.yEdgePosition);</mark>
+			<mark>break;</mark>
+		<mark>case 4:</mark>
+			<mark>AddTriangle(c.position, c.xEdgePosition, a.yEdgePosition);</mark>
+			<mark>break;</mark>
+		<mark>case 8:</mark>
+			<mark>AddTriangle(d.position, b.yEdgePosition, c.xEdgePosition);</mark>
+			<mark>break;</mark></pre>
+			
+			<figure>
+				<img src="03-03-case-1-2-4-8.png" width="290" height="220">
+				<figcaption>All single-corner cases.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Let's now take care of the cell types that contain rectangles. For that, we have to add a method for quads. It needs to insert four vertices and two triangles that share an edge and two vertices.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void AddQuad (Vector3 a, Vector3 b, Vector3 c, Vector3 d) {</mark>
+		<mark>int vertexIndex = vertices.Count;</mark>
+		<mark>vertices.Add(a);</mark>
+		<mark>vertices.Add(b);</mark>
+		<mark>vertices.Add(c);</mark>
+		<mark>vertices.Add(d);</mark>
+		<mark>triangles.Add(vertexIndex);</mark>
+		<mark>triangles.Add(vertexIndex + 1);</mark>
+		<mark>triangles.Add(vertexIndex + 2);</mark>
+		<mark>triangles.Add(vertexIndex);</mark>
+		<mark>triangles.Add(vertexIndex + 2);</mark>
+		<mark>triangles.Add(vertexIndex + 3);</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now we can support cases 3, 5, 10, 12, and 15.</p>
+			</div>
+			
+			<pre translate="no">		<mark>case 3:</mark>
+			<mark>AddQuad(a.position, a.yEdgePosition, b.yEdgePosition, b.position);</mark>
+			<mark>break;</mark>
+		<mark>case 5:</mark>
+			<mark>AddQuad(a.position, c.position, c.xEdgePosition, a.xEdgePosition);</mark>
+			<mark>break;</mark>
+		<mark>case 10:</mark>
+			<mark>AddQuad(a.xEdgePosition, c.xEdgePosition, d.position, b.position);</mark>
+			<mark>break;</mark>
+		<mark>case 12:</mark>
+			<mark>AddQuad(a.yEdgePosition, c.position, d.position, b.yEdgePosition);</mark>
+			<mark>break;</mark>
+		<mark>case 15:</mark>
+			<mark>AddQuad(a.position, c.position, d.position, b.position);</mark>
+			<mark>break;</mark></pre>
+			
+			<figure>
+				<img src="03-03-case-3-5-10-12-15.png" width="220" height="220">
+				<figcaption>All rectangles covered.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>The cases with three filled and one empty voxel each require a square with a single corner cut away. This is basically a pentagon that's stretched out of shape. A pentagon can be created with five vertices and three triangles that form a small fan.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void AddPentagon (Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 e) {</mark>
+		<mark>int vertexIndex = vertices.Count;</mark>
+		<mark>vertices.Add(a);</mark>
+		<mark>vertices.Add(b);</mark>
+		<mark>vertices.Add(c);</mark>
+		<mark>vertices.Add(d);</mark>
+		<mark>vertices.Add(e);</mark>
+		<mark>triangles.Add(vertexIndex);</mark>
+		<mark>triangles.Add(vertexIndex + 1);</mark>
+		<mark>triangles.Add(vertexIndex + 2);</mark>
+		<mark>triangles.Add(vertexIndex);</mark>
+		<mark>triangles.Add(vertexIndex + 2);</mark>
+		<mark>triangles.Add(vertexIndex + 3);</mark>
+		<mark>triangles.Add(vertexIndex);</mark>
+		<mark>triangles.Add(vertexIndex + 3);</mark>
+		<mark>triangles.Add(vertexIndex + 4);</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>This allows for cases 7, 11, 13, and 14. I decided to center the fans on the corner opposite to the empty one.</p>
+			</div>
+			
+			<pre translate="no">		<mark>case 7:</mark>
+			<mark>AddPentagon(a.position, c.position, c.xEdgePosition, b.yEdgePosition, b.position);</mark>
+			<mark>break;</mark>
+		<mark>case 11:</mark>
+			<mark>AddPentagon(b.position, a.position, a.yEdgePosition, c.xEdgePosition, d.position);</mark>
+			<mark>break;</mark>
+		<mark>case 13:</mark>
+			<mark>AddPentagon(c.position, d.position, b.yEdgePosition, a.xEdgePosition, a.position);</mark>
+			<mark>break;</mark>
+		<mark>case 14:</mark>
+			<mark>AddPentagon(d.position, b.position, a.xEdgePosition, a.yEdgePosition, c.position);</mark>
+			<mark>break;</mark>
+		<mark>}</mark></pre>
+			
+			<figure>
+				<img src="03-03-case-7-11-13-14.png" width="220" height="220">
+				<figcaption>Four pentagonal cases.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Only the two opposite-corner cases are still missing, 6 and 9. I decided to disconnect them, so they require two triangles each, which you can copy from the single-triangle cases. Connecting them would've required a hexagon instead.</p>
+			</div>
+			
+			<pre translate="no">		<mark>case 6:</mark>
+			<mark>AddTriangle(b.position, a.xEdgePosition, b.yEdgePosition);</mark>
+			<mark>AddTriangle(c.position, c.xEdgePosition, a.yEdgePosition);</mark>
+			<mark>break;</mark>
+		<mark>case 9:</mark>
+			<mark>AddTriangle(a.position, a.yEdgePosition, a.xEdgePosition);</mark>
+			<mark>AddTriangle(d.position, b.yEdgePosition, c.xEdgePosition);</mark>
+			<mark>break;</mark></pre>
+			
+			<figure>
+				<img src="03-03-case-6-9.png" width="220" height="220">
+				<figcaption>No connections along diagonals.</figcaption>
+			</figure>
+			
+			<h3>Connecting Chunks</h3>
+			
+			<div class="instructions">
+				<p>We are now able to triangulate surfaces around filled voxels, but there are gaps between chunks. These seams consist of cells whose corners belong to multiple different voxel grids.</p>
+			</div>
+			
+			<figure>
+				<img src="03-04-disconnected.png" width="280" height="280">
+				<figcaption>Chunks are disconnected.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Because voxels contain the positions of their right and top edge, it makes sense that a <code>VoxelGrid</code> takes care of triangulating the gap cells along its right and top border. To do so, it needs to fetch voxel data from its neighbors. So let's store references to those neighbors. We need the right and top neighbor, and also the top-right neighbor for where two seams cross.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public VoxelGrid xNeighbor, yNeighbor, xyNeighbor;</mark></pre>
+			
+			<div class="instructions">
+				<p>We have to establish these relationships when <code>VoxelMap</code> creates the chunks. When creating a new chunk, if it's not the first of a row, then it's the X neighbor of the previous chunk. Likewise along the Y direction, and for the diagonal relationship.</p>
+			</div>
+			
+			<pre translate="no">	private void CreateChunk (int i, int x, int y) {
+		VoxelGrid chunk = Instantiate(voxelGridPrefab) as VoxelGrid;
+		chunk.Initialize(voxelResolution, chunkSize);
+		chunk.transform.parent = transform;
+		chunk.transform.localPosition = new Vector3(x * chunkSize - halfSize, y * chunkSize - halfSize);
+		chunks[i] = chunk;
+		<mark>if (x > 0) {</mark>
+			<mark>chunks[i - 1].xNeighbor = chunk;</mark>
+		<mark>}</mark>
+		<mark>if (y > 0) {</mark>
+			<mark>chunks[i - chunkResolution].yNeighbor = chunk;</mark>
+			<mark>if (x > 0) {</mark>
+				<mark>chunks[i - chunkResolution - 1].xyNeighbor = chunk;</mark>
+			<mark>}</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>So now chunks depend on their right and top neighbors when triangulating. This means that we have to reverse our chunk loop in <code>EditVoxels</code>. If we didn't, the bottom-left chunks would triangulate using the current voxel states of their neighbors, then those neighbors would change their voxels states and triangulate as well, leading to wrong connections. Going from top-right to bottom-left prevents this.</p>
+			</div>
+			
+			<pre translate="no">		int voxelYOffset = <mark>yEnd</mark> * voxelResolution;
+		for (int y = <mark>yEnd</mark>; y <mark>>= yStart</mark>; <mark>y--</mark>) {
+			int i = y * chunkResolution + <mark>xEnd</mark>;
+			int voxelXOffset = <mark>xEnd</mark> * voxelResolution;
+			for (int x = <mark>xEnd</mark>; x <mark>>= xStart</mark>; <mark>x--</mark>, <mark>i--</mark>) {
+				activeStencil.SetCenter(centerX - voxelXOffset, centerY - voxelYOffset);
+				chunks[i].Apply(activeStencil);
+				voxelXOffset <mark>-=</mark> voxelResolution;
+			}
+			voxelYOffset <mark>-=</mark> voxelResolution;
+		}
+</pre>
+			
+			<h3>Adding Gap Cells Along X</h3>
+			
+			<div class="instructions">
+				<p>It's time to fill those gaps! First consider the single gap cell along X at the end of each row. We need to know two voxels from the X neighbor to triangulate it.</p>
+				<p>We could fetch the two required voxels again for each row, but most of the time we end up needing the same voxel twice, once as corner D and once as corner B.</p>
+			</div>
+			
+			<figure>
+				<img src="03-05-gap-cell.png" width="393" height="200">
+				<figcaption>Adding a gap cell at the end of each row, fetching neighbor voxels.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We actually cannot directly use the neighbor's voxel data, we have to translate the positions from one local space to the other. To keep track of that, add some dummy voxel objects to <code>VoxelGrid</code>. Let's remember one for the X and Y directions each. Also add a third one to help transport the voxel data along rows.</p>
+				<p>To perform the position conversions, the grid now also has to remember its size.</p>
+			</div>
+			
+			<pre translate="no">	private float voxelSize<mark>, gridSize</mark>;
+	
+	<mark>private Voxel dummyX, dummyY, dummyT;</mark>
+	
+	public void Initialize (int resolution, float size) {
+		this.resolution = resolution;
+		<mark>gridSize = size;</mark>
+		voxelSize = size / resolution;
+		voxels = new Voxel[resolution * resolution];
+		voxelMaterials = new Material[voxels.Length];
+
+		<mark>dummyX = new Voxel();</mark>
+		<mark>dummyY = new Voxel();</mark>
+		<mark>dummyT = new Voxel();</mark>
+		
+		&hellip;
+	}</pre>
+			
+			<div class="instructions">
+				<p>We don't need any initialization for dummy voxels, we didn't provide any arguments when invoking their constructor. To support this, we have to add an empty constructor to <code>Voxel</code>.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public Voxel () {}</mark></pre>
+			
+			<div class="instructions">
+				<p>Let's also have it take care off becoming a dummy of another voxel. For that, add a method specifically for becoming a dummy along the X direction, which takes care of applying some offset to the X coordinates. We will always use the grid's size as the offset, but voxels don't have this information, so we provide it as an argument when calling the method later.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public void BecomeXDummyOf (Voxel voxel, float offset) {</mark>
+		<mark>state = voxel.state;</mark>
+		<mark>position = voxel.position;</mark>
+		<mark>xEdgePosition = voxel.xEdgePosition;</mark>
+		<mark>yEdgePosition = voxel.yEdgePosition;</mark>
+		<mark>position.x += offset;</mark>
+		<mark>xEdgePosition.x += offset;</mark>
+		<mark>yEdgePosition.x += offset;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now that we can create dummy voxels along X, start the whole triangulation process by grabbing the first dummy, if possible. That gives us corner B for the gap cell at the end of the first row.</p>
+			</div>
+			
+			<pre translate="no">	private void Triangulate () {
+		vertices.Clear();
+		triangles.Clear();
+		mesh.Clear();
+
+		<mark>if (xNeighbor != null) {</mark>
+			<mark>dummyX.BecomeXDummyOf(xNeighbor.voxels[0], gridSize);</mark>
+		<mark>}</mark>
+		TriangulateCellRows();
+
+		mesh.vertices = vertices.ToArray();
+		mesh.triangles = triangles.ToArray();
+	}</pre>
+			
+			<div class="instructions">
+				<p>So each time we finish a row, if there is an X neighbor, we triangulate a gap cell.</p>
+			</div>
+			
+			<pre translate="no">	private void TriangulateCellRows () {
+		int cells = resolution - 1;
+		for (int i = 0, y = 0; y &lt; cells; y++, i++) {
+			for (int x = 0; x &lt; cells; x++, i++) {
+				TriangulateCell(
+					voxels[i],
+					voxels[i + 1],
+					voxels[i + resolution],
+					voxels[i + resolution + 1]);
+			}
+			<mark>if (xNeighbor != null) {</mark>
+				<mark>TriangulateGapCell(i);</mark>
+			<mark>}</mark>
+		}
+	}</pre>
+			
+			<div class="instructions">
+				<p>When triangulating a cap cell, we know that <code>dummyX</code> contains our corner B. We also know that we're at the last voxel of a now, so the next one would be the first of the next row, which gives us the index for corner D in the neighboring grid.</p>
+				<p>But we must also make sure that <code>dummyX</code> becomes corner B for the next row's gap cell, which is the same as our current corner D. We can do this by swapping <code>dummyX</code> and <code>dummyT</code> and putting the new corner in <code>dummyB</code>. To not lose our object references, we have to use a third temporary variable while performing the swap.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void TriangulateGapCell (int i) {</mark>
+		<mark>Voxel dummySwap = dummyT;</mark>
+		<mark>dummySwap.BecomeXDummyOf(xNeighbor.voxels[i + 1], gridSize);</mark>
+		<mark>dummyT = dummyX;</mark>
+		<mark>dummyX = dummySwap;</mark>
+		<mark>TriangulateCell(voxels[i], dummyT, voxels[i + resolution], dummyX);</mark>
+	<mark>}</mark></pre>
+			
+			<figure>
+				<img src="03-05-x-connected.png" width="280" height="280">
+				<figcaption>Connected along X.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We now connect chunks horizontally, but unfortunately it doesn't always work. It goes wrong when the leftmost voxels of a chunk are edited, but the chunk to the left of that isn't touched. A simple fix is to add a one-voxel padding to the bottom and left sides when determining which chunks to update in <code>VoxelMap.EditVoxels</code>. This guarantees that chunks also re-triangulate when their gap cells have changed.</p>
+			</div>
+			
+			<pre translate="no">		int centerX = (int)((point.x + halfSize) / voxelSize);
+		int centerY = (int)((point.y + halfSize) / voxelSize);
+
+		int xStart = (centerX - radiusIndex <mark>- 1</mark>) / voxelResolution;
+		if (xStart &lt; 0) {
+			xStart = 0;
+		}
+		int xEnd = (centerX + radiusIndex) / voxelResolution;
+		if (xEnd >= chunkResolution) {
+			xEnd = chunkResolution - 1;
+		}
+		int yStart = (centerY - radiusIndex <mark>- 1</mark>) / voxelResolution;
+		if (yStart &lt; 0) {
+			yStart = 0;
+		}
+		int yEnd = (centerY + radiusIndex) / voxelResolution;
+		if (yEnd >= chunkResolution) {
+			yEnd = chunkResolution - 1;
+		}</pre>
+			
+			<h3>Adding Gap Cells Along Y</h3>
+			
+			<div class="instructions">
+				<p>We also have to add gap cells in the Y direction, but in this case we work through an entire gap row at once.</p>
+			</div>
+			
+			<figure>
+				<img src="03-06-gap-row.png" width="200" height="393">
+				<figcaption>Adding a gap row.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>First, add another become-dummy method to <code>Voxel</code>, which offsets in the Y direction.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public void BecomeYDummyOf (Voxel voxel, float offset) {</mark>
+		<mark>state = voxel.state;</mark>
+		<mark>position = voxel.position;</mark>
+		<mark>xEdgePosition = voxel.xEdgePosition;</mark>
+		<mark>yEdgePosition = voxel.yEdgePosition;</mark>
+		<mark>position.y += offset;</mark>
+		<mark>xEdgePosition.y += offset;</mark>
+		<mark>yEdgePosition.y += offset;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Then add a method to triangulate the gap row to <code>VoxelGrid</code>. It runs along the top row of voxels and the bottom row of its Y-neighbor, swapping between <code>dummyY</code> and <code>dummyT</code>.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void TriangulateGapRow () {</mark>
+		<mark>dummyY.BecomeYDummyOf(yNeighbor.voxels[0], gridSize);</mark>
+		<mark>int cells = resolution - 1;</mark>
+		<mark>int offset = cells * resolution;</mark>
+
+		<mark>for (int x = 0; x &lt; cells; x++) {</mark>
+			<mark>Voxel dummySwap = dummyT;</mark>
+			<mark>dummySwap.BecomeYDummyOf(yNeighbor.voxels[x + 1], gridSize);</mark>
+			<mark>dummyT = dummyY;</mark>
+			<mark>dummyY = dummySwap;</mark>
+			<mark>TriangulateCell(voxels[x + offset], voxels[x + offset + 1], dummyT, dummyY);</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>And of course invoke it in <code>Triangulate</code>, after all other rows have been done.</p>
+			</div>
+			
+		<pre translate="no">		if (xNeighbor != null) {
+			dummyX.BecomeXDummyOf(xNeighbor.voxels[0], gridSize);
+		}
+		TriangulateCellRows();
+		<mark>if (yNeighbor != null) {</mark>
+			<mark>TriangulateGapRow();</mark>
+		<mark>}</mark></pre>
+			
+			<figure>
+				<img src="03-06-y-connected.png" width="280" height="280">
+				<figcaption>Connecting along X and Y, but not diagonal.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>To fill the last gap, <code>Voxel</code> needs to support one more become-dummy method, which offsets in both directions.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public void BecomeXYDummyOf (Voxel voxel, float offset) {</mark>
+		<mark>state = voxel.state;</mark>
+		<mark>position = voxel.position;</mark>
+		<mark>xEdgePosition = voxel.xEdgePosition;</mark>
+		<mark>yEdgePosition = voxel.yEdgePosition;</mark>
+		<mark>position.x += offset;</mark>
+		<mark>position.y += offset;</mark>
+		<mark>xEdgePosition.x += offset;</mark>
+		<mark>xEdgePosition.y += offset;</mark>
+		<mark>yEdgePosition.x += offset;</mark>
+		<mark>yEdgePosition.y += offset;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>This allows us to add the last gap cell at the end of the gap row. This cell is special because each of its corners belongs to a different grid. Corner A is the last voxel of the chunk itself. Corner B was already put in <code>dummyX</code>, and corner C is stored in <code>dummyY</code>. Corner D is the first voxel of the diagonal neighbor, which we can store in <code>dummyT</code>.</p>
+			</div>
+			
+			<pre translate="no">	private void TriangulateGapRow () {
+		&hellip;
+
+		<mark>if (xNeighbor != null) {</mark>
+			<mark>dummyT.BecomeXYDummyOf(xyNeighbor.voxels[0], gridSize);</mark>
+			<mark>TriangulateCell(voxels[voxels.Length - 1], dummyX, dummyY, dummyT);</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<figure>
+				<img src="03-06-fully-connected.png" width="280" height="280">
+				<figcaption>Fully connected map.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>That does it! You now have a fully triangulated voxel map, even though it is partitioned into separate chunks, each taking care of its own mesh.</p>
+				<p>Of course the resulting surface is very angular, which is great if that's the style you're going for, but quite limiting otherwise. This is because we're working with binary voxel data. All we know is whether a voxel is filled or empty, which gives us very little to work with. Including more information allows far more variety. This is something we'll explore in <a href="../marching-squares-2/index.html">the next tutorial</a>.</p>
+				<p>Enjoyed the tutorial? <a href="https://www.patreon.com/catlikecoding">Help me make more by becoming a patron!</a></p>
+			</div>
+			
+			<aside class="share"></aside>
+			
+			<h2>Downloads</h2>
+
+			<dl>
+				<dt><a href="marching-squares-01.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Marching Squares', '01']);" target="_blank" download rel="nofollow">marching-squares-01.unitypackage</a></dt>
+				<dd>The project after Showing a Bitmap.</dd>
+				<dt><a href="marching-squares-02.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Marching Squares', '02']);" target="_blank" download rel="nofollow">marching-squares-02.unitypackage</a></dt>
+				<dd>The project after Stenciling.</dd>
+				<dt><a href="marching-squares-finished.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Marching Squares', 'Final']);" target="_blank" download rel="nofollow">marching-squares-finished.unitypackage</a></dt>
+				<dd>The finished project.</dd>
+			</dl>
+		</article>
+		
+		<dl class="questions-answers">
+			<dt><a href="index.html#q-voxel" id="a-voxel">Aren't voxels 3D?</a></dt>
+			<dd>
+				<p>Typically, yes. So what should our units of 2D data be named? You might argue that "pixel" is a better name. However, I've found that using "pixel" for anything but pure visual data often leads to confusion, while using "voxel" in a 2D context never does.</p>
+			</dd>
+			<dt><a href="index.html#q-boolean" id="a-boolean">Are booleans 1-bit?</a></dt>
+			<dd>
+				<p>Conceptually, a boolean value stores only one bit of data. However, computers don't operate on single bits. Typically the smallest quantity of data is a byte, which is eight bits. When used as a variable it actually takes up four bytes, just like an integer.</p>
+				<p>Don't worry about this though. We're using booleans here for simplicity, not memory efficiency.</p>
+			</dd>
+			<dt><a href="index.html#q-3d-collider" id="a-3d-collider">Why a 3D collider?</a></dt>
+			<dd>
+				<p>By using a 3D collider and performing ray-cast in 3D, we can place our map anywhere in 3D space. We can move, rotate, and even scale it however we want and editing will keep working. This way you could easily integrate it in a 3D game world. Of course a strictly 2D input method works fine too at this point. All that matters now is being able to detect which voxel you're hitting.</p>
+			</dd>
+			<dt><a href="index.html#q-material-duplicates" id="a-material-duplicates">Won't this duplicate materials?</a></dt>
+			<dd>
+				<p>Indeed, retrieving the individual materials from the quad instances means that they no longer share a single material. An individual material is created as soon as you try to access it. As they have separate materials now, dynamic batching no longer works and each quad requires its own draw call. While you could work around this by using material property blocks, it's not worth it for this tutorial. The quads are a visual aid only.</p>
+			</dd>
+			<dt><a href="index.html#q-set-all-colors" id="a-set-all-colors">Why set all colors?</a></dt>
+			<dd>
+				<p>As we're only changing a single voxel, why not only change that voxel's material? Because soon we'll be editing multiple voxels at once. By always refreshing the entire grid, it'll always work, no matter how intricate our edits become.</p>
+			</dd>
+			<dt><a href="index.html#q-ongui" id="a-ongui">How does <code>OnGUI</code> work?</a></dt>
+			<dd>
+				<p>The <code>OnGUI</code> method is used by Unity to display simple UI overlays in the game view. It was the standard UI solution until the new game UI was released in Unity 4.6. It's still support, in fact the editor uses this UI system so it won't go away soon.</p>
+				<p>The two area methods are used to define an area in which Unity performs automatic layout for us. It's wide enough at 150 pixels, and its height is simply large enough to hold a bunch of controls.</p>
+				<p>The selection grid method uses our string array to show a collection of buttons. The first argument determines which option is currently selected, as an index. It returns the new selection index, which only changes when another option is clicked. The last argument controls how many options are shown per row. As we have two options it's simply set to two.</p>
+			</dd>
+			<dt><a href="index.html#q-primal-dual" id="a-primal-dual">What does primal and dual mean?</a></dt>
+			<dd>
+				<p>When generating contour shapes from voxel data, the primal method refers to way the original Marching Cubes and Squares algorithms work. The primal method places vertices along the cell edges and connects them inside the cell with faces, which means polygons. So vertices always lie on the cell border, and faces always lie fully inside the cell.</p>
+				<p>The dual method swaps this relationship. So vertices now always lie inside the cell, while the faces cross through the border, connecting the vertices of adjacent cells.</p>
+				<p>In general, for any abstract graph you can construct its dual graph by replacing its faces with points and its points with faces. This concept is known as "dual" because it is symmetrical. The dual of the dual of a graph is the same as the original graph. So designating one method as primal is just convenient.</p>
+			</dd>
+			<dt><a href="index.html#q-temporary-arrays" id="a-temporary-arrays">Doesn't that create temporary arrays?</a></dt>
+			<dd>
+				<p>Yes it does. Each time we triangulate, we have to convert the list data to arrays before passing it on to the mesh. These temporary arrays will then fill up memory until the garbage collector gets rid of them. The lists are very convenient to work with, but this is definitely a downside. If it becomes a problem, you have to switched to using arrays with a fixed length.</p>
+			</dd>
+			<dt><a href="index.html#q-add" id="a-add">Can't you just add the numbers?</a></dt>
+			<dd>
+				<p>Yes, that also works fine. I'm explicitly using binary OR operations because conceptually we're really performing bit manipulations here, not arithmetic.</p>
+			</dd>
+			<dt><a href="index.html#q-switch" id="a-switch">How does a <code>switch</code> work?</a></dt>
+			<dd>
+				<p>You can think of a <code>switch</code> block replacing a bunch of nested if-else blocks. In our case, we have a number and want to do something different for a fairly large range of specific values. That's the typical use case for a <code>switch</code>.</p>
+				<p>The <code>switch</code> block has a special syntax because it uses labels to indicate where to jump to. These <code>case</code> statements aren't indented because they aren't scope blocks, though many people prefer to indent an extra step anyway.</p>
+				<p>A special limitation is that each section must be terminated by either a <code>break</code> or a <code>return</code> statement. This explicit termination is required because you can perform some control flow tricks and end up going through multiple cases. Avoid using tricks though, keep your switches simple.</p>
+			</dd>
+		</dl>
+		
+		<footer></footer>
+		<script src="../../jquery.js"></script>
+		<script src="../../default.js"></script>
+	</body>
+</html>

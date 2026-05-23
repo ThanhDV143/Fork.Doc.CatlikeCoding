@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/custom-srp/lod-and-reflections/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/custom-srp/lod-and-reflections/tutorial-image.jpg">
+		<meta property="og:title" content="LOD and Reflections">
+		<meta property="og:description" content="A Unity Custom SRP tutorial about supporting level-of-detail and simple reflections.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>LOD and Reflections</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/custom-srp/lod-and-reflections/#article",
+				"headline": "LOD and Reflections",
+				"alternativeHeadline": "Adding Details",
+				"datePublished": "2020-03-30",
+				"dateModified": "2023-08-03",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Custom SRP tutorial about supporting level-of-detail and simple reflections",
+				"image": "https://catlikecoding.com/unity/tutorials/custom-srp/lod-and-reflections/tutorial-image.jpg",
+				"dependencies": "Unity 2022.3.5f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/custom-srp/", "name": "Custom SRP" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				CameraRenderer: 1,
+				CascadeBlendMode: 1,
+				CustomRenderPipeline: 1,
+				CustomRenderPipelineAsset: 1,
+				CustomShaderGUI: 1,
+				Directional: 1,
+				DirectionalShadowData: 1,
+				FilterMode: 1,
+				Lighting: 1,
+				MeshBall: 1,
+				PerObjectMaterialProperties: 1,
+				ShadowedDirLight: 1,
+				ShadowData: 1,
+				Shadows: 1,
+				ShadowMask: 1,
+				ShadowMode: 1,
+				ShadowSettings: 1,
+				TextureSize: 1
+			};
+			
+			var defaultCodeClass = "shader";
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../../scriptable-render-pipeline/reflections/index.html">Custom SRP</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>LOD and Reflections</h1>
+					<p>Adding Details</p>
+					<ul>
+						<li>Use LOD Groups.</li>
+						<li>Cross-Fade between LOD levels.</li>
+						<li>Reflect the environment by sampling a reflection probe.</li>
+						<li>Support optional Fresnel reflections.</li>
+					</ul>
+				</header>
+				
+				<p>This is the seventh part of a tutorial series about creating a <a href="../../scriptable-render-pipeline/reflections/index.html">custom scriptable render pipeline</a>. It cover level-of-detail hierarchies and simple reflections, which can add details to our scenes.</p>
+				
+				<p>This tutorial is made with Unity 2019.2.21f1 and upgraded to 2022.3.5f1.</p>
+								
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A bunch of LOD groups and reflection probes.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>LOD Groups</h2>
+					
+					<p>Many small objects add details to a scene and make it more interesting. However, details that are too small to cover multiple pixels degrade into indistinct noise. At those visual scales it's better to not render them, which also frees up the CPU and GPU to render more important things. We can also decide to cull such objects earlier, when they could still be distinguished. That improves performance even more, but causes things to suddenly pop in and out of existence based on their visual size. We could also add intermediate steps, switching to successively less-detailed visualizations before eventually completely culling an object. Unity makes it possible to do all these things by using LOD Groups.</p>
+					
+					<section>
+						<h3>LOD Group Component</h3>
+						
+						<p>You can add a level-of-detail group to a scene by creating an empty game object and adding a <code class="csharp">LODGroup</code> component to it. The default group defines four levels: LOD 0, LOD 1, LOD 2, and finally culled, which means that nothing gets rendered. The percentages represent thresholds for estimated visual size, relative to the display window dimensions. So LOD 0 is used for objects covering more than 60% of the window, typically considering the vertical dimension as that's the smallest.</p>
+						
+						<figure>
+							<img src="lod-groups/group-component.png" width="320" height="187">
+							<figcaption>Default LOD group component.</figcaption>
+						</figure>
+						
+						<p>However, the <em translate="no">Quality</em> project settings section contains a <em translate="no">LOD Bias</em> which scales these thresholds. It's set to 2 by default, which means it doubles the estimates visual size for this assessment. Thus LOD 0 ends up used for everything above 30% instead of only 60%. The component's inspector displays a warning when the bias is set to something other than 1. Besides that there's also a <em translate="no">Maximum LOD Level</em> option which can be used to limit the highest LOD level. For example if it were set to 1 then LOD 1 would also be used instead of LOD 0.</p>
+						
+						<p>The idea is that you make all game objects that visualize LOD levels children of the group object. For example, I used three colored spheres of the same size for the three LOD levels.</p>
+						
+						<figure>
+							<img src="lod-groups/lod-group-sphere.png" width="210" height="66">
+							<figcaption>LOD group containing three spheres.</figcaption>
+						</figure>
+						
+						<p>Each objects has to be assigned to the appropriate LOD level. You can do this by selecting a level block in the group component and then dragging the object onto its <em translate="no">Renderers</em> list, or by dropping it directly on a LOD level block.</p>
+						
+						<figure>
+							<img src="lod-groups/lod-renderers.png" width="320" height="176">
+							<figcaption>Renderers for LOD 0.</figcaption>
+						</figure>
+						
+						<p>Unity will automatically render the appropriate objects. Selecting a specific object in the editor will override this behavior, so you can see your selection in the scene. If you have a LOD group itself selected the editor will also indicate which LOD level is currently visible.</p>
+						
+						<figure>
+							<img src="lod-groups/rendering-lod-spheres.png" width="340" height="240">
+							<figcaption>Scene with LOD sphere prefab instances.</figcaption>
+						</figure>
+						
+						<p>Moving the camera around will change which LOD levels get used for each group. Alternatively, you can adjust the LOD bias to see the visualizations change while keeping everything else the same.</p>
+						
+						<figure>
+							<video width="340" height="240" controls loop muted>
+								<source src="lod-groups/adjusting-lod-bias.mp4" type="video/mp4">
+							</video>
+							<figcaption>Adjusting LOD bias.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Additive LOD Groups</h3>
+						
+						<p>Objects can be added to more than one LOD level. You can use this to add smaller details to higher levels while the same bigger objects are used for multiple levels. For example, I made a three-step pyramid from stacked flattened cubes. The base cube is part of all three levels. The middle cube is part of LOD 0 and LOD 1, while the smallest top cube is only part of LOD 0. Thus details and added and removed to the group based on visual size, instead of replacing the entire thing.</p>
+						
+						<figure>
+							<img src="lod-groups/stacked-cubes-lod.png" width="420" height="260">
+							<figcaption>Stacked cubes LOD groups.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Can LOD groups be lightmapped?</h3>
+							<div>
+								<p>Yes. When you make a LOD group contribute to GI it does get included for lightmapping purposes. LOD 0 is used for lightmapping as expected. The other LOD levels get baked lighting as well, but the rest of the scene only takes LOD 0 into consideration. You could also decide to only bake some levels and let the others rely on light probes.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>LOD Transitions</h3>
+						
+						<p>The sudden swap of LOD levels can be visually jarring, especially if an object ends up switching back and forth in rapid succession due to slight movement of either itself or the camera. It is possible to make this transition gradual, by setting the group's <em translate="no">Fade Mode</em> to <em translate="no">Cross Fade</em>. This makes the old level fade out while the new level fades in at the same time.</p>
+						
+						<figure>
+							<img src="lod-groups/cross-fade-mode.png" width="320" height="56">
+							<figcaption>Cross-fade mode.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What about the <em translate="no">Speed Tree</em> fade mode option?</h3>
+							<div>
+								<p>That mode is specifically for <em translate="no">SpeedTree</em> trees, which uses its own LOD system to collapse trees and transition between 3D models and billboard representations. We won't be using it.</p>
+							</div>
+						</aside>
+						
+						<p>You can control per LOD level when the cross-fade to the next level starts. This option becomes visible when cross-fading is enabled. A <em translate="no">Fade Transition Width</em> of zero means no fading between this level and the next lower, while a value of 1 means it starts fading immediately. At 0.5, with default settings LOD 0 would begin cross-fading to LOD 1 at 80%.</p>
+						
+						<figure>
+							<img src="lod-groups/fade-transition-width.png" width="320" height="192">
+							<figcaption>Fade transition width.</figcaption>
+						</figure>
+						
+						<p>When cross-fading is active both LOD levels get rendered at the same time. It's up to the shader to blend them somehow. Unity picks a shader variant for the <em translate="no">LOD_FADE_CROSSFADE</em> keyword, so add a multi-compile directive for it to our <em translate="no">Lit</em> shader. Do this for both the <em translate="no">CustomLit</em> and the <em translate="no">ShadowCaster</em> passes.</p>
+						
+						<pre translate="no">			<ins>#pragma multi_compile _ LOD_FADE_CROSSFADE</ins></pre>
+						
+						<p>How much an object is faded gets communicated via the <code>unity_LODFade</code> vector of the <em translate="no">UnityPerDraw</em> buffer, which we've already defined. Its X component contains the fade factor. Its Y component contains the same factor, but quantized to sixteen steps, which we won't use. Let's visualize the fade factor if it is in use by returning it at the start of <code>LitPassFragment</code>.</p>
+						
+						<pre translate="no">float4 LitPassFragment (Varyings input) : SV_TARGET {
+	UNITY_SETUP_INSTANCE_ID(input);
+	<ins>#if defined(LOD_FADE_CROSSFADE)</ins>
+		<ins>return unity_LODFade.x;</ins>
+	<ins>#endif</ins>
+	
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="lod-groups/fade-factor.png" width="340" height="240">
+							<figcaption>LOD fade factor.</figcaption>
+						</figure>
+						
+						<p>Objects that are fading out start with a factor of 1 and reduces to zero, as expected. But we also see solid black objects that represent higher LOD levels. That happens because objects that are fading in have their fade factor negated. We can see this by returning the negated fade factor instead.</p>
+						
+						<pre translate="no">		return <ins>-</ins>unity_LODFade.x;</pre>
+						
+						<figure>
+							<img src="lod-groups/fade-factor-negated.png" width="340" height="240">
+							<figcaption>Negated fade factor.</figcaption>
+						</figure>
+						
+						<p>Note that objects that are in both LOD levels aren't cross-faded with themselves.</p>
+					</section>
+					
+					<section>
+						<h3>Dithering</h3>
+						
+						<p>To mix both LOD levels we can use clipping, applying an approach similar to approximating semitransparent shadows. As we need to do this for both surfaces and their shadows, let's add a <code>ClipLOD</code> function for this to <em translate="no">Common</em>. Give it clip-space XY coordinates and the fade factor as parameters. Then&mdash;if cross-fading is active&mdash;clip based on the fade factor minus a dither pattern.</p>
+						
+						<pre translate="no"><ins>void ClipLOD (float2 positionCS, float fade) {</ins>
+	<ins>#if defined(LOD_FADE_CROSSFADE)</ins>
+		<ins>float dither = 0;</ins>
+		<ins>clip(fade - dither);</ins>
+	<ins>#endif</ins>
+<ins>}</ins></pre>
+						
+						<p>To check whether clipping works as expected, we'll start with a vertical gradient that repeats every 32 pixels. That should create alternating horizontal stripes.</p>
+						
+						<pre translate="no">		float dither = <ins>(positionCS.y % 32) / 32</ins>;</pre>
+						
+						<p>Invoke <code>ClipLOD</code> in <code>LitPassFragment</code> instead of returning the fade factor.</p>
+						
+						<pre translate="no">	<del>//#if defined(LOD_FADE_CROSSFADE)</del>
+	<del>//	return unity_LODFade.x;</del>
+	<del>//#endif</del>
+	<ins>ClipLOD(input.positionCS.xy, unity_LODFade.x);</ins></pre>
+						
+						<p>And also invoke it at the start of <code>ShadowCasterPassFragment</code> to cross-fade shadows.</p>
+						
+						<pre translate="no">void ShadowCasterPassFragment (Varyings input) {
+	UNITY_SETUP_INSTANCE_ID(input);
+	<ins>ClipLOD(input.positionCS.xy, unity_LODFade.x);</ins>
+
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="lod-groups/striped-lod-half.png" width="340" height="240">
+							<figcaption>LOD stripes, half.</figcaption>
+						</figure>
+						
+						<p>We get striped rendering, but only one of the two LOD levels shows up when cross-fading. That's because one of the two has a negative fade factor. We fix that by adding instead of subtracting the dither pattern when that's the case.</p>
+						
+						<pre translate="no">		clip(fade <ins>+ (fade &lt; 0.0 ? dither : -dither)</ins>);</pre>
+						
+						<figure>
+							<img src="lod-groups/striped-lod-complete.png" width="340" height="240">
+							<figcaption>LOD stripes, complete.</figcaption>
+						</figure>
+						
+						<p>Now that it's working we can switch to a proper dither pattern. Let's pick the same one that we use for semitransparent shadows.</p>
+						
+						<pre translate="no">		float dither = <ins>InterleavedGradientNoise(positionCS.xy, 0)</ins>;</pre>
+						
+						<figure>
+							<img src="lod-groups/dithered-lod.png" width="340" height="240">
+							<figcaption>Dithered LOD.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Animated Cross-Fading</h3>
+						
+						<p>Although dithering creates a fairly smooth transition, the pattern is obvious. And just like with semitransparent shadows, faded shadows are unstable and distracting. Ideally a cross-fade is only temporary, even then nothing else changes. We can make it so by enabling the LOD group's <em translate="no">Animate Cross-fading</em> option. That disregards fade transition widths and instead quickly cross-fades once a group passes a LOD threshold.</p>
+						
+						<figure>
+							<img src="lod-groups/animated-cross-fading.png" width="320" height="38" alt="inspector"><br>
+							<video width="340" height="240" controls loop muted>
+								<source src="lod-groups/animated-lod-cross-fading.mp4" type="video/mp4">
+							</video>
+							<figcaption>Animated cross-fading.</figcaption>
+						</figure>
+						
+						<p>The default animation duration is half a second, which can be changed for all groups by setting the static <code class="csharp">LODGroup.crossFadeAnimationDuration</code> property. However, while not in play mode the transitions are faster in Unity 2022.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Reflections</h2>
+					
+					<p>Another phenomenon that adds detail and realism to a scene is specular reflection of the environment&mdash;of which mirrors are the most obvious example&mdash;which we don't support yet. This is especially important for metallic surfaces, which are currently mostly black. To make this more obvious I added a new more metal spheres with varying color and smoothness to the <em translate="no">Baked Light</em> scene.</p>
+					
+					<figure>
+						<img src="reflections/without-reflections.png" width="360" height="210">
+						<figcaption>Scene without reflections.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Indirect BRDF</h3>
+						
+						<p>We already support diffuse global illumination, which depends on the BRDF's diffuse color. Now we add specular global illumination as well, which also depends on the BRDF. So let's add an <code>IndirectBRDF</code> function to <em translate="no">BRDF</em>, with surface and BRDF parameters, plus diffuse and specular colors obtained from global illumination. Initially have it return the reflected diffuse light only.</p>
+						
+						<pre translate="no"><ins>float3 IndirectBRDF (</ins>
+	<ins>Surface surface, BRDF brdf, float3 diffuse, float3 specular</ins>
+<ins>) {</ins>
+    <ins>return diffuse * brdf.diffuse;</ins>
+<ins>}</ins></pre>
+						
+						<p>Adding the specular reflection starts out similar: simply include the specular GI multiplied with the BRDF's specular color.
+						
+						<pre translate="no">	<ins>float3 reflection = specular * brdf.specular;</ins>
+
+    return diffuse * brdf.diffuse <ins>+ reflection</ins>;</pre>
+    					
+    					<p>But roughness scatters this reflection, so it should reduce the specular reflection that we end up seeing.  We do this by dividing it by the squared roughness plus one. Thus low roughness values don't matter much while maximum roughness halves the reflection.</p>
+    					
+						<pre translate="no">	float3 reflection = specular * brdf.specular;
+	<ins>reflection /= brdf.roughness * brdf.roughness + 1.0;</ins></pre>
+						
+						<p>Invoke <code>IndirectBRDF</code> in <code>GetLighting</code> instead of calculating the diffuse indirect light directly. Start with using white for the specular GI color.</p>
+						
+						<pre translate="no">float3 GetLighting (Surface surfaceWS, BRDF brdf, GI gi) {
+	ShadowData shadowData = GetShadowData(surfaceWS);
+	shadowData.shadowMask = gi.shadowMask;
+	
+	float3 color = <ins>IndirectBRDF(surfaceWS, brdf, gi.diffuse, 1.0)</ins>;
+	for (int i = 0; i &lt; GetDirectionalLightCount(); i++) {
+		Light light = GetDirectionalLight(i, surfaceWS, shadowData);
+		color += GetLighting(surfaceWS, brdf, light);
+	}
+	return color;
+}</pre>
+						
+						<figure>
+							<img src="reflections/reflecting-white-environment.png" width="360" height="210">
+							<figcaption>Reflecting a white environment.</figcaption>
+						</figure>
+						
+						<p>Everything got at least a little brighter, because we're adding lighting that was previously missing. The change to metallic surfaces is dramatic: their colors are now bright and obvious.</p>
+					</section>
+					
+					<section>
+						<h3>Sampling the Environment</h3>
+						
+						<p>Specular reflections mirror the environment, which is the skybox by default. It's made available as a cube map texture, via <code>unity_SpecCube0</code>. Declare it in <em translate="no">GI</em> along with its sampler state, this time using the <code>TEXTURECUBE</code> macro.</p>
+						
+						<pre translate="no"><ins>TEXTURECUBE(unity_SpecCube0);</ins>
+<ins>SAMPLER(samplerunity_SpecCube0);</ins></pre>
+						
+						<p>Then add a <code>SampleEnvironment</code> function with a world-space surface parameter, sample the texture, and return its RGB components. We sample the cube map via the <code>SAMPLE_TEXTURECUBE_LOD</code> macro, which takes the map, sampler state, UVW coordinates, and mip level as arguments. As it's a cube map we need 3D texture coordinates, hence UVW. We start with always using the highest mip level, so we sample the full-resolution texture.</p>
+						
+						<pre translate="no"><ins>float3 SampleEnvironment (Surface surfaceWS) {</ins>
+	<ins>float3 uvw = 0.0;</ins>
+	<ins>float4 environment = SAMPLE_TEXTURECUBE_LOD(</ins>
+		<ins>unity_SpecCube0, samplerunity_SpecCube0, uvw, 0.0</ins>
+	<ins>);</ins>
+	<ins>return environment.rgb;</ins>
+<ins>}</ins></pre>
+						
+						<p>Sampling a cube map is done with a direction, which in this case is the view direction from camera to surface reflected off the surface. We get it by invoking the <code>reflect</code> function with the negative view direction and the surface normal as arguments.</p> 
+						
+						<pre translate="no">	float3 uvw = <ins>reflect(-surfaceWS.viewDirection, surfaceWS.normal)</ins>;</pre>
+						
+						<p>Next, add a specular color to <code>GI</code> and store the sampled environment in it in <code>GetGI</code>.</p>
+						
+						<pre translate="no">struct GI {
+	float3 diffuse;
+	<ins>float3 specular;</ins>
+	ShadowMask shadowMask;
+};
+
+&hellip;
+
+GI GetGI (float2 lightMapUV, Surface surfaceWS) {
+	GI gi;
+	gi.diffuse = SampleLightMap(lightMapUV) + SampleLightProbe(surfaceWS);
+	<ins>gi.specular = SampleEnvironment(surfaceWS);</ins>
+	&hellip;
+}</pre>
+						
+						<p>Now we can pass the correct color to <code>IndirectBRDF</code> in <code>GetLighting</code>.</p>
+						
+						<pre translate="no">	float3 color = IndirectBRDF(surfaceWS, brdf, gi.diffuse, <ins>gi.specular</ins>);</pre>
+						
+						<p>Finally, to get it working we have to instruct Unity to include the reflection probe when setting up the per-object data, in <code class="csharp">CameraRenderer.DrawVisibleGeometry</code>.</p>
+						
+						<pre class="csharp">			perObjectData =
+				<ins>PerObjectData.ReflectionProbes |</ins>
+				PerObjectData.Lightmaps | PerObjectData.ShadowMask |
+				PerObjectData.LightProbe | PerObjectData.OcclusionProbe |
+				PerObjectData.LightProbeProxyVolume |
+				PerObjectData.OcclusionProbeProxyVolume</pre>
+						
+						<figure>
+							<img src="reflections/reflecting-environment.png" width="360" height="210">
+							<figcaption>Reflecting the environment probe.</figcaption>
+						</figure>
+						
+						<p>Surfaces now reflect the environment. This is obvious for metallic surfaces but other surfaces reflect it as well. As it's just the sky box nothing else gets reflected, but we'll look at that later.</p>
+						
+						<figure>
+							<img src="reflections/environment-probe.png" width="250" height="250">
+							<figcaption>Environment probe.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Rough Reflections</h3>
+						
+						<p>As roughness scatters specular reflection it not only reduces its intensity but also muddles it, as if it's out of focus. This effect gets approximated by Unity by storing blurred versions of the environment map in lower mip levels. To access the correct mip level we need to know the perceptual roughness, so let's add it to the <code>BRDF</code> struct.</p>
+						
+						<pre translate="no">struct BRDF {
+	&hellip;
+	<ins>float perceptualRoughness;</ins>
+};
+
+&hellip;
+
+BRDF GetBRDF (Surface surface, bool applyAlphaToDiffuse = false) {
+	&hellip;
+
+	<ins>brdf.</ins>perceptualRoughness =
+		PerceptualSmoothnessToPerceptualRoughness(surface.smoothness);
+	brdf.roughness = PerceptualRoughnessToRoughness(<ins>brdf.</ins>perceptualRoughness);
+	return brdf;
+}</pre>
+						
+						<p>We can rely on the <code>PerceptualRoughnessToMipmapLevel</code> function to calculate the correct mip level for a given perceptual roughness. It's defined in the <em translate="no">ImageBasedLighting</em> file of the <em translate="no">Core RP Library</em>. This requires us to add a BRDF parameter to <code>SampleEnvironment</code>.</p>
+						
+						<pre translate="no">#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/EntityLighting.hlsl"
+<ins>#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/ImageBasedLighting.hlsl"</ins>
+
+&hellip;
+
+float3 SampleEnvironment (Surface surfaceWS<ins>, BRDF brdf</ins>) {
+	float3 uvw = reflect(-surfaceWS.viewDirection, surfaceWS.normal);
+	<ins>float mip = PerceptualRoughnessToMipmapLevel(brdf.perceptualRoughness);</ins>
+	float4 environment = SAMPLE_TEXTURECUBE_LOD(
+		unity_SpecCube0, samplerunity_SpecCube0, uvw, <ins>mip</ins>
+	);
+	return environment.rgb;
+}</pre>
+						
+						<p>Add the required parameter to <code>GetGI</code> as well and pass it through.</p>
+						
+						<pre translate="no">GI GetGI (float2 lightMapUV, Surface surfaceWS<ins>, BRDF brdf</ins>) {
+	GI gi;
+	gi.diffuse = SampleLightMap(lightMapUV) + SampleLightProbe(surfaceWS);
+	gi.specular = SampleEnvironment(surfaceWS<ins>, brdf</ins>);
+	&hellip;
+}</pre>
+						
+						<p>Finally, supply it in <code>LitPassFragment</code>.</p>
+						
+						<pre translate="no">	GI gi = GetGI(GI_FRAGMENT_DATA(input), surface<ins>, brdf</ins>);</pre>
+						
+						<figure>
+							<img src="reflections/rough-reflections.png" width="360" height="210">
+							<figcaption>Roughness blurs reflections.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Fresnel Reflection</h3>
+						
+						<p>A property of all surfaces is that when viewed at grazing angles they start to resemble perfect mirrors, as light bounces off them mostly unaffected. This phenomenon is known as Fresnel reflection. It's actually more complicated than that as it has to do with transmission and reflection of light waves at the boundaries of different media, but we simply use the same approximation that the <em translate="no">Universal RP</em> uses, which is to assume air-solid boundaries.</p>
+						
+						<p>We use a variant Schlick's approximation for Fresnel. It replaces the specular BRDF color with solid white in the ideal case, but roughness can prevent reflections from showing up. We arrive at the final color by adding the surface smoothness and reflectivity together, with a maximum of 1. As it's grayscale we can suffice with adding a single value to <code>BRDF</code> for it.</p>
+						
+						<pre translate="no">struct BRDF {
+	&hellip;
+	<ins>float fresnel;</ins>
+};
+
+&hellip;
+
+BRDF GetBRDF (Surface surface, bool applyAlphaToDiffuse = false) {
+	&hellip;
+	
+	<ins>brdf.fresnel = saturate(surface.smoothness + 1.0 - oneMinusReflectivity);</ins>
+	return brdf;
+}</pre>
+						
+						<p>In <code>IndirectBRDF</code> we find the strength of the Fresnel effect by taking the dot product of the surface normal and view direction, subtracting it from 1, and raising the result to the fourth power. We can use the convenient <code>Pow4</code> function from the <em translate="no">Core RP Library</em> here.</p>
+						
+						<pre translate="no">	<ins>float fresnelStrength =</ins>
+		<ins>Pow4(1.0 - saturate(dot(surface.normal, surface.viewDirection)));</ins>
+	float3 reflection = specular * brdf.specular;</pre>
+						
+						<p>We then interpolate between the BRDF specular and fresnel color based on the strength, then use the result of tint the environment reflection.</p>
+						
+						<pre translate="no">	float3 reflection =
+		specular * <ins>lerp(</ins>brdf.specular<ins>, brdf.fresnel, fresnelStrength)</ins>;</pre>
+						
+						<figure>
+							<img src="reflections/fresnel-reflections.png" width="360" height="210">
+							<figcaption>Fresnel reflections.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Fresnel Slider</h3>
+						
+						<p>Fresnel reflections add reflections mostly along the edges of geometry. The effect is subtle when the environment map correctly matches the color of what's behind the object, but if that's not the case the reflections can appear weird and distracting. The bright reflections along the edges of spheres inside the structure are a good example.</p>
+						
+						<p>Lowering smoothness gets rid of Fresnel reflections, but dulls the entire surface as well. Also, in some cases the Fresnel approximation isn't appropriate, for example underwater. So let's add a slider to scale it down to the <em translate="no">Lit</em> shader.</p>
+						
+						<pre translate="no">		_Metallic ("Metallic", Range(0, 1)) = 0
+		_Smoothness ("Smoothness", Range(0, 1)) = 0.5
+		<ins>_Fresnel ("Fresnel", Range(0, 1)) = 1</ins></pre>
+						
+						<p>Add it to the <code>UnityPerMaterial</code> buffer in <em translate="no">LitInput</em> and create a <code>GetFresnel</code> function for it.</p>
+						
+						<pre translate="no">UNITY_INSTANCING_BUFFER_START(UnityPerMaterial)
+	&hellip;
+	<ins>UNITY_DEFINE_INSTANCED_PROP(float, _Fresnel)</ins>
+UNITY_INSTANCING_BUFFER_END(UnityPerMaterial)
+
+&hellip;
+
+<ins>float GetFresnel (float2 baseUV) {</ins>
+	<ins>return UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Fresnel);</ins>
+<ins>}</ins></pre>
+						
+						<p>Also add a dummy function for it to <em translate="no">UnlitInput</em>, to keep them synchronized.</p>
+						
+						<pre translate="no"><ins>float GetFresnel (float2 baseUV) {</ins>
+	<ins>return 0.0;</ins>
+<ins>}</ins></pre>
+						
+						<p><code>Surface</code> now gets a field for its Fresnel strength.</p>
+						
+						<pre translate="no">struct Surface {
+	&hellip;
+	float smoothness;
+	<ins>float fresnelStrength;</ins>
+	float dither;
+};</pre>
+						
+						<p>Which we set equal to the slider poperty's value in <code>LitPassFragment</code>.</p>
+						
+						<pre translate="no">	surface.smoothness = GetSmoothness(input.baseUV);
+	<ins>surface.fresnelStrength = GetFresnel(input.baseUV);</ins></pre>
+						
+						<p>Finally, use it to scale the Fresnel strength that we use in <code>IndirectBRDF</code>.</p>
+						
+						<pre translate="no">	float fresnelStrength = <ins>surface.fresnelStrength *</ins>
+		Pow4(1.0 - saturate(dot(surface.normal, surface.viewDirection)));</pre>
+						
+						<figure>
+							<video width="360" height="210" controls loop muted>
+								<source src="reflections/adjusting-fresnel-strength.mp4" type="video/mp4">
+							</video>
+							<figcaption>Adjusting Fresnel strength.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Reflection Probes</h3>
+						
+						<p>The default environment cube map only contains the sky box. To reflect anything else in the scene we have to add a reflection probe to it, via <em translate="no">GameObject / Light / Reflection Probe</em>. These probes render the scene to a cube map, from their position. So reflections will only appear more-or-less correct for surfaces that are close to the probes. Thus it is often necessary to put multiple probes in a scene. They have <em translate="no">Importance</em> and <em translate="no">Box Size</em> properties that can be used to control which area is affected by each probe.</p>
+						
+						<figure>
+							<img src="reflections/reflection-probe-inspector.png" width="320" height="492" alt="inspector"><br>
+							<img src="reflections/reflection-probe-map.png" width="250" height="250" alt="cube map">
+							<figcaption>Reflection probe inside structure.</figcaption>
+						</figure>
+						
+						<p>A probe's <em translate="no">Type</em> is set to <em translate="no">Baked</em> by default, which means that it gets rendered once and the cube map gets stored in builds. You could also set it to <em translate="no">Realtime</em>, which keeps the map up to date with the dynamic scene. It gets rendered just like any other camera, using our RP, once for each of the six faces of the cube map. So realtime reflection probes are expensive.</p>
+						
+						<figure>
+							<img src="reflections/reflection-probes.png" width="360" height="210">
+							<figcaption>Using three reflection probes.</figcaption>
+						</figure>
+						
+						<p>Only a single environment probe is used per object, but there can be multiple probes in the scene. Thus you might have to split objects to get acceptable reflections. For example, the cubes used to build the structure should ideally be split into separate inside and outside parts, so each could use a different reflection probe. Also, this means that GPU batching gets broken up by reflection probes. Unfortunately the mesh ball can't use reflection probes at all, always ending up with the sky box.</p>
+						
+						<p><code class="csharp">MeshRenderer</code> components have an <em translate="no">Anchor Override</em> that can be used to fine-tune which probe they use, without having to worry about box sizes and positions. There's also a <em translate="no">Reflection Probes</em> option, which is set to <em translate="no">Blend Probes</em> by default. The idea is that Unity allows blending between the best two reflection probes. However, this mode in incompatible with the SRP batcher, so Unity's other RPs don't support it and neither will we. In case you're curious, how to blend probes is explained in the <a href="../../scriptable-render-pipeline/reflections/index.html">Reflections</a> tutorial of my 2018 SRP tutorial, but I expect this functionality to disappear once the legacy pipeline gets removed. We'll investigate other reflection techniques in the future. So the only two functional modes are <em translate="no">Off</em>, which always uses the sky box, and <em translate="no">Simple</em>, which picks the most important probe. The others functions exactly like <em translate="no">Simple</em>.</p>
+						
+						<figure>
+							<img src="reflections/simple-probes.png" width="320" height="112">
+							<figcaption>Simple reflection probes mode selected.</figcaption>
+						</figure>
+						
+						<p>Besides that, reflection probes also have an option to enable box projection mode. This should change how reflections are determined to better match their finite influence area, but this also isn't supported by the SRP batcher so we won't support it either.</p>
+					</section>
+					
+					<section>
+						<h3>Decoding Probes</h3>
+						
+						<p>Finally, we have to make sure that we interpret the data from the cube map correctly. It could be HDR or LDR, and its intensity can also be adjusted. These settings are made available via the <code>unity_SpecCube0_HDR</code> vector, which comes after <code>unity_ProbesOcclusion</code> in the <code>UnityPerDraw</code> buffer.</p>
+						
+						<pre translate="no">CBUFFER_START(UnityPerDraw)
+	&hellip;
+
+	float4 unity_ProbesOcclusion;
+	
+	<ins>float4 unity_SpecCube0_HDR;</ins>
+	
+	&hellip;
+CBUFFER_END</pre>
+						
+						<p>We get the correct color by invoking <code>DecodeHDREnvironment</code> with the raw environment data and the settings as arguments, at the end of <code>SampleEnvironment</code>.</p>
+						
+						<pre translate="no">float3 SampleEnvironment (Surface surfaceWS, BRDF brdf) {
+	&hellip;
+	return <ins>DecodeHDREnvironment(environment, unity_SpecCube0_HDR)</ins>;
+}</pre>
+						
+						<p>The next tutorial is <a href="../complex-maps/index.html">Complex Maps</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/custom-srp-07-lod-and-reflections/" class="repository">repository</a>
+					<a href="LOD-and-Reflections.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

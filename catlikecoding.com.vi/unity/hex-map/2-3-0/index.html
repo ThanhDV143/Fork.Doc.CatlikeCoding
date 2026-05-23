@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/hex-map/2-3-0/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/hex-map/2-3-0/tutorial-image.jpg">
+		<meta property="og:title" content="Hex Map 2.3.0">
+		<meta property="og:description" content="Unity Hex Map 2.3.0 tutorial, Leaner Cells.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hex Map 2.3.0</title>
+		<link href="../../tutorials/tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../site.webmanifest.html">
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/hex-map/2-3-0/#article",
+				"headline": "Hex Map 2.3.0",
+				"alternativeHeadline": "Leaner Cells",
+				"datePublished": "2023-10-04",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "Unity Hex Map 2.3.0 tutorial, Leaner Cells.",
+				"image": "https://catlikecoding.com/unity/tutorials/hex-map/2-3-0/tutorial-image.jpg",
+				"dependencies": "Unity 2021.3.24f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/hex-map/", "name": "Hex Map" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				Bezier: 1,
+				Biome: 1,
+				ClimateData: 1,
+				EdgeVertices: 1,
+				HemisphereMode: 1,
+				HexCell: 1,
+				HexCellPriorityQueue: 1,
+				HexCellShaderData: 1,
+				HexCoordinates: 1,
+				HexCoordinatesDrawer: 1,
+				HexDirection: 1,
+				HexDirectionExtensions: 1,
+				HexEdgeType: 1,
+				HexFeatureCollection: 1,
+				HexFeatureManager: 1,
+				HexFlags: 1,
+				HexGameUI: 1,
+				HexGrid: 1,
+				HexGridChunk: 1,
+				HexGridData: 1,
+				HexHash: 1,
+				HexMapCamera: 1,
+				HexMapEditor: 1,
+				HexMapGenerator: 1,
+				HexMesh: 1,
+				HexMetrics: 1,
+				HexUnit: 1,
+				ListPool: 1,
+				MapRegion: 1,
+				NewMapMenu: 1,
+				OptionalToggle: 1,
+				SaveLoadItem: 1,
+				SaveLoadMenu: 1,
+				TextureArrayWizard: 1
+			};
+			
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../products/utilities/frame-rate-counter/index.html"><img src="../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../index.html">Unity</a></li>
+					<li><a href="../index.html">Hex Map</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hex Map 2.3.0</h1>
+					<p>Leaner Cells</p>
+					<ul>
+						<li>Store cell data in bit flags.</li>
+						<li>Eliminate arrays per cell.</li>
+						<li>Retrieve neighbors via the grid.</li>
+					</ul>
+				</header>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>When maps get multiple continents you start caring about memory usage.</figcaption>
+				</figure>
+				
+				<p>This tutorial is made with Unity 2021.3.24f1 and follows <a href="../2-2-0/index.html">Hex Map 2.2.0</a>.</p>
+				
+				<section>
+					<h2>Roads</h2>
+					
+					<p>Each cell of the hex map has its own game object, which in turn stores its data in fields and arrays. This is fine for small maps but for larger maps the memory size of cells becomes problematic. In this tutorial we're going to drastically reduce the memory footprint of cells, with the ultimate goal of entirely doing away with cell game objects in a future release.</p>
+					
+					<p>The first data that we will compress are the roads, which are currently stored in an array per cell. We will replace that array with a single bit flag field, similar to the one used for cell flags in the <a href="../../maze/index.html">Maze project</a>.</p>
+					
+					<section>
+						<h3>Hex Flags</h3>
+						
+						<p>Create a <code>HexFlags</code> flags enum type with six bits representing the directions in which a road could exist, along with a mask for all roads and an empty state. Give it extension methods to check whether any, all, or none of the bits for a given mask are set, and methods to get flags with or without a mask set.</p>
+						
+						<pre>[System.Flags]
+public enum HexFlags
+{
+	Empty = 0,
+
+	RoadNE = 0b000001,
+	RoadE  = 0b000010,
+	RoadSE = 0b000100,
+	RoadSW = 0b001000,
+	RoadW  = 0b010000,
+	RoadNW = 0b100000,
+	
+	Roads = 0b111111
+}
+
+public static class HexFlagsExtensions
+{
+	public static bool HasAny (this HexFlags flags, HexFlags mask) => (flags &amp; mask) != 0;
+
+	public static bool HasAll (this HexFlags flags, HexFlags mask) =>
+		(flags &amp; mask) == mask;
+
+	public static bool HasNone (this HexFlags flags, HexFlags mask) =>
+		(flags &amp; mask) == 0;
+
+	public static HexFlags With (this HexFlags flags, HexFlags mask) => flags | mask;
+
+	public static HexFlags Without (this HexFlags flags, HexFlags mask) => flags &amp; ~mask;
+}</pre>
+						
+						<p>For hex map specifically we also add <code>Has</code>, <code>With</code>, and <code>Without</code> methods that act on a specific direction relative to a starting bit. These methods are private to the extension class.</p>
+						
+						<pre>	<ins>static bool Has (this HexFlags flags, HexFlags start, HexDirection direction) =></ins>
+		<ins>((int)flags &amp; ((int)start &lt;&lt; (int)direction)) != 0;</ins>
+
+	<ins>static HexFlags With (this HexFlags flags, HexFlags start, HexDirection direction) =></ins>
+		<ins>flags | (HexFlags)((int)start &lt;&lt; (int)direction);</ins>
+
+	<ins>static HexFlags Without (</ins>
+		<ins>this HexFlags flags, HexFlags start, HexDirection direction</ins>
+	<ins>) =></ins>
+		<ins>flags &amp; ~(HexFlags)((int)start &lt;&lt; (int)direction);</ins></pre>
+						
+						<p>We use them to publicly expose methods specific for road directions.</p>
+						
+						<pre>	<ins>public static bool HasRoad (this HexFlags flags, HexDirection direction) =></ins>
+		<ins>flags.Has(HexFlags.RoadNE, direction);</ins>
+
+	<ins>public static HexFlags WithRoad (this HexFlags flags, HexDirection direction) =></ins>
+		<ins>flags.With(HexFlags.RoadNE, direction);</ins>
+	
+	<ins>public static HexFlags WithoutRoad (this HexFlags flags, HexDirection direction) =></ins>
+		<ins>flags.Without(HexFlags.RoadNE, direction);</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Flags instead of Array</h3>
+						
+						<p>Add a flags field to <code>HexCell</code>.</p>
+						
+						<pre>	<ins>HexFlags flags;</ins></pre>
+						
+						<p>We will now begin replacing the usage of the roads array with these flags. First is the <code>HasRoads</code> property, which can simply check if any roads flag is set.</p>
+						
+						<pre>	public bool HasRoads <ins>=> flags.HasAny(HexFlags.Roads);</ins></pre>
+						
+						<p>Second is the <code>HasRoadsThroughEdge</code> method, which can use the <code>HasRoad</code> flags method to check it.</p>
+						
+						<pre>	public bool HasRoadThroughEdge (HexDirection direction) => <ins>flags.HasRoad(direction)</ins>;</pre>
+						
+						<p>Next we will remove the <code>SetRoad</code> method and replace it with an explicit <code>RemoveRoad</code> method, because adding a road is done in only a single place.</p>
+						
+						<pre>	<del>//void SetRoad (int index, bool state) { &hellip; }</del>
+	
+	<ins>void RemoveRoad (HexDirection direction)</ins>
+	<ins>{</ins>
+		<ins>flags = flags.WithoutRoad(direction);</ins>
+		<ins>HexCell neighbor = GetNeighbor(direction);</ins>
+		<ins>neighbor.flags = neighbor.flags.WithoutRoad(direction.Opposite());</ins>
+		<ins>neighbor.RefreshSelfOnly();</ins>
+		<ins>RefreshSelfOnly();</ins>
+	<ins>}</ins></pre>
+						
+						<p>Adjust <code>AddRoad</code> and <code>RemoveRoads</code> to work with the flags.</p>
+						
+						<pre>	public void AddRoad (HexDirection direction)
+	{
+		if (
+			!<ins>flags.HasRoad(direction)</ins> &amp;&amp; !HasRiverThroughEdge(direction) &amp;&amp;
+			!IsSpecial &amp;&amp; !GetNeighbor(direction).IsSpecial &amp;&amp;
+			GetElevationDifference(direction) &lt;= 1
+		)
+		{
+			<del>//SetRoad((int)direction, true);</del>
+			<ins>flags = flags.WithRoad(direction);</ins>
+			<ins>HexCell neighbor = GetNeighbor(direction);</ins>
+			<ins>neighbor.flags = neighbor.flags.WithRoad(direction.Opposite());</ins>
+			<ins>neighbor.RefreshSelfOnly();</ins>
+			<ins>RefreshSelfOnly();</ins>
+		}
+	}
+	
+	public void RemoveRoads ()
+	{
+		for (<ins>HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++</ins>)
+		{
+			if (<ins>flags.HasRoad(d)</ins>)
+			{
+				<ins>RemoveRoad(d);</ins>
+			}
+		}
+	}</pre>
+						
+						<p>Adjust the <code>Elevation</code> setter as well.</p>
+						
+						<pre>	public int Elevation
+	{
+		get => elevation;
+		set
+		{
+			&hellip;
+
+			for (<ins>HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++</ins>)
+			{
+				if (<ins>flags.HasRoad(d)</ins> &amp;&amp; GetElevationDifference(<ins>d</ins>) > 1)
+				{
+					<ins>RemoveRoad(d);</ins>
+				}
+			}
+
+			Refresh();
+		}
+	}</pre>
+						
+						<p>We also have to adjust saving and loading the roads data. As we already stored them as bit flags the code becomes simpler as a direct cast is possible.</p>
+						
+						<pre>	public void Save (BinaryWriter writer)
+	{
+		&hellip;
+		
+		<del>//int roadFlags = 0;</del>
+		<del>//for (int i = 0; i &lt; roads.Length; i++) { &hellip; }</del>
+		writer.Write((byte)<ins>(flags &amp; HexFlags.Roads)</ins>);
+		writer.Write(IsExplored);
+	}
+	
+	public void Load (BinaryReader reader, int header)
+	{
+		&hellip;
+		
+		<del>//int roadFlags = reader.ReadByte();</del>
+		<del>//for (int i = 0; i &lt; roads.Length; i++) { &hellip; }</del>
+		<ins>flags |= (HexFlags)reader.ReadByte();</ins>
+
+		IsExplored = header >= 3 ? reader.ReadBoolean() : false;
+		ShaderData.RefreshTerrain(this);
+		ShaderData.RefreshVisibility(this);
+	}</pre>
+						
+						<p>Finally we remove the roads array field. Cells have now become smaller and even a bit more performant as well, because the indirection via an array has been removed.</p>
+						
+						<pre>	<del>//[SerializeField]</del>
+	<del>//bool[] roads;</del></pre>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Rivers</h2>
+					
+					<p>What we did for roads we can also do for rivers. We store river data in two boolean and two direction fields instead of an array, but there is plenty of room for all river data in our single flags field.</p>
+					
+					<section>
+						<h3>River Flags</h3>
+						
+						<p>Use the next six bits of <code>HexFlags</code> to represent the incoming river direction and the six bits after that for the outgoing river direction. Also define masks for the incoming, the outgoing, and any river. Note that this data structure would allow for multiple incoming and outgoing rivers per cell, but our hex map does not support that.</p>
+						
+						<pre>	Roads = 0b111111<ins>,</ins>
+
+	<ins>RiverInNE = 0b000001_000000,</ins>
+	<ins>RiverInE  = 0b000010_000000,</ins>
+	<ins>RiverInSE = 0b000100_000000,</ins>
+	<ins>RiverInSW = 0b001000_000000,</ins>
+	<ins>RiverInW  = 0b010000_000000,</ins>
+	<ins>RiverInNW = 0b100000_000000,</ins>
+
+	<ins>RiverIn = 0b111111_000000,</ins>
+
+	<ins>RiverOutNE = 0b000001_000000_000000,</ins>
+	<ins>RiverOutE  = 0b000010_000000_000000,</ins>
+	<ins>RiverOutSE = 0b000100_000000_000000,</ins>
+	<ins>RiverOutSW = 0b001000_000000_000000,</ins>
+	<ins>RiverOutW  = 0b010000_000000_000000,</ins>
+	<ins>RiverOutNW = 0b100000_000000_000000,</ins>
+
+	<ins>RiverOut = 0b111111_000000_000000,</ins>
+
+	<ins>River = 0b111111_111111_000000</ins></pre>
+						
+						<p>Add extension methods for rivers like for roads.</p>
+						
+						<pre>	<ins>public static bool HasRiverIn (this HexFlags flags, HexDirection direction) =></ins>
+		<ins>flags.Has(HexFlags.RiverInNE, direction);</ins>
+
+	<ins>public static HexFlags WithRiverIn (this HexFlags flags, HexDirection direction) =></ins>
+		<ins>flags.With(HexFlags.RiverInNE, direction);</ins>
+
+	<ins>public static HexFlags WithoutRiverIn (this HexFlags flags, HexDirection direction) =></ins>
+		<ins>flags.Without(HexFlags.RiverInNE, direction);</ins>
+
+	<ins>public static bool HasRiverOut (this HexFlags flags, HexDirection direction) =></ins>
+		<ins>flags.Has(HexFlags.RiverOutNE, direction);</ins>
+
+	<ins>public static HexFlags WithRiverOut (this HexFlags flags, HexDirection direction) =></ins>
+		<ins>flags.With(HexFlags.RiverOutNE, direction);</ins>
+
+	<ins>public static HexFlags WithoutRiverOut (</ins>
+		<ins>this HexFlags flags, HexDirection direction</ins>
+	<ins>) =></ins>
+		<ins>flags.Without(HexFlags.RiverOutNE, direction);</ins></pre>
+						
+						<p>We also need to get the river directions, so add a private method to convert flags to a direction, shifted to the lowest six bits. This assumes that exactly one of the six bits is set.</p>
+						
+						<pre>	<ins>static HexDirection ToDirection (this HexFlags flags, int shift) =></ins>
+		 <ins>(((int)flags >> shift) &amp; 0b111111) switch</ins>
+		 <ins>{</ins>
+			 <ins>0b000001 => HexDirection.NE,</ins>
+			 <ins>0b000010 => HexDirection.E,</ins>
+			 <ins>0b000100 => HexDirection.SE,</ins>
+			 <ins>0b001000 => HexDirection.SW,</ins>
+			 <ins>0b010000 => HexDirection.W,</ins>
+			 <ins>_ => HexDirection.NW</ins>
+		 <ins>};</ins></pre>
+						
+						<p>Using that method, add public methods for getting the incoming and outgoing river direction.</p>
+						
+						<pre>	<ins>public static HexDirection RiverInDirection (this HexFlags flags) =></ins>
+		<ins>flags.ToDirection(6);</ins>
+
+	<ins>public static HexDirection RiverOutDirection (this HexFlags flags) =></ins>
+		<ins>flags.ToDirection(12);</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Flags instead of Fields</h3>
+						
+						<p>This time we begin by removing the old river fields.</p>
+						
+						<pre>	<del>//bool hasIncomingRiver, hasOutgoingRiver;</del>
+	<del>//HexDirection incomingRiver, outgoingRiver;</del></pre>
+						
+						<p>Adjust the <code>HasIncomingRiver</code>, <code>HasOutGoingRiver</code>, and <code>HasRiver</code> properties.</p>
+						
+						<pre>	public bool HasIncomingRiver => <ins>flags.HasAny(HexFlags.RiverIn)</ins>;
+
+	public bool HasOutgoingRiver => <ins>flags.HasAny(HexFlags.RiverOut)</ins>;
+
+	public bool HasRiver => <ins>flags.HasAny(HexFlags.River)</ins>;</pre>
+						
+						<p>Adjust the <code>HasRiverBeginOrEnd</code> property to use these properties instead of the removed fields.</p>
+						
+						<pre>	public bool HasRiverBeginOrEnd => <ins>HasIncomingRiver</ins> != <ins>HasOutgoingRiver</ins>;</pre>
+						
+						<p>Remove the <code>RiverBeginOrEndDirection</code> property, because with the fields removed getting river directions is no longer trivial.</p>
+						
+						<pre>	<del>//public HexDirection RiverBeginOrEndDirection =></del>
+		<del>//hasIncomingRiver ? incomingRiver : outgoingRiver;</del></pre>
+						
+						<p>We keep and adjust the properties that explicitly get the incoming or outgoing river direction.</p>
+						
+						<pre>	public HexDirection IncomingRiver => <ins>flags.RiverInDirection()</ins>;
+
+	public HexDirection OutgoingRiver => <ins>flags.RiverOutDirection()</ins>;</pre>
+						
+						<p>The <code>HasRiverThroughEdge</code> method also needs to be updated.</p>
+						
+						<pre>	public bool HasRiverThroughEdge (HexDirection direction) =>
+		<ins>flags.HasRiverIn(direction) || flags.HasRiverOut(direction)</ins>;</pre>
+						
+						<p>And we add a new <code>HasIncomingRiverThroughEdge</code> method, which checks the flags based on a given direction.</p>
+						
+						<pre>	<ins>public bool HasIncomingRiverThroughEdge (HexDirection direction) =></ins>
+		<ins>flags.HasRiverIn(direction);</ins></pre>
+						
+						<p>Next, adapt <code>RemoveIncomingRiver</code> and <code>RemoveOutgiongRiver</code> to work with the flags.</p>
+						
+						<pre>	public void RemoveIncomingRiver ()
+	{
+		if (!HasIncomingRiver)
+		{
+			return;
+		}
+		<del>//hasIncomingRiver = false;</del>
+		<del>//RefreshSelfOnly();</del>
+		
+		HexCell neighbor = GetNeighbor(<ins>IncomingRiver</ins>);
+		<del>//neighbor.hasOutgoingRiver = false;</del>
+		<ins>flags = flags.Without(HexFlags.RiverIn);</ins>
+		<ins>neighbor.flags = neighbor.flags.Without(HexFlags.RiverOut);</ins>
+		neighbor.RefreshSelfOnly();
+		<ins>RefreshSelfOnly();</ins>
+	}
+
+	public void RemoveOutgoingRiver ()
+	{
+		if (!HasOutgoingRiver)
+		{
+			return;
+		}
+		<del>//hasOutgoingRiver = false;</del>
+		<del>//RefreshSelfOnly();</del>
+		
+		HexCell neighbor = GetNeighbor(<ins>OutgoingRiver</ins>);
+		<del>//neighbor.hasIncomingRiver = false;</del>
+		<ins>flags = flags.Without(HexFlags.RiverOut);</ins>
+		<ins>neighbor.flags = neighbor.flags.Without(HexFlags.RiverIn);</ins>
+		neighbor.RefreshSelfOnly();
+		<ins>RefreshSelfOnly();</ins>
+	}</pre>
+						
+						<p>Followed by <code>SetOutgoingRiver</code>.</p>
+						
+						<pre>	public void SetOutgoingRiver (HexDirection direction)
+	{
+		if (<ins>flags.HasRiverOut(direction)</ins>)
+		{
+			return;
+		}
+
+		&hellip;
+
+		RemoveOutgoingRiver();
+		if (<ins>flags.HasRiverIn(direction)</ins>)
+		{
+			RemoveIncomingRiver();
+		}
+		<del>//hasOutgoingRiver = true;</del>
+		<del>//outgoingRiver = direction;</del>
+		
+		<ins>flags = flags.WithRiverOut(direction);</ins>
+		specialIndex = 0;
+		neighbor.RemoveIncomingRiver();
+		<del>//neighbor.hasIncomingRiver = true;</del>
+		<del>//neighbor.incomingRiver = direction.Opposite();</del>
+		<ins>neighbor.flags = neighbor.flags.WithRiverIn(direction.Opposite());</ins>
+		neighbor.specialIndex = 0;
+
+		RemoveRoad(direction);
+	}</pre>
+						
+						<p><code>ValidateRiver</code> now also has to use the river properties.</p>
+						
+						<pre>	void ValidateRivers ()
+	{
+		if (<ins>HasOutgoingRiver</ins> &amp;&amp; !IsValidRiverDestination(GetNeighbor(<ins>OutgoingRiver</ins>)))
+		{
+			RemoveOutgoingRiver();
+		}
+		if (
+			<ins>HasIncomingRiver</ins> &amp;&amp; !GetNeighbor(<ins>IncomingRiver</ins>).IsValidRiverDestination(this)
+		)
+		{
+			RemoveIncomingRiver();
+		}
+	}</pre>
+						
+						<p>We keep the save format the same, so <code>Save</code> only has to switch to using properties.</p>
+						
+						<pre>		if (<ins>HasIncomingRiver</ins>)
+		{
+			writer.Write((byte)(<ins>IncomingRiver</ins> + 128));
+		}
+		else
+		{
+			writer.Write((byte)0);
+		}
+
+		if (<ins>HasOutgoingRiver</ins>)
+		{
+			writer.Write((byte)(<ins>OutgoingRiver</ins> + 128));
+		}
+		else
+		{
+			writer.Write((byte)0);
+		}</pre>
+						
+						<p>While <code>Load</code> has to set the flags.</p>
+						
+						<pre>		byte riverData = reader.ReadByte();
+		if (riverData >= 128)
+		{
+			<del>//hasIncomingRiver = true;</del>
+			<del>//incomingRiver = (HexDirection)(riverData - 128);</del>
+			<ins>flags = flags.WithRiverIn((HexDirection)(riverData - 128));</ins>
+		}
+		<del>//else { &hellip; }</del>
+
+		riverData = reader.ReadByte();
+		if (riverData >= 128)
+		{
+			<del>//hasOutgoingRiver = true;</del>
+			<del>//outgoingRiver = (HexDirection)(riverData - 128);</del>
+			flags = flags.WithRiverOut((HexDirection)(riverData - 128));
+		}
+		<del>//else { &hellip; }</del></pre>
+					</section>
+					
+					<section>
+						<h3>Chunks</h3>
+						
+						<p>We also have to tweak <code>HexGridChunk</code> to work with the new approach. Make <code>TriangulateWaterShore</code> use the new <code>HasIncomingRiverThroughEdge</code> method.</p>
+						
+						<pre>	void TriangulateWaterShore (
+		HexDirection direction, HexCell cell, HexCell neighbor, Vector3 center
+	) {
+		&hellip;
+
+		if (cell.HasRiverThroughEdge(direction)) {
+			TriangulateEstuary(
+				e1, e2, <ins>cell.HasIncomingRiverThroughEdge(direction)</ins>, indices
+			);
+		}
+		else { &hellip; }
+
+		&hellip;
+	}</pre>
+						
+						<p>Change <code>TriangulateRoadAdjacentToRiver</code> so it caches the river directions, as these aren't simple field lookups anymore.</p>
+						
+						<pre>	void TriangulateRoadAdjacentToRiver (
+		HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e
+	) {
+		&hellip;
+
+		<ins>HexDirection riverIn = cell.IncomingRiver, riverOut = cell.OutgoingRiver;</ins>
+
+		if (cell.HasRiverBeginOrEnd) {
+			roadCenter += HexMetrics.GetSolidEdgeMiddle(
+				<ins>(cell.HasIncomingRiver ? riverIn : riverOut)</ins>.Opposite()
+			) * (1f / 3f);
+		}
+		else if (<ins>riverIn</ins> == <ins>riverOut</ins>.Opposite()) {
+			&hellip;
+			roadCenter += corner * 0.5f;
+			if (<ins>riverIn</ins> == direction.Next() &amp;&amp; (
+				cell.HasRoadThroughEdge(direction.Next2()) ||
+				cell.HasRoadThroughEdge(direction.Opposite())
+			)) {
+				features.AddBridge(roadCenter, center - corner * 0.5f);
+			}
+			center += corner * 0.25f;
+		}
+		else if (<ins>riverIn</ins> == <ins>riverOut</ins>.Previous()) {
+			roadCenter -= HexMetrics.GetSecondCorner(<ins>riverIn</ins>) * 0.2f;
+		}
+		else if (<ins>riverIn</ins> == <ins>riverOut</ins>.Next()) {
+			roadCenter -= HexMetrics.GetFirstCorner(<ins>riverIn</ins>) * 0.2f;
+		}
+		&hellip;
+	}</pre>
+						
+						<p>Make <code>TriangulateWithRiver</code> also use <code>HasIncomingRiverThroughEdge</code>.</p>
+						
+						<pre>	void TriangulateWithRiver (
+		HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e
+	) {
+		&hellip;
+
+		if (!cell.IsUnderwater) {
+			bool reversed = cell.<ins>HasIncomingRiverThroughEdge(direction)</ins>;
+			&hellip;
+		}
+	}</pre>
+						
+						<p>And <code>TriangulateConnection</code> as well.</p>
+						
+						<pre>	void TriangulateConnection (
+		HexDirection direction, HexCell cell, EdgeVertices e1
+	) {
+		&hellip;
+
+		if (hasRiver) {
+			&hellip;
+
+			if (!cell.IsUnderwater) {
+				if (!neighbor.IsUnderwater) {
+					TriangulateRiverQuad(
+						e1.v2, e1.v4, e2.v2, e2.v4,
+						cell.RiverSurfaceY, neighbor.RiverSurfaceY, 0.8f,
+						cell.<ins>HasIncomingRiverThroughEdge(direction)</ins>,
+						indices
+					);
+				}
+				&hellip;
+			}
+			&hellip;
+		}
+
+		&hellip;
+	}</pre>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Neighbors</h2>
+					
+					<p>Neighbor data is also stored an array, which we'll remove next. While we could store whether neighbors exist in flags we won't, as they usually do exist.</p>
+					
+					<section>
+						<h3>Going via the Grid</h3>
+						
+						<p>Without direct references to its neighbors <code>HexCell</code> needs a reference to the hex grid. Give it a property for this.</p>
+						
+						<pre>	<ins>public HexGrid Grid</ins>
+	<ins>{ get; set; }</ins></pre>
+						
+						<p>We make a slight adjustment to <code>HexGrid</code>, consolidating the bounds check for <code>GetCell</code> so it has only two exit paths instead of three.</p>
+						
+						<pre>	public HexCell GetCell (HexCoordinates coordinates)
+	{
+		int z = coordinates.Z;
+		<del>//if (z &lt; 0 || z >= CellCountZ) {</del>
+			<del>//return null;</del>
+		<del>//}</del>
+		int x = coordinates.X + z / 2;
+		if (<ins>z &lt; 0 || z >= CellCountZ ||</ins> x &lt; 0 || x >= CellCountX)
+		{
+			return null;
+		}
+		return cells[x + z * CellCountX];
+	}</pre>
+						
+						<p>And we add a <code>TryGetCell</code> method alternative to <code>GetCell</code> which is slightly more performant and more convenient to use.</p>
+						
+						<pre>	<ins>public bool TryGetCell (HexCoordinates coordinates, out HexCell cell)</ins>
+	<ins>{</ins>
+		<ins>int z = coordinates.Z;</ins>
+		<ins>int x = coordinates.X + z / 2;</ins>
+		<ins>if (z &lt; 0 || z >= CellCountZ || x &lt; 0 || x >= CellCountX)</ins>
+		<ins>{</ins>
+			<ins>cell = null;</ins>
+			<ins>return false;</ins>
+		<ins>}</ins>
+		<ins>cell = cells[x + z * CellCountX];</ins>
+		<ins>return true;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Also add a <code>Step</code> method to <code>HexCoordinates</code> that makes it easy to get the hex coordinates of a direct neighbor.</p>
+						
+						<pre>	<ins>public HexCoordinates Step (HexDirection direction) => direction switch</ins>
+	<ins>{</ins>
+		<ins>HexDirection.NE => new HexCoordinates(x, z + 1),</ins>
+		<ins>HexDirection.E => new HexCoordinates(x + 1, z),</ins>
+		<ins>HexDirection.SE => new HexCoordinates(x + 1, z - 1),</ins>
+		<ins>HexDirection.SW => new HexCoordinates(x, z - 1),</ins>
+		<ins>HexDirection.W => new HexCoordinates(x - 1, z),</ins>
+		<ins>_ => new HexCoordinates(x - 1, z + 1)</ins>
+	<ins>};</ins></pre>
+					</section>
+					
+					<section>
+						<h3>No More Array</h3>
+						
+						<p>Remove the neighbors array from <code>HexCell</code>.</p>
+						
+						<pre>	<del>//[SerializeField]</del>
+	<del>//HexCell[] neighbors;</del></pre>
+						
+						<p>Adjust its <code>GetNeighbor</code> method to go via the grid and include a <code>TryGetNeighbor</code> variant as well. Going via the grid is comparable to going via a neighbors array. It requires a little more work to find the neighbor coordinates, but everything now goes through a central point instead of via separate arrays that are scattered around, so memory access is improved.</p>
+						
+						<pre>	public HexCell GetNeighbor (HexDirection direction) =>
+		<ins>Grid.GetCell(Coordinates.Step(direction));</ins>
+		
+	<ins>public bool TryGetNeighbor (HexDirection direction, out HexCell cell) =></ins>
+		<ins>Grid.TryGetCell(Coordinates.Step(direction), out cell);</ins></pre>
+						
+						<p>Remove the <code>SetNeighbor</code> method as it is no longer applicable.</p>
+						
+						<pre>	<del>//public void SetNeighbor (HexDirection direction, HexCell cell) { &hellip; }</del></pre>
+						
+						<p><code>GetEdgeType</code> now has to use <code>GetNeighbor</code>. We still assume that the neighbor exists, because only then is this method invoked.</p>
+						
+						<pre>	public HexEdgeType GetEdgeType (HexDirection direction) => HexMetrics.GetEdgeType(
+		elevation, <ins>GetNeighbor(direction)</ins>.elevation
+	);</pre>
+						
+						<p>Also adjust <code>Refresh</code> so it uses <code>TryGetNeighbor</code>.</p>
+						
+						<pre>	void Refresh ()
+	{
+		if (Chunk)
+		{
+			Chunk.Refresh();
+			for (<ins>HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++</ins>)
+			{
+				<del>//HexCell neighbor = neighbors[i];</del>
+				if (<ins>TryGetNeighbor(d, out HexCell neighbor)</ins> &amp;&amp; neighbor.Chunk != Chunk)
+				{
+					neighbor.Chunk.Refresh();
+				}
+			}
+			&hellip;
+		}
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>The Grid</h3>
+						
+						<p><code>HexGrid.CreateCell</code> now has to set the cell's grid and no longer needs to hook up neighbors.</p>
+						
+						<pre>	void CreateCell (int x, int z, int i)
+	{
+		&hellip;
+
+		HexCell cell = cells[i] = Instantiate&lt;HexCell>(cellPrefab);
+		<ins>cell.Grid = this;</ins>
+		&hellip;
+		
+		<del>//if (x > 0) {</del>
+			<del>//cell.SetNeighbor(HexDirection.W, cells[i - 1]);</del>
+			<del>//&hellip;</del>
+		<ins>//}</ins>
+		<del>//if (z > 0) {</del>
+			<del>//&hellip;</del>
+		<del>//}</del>
+		
+		Text label = Instantiate&lt;Text>(cellLabelPrefab);
+		&hellip;
+	}</pre>
+						
+						<p>Also adjust <code>Search</code> so it uses <code>TryGetNeighbor</code>.</p>
+						
+						<pre>	bool Search (HexCell fromCell, HexCell toCell, HexUnit unit)
+	{
+		&hellip;
+		while (searchFrontier.Count > 0)
+		{
+			&hellip;
+			
+			for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++)
+			{
+				<del>//HexCell neighbor = current.GetNeighbor(d);</del>
+				if (
+					<del>//neighbor == null ||</del>
+					<ins>!current.TryGetNeighbor(d, out HexCell neighbor) ||</ins>
+					neighbor.SearchPhase > searchFrontierPhase
+				)
+				{
+					continue;
+				}
+				&hellip;
+			}
+		}
+		return false;
+	}</pre>
+						
+						<p>The same goes for <code>GetVisibleCells</code>.</p>
+						
+						<pre>	List&lt;HexCell> GetVisibleCells (HexCell fromCell, int range)
+	{
+		&hellip;
+		while (searchFrontier.Count > 0)
+		{
+			&hellip;
+
+			for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++)
+			{
+				<del>//HexCell neighbor = current.GetNeighbor(d);</del>
+				if (
+					<del>//neighbor == null ||</del>
+					<ins>!current.TryGetNeighbor(d, out HexCell neighbor) ||</ins>
+					neighbor.SearchPhase > searchFrontierPhase ||
+					!neighbor.Explorable
+				)
+				{
+					continue;
+				}
+				
+				&hellip;
+			}
+		}
+		return visibleCells;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Chunks</h3>
+						
+						<p>Adjust <code>HexGridChunk</code> so it also relies on <code>TryGetNeighbor</code>, beginning with <code>TriangulateWater</code>.</p>
+						
+						<pre>	void TriangulateWater (
+		HexDirection direction, HexCell cell, Vector3 center
+	) {
+		center.y = cell.WaterSurfaceY;
+
+		<del>//HexCell neighbor = cell.GetNeighbor(direction);</del>
+		if (
+			cell.<ins>TryGetNeighbor(direction, out HexCell neighbor)</ins> &amp;&amp; !neighbor.IsUnderwater
+		) {
+			TriangulateWaterShore(direction, cell, neighbor, center);
+		}
+		&hellip;
+	}</pre>
+						
+						<p>Do the same for <code>TriangulateOpenWater</code>, <code>TriangulateWaterShore</code>, and <code>TriangulateConnection</code>.</p>
+						
+					</section>
+					
+					<section>
+						<h3>Map Generator</h3>
+						
+						<p><code>HexMapGenerator</code> can also use <code>TryGetNeighbor</code>. First in <code>RaiseTerrain</code>.</p>
+						
+						<pre>	int RaiseTerrain (int chunkSize, int budget, MapRegion region) {
+		&hellip;
+		while (size &lt; chunkSize &amp;&amp; searchFrontier.Count > 0) {
+			&hellip;
+
+			for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++) {
+				<del>//HexCell neighbor = current.GetNeighbor(d);</del>
+				if (
+					<ins>current.TryGetNeighbor(d, out HexCell neighbor)</ins> &amp;&amp;
+					neighbor.SearchPhase &lt; searchFrontierPhase
+				) {
+					&hellip;
+				}
+			}
+		}
+		&hellip;
+	}</pre>
+						
+						<p>And also in <code>SinkTerrain</code>, <code>ErodeLand</code>, <code>IsErodible</code>, <code>GetErosionTarget</code>, <code>EvolveClimate</code>, <code>CreateRivers</code>, <code>CreateRiver</code>, and <code>SetTerrainType</code>.</p>
+					</section>
+					
+					<section>
+						<h3>Map Editor</h3>
+						
+						<p><code>HexMapEditor</code> also has one place where we can use <code>TryGetNeighbor</code>, in <code>EditCell</code>.</p>
+						
+						<pre>	void EditCell (HexCell cell)
+	{
+		if (cell)
+		{
+			&hellip;
+			if (
+				isDrag <ins>&amp;&amp;</ins>
+				<ins>cell.TryGetNeighbor(dragDirection.Opposite(), out HexCell otherCell)</ins>
+			) {
+				<del>//HexCell otherCell = cell.GetNeighbor(dragDirection.Opposite());</del>
+				<del>//if (otherCell) {</del>
+				if (riverMode == OptionalToggle.Yes)
+				{
+					otherCell.SetOutgoingRiver(dragDirection);
+				}
+				if (roadMode == OptionalToggle.Yes)
+				{
+					otherCell.AddRoad(dragDirection);
+				}
+				<del>//}</del>
+			}
+		}
+	}</pre>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Walls and Exploration</h2>
+					
+					<p>The final data that we turn into flags in this tutorial are the wall and exploration states. These are boolean fields, taking up the same amount of space as our single flags field, while they could fit in a single bit each.</p>
+					
+					<section>
+						<h3>Walls</h3>
+						
+						<p>Add a bit for walls to <code>HexFlags</code>.</p>
+						
+						<pre>	River = 0b111111_111111_000000<ins>,</ins>
+
+	<ins>Walled = 0b1_000000_000000_000000</ins></pre>
+						
+						<p>Then remove the <code>walled</code> field from <code>HexCell</code>.</p>
+						
+						<pre>	<del>//bool walled;</del></pre>
+						
+						<p>Adjust the <code>Walled</code> property so it uses the bit flag.</p>
+						
+						<pre>	public bool Walled
+	{
+		get => <ins>flags.HasAny(HexFlags.Walled)</ins>;
+		set
+		{
+			<ins>HexFlags newFlags =</ins>
+				<ins>value ? flags.With(HexFlags.Walled) : flags.Without(HexFlags.Walled);</ins>
+			if (<ins>flags</ins> != <ins>newFlags</ins>)
+			{
+				<del>//walled = value;</del>
+				<ins>flags = newFlags;</ins>
+				Refresh();
+			}
+		}
+	}</pre>
+						
+						<p>Change <code>Save</code> to it uses that property.</p>
+						
+						<pre>		writer.Write(<ins>Walled</ins>);</pre>
+						
+						<p>And <code>Load</code> so it sets the flag if needed.</p>
+						
+						<pre>		<del>//walled = reader.ReadBoolean();</del>
+		<ins>if (reader.ReadBoolean())</ins>
+		<ins>{</ins>
+			<ins>flags = flags.With(HexFlags.Walled);</ins>
+		<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Exploration</h3>
+						
+						<p>Add bits for the explored and explorable states to <code>HexFlags</code>.</p>
+						
+						<pre>	Walled = 0b1_000000_000000_000000<ins>,</ins>
+
+	<ins>Explored   = 0b010_000000_000000_000000,</ins>
+	<ins>Explorable = 0b100_000000_000000_000000</ins></pre>
+						
+						<p>Then remove the <code>explored</code> field from <code>HexCell</code>.</p>
+						
+						<pre>	<del>//bool explored;</del></pre>
+						
+						<p>Change the <code>IsExplored</code> property to work with the flags.</p>
+						
+						<pre>	public bool IsExplored
+	{
+		get => <ins>flags.HasAll(HexFlags.Explored | HexFlags.Explorable)</ins>;
+		private set => <ins>flags = value ?</ins>
+			<ins>flags.With(HexFlags.Explored) : flags.Without(HexFlags.Explored)</ins>;
+	}</pre>
+						
+						<p><code>Explorable</code> was a stand-alone property, but it must now also refer to the flags.</p>
+						
+						<pre>	public bool Explorable
+	{
+		get <ins>=> flags.HasAny(HexFlags.Explorable)</ins>;
+		set <ins>=> flags = value ?</ins>
+			<ins>flags.With(HexFlags.Explorable) : flags.Without(HexFlags.Explorable)</ins>;
+	}</pre>
+						
+						<p>Whether a cell is explorable is set when a map is created. So when <code>Load</code> gets invoked it is already appropriately set. To make this explicit clear all flags at the start of <code>Load</code>, except the explorable one.</p>
+						
+						<pre>	public void Load (BinaryReader reader, int header)
+	{
+		<ins>flags &= HexFlags.Explorable;</ins>
+		&hellip;
+	}</pre>
+						
+						<p>Our cells have become a lot leaner at this point. We'll continue working on this in the future.</p>
+						
+						<p>The next tutorial is <a href="../3-0-0/index.html">Hex Map 3.0.0</a>.</p>
+					</section>
+					
+					<a href="../../tutorials/license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecoding-projects/hex-map-project/src/ffa341353ffa5cf8f7c6d06e0d8e148298f2c70f/?at=release%2F2.3.0" class="repository">repository</a>
+					<a href="Hex-Map-2-3-0.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../tutorials/index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../tutorials/become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../tutorials/donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials/tutorials.js"></script>
+	</body>
+</html>

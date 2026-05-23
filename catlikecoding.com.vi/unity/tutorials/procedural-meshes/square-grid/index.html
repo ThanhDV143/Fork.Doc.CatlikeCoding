@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/procedural-meshes/square-grid/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/procedural-meshes/square-grid/tutorial-image.jpg">
+		<meta property="og:title" content="Square Grid">
+		<meta property="og:description" content="A Unity C# Procedural Meshes tutorial about creating a square grid mesh via a Burst job.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Square Grid</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/procedural-meshes/square-grid/#article",
+				"headline": "Square Grid",
+				"alternativeHeadline": "Mesh Jobs",
+				"datePublished": "2021-11-23",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity C# Procedural Meshes tutorial about creating a square grid mesh via a Burst job.",
+				"image": "https://catlikecoding.com/unity/tutorials/procedural-meshes/square-grid/tutorial-image.jpg",
+				"dependencies": "Unity 2020.3.18f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/procedural-meshes/", "name": "Procedural Meshes" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				AdvancedMultiStreamProceduralMesh: 1,
+				AdvancedSingleStreamProceduralMesh: 1,
+				IMeshGenerator: 1,
+				IMeshStreams: 1,
+				G: 1,
+				MeshJob: 1,
+				MultiStream: 1,
+				ProceduralMesh: 1,
+				S: 1,
+				SingleStream: 1,
+				SquareGrid: 1,
+				Stream0: 1,
+				TriangleUInt16: 1,
+				Vertex: 1
+			};
+			
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Procedural Meshes</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Square Grid</h1>
+					<p>Mesh Jobs</p>
+					<ul>
+						<li>Design a generic mesh job framework.</li>
+						<li>Define separate mesh streams and generators.</li>
+						<li>Disable restrictions on native container access.</li>
+						<li>Create a grid of quads on the XZ plane.</li>
+						<li>Generate rows of quads instead of individual quads.</li>
+					</ul>
+				</header>
+				
+				<p>This is the second tutorial in a series about <a href="../index.html">procedural meshes</a>. The <a href="../creating-a-mesh/index.html">previous tutorial</a> introduced the advanced Mesh API. This time we'll use that API to make a Burst job that generates a square grid consisting of multiple quads.</p>
+				
+				<p>This tutorial is made with Unity 2020.3.18f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A 3&times;3 square grid.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Procedural Mesh Job Framework</h2>
+					
+					<p>A square grid is only one of many procedural meshes that we could generate. So instead of starting directly with a square grid job we'll first design a framework that supports a general approach. This will work somewhat similar to the generic approach that we used in the <a href="../../pseudorandom-noise/index.html">Pseudorandom Noise</a> series, but with a few differences.</p>
+					
+					<section>
+						<h3>Generic Vertex</h3>
+						
+						<p>The first thing that we'll do is define a generic <code>Vertex</code> struct type to hold the vertex data. Let's put its asset file in a <em translate="no">Scripts / Procedural Meshes</em> subfolder.</p>
+						
+						<figure>
+							<img src="procedural-mesh-job-framework/procedural-meshes-namespace.png" width="234" height="112">
+							<figcaption>Vertex asset in <em translate="no">Procedural Meshes</em> subfolder.</figcaption>
+						</figure>
+						
+						<p>The contents of <code>Vertex</code> are the same as <code>AdvancedSingleStreamProceduralMesh.Vertex</code>, except that we won't bother with minimizing its size, so give everything the appropriate <code>float</code> type.</p>
+						
+						<pre translate="no"><ins>using Unity.Mathematics;</ins>
+
+<ins>public struct Vertex {</ins>
+	<ins>public float3 position, normal;</ins>
+	<ins>public float4 tangent;</ins>
+	<ins>public float2 texCoord0;</ins>
+<ins>}</ins></pre>
+						
+						<p>In the <a href="../../pseudorandom-noise/index.html">Pseudorandom Noise</a> series we put all noise-related types in a single class and used partial classes to split the code into multiple files. This time we'll use a different approach: a custom namespace, which we'll named <code>ProceduralMeshes</code>.</p>
+						
+						<p>To make a type part of a namespace it has to be defined inside a <code>namespace</code> block with the appropriate name, as if it were nested inside a <code>class</code> block. Do this for <code>Vertex</code>.</p>
+						
+						<pre translate="no">using Unity.Mathematics;
+
+<ins>namespace ProceduralMeshes {</ins>
+
+	public struct Vertex {
+		public float3 position, normal;
+		public float4 tangent;
+		public float2 texCoord0;
+	}
+<ins>}</ins></pre>
+						
+						<p>We'll put all other <code>ProceduralMeshes</code> type assets in the <em translate="no">Procedural Meshes</em> folder as well.</p>
+					</section>
+					
+					<section>
+						<h3>Mesh Streams</h3>
+						
+						<p>To store the mesh data we need to define the vertex and index buffers and copy the relevant data in the appropriate format. Rather than define this explicitly for each job we'll isolate this code by introducing a <code>ProceduralMeshes.IMeshStreams</code> interface. It will take care of setting up the vertex and index buffers, hiding the details of how many streams there are and what the exact data format is.</p>
+						
+						<pre translate="no"><ins>using Unity.Mathematics;</ins>
+<ins>using UnityEngine;</ins>
+
+<ins>namespace ProceduralMeshes {</ins>
+
+	<ins>public interface IMeshStreams { }</ins>
+<ins>}</ins></pre>
+						
+						<p>Its first responsibility is to initialize the mesh data. We'll define a <code>Setup</code> method for this, with the mesh data as a paramater, along with the desired vertex count and index count.</p>
+						
+						<pre translate="no">		<ins>void Setup(Mesh.MeshData data, int vertexCount, int indexCount);</ins></pre>
+						
+						<p>It also takes care of copying a vertex to the mesh's vertex buffer, regardless the amount of streams and the data format. We'll use a <code>SetVertex</code> method for this, with the vertex index and data to set as parameters.</p>
+						
+						<pre translate="no">		<ins>void SetVertex(int index, Vertex data);</ins></pre>
+						
+						<p>We have to do this for the index buffer as well. As it's more convenient to work with triangles instead of individual indices, we'll define a <code>SetTriangle</code> method with the triangle index and an <code>int3</code> vertex index triplet as parameters.</p>
+						
+						<pre translate="no">		<ins>void SetTriangle(int index, int3 triangle);</ins></pre>
+						
+						<p>The most straightforward implementation of this interface would be a single-stream approach. We'll name this type <code>SingleStream</code> and it has to be a struct to work with Burst jobs. We'll also group the stream implementations in the <code>ProceduralMeshes.Streams</code> nested namespace. I'll also put their assets in the <em translate="no">Scripts / Procedural Meshes / Streams</em> subfolder.</p>
+						
+						<pre translate="no"><ins>using System.Runtime.CompilerServices;</ins>
+<ins>using System.Runtime.InteropServices;</ins>
+<ins>using Unity.Collections;</ins>
+<ins>using Unity.Mathematics;</ins>
+<ins>using UnityEngine;</ins>
+<ins>using UnityEngine.Rendering;</ins>
+
+<ins>namespace ProceduralMeshes.Streams {</ins>
+
+    <ins>public struct SingleStream : IMeshStreams {}</ins>
+<ins>}</ins></pre>
+						
+						<p>Add the <code>Setup</code> method and use it to define the mesh's buffers like we did in <code>AdvancedSingleStreamProceduralMesh</code>, except that we'll use 32-bit floats everywhere. Also immediately set the single submesh, not yet worrying about its bounds.</p>
+						
+						<pre translate="no">		<ins>public void Setup (Mesh.MeshData meshData, int vertexCount, int indexCount) {</ins>
+			<ins>var descriptor = new NativeArray&lt;VertexAttributeDescriptor>(</ins>
+				<ins>4, Allocator.Temp, NativeArrayOptions.UninitializedMemory</ins>
+			<ins>);</ins>
+			<ins>descriptor[0] = new VertexAttributeDescriptor(dimension: 3);</ins>
+			<ins>descriptor[1] = new VertexAttributeDescriptor(</ins>
+				<ins>VertexAttribute.Normal, dimension: 3</ins>
+			<ins>);</ins>
+			<ins>descriptor[2] = new VertexAttributeDescriptor(</ins>
+				<ins>VertexAttribute.Tangent, dimension: 4</ins>
+			<ins>);</ins>
+			<ins>descriptor[3] = new VertexAttributeDescriptor(</ins>
+				<ins>VertexAttribute.TexCoord0, dimension: 2</ins>
+			<ins>);</ins>
+			<ins>meshData.SetVertexBufferParams(vertexCount, descriptor);</ins>
+			<ins>descriptor.Dispose();</ins>
+
+			<ins>meshData.SetIndexBufferParams(indexCount, IndexFormat.UInt32);</ins>
+			
+			<ins>meshData.subMeshCount = 1;</ins>
+			<ins>meshData.SetSubMesh(0, new SubMeshDescriptor(0, indexCount));</ins>
+		<ins>}</ins></pre>
+						
+						<p>To store the vertex data in the single stream, introduce a private nested <code>Stream0</code> type. It exactly matches <code>Vertex</code>, except that here we should make sure that the field order is fixed, by attaching the <code>StructLayout(LayoutKind.Sequential)</code> attribute to it. Use it to define a native array field for this stream and retrieve it at the end of <code>Setup</code>.</p>
+						
+						<pre translate="no">		<ins>[StructLayout(LayoutKind.Sequential)]</ins>
+		<ins>struct Stream0 {</ins>
+			<ins>public float3 position, normal;</ins>
+			<ins>public float4 tangent;</ins>
+			<ins>public float2 texCoord0;</ins>
+		<ins>}</ins>
+		
+		<ins>NativeArray&lt;Stream0> stream0;</ins>
+	
+		public void Setup (Mesh.MeshData meshData, int vertexCount, int indexCount) {
+			&hellip;
+
+			<ins>stream0 = meshData.GetVertexData&lt;Stream0>();</ins>
+		}</pre>
+						
+						<p>The implementation of <code>SetVertex</code> then consists of copying the vertex data to a <code>Stream0</code> value and storing it at the appropriate index in the stream.</p>
+						
+						<pre translate="no">		<ins>public void SetVertex (int index, Vertex vertex) => stream0[index] = new Stream0 {</ins>
+			<ins>position = vertex.position,</ins>
+			<ins>normal = vertex.normal,</ins>
+			<ins>tangent = vertex.tangent,</ins>
+			<ins>texCoord0 = vertex.texCoord0</ins>
+		<ins>};</ins></pre>
+						
+						<aside>
+							<h3>Can't we just use <code>Vertex</code> for the stream type?</h3>
+							<div>
+								<p>Yes, if we gave <code>Vertex</code> an explicit sequential layout. However, this approach allows us more flexibility to add data to <code>Vertex</code>&mdash;for example a vertex color&mdash;without having to immediately adjust <code>SingleStream</code>. Keep in mind that Burst will optimize away intermediate steps like copying from <code>Vertex</code> to <code>Stream0</code>.</p>
+							</div>
+						</aside>
+						
+						<p>Our implementation of <code>SetVertex</code> is trivial, but it could be a lot more complex, for example if we decided to store part of the data as 16-bit values, requiring conversions. In such cases Burst might decide to include the <code>SetVertex</code> code only once and insert a call instruction&mdash;a method invocation&mdash;each time a vertex gets set. This approach is slow and prevents aggressive code optimizations. So we'll instruct Burst to always insert the entire code inline instead of going for a call. This is done by attaching the <code>MethodImpl</code> attribute to the method, with <code>MethodImplOptions.AggressiveInlining</code> as its argument. These types are part of the <code>System.Runtime.CompilerServices</code> namespace.</p>
+						
+						<pre translate="no">		<ins>[MethodImpl(MethodImplOptions.AggressiveInlining)]</ins>
+		public void SetVertex (int index, Vertex vertex) => stream0[index] = new Stream0 {
+			&hellip;
+		};</pre>
+						
+						<aside>
+							<h3>Shouldn't we always suggest aggressive inlining for Burst code?</h3>
+							<div>
+								<p>As a rule of thumb you could indeed always do this, but it mostly isn't necessary. Small methods are inlined automatically and those that are used only one are also inlined. To be sure, inspect the code generated by Burst to see whether undesired <code>call</code> instructions are present.</p>
+								
+								<p>In our specific case we'll invoke <code>SetVertex</code> four times per quad. If we'd include code to convert from <code>float</code> to <code>half</code> in <code>SetVertex</code> then Burst likely won't inline the method. At this point <code>SetVertex</code> doesn't require the attribute, but I include it as a demonstration.</p>
+							</div>
+						</aside>
+						
+						<p>Finally, we can directly copy the triangle data to the index buffer by reinterpreting the index data to <code>int3</code> triangle data. Store the native array in a field at the end of <code>Setup</code> and perform the copy in <code>SetTriangle</code>.</p>
+						
+						<pre translate="no">		<ins>NativeArray&lt;int3> triangles;</ins>
+		
+		public void Setup (Mesh.MeshData meshData, int vertexCount, int indexCount) {
+			&hellip;
+			
+			stream0 = meshData.GetVertexData&lt;Stream0>();
+			<ins>triangles = meshData.GetIndexData&lt;int>().Reinterpret&lt;int3>(4);</ins>
+		}
+		
+		&hellip;
+		
+		<ins>public void SetTriangle (int index, int3 triangle) => triangles[index] = triangle;</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Mesh Generators</h3>
+						
+						<p>We'll also introduce an interface for the part of the code that takes care of generating the mesh, naming it <code>ProceduralMeshes.IMeshGenerator</code>. It defines the code that gets executed by the job, so it needs an <code>Execute</code> method with an index parameter. We also give it a second parameter for the streams used for storage. This has to be a generic parameter, constrained to be a struct than implements <code>IMeshStreams</code>. We don't need to make the entire interface generic, we can limit this to the <code>Execute</code> method only.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+						
+<ins>namespace ProceduralMeshes {</ins>
+
+	<ins>public interface IMeshGenerator {</ins>
+
+		<ins>void Execute&lt;S> (int i, S streams) where S : struct, IMeshStreams;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>We'll need to know the vertex count for the mesh that gets generated, and the generator can provide it via a <code>VertexCount</code> getter property. We can add it to the interface by writing <code>int VertexCount { get; }</code>. Also include a getter property for the index count.</p>
+						
+						<pre translate="no">		<ins>int VertexCount { get; }</ins>
+		
+		<ins>int IndexCount { get; }</ins></pre>
+						
+						<p>Besides that, the length of the job must also be known when scheduling it. Add a <code>JobLength</code> getter property to provide this information.</p>
+						
+						<pre translate="no">		<ins>int JobLength { get; }</ins></pre>
+						
+						<p>To generate our square grid we have to implement this interface, by defining the <code>ProceduralMeshes.Generators.SquareGrid</code> struct type, once again in a nested namespace and separate subfolder.</p>
+						
+						<pre translate="no"><ins>using Unity.Mathematics;</ins>
+<ins>using UnityEngine;</ins>
+
+<ins>using static Unity.Mathematics.math;</ins>
+
+<ins>namespace ProceduralMeshes.Generators {</ins>
+
+	<ins>public struct SquareGrid : IMeshGenerator {}</ins>
+<ins>}</ins></pre>
+						
+						<p>We won't generate the grid just yet, focusing on completing the framework first. So for now only provide a minimal implementation that generates an empty mesh and does nothing.</p>
+						
+						<pre translate="no">		<ins>public int VertexCount => 0;</ins>
+
+		<ins>public int IndexCount => 0;</ins>
+
+		<ins>public int JobLength => 0;</ins>
+
+		<ins>public void Execute&lt;S> (int i, S streams) where S : struct, IMeshStreams {}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Mesh Job</h3>
+						
+						<p>The next step is to define a Burst job to generate meshes, for which we introduce the <code>ProceduralMeshes.MeshJob</code> type. This is a generic <code>IJobFor</code> struct with type parameters for <code>IMeshGenerator</code> and <code>IMeshStreams</code>.</p>
+						
+						<pre translate="no"><ins>using Unity.Burst;</ins>
+<ins>using Unity.Collections;</ins>
+<ins>using Unity.Jobs;</ins>
+<ins>using UnityEngine;</ins>
+
+<ins>namespace ProceduralMeshes {</ins>
+
+	<ins>[BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = true)]</ins>
+	<ins>public struct MeshJob&lt;G, S> : IJobFor</ins>
+		<ins>where G : struct, IMeshGenerator</ins>
+		<ins>where S : struct, IMeshStreams {}</ins>
+<ins>}</ins></pre>
+						
+						<p>Give it private fields for its generator and streams. Its <code>Execute</code> method simply forwards the invocation to the generator, passing it both the index and streams.</p>
+						
+						<pre translate="no">		<ins>G generator;</ins>
+
+		<ins>S streams;</ins>
+
+		<ins>public void Execute (int i) => generator.Execute(i, streams);</ins></pre>
+						
+						<p>Because we're only writing to the streams when generating the mesh and don't read from them we can attach the <code>WriteOnly</code> attribute to the streams. This will indirectly apply the write-only state to the native arrays contained by the <code>IMeshStreams</code> implementation.</p>
+						
+						<pre translate="no">		<ins>[WriteOnly]</ins>
+		S streams;</pre>
+						
+						<p>Like we did in the <a href="../../pseudorandom-noise/index.html">Pseudorandom Noise</a> series, we also give this job its own public static <code>ScheduleParallel</code> method that creates and schedules the job, returning its job handle. It needs mesh data and a job depency as parameters. In this case we have to invoke <code>Setup</code> on the job's streams before scheduling, passing it the mesh data along with the vertex and index counts that we retrieve from the job's generator.</p>
+						
+						<pre translate="no">		<ins>public static JobHandle ScheduleParallel (</ins>
+			<ins>Mesh.MeshData meshData, JobHandle dependency</ins>
+		<ins>) {</ins>
+			<ins>var job = new MeshJob&lt;G, S>();</ins>
+			<ins>job.streams.Setup(</ins>
+				<ins>meshData, job.generator.VertexCount, job.generator.IndexCount</ins>
+			<ins>);</ins>
+			<ins>return job.ScheduleParallel(job.generator.JobLength, 1, dependency);</ins>
+		<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Procedural Mesh Component</h3>
+						
+						<p>To try out our framework we'll create a <code>ProceduralMesh</code> component type that will set the mesh of its <code>MeshFilter</code> component, like the components of the <a href="../creating-a-mesh/index.html">previous tutorial</a>. This type isn't part of the framework itself, so we'll put its asset in the <em translate="no">Scripts</em> folder. Also, as it isn't part of our namespaces we'll have to import them all.</p>
+						
+						<pre translate="no"><ins>using ProceduralMeshes;</ins>
+<ins>using ProceduralMeshes.Generators;</ins>
+<ins>using ProceduralMeshes.Streams;</ins>
+<ins>using UnityEngine;</ins>
+<ins>using UnityEngine.Rendering;</ins>
+
+<ins>[RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]</ins>
+<ins>public class ProceduralMesh : MonoBehaviour {}</ins></pre>
+						
+						<p>This time we'll create the mesh object in the <code>Awake</code> method, generate the mesh, and assign it to the <code>MeshFilter</code>. We put the mesh-generating code in a separate <code>GenerateMesh</code> method and keep track of the mesh via a field.</p>
+						
+						<pre translate="no">	<ins>Mesh mesh;</ins>
+
+	<ins>void Awake () {</ins>
+		<ins>mesh = new Mesh {</ins>
+			<ins>name = "Procedural Mesh"</ins>
+		<ins>};</ins>
+		<ins>GenerateMesh();</ins>
+		<ins>GetComponent&lt;MeshFilter>().mesh = mesh;</ins>
+	<ins>}</ins>
+	
+	<ins>void GenerateMesh () {}</ins></pre>
+						
+						<p>Generating the mesh consists of allocating writable mesh data, followed by scheduling and immediately completing a <code>MeshJob</code> for it&mdash;using our <code>SquareGrid</code> and <code>SingleStream</code> types&mdash;and then applying it to the mesh.</p>
+						
+						<pre translate="no">	void GenerateMesh () {
+		<ins>Mesh.MeshDataArray meshDataArray = Mesh.AllocateWritableMeshData(1);</ins>
+		<ins>Mesh.MeshData meshData = meshDataArray[0];</ins>
+
+		<ins>MeshJob&lt;SquareGrid, SingleStream>.ScheduleParallel(</ins>
+			<ins>meshData, default</ins>
+		<ins>).Complete();</ins>
+
+		<ins>Mesh.ApplyAndDisposeWritableMeshData(meshDataArray, mesh);</ins>
+	}</pre>
+						
+						<p>Now create a procedural mesh game object, either in a new scene or replacing the existing quad-generating game objects of the <a href="../creating-a-mesh/index.html">previous tutorial</a></p>
+						
+						<figure>
+							<img src="procedural-mesh-job-framework/procedural-mesh-game-object.png" width="320" height="330">
+							<figcaption>Procedural mesh game object.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Generating a Quad</h3>
+						
+						<p>At this point an empty mesh is generated when entering play mode.</p>
+						
+						<figure>
+							<img src="procedural-mesh-job-framework/procedural-mesh-empty.png" width="320" height="310">
+							<figcaption>Empty procedural mesh.</figcaption>
+						</figure>
+						
+						<p>We get an empty mesh because our job doesn't do anything yet. Currently the job isn't scheduled at all because its length is zero. We activate the job by making <code>SquareGrid.JobLength</code> return 1.</p>
+						
+						<pre translate="no">		public int JobLength => <ins>1</ins>;</pre>
+						
+						<p>This causes our job to get scheduled, but when entering play mode we now get an invalid operation exception complaining that two containers might be the same thing. This refers to the two native arrays of <code>SingleStream</code>. Unity complains that they might be aliasing, which means that the native arrays might represent overlapping data. The reason for this is that all the mesh data is a single unmanaged block of memory. Our job tries to access two subsections of this data&mdash;the vertex part and the triangle index part&mdash;at the same time and Unity disallows this because it might produce faulty results.</p>
+						
+						<p>In general Unity's safety checks are valid and should be heeded, but in this case we are certain that the vertex and index data never overlap. So we'll disable the safety, by attaching the <code>NativeDisableContainerSafetyRestriction</code> attribute from the <code>Unity.Collections.LowLevel.Unsafe</code> namespace to both native array fields.</p>
+						
+						<pre translate="no">using Unity.Collections;
+<ins>using Unity.Collections.LowLevel.Unsafe;</ins>
+using Unity.Mathematics;
+&hellip;
+
+namespace ProceduralMeshes.Streams {
+	
+	public struct SingleStream : IMeshStreams {
+		
+		&hellip;
+		
+		<ins>[NativeDisableContainerSafetyRestriction]</ins>
+		NativeArray&lt;Stream0> stream0;
+
+		<ins>[NativeDisableContainerSafetyRestriction]</ins>
+		NativeArray&lt;int3> triangles;
+		
+		&hellip;
+	}
+}</pre>
+						
+						<p>To test our framework we'll have <code>SquareGrid</code> generate only a single quad for now, exactly like the one that we generated in the <a href="../creating-a-mesh/index.html">previous tutorial</a>. So its vertex count has to become four.</p>
+						
+						<pre translate="no">		public int VertexCount => <ins>4</ins>;</pre>
+						
+						<p>In <code>Execute</code>, begin by creating a generic vertex value and settings its normal and tangent vector, which are the same for all vertices. As all values are initialized to zero we can suffice with setting only the nonzero components. Thus the normal Z component becomes &minus;1 and the tangent XW components become 1 and &minus;1.</p>
+						
+						<pre translate="no">		public void Execute&lt;S> (int i, S streams) where S : struct, IMeshStreams {
+			<ins>var vertex = new Vertex();</ins>
+			<ins>vertex.normal.z = -1f;</ins>
+			<ins>vertex.tangent.xw = float2€(1f, -1f);</ins>
+		}</pre>
+						
+						<aside>
+							<h3>How does the assignment to <code>xw</code> work?</h3>
+							<div>
+								<p>This is a swizzle operation, which allows us to assign to a subset of the vector's components in the order that we want. A swizzle operation can also be used to extract a subset of the components, in whatever order we like and even with repetition. For example, instead of <code>.xy</code> we could also access <code>.yx</code>, <code>.zy</code>, <code>.xx</code>, <code>.xxy</code>, <code>.zxxy</code>, etc. The Mathematics types implement these via properties.</p>
+							</div>
+						</aside>
+						
+						<p>We can then set the first vertex, with index zero. We ignore the index passed to <code>Execute</code> method, because we'll generate the entire quad at once. We can do this because we disabled the safety restrictions for the native arrays.</p>
+						
+						<pre translate="no">			var vertex = new Vertex();
+			vertex.normal.z = -1f;
+			vertex.tangent.xw = float2€(1f, -1f);
+
+			<ins>streams.SetVertex(0, vertex);</ins></pre>
+						
+						<aside>
+							<h3>Don't we need the <code>NativeDisableParallelForRestriction</code> attribute to write to any index?</h3>
+							<div>
+								<p>Yes, but the <code>NativeDisableContainerSafetyRestriction</code> attribute disables all restrictions, so we don't need to also apply <code>NativeDisableParallelForRestriction</code>.</p>
+							</div>
+						</aside>
+						
+						<p>Complete the quad by adjusting the positions and texture coordinates and setting the other three vertices.</p>
+						
+						<pre translate="no">			streams.SetVertex(0, vertex);
+			
+			<ins>vertex.position = right();</ins>
+			<ins>vertex.texCoord0 = float2€(1f, 0f);</ins>
+			<ins>streams.SetVertex(1, vertex);</ins>
+
+			<ins>vertex.position = up();</ins>
+			<ins>vertex.texCoord0 = float2€(0f, 1f);</ins>
+			<ins>streams.SetVertex(2, vertex);</ins>
+
+			<ins>vertex.position = float3€(1f, 1f, 0f);</ins>
+			<ins>vertex.texCoord0 = 1f;</ins>
+			<ins>streams.SetVertex(3, vertex);</ins></pre>
+						
+						<p>We also need two triangles, so set the index count to six.</p>
+						
+						<pre translate="no">		public int IndexCount => <ins>6</ins>;</pre>
+						
+						<p>Then set the two triangles at the end of <code>Execute</code>.</p>
+						
+						<pre translate="no">		public void Execute&lt;S> (int i, S streams) where S : struct, IMeshStreams {
+			&hellip;
+
+			<ins>streams.SetTriangle(0, int3€(0, 2, 1));</ins>
+			<ins>streams.SetTriangle(1, int3€(1, 2, 3));</ins>
+		}</pre>
+						
+						<p>This should produce a quad, but instead we get an argument exception even before the jobs are scheduled. It happens when the submesh is set in <code>SingleStream.Setup</code>. When we invoke <code>SetSubMesh</code> it immediately validates the triangle indices and recalculates the bounds. This is virtually guaranteed to fail, because at this point the job hasn't run yet so the index buffer contains arbitrary data. We must supply <code>MeshUpdateFlags</code> to indicate that <code>SetSubMesh</code> should not do anything with the data. We already used <code>DontRecalculateBounds</code> in the <a href="../creating-a-mesh/index.html">previous tutorial</a>. This time we also have to use <code>DontValidateIndices</code>. We apply both by merging the flags with the binary OR <code>|</code> operator.</p>
+						
+						<pre translate="no">			meshData.SetSubMesh(
+				0, new SubMeshDescriptor(0, indexCount)<ins>,</ins>
+				<ins>MeshUpdateFlags.DontRecalculateBounds |</ins>
+				<ins>MeshUpdateFlags.DontValidateIndices</ins>
+			);</pre>
+						
+						<figure>
+							<img src="procedural-mesh-job-framework/quad.png" width="170" height="170">
+							<figcaption>Quad generated via job.</figcaption>
+						</figure>
+						
+					</section>
+					
+					<section>
+						<h3>Bounds</h3>
+						
+						<p>The only thing that our mesh still lacks is valid bounds. The generator should provide these bounds, so add a property to get them to the <code>IMeshGenerator</code> interface.</p>
+						
+						<pre translate="no">		<ins>Bounds Bounds€ { get; }</ins></pre>
+						
+						<p>Then add the implementation to <code>SquareGrid</code>.</p>
+						
+						<pre translate="no">		<ins>public Bounds Bounds€ => new Bounds(new Vector3(0.5f, 0.5f), new Vector3(1f, 1f));</ins></pre>
+						
+						<p>To set the bounds, add a parameter for the mesh to <code>MeshJob.ScheduleParallel</code>. I make it the first parameter. We can then set the mesh bounds immediately after creating the job.</p>
+						
+						<pre translate="no">		public static JobHandle ScheduleParallel (
+			<ins>Mesh mesh,</ins> Mesh.MeshData meshData, JobHandle dependency
+		) {
+			var job = new MeshJob&lt;G, S>();
+			<ins>mesh.bounds = job.generator.Bounds€;</ins>
+			&hellip;
+		}</pre>
+						
+						<p>Pass along the mesh in <code>ProceduralMesh.GenerateMesh</code>.</p>
+						
+						<pre translate="no">		MeshJob&lt;SquareGrid, SingleStream>.ScheduleParallel(
+			<ins>mesh,</ins> meshData, default
+		).Complete();</pre>
+						
+						<p>We should also set the bounds of the submesh. To make this possible we'll add the bounds as a second parameter to <code>IMeshStreams.Setup</code>.</p>
+						
+						<pre translate="no">		void Setup(
+			Mesh.MeshData meshData, <ins>Bounds bounds,</ins> int vertexCount, int indexCount
+		);</pre>
+						
+						<p>Adjust <code>SingleStream.Setup</code> so it sets the bounds and vertex count of the submesh.</p>
+						
+						<pre translate="no">		public void Setup (
+			Mesh.MeshData meshData, <ins>Bounds bounds,</ins> int vertexCount, int indexCount
+		) {
+			&hellip;
+			meshData.SetSubMesh(
+				0, new SubMeshDescriptor(0, indexCount) <ins>{</ins>
+					<ins>bounds = bounds,</ins>
+					<ins>vertexCount = vertexCount</ins>
+				<ins>}</ins>,
+				MeshUpdateFlags.DontRecalculateBounds |
+				MeshUpdateFlags.DontValidateIndices
+			);
+
+			&hellip;
+		}</pre>
+						
+						<p>Finally, include the bounds when setting up the streams in <code>MeshJob.ScheduleParallel</code>. We could either store the bounds in a variable or directly use the result of the mesh bounds assignment expression as an argument for <code>Setup</code>. I do the latter to demonstrate this usage.</p>
+						
+						<pre translate="no">		public static JobHandle ScheduleParallel (
+			Mesh mesh, Mesh.MeshData meshData, JobHandle dependency
+		) {
+			var job = new MeshJob&lt;G, S>();
+			<del>//mesh.bounds = job.generator.Bounds;</del>
+			job.streams.Setup(
+				meshData,
+				<ins>mesh.bounds = job.generator.Bounds€,</ins>
+				job.generator.VertexCount,
+				job.generator.IndexCount
+			);
+			return job.ScheduleParallel(job.generator.JobLength, 1, dependency);
+		}</pre>
+					</section>
+					
+					<section>
+						<h3>16-Bit Indices</h3>
+						
+						<p>In the <a href="../creating-a-mesh/index.html">previous tutorial</a> we reduced the triangle indices from 32-bit to 16-bit, because that halves the size of the index buffer. Let's do the same for our framework as well. A convenient way to do this is by defining a <code>TriangleUInt16</code> type in the <code>ProceduralMeshes.Streams</code> namespace. It's a sequential struct containing three <code>ushort</code> values. Give it an implicit conversion operator from <code>int3</code> to <code>TriangleUInt16</code>.</p>
+						
+						<pre translate="no"><ins>using System.Runtime.InteropServices;</ins>
+<ins>using Unity.Mathematics;</ins>
+
+<ins>namespace ProceduralMeshes.Streams {</ins>
+
+	<ins>[StructLayout(LayoutKind.Sequential)]</ins>
+	<ins>public struct TriangleUInt16 {</ins>
+		
+		<ins>public ushort a, b, c;</ins>
+
+		<ins>public static implicit operator TriangleUInt16 (int3 t) => new TriangleUInt16 {</ins>
+			<ins>a = (ushort)t.x,</ins>
+			<ins>b = (ushort)t.y,</ins>
+			<ins>c = (ushort)t.z</ins>
+		<ins>};</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Now we can switch <code>SingleStream</code> to 16-bit indices simply by changing the triangle index element types and the index buffer format.</p>
+						
+						<pre translate="no">		[NativeDisableContainerSafetyRestriction]
+		NativeArray&lt;<ins>TriangleUInt16</ins>> triangles;
+		
+		public void Setup (
+			Mesh.MeshData meshData, Bounds bounds, int vertexCount, int indexCount
+		) {
+			&hellip;
+			
+			meshData.SetIndexBufferParams(indexCount, IndexFormat.<ins>UInt16</ins>);
+						
+			&hellip;
+			triangles = meshData.GetIndexData&lt;<ins>ushort</ins>>().Reinterpret<ins>&lt;TriangleUInt16>(2)</ins>;
+		}</pre>
+						
+						<figure>
+							<img src="procedural-mesh-job-framework/16-bit-indices.png" width="320" height="60">
+							<figcaption>16-Bit indices.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Multiple Vertex Streams</h3>
+						
+						<p>As an example of a different <code>IMeshStreams</code> implementation, let's include a multi-stream approach, like <code>AdvancedMultiStreamProceduralMesh</code>. Duplicate <code>SingleStream</code> and rename it to <code>MultiStream</code>. Replace its single stream with four streams for the individual vertex attributes.</p>
+						
+						<pre translate="no">	public struct <ins>MultiStream</ins> : IMeshStreams {
+
+		<del>//[StructLayout(LayoutKind.Sequential)]</del>
+		<del>//struct Stream0 {</del>
+		<del>//	&hellip;</del>
+		<del>//}</del>
+
+		<del>//[NativeDisableContainerSafetyRestriction]</del>
+		<del>//NativeArray&lt;Stream0> stream0;</del>
+
+		<ins>[NativeDisableContainerSafetyRestriction]</ins>
+		<ins>NativeArray&lt;float3> stream0, stream1;</ins>
+
+		<ins>[NativeDisableContainerSafetyRestriction]</ins>
+		<ins>NativeArray&lt;float4> stream2;</ins>
+
+		<ins>[NativeDisableContainerSafetyRestriction]</ins>
+		<ins>NativeArray&lt;float2> stream3;</ins>
+
+		&hellip;
+
+		public void Setup (
+			Mesh.MeshData meshData, Bounds bounds, int vertexCount, int indexCount
+		) {
+			&hellip;
+			descriptor[1] = new VertexAttributeDescriptor(
+				VertexAttribute.Normal, dimension: 3<ins>, stream: 1</ins>
+			);
+			descriptor[2] = new VertexAttributeDescriptor(
+				VertexAttribute.Tangent, dimension: 4<ins>, stream: 2</ins>
+			);
+			descriptor[3] = new VertexAttributeDescriptor(
+				VertexAttribute.TexCoord0, dimension: 2<ins>, stream: 3</ins>
+			);
+			&hellip;
+
+			stream0 = meshData.GetVertexData&lt;<ins>float3</ins>>();
+			<ins>stream1 = meshData.GetVertexData&lt;float3>(1);</ins>
+			<ins>stream2 = meshData.GetVertexData&lt;float4>(2);</ins>
+			<ins>stream3 = meshData.GetVertexData&lt;float2>(3);</ins>
+			triangles = meshData.GetIndexData&lt;ushort>().Reinterpret&lt;TriangleUInt16>(2);
+		}
+		
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public void SetVertex (int index, Vertex vertex) <ins>{</ins>
+			<ins>stream0[index] = vertex.position;</ins>
+			<ins>stream1[index] = vertex.normal;</ins>
+			<ins>stream2[index] = vertex.tangent;</ins>
+			<ins>stream3[index] = vertex.texCoord0;</ins>
+		<ins>}</ins>
+
+		&hellip;
+	}</pre>
+						
+						<p>It is now possible to switch to a multi-stream approach by replacing <code>SingleStream</code> with <code>MultiStream</code> in <code>ProceduralMesh.GenerateMesh</code>.</p>
+						
+						<pre translate="no">		MeshJob&lt;SquareGrid, <ins>MultiStream</ins>>.ScheduleParallel(
+			mesh, meshData, default
+		).Complete();</pre>
+						
+						<p>Note that the generator code only knows about the generic <code>Vertex</code>. It is completely oblivious of how the vertex data gets stored. It's even possible that only part of the data gets stored, for example omitting the normal and tangent. Burst will optimize away the unneeded code.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>A Grid of Quads</h2>
+					
+					<p>Now that we have a functional framework we move on to generating a mesh that consists of multiple quads, placed so that they form a regular square grid. Such a grid itself doesn't provide any benefit compared to a single quad, but it can be used as the basis of more complex meshes that aren't entirely flat. In this tutorial we'll limit ourselves to the simple grid.</p>
+					
+					<section>
+						<h3>Mesh Resolution</h3>
+						
+						<p>We'll adapt our code so it can produce a grid of R&times;R squares, where R stands for the resolution of the grid. The resolution of the mesh is a general concept, for which we can add a property to <code>IMeshGenerator</code>. In this case the property should be settable, which we enforce by also including <code>set;</code> in its block.</p>
+						
+						<pre translate="no">		<ins>int Resolution { get; set; }</ins></pre>
+						
+						<p>We can implement this property in <code>SquareGrid</code> by including the same line of code, only adding the <code>public</code> access modifier. This generates a trivial automatic property, which implicitly includes a field used by the property.</p>
+						
+						<pre translate="no">		<ins>public int Resolution { get; set; }</ins></pre>
+						
+						<p>The vertex count, index count, and job length now depend on the resolution. The amount of quads is equal to the resolution squared, so have to multiplied all by that.</p>
+						
+						<pre translate="no">		public int VertexCount => 4 <ins>* Resolution * Resolution </ins>;
+
+		public int IndexCount => 6 <ins>* Resolution * Resolution</ins>;
+
+		public int JobLength => <ins>Resolution * Resolution</ins>;</pre>
+						
+						<p>Add a resolution parameter to <code>MeshJob.ScheduleParallel</code> and use it to set the generator's resolution immediately after creating the job.</p>
+						
+						<pre translate="no">		public static JobHandle ScheduleParallel (
+			Mesh mesh, Mesh.MeshData meshData, <ins>int resolution,</ins> JobHandle dependency
+		) {
+			var job = new MeshJob&lt;G, S>();
+			<ins>job.generator.Resolution = resolution;</ins>
+			&hellip;
+		}</pre>
+						
+						<p>Then add a resolution slider to <code>ProceduralMesh</code> and use it when generating the mesh. The minimum should be 1 and I'll use 10 for the maximum.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Range(1, 10)]</ins>
+	<ins>int resolution = 1;</ins>
+
+	&hellip;
+
+	void GenerateMesh () {
+		&hellip;
+
+		MeshJob&lt;SquareGrid, MultiStream>.ScheduleParallel(
+			mesh, meshData, <ins>resolution,</ins> default
+		).Complete();
+
+		&hellip;
+	}</pre>
+						
+						<p>To support regenerating the mesh when we change the resolution while in play mode we have to make some more changes. Our approach this time is to include an <code>Update</code> method that generates the mesh and then disables the component. This way <code>Update</code> isn't needlessly invoked every frame. We enable the component in a new <code>OnValidate</code> method. This means that we no longer need to generate the mesh in <code>Awake</code>.</p>
+						
+						<pre translate="no">	void Awake () {
+		&hellip;
+		<ins>//GenerateMesh();</ins>
+		GetComponent&lt;MeshFilter>().mesh = mesh;
+	}
+	
+	<ins>void OnValidate () => enabled = true;</ins>
+
+	<ins>void Update () {</ins>
+		<ins>GenerateMesh();</ins>
+		<ins>enabled = false;</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="a-grid-of-quads/resolution-slider.png" width="320" height="73">
+							<figcaption>Resolution slider.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Generating All Quads</h3>
+						
+						<p>To make sure that we set the data for all quads we'll determine the correct vertex and triangle indices at the start of <code>Execute</code>. The job index passed to <code>Execute</code> represents the quad index. So its first vertex index is the quadruple that and its first triangle index is double that.</p>
+						
+						<pre translate="no">		public void Execute&lt;S> (int i, S streams) where S : struct, IMeshStreams {
+			<ins>int vi = 4 * i, ti = 2 * i;</ins>
+
+			&hellip;
+		}</pre>
+						
+						<p>We find the other vertex indices by adding an offset to the first one. I include the zero offset for clarity, even though it does not affect the code.</p>
+						
+						<pre translate="no">			streams.SetVertex(<ins>vi +</ins> 0, vertex);
+			
+			vertex.position = right();
+			vertex.texCoord0 = float2€(1f, 0f);
+			streams.SetVertex(<ins>vi +</ins> 1, vertex);
+
+			vertex.position = up();
+			vertex.texCoord0 = float2€(0f, 1f);
+			streams.SetVertex(<ins>vi +</ins> 2, vertex);
+
+			vertex.position = float3€(1f, 1f, 0f);
+			vertex.texCoord0 = 1f;
+			streams.SetVertex(<ins>vi +</ins> 3, vertex);</pre>
+						
+						<p>The same goes for the triangles. In this case we also have to add the first vertex index to the relative vertex indices that define the triangles, to keep them relative.</p>
+						
+						<pre translate="no">			streams.SetTriangle(<ins>ti +</ins> 0, <ins>vi +</ins> int3€(0, 2, 1));
+			streams.SetTriangle(<ins>ti +</ins> 1, <ins>vi +</ins> int3€(1, 2, 3));</pre>
+						
+						<p>We also have to determine the position offsets for the quads, relative to their bottom-left corners. We find the Y offset via an integer division of the quad index by the resolution. The X offset is then found by subtracting Y times the resolution from the quad index.</p>
+						
+						<pre translate="no">			int vi = 4 * i, ti = 2 * i;
+
+			<ins>int y = i / Resolution;</ins>
+			<ins>int x = i - Resolution * y;</ins></pre>
+						
+						<p>We can define all four coordinates that we need for the quad in a single <code>float4</code> value, containing X, X + 1, Y, and Y + 1. But we'll initially only add 0.9 to leave a visible gap between the quads.</p>
+						
+						<pre translate="no">			int y = i / Resolution;
+			int x = i - Resolution * y;
+
+			<ins>var coordinates = float4€(x, x + 0.9f, y, y + 0.9f);</ins></pre>
+						
+						<p>We can set the positions correctly via swizzle operations on the coordinates, selecting the appropriate two coordinates per position.</p>
+						
+						<pre translate="no">			<ins>vertex.position.xy = coordinates.xz;</ins>
+			streams.SetVertex(vi + 0, vertex);
+			
+			vertex.position<ins>.xy</ins> = <ins>coordinates.yz</ins>;
+			vertex.texCoord0 = float2€(1f, 0f);
+			streams.SetVertex(vi + 1, vertex);
+
+			vertex.position<ins>.xy</ins> = <ins>coordinates.xw</ins>;
+			vertex.texCoord0 = float2€(0f, 1f);
+			streams.SetVertex(vi + 2, vertex);
+
+			vertex.position<ins>.xy</ins> = <ins>coordinates.yw</ins>;
+			vertex.texCoord0 = 1f;
+			streams.SetVertex(vi + 3, vertex);</pre>
+						
+						<figure>
+							<img src="a-grid-of-quads/grid-resolution-2-gaps.png" width="300" height="300">
+							<figcaption>Resolution 2 grid with gaps.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>A Plane</h3>
+						
+						<p>Grids are typically used for flat planes, so let's adjust ours so it lies in the XZ plane. Begin by renaming <code>y</code> to <code>z</code> and also close the gaps between the quads.</p>
+						
+						<pre translate="no">			int <ins>z</ins> = i / Resolution;
+			int x = i - Resolution * <ins>z</ins>;
+			
+			var coordinates = float4€(x, x + <ins>1f</ins>, <ins>z</ins>, <ins>z</ins> + <ins>1f</ins>);</pre>
+						
+						<p>We change the orientation of the grid by assigning to the XZ components of the vertex position instead of to XY.</p>
+						
+						<pre translate="no">			vertex.position.<ins>xz</ins> = coordinates.xz;
+			streams.SetVertex(vi + 0, vertex);
+			
+			vertex.position.<ins>xz</ins> = coordinates.yz;
+			vertex.texCoord0 = float2€(1f, 0f);
+			streams.SetVertex(vi + 1, vertex);
+
+			vertex.position.<ins>xz</ins> = coordinates.xw;
+			vertex.texCoord0 = float2€(0f, 1f);
+			streams.SetVertex(vi + 2, vertex);
+
+			vertex.position.<ins>xz</ins> = coordinates.yw;</pre>
+						
+						<p>We also have to change the normal vector so it points up.</p>
+						
+						<pre translate="no">			vertex.normal.<ins>y</ins> = <ins>1f</ins>;</pre>
+						
+						<figure>
+							<img src="a-grid-of-quads/plane-resolution-3.png" width="390" height="144">
+							<figcaption>Resolution 3 plane.</figcaption>
+						</figure>
+						
+						<p>It's also convenient if the plane is centered on the origin and has a fixed size, regardless of its resolution. We can achieve this by dividing all coordinates by the resolution and then subtracting &frac12;.</p>
+						
+						<pre translate="no">			var coordinates = float4€(x, x + 1f, z, z + 1f) <ins>/ Resolution - 0.5f</ins>;</pre>
+						
+						<p>Adjust the bounds to match.</p>
+						
+						<pre translate="no">		public Bounds Bounds => new Bounds(<ins>Vector3.zero</ins>, new Vector3(1f, <ins>0f, 1f</ins>));</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Generating Rows of Quads</h3>
+						
+						<p>Our job currently generates each quad of the grid in isolation. Creating a single quad isn't much work, but the vertex data cannot be vectorized. So everything has to be calculated per quad and Unity's job framework adds additional overhead. We can improve efficiency by combining the generation of multiple quads in a single invocation of <code>Execute</code>. It makes the most sense to generates all quads of a single row together. That will make the job length equal to the resolution, no longer squaring it.</p>
+						
+						<pre translate="no">		public int JobLength => <ins>Resolution</ins>;</pre>
+						
+						<p>We'll let each invocation of <code>Execute</code> take care of a whole row of quads along the X axis. The job index will thus represent the Z offset of the row instead of the quad index. Let's rename it accordingly. Also, the first quad index of the row is thus equal to the resolution times Z.</p>
+						
+						<pre translate="no">		public void Execute&lt;S> (int <ins>z</ins>, S streams) where S : struct, IMeshStreams {
+			int vi = 4 * <ins>Resolution * z</ins>, ti = 2 <ins>* Resolution * z</ins>;
+
+			<del>//int z = i / Resolution;</del>
+			&hellip;
+		}</pre>
+						
+						<p>Now instead of using a fixed X offset we introduce a loop for the entire row, which encloses the code that fills the streams.</p>
+						
+						<pre translate="no">			<del>//int x = i - Resolution * z;</del>
+			
+			<ins>for (int x = 0; x &lt; Resolution; x++) {</ins>
+				var coordinates = float4€(x, x + 1f, z, z + 1f) / Resolution - 0.5f;
+
+				&hellip;
+
+				streams.SetTriangle(ti + 0, vi + int3€(0, 2, 1));
+				streams.SetTriangle(ti + 1, vi + int3€(1, 2, 3));
+			<ins>}</ins></pre>
+						
+						<p>To set the correct quads, after each iteration of the loop we have to increment the vertex index by four and the triangle index by two.</p>
+						
+						<pre translate="no">			for (int x = 0; x < Resolution; x++<ins>, vi += 4, ti += 2</ins>) { &hellip; }</pre>
+						
+						<p>Finally, Burst can detect code inside the loop that never changes and automatically pull it out of the loop. However, it won't split vectors so we can optimize a little bit by manually splitting the coordinates vector in separate X and Z pairs. The Z coordinate calculation is constant and will thus be hoisted out of the loop.</p>
+						
+						<pre translate="no">				<del>//var coordinates = float4(x, x + 1f, z, z + 1f) / Resolution - 0.5f;</del>
+				<ins>var xCoordinates = float2€(x, x + 1f) / Resolution - 0.5f;</ins>
+				<ins>var zCoordinates = float2€(z, z + 1f) / Resolution - 0.5f;</ins>
+			
+				<del>//vertex.position.xz = coordinates.xz;</del>
+				<ins>vertex.position.x = xCoordinates.x;</ins>
+				<ins>vertex.position.z = zCoordinates.x;</ins>
+				streams.SetVertex(vi + 0, vertex);
+
+				<del>//vertex.position.xz = coordinates.yz;</del>
+				<ins>vertex.position.x = xCoordinates.y;</ins>
+				vertex.texCoord0 = float2€(1f, 0f);
+				streams.SetVertex(vi + 1, vertex);
+
+				<del>//vertex.position.xz = coordinates.xw;</del>
+				<ins>vertex.position.x = xCoordinates.x;</ins>
+				<ins>vertex.position.z = zCoordinates.y;</ins>
+				vertex.texCoord0 = float2€(0f, 1f);
+				streams.SetVertex(vi + 2, vertex);
+
+				<del>//vertex.position.xz = coordinates.yw;</del>
+				<ins>vertex.position.x = xCoordinates.y;</ins>
+				vertex.texCoord0 = 1f;
+				streams.SetVertex(vi + 3, vertex);</pre>
+						
+						<aside>
+							<h3>Shouldn't we also introduce an <code>invResolution</code> variable to avoid multiple divisions?</h3>
+							<div>
+								<p>Because we use <code>FloatMode.Fast</code> Burst will do this automatically when it detects repeated division by the same value. So a division is only calculated once per invocation of <code>Execute</code> and all divisions that we wrote become multiplications.</p>
+							</div>
+						</aside>
+						
+						<p>The next tutorial is <a href="../modified-grid/index.html">Modified Grid</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/procedural-meshes-02-square-grid/" class="repository">repository</a>
+					<a href="Square-Grid.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

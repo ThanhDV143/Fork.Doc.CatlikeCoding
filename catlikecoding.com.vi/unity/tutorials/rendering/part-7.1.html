@@ -1,0 +1,1360 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/rendering/part-7/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/rendering/part-7/tutorial-image.jpg">
+		<meta property="og:title" content="Rendering 7">
+		<meta property="og:description" content="A Unity Rendering tutorial about supporting shadows. Part 7 of 20.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Rendering 7</title>
+		<link href="../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/rendering/part-7/#article",
+				"headline": "Rendering 7",
+				"alternativeHeadline": "Shadows",
+				"datePublished": "2016-08-30",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Rendering tutorial about supporting shadows. Part 7 of 20.",
+				"image": "https://catlikecoding.com/unity/tutorials/rendering/part-7/tutorial-image.jpg",
+				"dependencies": "Unity 5.4.0f3",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/rendering/", "name": "Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				TangentSpaceVisualizer: 1
+			};
+			
+			var hasAnimations = true;
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../products/utilities/frame-rate-counter/index.html"><img src="../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../index.html">Unity</a></li>
+					<li><a href="../index.html">Tutorials</a></li>
+					<li><a href="index.html">Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Rendering 7</h1>
+					<p>Shadows</p>
+					<ul>
+						<li>Investigate how Unity renders shadows.</li>
+						<li>Cast directional shadows.</li>
+						<li>Receive directional shadows.</li>
+						<li>Add support for spotlight and point light shadows.</li>
+					</ul>
+				</header>
+
+				<p>This is the seventh part of a tutorial series about rendering. The <a href="part-6.1.html">previous part</a> covered normal mapping. Now we'll take a look at shadows.</p>
+				
+				<p>This tutorial was made with Unity 5.4.0f3.</p>
+				
+				<figure>
+					<img src="part-7/tutorial-image.jpg" width="512" height="256">
+					<figcaption>When rendering, casting a shadow is a good thing.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Directional Shadows</h2>
+					
+					<p>While our lighting shader produces fairly realistic results by now, it evaluates each surface fragment in isolation. It assumes that a ray of light from every light source eventually hits every fragment. But this is only true if those rays aren't blocked by something.</p>
+					
+					<figure>
+						<img src="part-7/directional-shadows/blocked-light.png" width="340" height="310">
+						<figcaption>Some light rays get blocked.</figcaption>
+					</figure>
+					
+					<p>When an object sits in between a light source and another object, it might prevent part or all of the light rays from reaching that other object. The rays that illuminate the first object are no longer available to illuminate the second object. As as result, the second object will remain at least partially unlit. The area that is not lit lies in the shadow of the first object. To describe this, we often say that the first object casts a shadow on the second one.</p>
+					
+					<p>In reality, there is a transition region between fully lit and fully shadowed space, know as the penumbra. It exists because all light sources have a volume. As a result, there are regions where only part of the light source is visible, which means that they are partially shadowed. The larger the light source, and the further away a surface is from its shadow caster, the larger this region is.</p>
+					
+					<figure>
+						<img src="part-7/directional-shadows/penumbra.png" width="340" height="310">
+						<figcaption>Shadow with penumbra.</figcaption>
+					</figure>
+					
+					<p>Unity doesn't support penumbra. Unity does support soft shadows, but that is a shadow filtering technique, not a simulation of penumbra.</p>
+					
+					<section>
+						<h3>Enabling Shadows</h3>
+						
+						<p>Without shadows, it is hard to see the spatial relationships between objects. To illustrate this, I created a simple scene with a few stretched cubes. I placed four rows of spheres above these cubes. The middle rows float of spheres, while the outer rows are connected to the cubes below them via cylinders.</p>
+						
+						<p>The objects have Unity's default white material. The scene has two directional lights, the default directional light, and a slightly weaker yellow light. These are the same lights used in previous tutorials.</p>
+						
+						<p>Currently, the shadows are disabled project-wide. We did that in an earlier tutorial. The ambient intensity is also set to zero, which makes it easier to see the shadows.</p>
+
+						<figure>
+							<img src="part-7/directional-shadows/without-shadows.png" width="380" height="210">
+							<figcaption>Two directional lights, no shadows, no ambient light.</figcaption>
+						</figure>
+						
+						<p>Shadows are part of the project-wide quality settings, found via <em translate="no">Edit / Project Settings / Quality</em>. We'll enable them at a high quality level. This means supporting both hard and soft shadows, using a high resolution, a stable fit projection, a distance of 150, and four cascades.</p>
+						
+						<figure>
+							<img src="part-7/directional-shadows/shadows-enabled.png" width="300" height="180">
+							<figcaption>Shadow quality settings.</figcaption>
+						</figure>
+						
+						<p>Make sure that both lights are set to cast soft shadows. Their resolution should depend on the quality settings.</p>
+						
+						<figure>
+							<img alt="inspector" src="part-7/directional-shadows/light-settings.png" width="320" height="116">
+							<figcaption>Shadow settings per light.</figcaption>
+						</figure>
+						
+						<p>With both directional lights casting shadows, the spatial relationships between all objects becomes a lot clearer. The entire scene has become both more realistic and more interesting to look at.</p>
+						
+						<figure>
+							<img src="part-7/directional-shadows/with-shadows.png" width="380" height="210">
+							<figcaption>Scene with shadows.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Shadow Mapping</h3>
+						
+						<p>How does Unity add these shadows to the scene? The standard shader apparently has some way to determine whether a ray is blocked or not.</p>
+						
+						<p>You could figure this out whether a point lies in a shadow, by casting a ray through the scene, from the light to the surface fragment. If that ray hits something before it reaches the fragment, then it is blocked. This is something that a physics engine could do, but it would be very impractical to do so for each fragment, and per light. And then you'd have to get the results to the GPU somehow.</p>
+						
+						<p>There are a few techniques to support real-time shadows. Each has it advantages and disadvantages. Unity uses the most common technique nowadays, which is shadow mapping. This means that Unity stores shadow information in textures, somehow. We'll now investigate how that works.</p>
+
+						<p>Open the frame debugger via <em translate="no">Window / Frame Debugger</em>, enable it, and look at the hierarchy of rendering steps. Look at the differences between a frame without and a frame with shadows enabled.</p>
+
+						<figure>
+							<img alt="without" src="part-7/directional-shadows/render-steps-without.png" width="300" height="116">
+							<img alt="with" src="part-7/directional-shadows/render-steps-with.png" width="300" height="228">
+							<figcaption>Rendering process without vs. with shadows.</figcaption>
+						</figure>
+						
+						<p>When shadows are disabled, all objects are rendered as usual. We were already familiar with this process. But when shadows are enabled, the process becomes more complex. There are a few more rendering phases, and quite a lot more draw calls. Shadows are expensive!</p>
+						
+					</section>
+					
+					<section>
+						<h3>Rendering to the Depth Texture</h3>
+						
+						<p>When directional shadows are enabled, Unity begins a depth pass into the rendering process. The result is put into a texture that matches the screen resolution. This pass renders the entire scene, but only records the depth information of each fragment. This is the same information that is used by the GPU to determine whether a fragment ends up on top or below a previously rendered fragment.</p>
+						
+						<p>This data corresponds with a fragment's Z coordinate, in clip space. This is the space that defines the area that the camera can see. The depth information ends up stored as a value in the 0&ndash;1 range. When viewing the texture, nearby texels appear dark. The further away a texel is, the lighter it becomes.</p>
+						
+						<figure>
+							<img src="part-7/directional-shadows/depth-texture.png" width="380" height="210">
+							<figcaption>Depth texture, with camera near plane set to 5.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What is clip space?</h3>
+							<div>
+								<p>It is the space that determines what the camera sees. When you select the main camera in the scene view, you will see a pyramid wire frame in front of it, which indicates what it can see. </p>
+								
+								<figure>
+									<img src="part-7/directional-shadows/clip-space.png" width="200" height="180">
+									<figcaption>Camera view, with large near plane value.</figcaption>
+								</figure>
+								
+								<p>In clip space, this pyramid is a regular cube. The model-view-projection matrix is used to convert mesh vertices to this space. It is known as clip space, because everything that ends up outside of this cube gets clipped, because it isn't visible.</p>
+							</div>
+						</aside>
+						
+						<p>This information actually has nothing to do with shadows directly, but Unity will use it in a later pass.</p>
+					</section>
+					
+					<section>
+						<h3>Rendering to Shadow Maps</h3>
+						
+						<p>The next thing Unity renders is the shadow map of the first light. A little later, it will rendered the shadow map of the second light as well.</p>
+						
+						<p>Again, the entire scene is rendered, and again only the depth information is stored in a texture. However, this time the scene is rendered from the point of the view of the light source. Effectively, the light acts as a camera. This means that the depth value tells us how far a ray of light traveled before it hit something. This can be used to determine if something is shadowed!</p>
+						
+						<aside>
+							<h3>What about normal maps?</h3>
+							<div>
+								<p>The shadow maps record the depth of the actual geometry. Normals maps add the illusion of a rough surface, and shadow maps ignore them. Thus, shadows are not affected by normal maps.</p>
+							</div>
+						</aside>
+						
+						<p>Because we're using directional lights, their cameras are orthographic. As such, there is no perspective projection, and the exact position of the light's camera doesn't matter. Unity will position the camera so it sees all objects that are in view of the normal camera.</p>
+						
+						<figure>
+							<img alt="1" src="part-7/directional-shadows/shadow-map-1.png" width="352" height="352">
+							<img alt="2" src="part-7/directional-shadows/shadow-map-2.png" width="352" height="352">
+							<figcaption>Two shadow maps, each with four viewpoints.</figcaption>
+						</figure>
+						
+						<p>Actually, it turns out that Unity doesn't just render the entire scene once per light. The scene is rendered four times per light! The textures are split into four quadrants, each being rendered to from a different point of view. This happens because we have opted to use four shadow cascades. If you were to switch to two cascades, the scene would be rendered twice per light. And without cascades, it is only rendered once per light. We will see why Unity does this when we look at the quality of shadows.</p>
+					</section>
+					
+					<section>
+						<h3>Collecting Shadows</h3>
+						
+						<p>We have the depth information of the scene, from the point of view of the camera. We also have this information from the point of view of each light. Of course this data is stored in different clip spaces, but we know the relative positions and orientations of these spaces. So we can convert from one space to the other. This allows us to compare the depth measurements from both points of view. Conceptually, we have two vectors that should end up at the same point. If they do, both the camera and light can see that point, and so it is lit. If the light's vector ends before reaching the point, then the light is blocked, which means that the point is shadowed.</p>
+						
+						<aside>
+							<h3>What about when the scene camera can't see a point?</h3>
+							<div>
+								<p>Those points are hidden behind other points that are closer to the camera. The scene's depth texture only contains the closest points. As a result, no time is wasted on evaluating hidden points.</p>
+							</div>
+						</aside>
+						
+						<figure>
+							<img alt="1" src="part-7/directional-shadows/screenspace-shadow-map-1.png" width="352" height="352">
+							<img alt="2" src="part-7/directional-shadows/screenspace-shadow-map-2.png" width="352" height="352">
+							<figcaption>Screen-space shadows, per light.</figcaption>
+						</figure>
+						
+						<p>Unity creates these textures by rendering a single quad that covers the entire view. It uses the <em translate="no">Hidden/Internal-ScreenSpaceShadows</em> shader for this pass. Each fragment samples from the scene's and light's depth textures, makes the comparison, and renders the final shadow value to a screen-space shadow map. Lit texels are set to 1, and shadowed texels are set to 0. At this point Unity can also perform filtering, to create soft shadows.</p>
+						
+						<aside>
+							<h3>Why does Unity alternate between rendering and collecting?</h3>
+							<div>
+								<p>Each light needs its own screen-space shadow map. But the shadow map rendered from the light's point of view can be reused.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Sampling the Shadow Maps</h3>
+						
+						<p>Finally, Unity is finished rendering shadows. Now the scene is rendered normally, with one change. The light colors are multiplied  by the values stored in their shadow maps. This eliminates the light when it should be blocked.</p>
+						
+						<p>Every fragment that gets rendered samples the shadow maps. Also fragments that end up hidden behind other objects that are drawn later. So these fragments can end up receiving the shadows of the objects that end up hiding them. You can see this when stepping through the frame debugger. You can also see shadows appear before the objects that actually cast them. Of course these mistakes only manifest while rendering the frame. Once it is finished, the image is correct.</p>
+						
+						<figure>
+							<img src="part-7/directional-shadows/sampling-shadows.png" width="380" height="210">
+							<figcaption>Patially rendered frame, containing strange shadows.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Shadow Quality</h3>
+						
+						<p>When the scene is rendered from the light's point of view, the orientation does not match the scene camera. So the texels of the shadow maps don't align with the texels of the final image. The resolution of the shadow maps also ends up being different. The resolution of the final image is determined by the display settings. The resolution of the shadow maps is determined by the shadow quality settings.</p>
+						
+						<p>When the texels of the shadow maps end up rendered larger than those of the final image, they will become noticeable. The edges of the shadows will be aliased. This is most obvious when using hard shadows.</p>
+						
+						<figure>
+							<img alt="hard" src="part-7/directional-shadows/hard.png" width="200" height="140">
+							<img alt="soft" src="part-7/directional-shadows/soft.png" width="200" height="140">
+							<figcaption>Hard vs. soft shadows.</figcaption>
+						</figure>
+						
+						<p>To make this as obvious as possible, change the shadow quality settings so we only get hard shadows, at the lowest resolution, with no cascades.</p>
+						
+						<figure>
+							<img src="part-7/directional-shadows/low-quality.png" width="380" height="210">
+							<figcaption>Low quality shadows.</figcaption>
+						</figure>
+						
+						<p>It is now very obvious that the shadows are textures. Also, bits of shadow are appearing in places where they shouldn't. We'll look into that later.</p>
+						
+						<p>The closer the shadows get to the scene camera, the larger their texels become. That's because the shadow map currently covers the entire area visible to the scene camera. We can increase the quality close to the camera, by reducing the area that is covered by shadows, via the quality settings.</p>
+						
+						<figure>
+							<img src="part-7/directional-shadows/shadow-distance-25.png" width="380" height="210">
+							<figcaption>Shadow distance reduced to 25.</figcaption>
+						</figure>
+						
+						<p>By limiting shadows to an area close to the scene camera, we can use the same shadow maps to cover a much smaller area. As a result, we get better shadows. But we lose the shadows that are further away. The shadows fade away as they approach the maximum distance.</p>
+						
+						<p>Ideally, we get high-quality shadows up close, while also keeping the shadows that are far away. Because far away shadows end up rendered to a smaller screen area, those could make do with a lower-resolution shadow map. This is what shadow cascades do. When enabled, multiple shadow maps are rendered into the same texture. Each map is for use at a certain distance.</p>
+						
+						<figure>
+							<img src="part-7/directional-shadows/shadow-cascades.png" width="380" height="210">
+							<figcaption>Low resolution textures, with four cascades.</figcaption>
+						</figure>
+						
+						<p>When using four cascades, the result looks a lot better, even though we're still using the same texture resolution. We're just using the texels much more efficiently. The downside is that we now have to render the scene three more times.</p>
+						
+						<p>When rendering to the screen-space shadow maps, Unity takes care of sampling from the correct cascade. You can find where one cascade ends and another begins, by looking for a sudden change of the shadow texel size.</p>
+						
+						<p>You can control the range of the cascade bands via the quality settings, as portions of the shadow distance. You can also visualize them in the scene view, by changing its <em translate="no">Shading Mode</em>. Instead of just <em translate="no">Shaded</em>, use <em translate="no">Miscellaneous / Shadow Cascades</em>. This will render the colors of the cascades on top of the scene.</p>
+						
+						<figure>
+							<img src="part-7/directional-shadows/cascades-visualized.png" width="380" height="210">
+							<figcaption>Cascade regions, adjusted to show three bands.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>How do I change the scene view's display mode?</h3>
+							<div>
+								<p>There is a dropdown list at the top left of the scene view window. By default, it is set to <em translate="no">Shaded</em>.</p>
+							</div>
+						</aside>
+						
+						<p>The shape of the cascade bands depends on the <em translate="no">Shadow Projection</em> quality setting. The default is <em translate="no">Stable Fit</em>. In this mode, the bands are chosen based on the distance to the camera's position. The other option is <em translate="no">Close Fit</em>, which uses the camera's depth instead. This produces rectangular bands in the camera's view direction.</p>
+						
+						<figure>
+							<img src="part-7/directional-shadows/close-fit.png" width="380" height="210">
+							<figcaption>Close fit.</figcaption>
+						</figure>
+						
+						<p>This configuration allows for more efficient use of the shadow texture, which leads to higher-quality shadows. However, the shadow projection now depends on the position and orientation or the camera. As a result, when the camera moves or rotates, the shadow maps change as well. If you can see the shadow texels, you'll notice that they move. This effect is known as shadow edge swimming, and can be very obvious. That's why the other mode is the default.</p>
+						
+						<figure>
+							<video width="206" height="236" controls loop muted>
+								<source src="part-7/directional-shadows/swimming.mp4" type="video/mp4">
+							</video>
+							<figcaption>Shadow swimming.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Don't <em translate="no">Stable Fit</em> shadows also depend on the camera position?</h3>
+							<div>
+								<p>They do, but Unity can align the maps so that when the camera position changes, the texels appear motionless. Of course the cascade bands do move, so the transition points between the bands change. But if you don't notice the bands, you also don't notice that they move.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Shadow Acne</h3>
+						
+						<p>When we used low quality hard shadows, we saw bits of shadow appear where they shouldn't. Unfortunately, this can happen regardless of the quality settings.</p>
+						
+						<p>Each texel in the shadow map represents the point where a light ray hit a surface. However, texels aren't single points. They end up covering a larger area. And they are aligned with the light direction, not with the surface. As a result of this, they can end up sticking in, through, and out of surfaces like dark shards. As parts of the texels end up poking out of the surfaces that cast the shadow, the surface appears to shadow itself. This is known as shadow acne.</p>
+						
+						<figure>
+							<img src="part-7/directional-shadows/acne-diagram.png" width="240" height="180">
+							<figcaption>Shadow map causes acne.</figcaption>
+						</figure>
+						
+						<p>Another source of shadow acne is numerical precision limitations. These limitations can cause incorrect result when very small distances are involved.</p>
+						
+						<figure>
+							<img src="part-7/directional-shadows/acne.png" width="380" height="210">
+							<figcaption>Severe acne, when using no biases at all.</figcaption>
+						</figure>
+						
+						<p>One way to prevent this problem is by adding a depth offset when rendering the shadow maps. This bias is added to the distance from the light to the shadow casting surface, pushes the shadows into the surfaces.</p>
+						
+						<figure>
+							<img src="part-7/directional-shadows/bias-diaram.png" width="240" height="180">
+							<figcaption>Biased shadow map.</figcaption>
+						</figure>
+						
+						<p>The shadow bias is configured per light, and is set to 0.05 by default.</p>
+						
+						<figure>
+							<img src="part-7/directional-shadows/light-settings.png" width="320" height="116">
+							<figcaption>Shadow settings per light.</figcaption>
+						</figure>
+						
+						<p>A low bias can produce shadow acne, but a large bias introduces another problem. As the shadow-casting objects are pushed away from the lights, so are their shadows. As a result, the shadows will not be perfectly aligned with the objects. This isn't so bad when using a small bias. But too large a bias can make it seem like shadows are disconnected from the objects that cast them. This effect is known as peter panning.</p>
+						
+						<figure>
+							<img src="part-7/directional-shadows/peter-panning.png" width="380" height="210">
+							<figcaption>Large bias causes peter panning.</figcaption>
+						</figure>
+						
+						<p>Besides this distance bias, there is also a <em translate="no">Normal Bias</em>. This is a subtler adjustment of the shadow casters. This bias pushes the vertices of the shadow casters inwards, along their normals. This also reduces self-shadowing, but it also makes the shadows smaller and can cause holes to appear in the shadows.</p>
+						
+						<aside>
+							<h3>What are the best bias settings?</h3>
+							<div>
+								<p>There are no best settings. Unfortunately, you'll have to experiment. Unity's default settings might work, but they can also produce unacceptable results. Different quality settings can also produce different results.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Anti-Aliasing</h3>
+						
+						<p>Do you have anti-aliasing enabled in the quality settings? If you have, then you might have spotted another problem of shadow maps. They do not mix with the standard anti-aliasing approach.</p>
+						
+						<figure>
+							<img alt="scene" src="part-7/directional-shadows/aliasing.png" width="180" height="300">
+							<img alt="settings" src="part-7/directional-shadows/msaa-settings.png" width="300" height="94">
+							<figcaption>Aliasing when using anti-aliasing.</figcaption>
+						</figure>
+						
+						<p>When you enable anti-aliasing in the quality settings, Unity will use multi-sampling anti-aliasing, MSAA. It removes the aliasing at triangle edges by performing some super-sampling along those edges. The details don't matter here. What matters is that when Unity renders the screen-space shadow maps, it does so with a single quad that covers the entire view. As a result, there are no triangle edges, and thus MSAA does not affect the screen-space shadow map. MSAA does work for the final image, but the shadow values are taken straight from the screen-space shadow map. This becomes very obvious when a light surface next to a darker surface is shadowed. The edge between the light and dark geometry is anti-aliased, while the shadow edge isn't.</p>
+						
+						<figure>
+							<img alt="no aa" src="part-7/directional-shadows/no-aa.png" width="180" height="300">
+							<img alt="msaa" src="part-7/directional-shadows/msaa.png" width="180" height="300">
+							<img alt="fxaa" src="part-7/directional-shadows/fxaa.png" width="180" height="300">
+							<figcaption>No AA vs. MSAA 4&times; vs. FXAA.</figcaption>
+						</figure>
+						
+						<p>Anti-aliasing methods that rely on image post-processing &ndash; like FXAA &ndash; don't have this problem, because they are applied after the entire scene has been rendered.</p>
+						
+						<aside>
+							<h3>Does this mean that I cannot combine MSAA with directional shadows?</h3>
+							<div>
+								<p>You can, but you will experience the problem described above. In some cases, it might not be noticeable. For example, when all surface colors are roughly the same, the artifacts will be subtle. You still get aliased shadow edges, of course.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="part-7/directional-shadows/directional-shadows.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Casting Shadows</h2>
+					
+					<p>Now that we know how Unity creates shadows for directional lights, it is time to add support for them to our own shader. Currently, <em translate="no">My First Lighting Shader</em> neither casts nor received shadows.</p>
+					
+					<p>Let's deal with casting shadows first. I have changed the spheres and cylinders in the example scene so they use our material. So now they no longer cast shadows.</p>
+					
+					<figure>
+						<img src="part-7/casting-shadows/no-shadows.png" width="380" height="210">
+						<figcaption>No shadows are cast by our material.</figcaption>
+					</figure>
+					
+					<p>We know that Unity renders the scene multiple times for directional shadows. Once for the depth pass, and once per light, for each shadow map cascade. The screen-space shadow map is a screen-space effect and doesn't concern us.</p>
+					
+					<p>To support all relevant passes, we have to add a pass to our shader, with its light mode set to <em translate="no">ShadowCaster</em>. Because we are only interested in the depth values, it will be a lot simpler than our other passes.</p>
+					
+					<pre translate="no" class="shader">	SubShader {
+
+		Pass {
+			Tags {
+				"LightMode" = "ForwardBase"
+			}
+
+			&hellip;
+		}
+
+		Pass {
+			Tags {
+				"LightMode" = "ForwardAdd"
+			}
+
+			&hellip;
+		}
+
+		<ins>Pass {</ins>
+			<ins>Tags {</ins>
+				<ins>"LightMode" = "ShadowCaster"</ins>
+			<ins>}</ins>
+
+			<ins>CGPROGRAM</ins>
+
+			<ins>#pragma target 3.0</ins>
+
+			<ins>#pragma vertex MyShadowVertexProgram</ins>
+			<ins>#pragma fragment MyShadowFragmentProgram</ins>
+
+			<ins>#include "My Shadows.cginc"</ins>
+
+			<ins>ENDCG</ins>
+		<ins>}</ins>
+	}</pre>
+					
+					<p>Let's give the shadow programs their own include file, named <em translate="no">My Shadows.cginc</em>. They are very simple. The vertex program converts the position from object space to clip space as usual, and does nothing else. The fragment program actually doesn't need to do anything, so just return zero. The GPU records the depth value for us.</p>
+					
+					<pre translate="no" class="shader"><ins>#if !defined(MY_SHADOWS_INCLUDED)</ins>
+<ins>#define MY_SHADOWS_INCLUDED</ins>
+
+<ins>#include "UnityCG.cginc"</ins>
+
+<ins>struct VertexData {</ins>
+	<ins>float4 position : POSITION;</ins>
+<ins>};</ins>
+
+<ins>float4 MyShadowVertexProgram (VertexData v) : SV_POSITION {</ins>
+	<ins>return mul(UNITY_MATRIX_MVP, v.position);</ins>
+<ins>}</ins>
+
+<ins>half4 MyShadowFragmentProgram () : SV_TARGET {</ins>
+	<ins>return 0;</ins>
+<ins>}</ins>
+
+<ins>#endif</ins></pre>
+					
+					<p>This is already enough to cast shadows directional.</p>
+					
+					<figure>
+						<img src="part-7/casting-shadows/casting-shadows.png" width="380" height="210">
+						<figcaption>Casting shadows.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Bias</h3>
+						
+						<p>We also have to support the shadow bias. During the depth pass, the biases are zero, but when rendering the shadow maps, the biases correspond to the light settings. We do so by applying the depth bias to the position in the vertex shader, in clip space.</p>
+						
+						<p>To support the depth bias, we can use the <code class="shader">UnityApplyLinearShadowBias</code> function, which is defined in <em translate="no">UnityCG</em>.</p>
+						
+						<pre translate="no" class="shader">float4 MyShadowVertexProgram (VertexData v) : SV_POSITION {
+	<ins>float4 position =</ins> mul(UNITY_MATRIX_MVP, v.position);
+	return <ins>UnityApplyLinearShadowBias(position);</ins>
+}</pre>
+						
+						<aside>
+							<h3>How does <code class="shader">UnityApplyLinearShadowBias</code> work?</h3>
+							<div>
+								<p>It increases the Z coordinate in clip space. What complicates this is that it are working with homogeneous coordinates. It has to compensate for the perspective projection, so that the offset doesn't vary with distance from the camera. It must also make sure that the result doesn't go out of bounds.</p>
+								
+								<pre translate="no" class="shader">float4 UnityApplyLinearShadowBias (float4 clipPos) {
+	clipPos.z += saturate(unity_LightShadowBias.x / clipPos.w);
+	float clamped = max(clipPos.z, clipPos.w * UNITY_NEAR_CLIP_VALUE);
+	clipPos.z = lerp(clipPos.z, clamped, unity_LightShadowBias.y);
+	return clipPos;
+}</pre>
+							</div>
+						</aside>
+						
+						<p>To also support the normal bias, we have to move the vertex position based on the normal Vector. So we have to add the normal to our vertex data. Then we can use the <code class="shader">UnityClipSpaceShadowCasterPos</code> function to apply the bias. This function is also defined in <em translate="no">UnityCG</em>.</p>
+						
+						<pre translate="no" class="shader">struct VertexData {
+	float4 position : POSITION;
+	<ins>float3 normal : NORMAL;</ins>
+};
+
+float4 MyShadowVertexProgram (VertexData v) : SV_POSITION {
+	float4 position = <ins>UnityClipSpaceShadowCasterPos(v.position.xyz, v.normal);</ins>
+	return UnityApplyLinearShadowBias(position);
+}</pre>
+						
+						<aside>
+							<h3>How does <code class="shader">UnityClipSpaceShadowCasterPos</code> work?</h3>
+							<div>
+								<p>It converts the position to world space, applies the normal bias, then converts to clip space. The exact offset depends on the angle between the normal and light direction, and the shadow texel size.</p>
+								
+								<pre translate="no" class="shader">float4 UnityClipSpaceShadowCasterPos (float3 vertex, float3 normal) {
+	float4 clipPos;
+    
+    // Important to match MVP transform precision exactly while rendering
+    // into the depth texture, so branch on normal bias being zero.
+    if (unity_LightShadowBias.z != 0.0) {
+		float3 wPos = mul(unity_ObjectToWorld, float4(vertex,1)).xyz;
+		float3 wNormal = UnityObjectToWorldNormal(normal);
+		float3 wLight = normalize(UnityWorldSpaceLightDir(wPos));
+
+	// apply normal offset bias (inset position along the normal)
+	// bias needs to be scaled by sine between normal and light direction
+	// (http://the-witness.net/news/2013/09/shadow-mapping-summary-part-1/)
+	//
+	// unity_LightShadowBias.z contains user-specified normal offset amount
+	// scaled by world space texel size.
+
+		float shadowCos = dot(wNormal, wLight);
+		float shadowSine = sqrt(1 - shadowCos * shadowCos);
+		float normalBias = unity_LightShadowBias.z * shadowSine;
+
+		wPos -= wNormal * normalBias;
+
+		clipPos = mul(UNITY_MATRIX_VP, float4(wPos, 1));
+    }
+    else {
+        clipPos = UnityObjectToClipPos(vertex);
+    }
+	return clipPos;
+}</pre>
+								
+								<p>The <code class="shader">UnityObjectToClipPos</code> function just performs the model-view-projection matrix multiplication, with a caveat when using stereoscopic rendering.</p>
+								
+								<pre translate="no" class="shader">// Tranforms position from object to homogenous space
+inline float4 UnityObjectToClipPos( in float3 pos) {
+#ifdef UNITY_USE_PREMULTIPLIED_MATRICES
+	return mul(UNITY_MATRIX_MVP, float4(pos, 1.0));
+#else
+	// More efficient than computing M*VP matrix product
+	return mul(UNITY_MATRIX_VP, mul(unity_ObjectToWorld, float4(pos, 1.0)));
+#endif
+}</pre>
+							</div>
+						</aside>
+						
+						<p>Our shader is now a fully functional shadow caster.</p>
+					</section>
+					
+					<a href="part-7/casting-shadows/casting-shadows.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Receiving Shadows</h2>
+					
+					<p>The second part of the process is receiving shadows. All objects in the test scene now use our material.</p>
+					
+					<figure>
+						<img src="part-7/receiving-shadows/no-shadows.png" width="380" height="210">
+						<figcaption>No shadows are received, when only using our material.</figcaption>
+					</figure>
+					
+					<p>Let's first concern ourselves with the shadows of the main directional light only. Because this light is included in the base pass, we have to adjust that one.</p>
+					
+					<p>When the main directional light casts shadows, Unity will look for a shader variant that has the <code class="shader">SHADOWS_SCREEN</code> keyword enabled. So we have to create two variants of our base pass, one with and one without this keyword. This works the same as for the <code class="shader">VERTEXLIGHT_ON</code> keyword.</p>
+					
+					<pre translate="no" class="shader">			<ins>#pragma multi_compile _ SHADOWS_SCREEN</ins>
+			#pragma multi_compile _ VERTEXLIGHT_ON</pre>
+					
+					<p>The pass now has two multi-compile directives, each for a single keyword. As a result, there are four possible variants. One with no keywords, one for each keyword, and one with both keywords.</p>
+					
+					<pre translate="no" class="shader">// Snippet #0 platforms ffffffff:
+SHADOWS_SCREEN VERTEXLIGHT_ON
+
+4 keyword variants used in scene:
+
+&lt;no keywords defined>
+VERTEXLIGHT_ON
+SHADOWS_SCREEN
+SHADOWS_SCREEN VERTEXLIGHT_ON</pre>
+					
+					<p>After adding the multi-compile pragma, the shader compiler will complain about a nonexistent <code class="shader">_ShadowCoord</code>. This happens because the <code class="shader">UNITY_LIGHT_ATTENUATION</code> macro behaves differently when shadows are in play. To quickly fix this, open the <em translate="no">My Lighting.cginc</em> file and just set the attenuation to 1 when we have shadows.</p>
+					
+					<pre translate="no" class="shader">UnityLight CreateLight (Interpolators i) {
+	UnityLight light;
+
+	#if defined(POINT) || defined(POINT_COOKIE) || defined(SPOT)
+		light.dir = normalize(_WorldSpaceLightPos0.xyz - i.worldPos);
+	#else
+		light.dir = _WorldSpaceLightPos0.xyz;
+	#endif
+
+	<ins>#if defined(SHADOWS_SCREEN)</ins>
+		<ins>float attenuation = 1;</ins>
+	<ins>#else</ins>
+		UNITY_LIGHT_ATTENUATION(attenuation, 0, i.worldPos);
+	<ins>#endif</ins>
+
+	light.color = _LightColor0.rgb * attenuation;
+	light.ndotl = DotClamped(i.normal, light.dir);
+	return light;
+}</pre>
+					
+					<section>
+						<h3>Sampling Shadows</h3>
+						
+						<p>To get to the shadows, we have to sample the screen-space shadow map. To do this, we need to know the screen-space texture coordinates. Like other texture coordinates, we'll pass them from the vertex shader to the fragment shader. So we need use an additional interpolator when supporting shadows. We'll begin by just passing along the homogeneous clip-space position, so we need a <code class="shader">float4</code>.</p>
+
+						<pre translate="no" class="shader">struct Interpolators {
+	&hellip;
+
+	<ins>#if defined(SHADOWS_SCREEN)</ins>
+		<ins>float4 shadowCoordinates : TEXCOORD5;</ins>
+	<ins>#endif</ins>
+
+	#if defined(VERTEXLIGHT_ON)
+		float3 vertexLightColor : <ins>TEXCOORD6</ins>;
+	#endif
+};
+
+&hellip;
+
+Interpolators MyVertexProgram (VertexData v) {
+	&hellip;
+
+	<ins>#if defined(SHADOWS_SCREEN)</ins>
+		<ins>i.shadowCoordinates = i.position;</ins>
+	<ins>#endif</ins>
+
+	ComputeVertexLightColor(i);
+	return i;
+}</pre>
+						
+						<p>We can access the screen-space shadows via <code class="shader">_ShadowMapTexture</code>. It is defined in <em translate="no">AutoLight</em> when appropriate. The naive approach is to simply use the clip-space XY coordinates of the fragment to sample this texture.</p>
+
+						<pre translate="no" class="shader">UnityLight CreateLight (Interpolators i) {
+	&hellip;
+
+	#if defined(SHADOWS_SCREEN)
+		float attenuation = <ins>tex2D(_ShadowMapTexture, i.shadowCoordinates.xy);</ins>
+	#else
+		UNITY_LIGHT_ATTENUATION(attenuation, 0, i.worldPos);
+	#endif
+
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="part-7/receiving-shadows/sampling-shadows.png" width="300" height="200">
+							<figcaption>Sampling shadows.</figcaption>
+						</figure>
+						
+						<p>We're now sampling shadows, but with clip-space coordinates instead of screen-space coordinates. We do get shadows, but they end up compressed into a tiny region at the center of the screen. We have to stretch them to cover the entire window.</p>
+						
+						<aside>
+							<h3>My shadows are upside down?</h3>
+							<div>
+								<p>That is due to API differences. We'll deal with that soon.</p>
+							</div>
+						</aside>
+						
+						<p>In clip space, all visible XY coordinates fall inside the &minus;1&ndash;1 range, while the range for screen-space is 0&ndash;1. The first step to solve this by halving XY. Next, we also have to offset the coordinates so they are zero at the bottom-left corner of the screen. Because we're dealing with a perspective transformation, how much we must offset the coordinates depends on how far away they are. In this case, the offset is equal to the fourth homogeneous coordinate, before halving.</p>
+						
+						<pre translate="no" class="shader">	#if defined(SHADOWS_SCREEN)
+		<ins>i.shadowCoordinates.xy = (i.position.xy + i.position.w) * 0.5;</ins>
+		<ins>i.shadowCoordinates.zw = i.position.zw;</ins>
+	#endif
+</pre>
+						
+						<figure>
+							<img src="part-7/receiving-shadows/shadows-corner.png" width="300" height="200">
+							<figcaption>Shadows in the bottom-left corner.</figcaption>
+						</figure>
+						
+						<p>The projection is still not correct, because we're using homogeneous coordinates. We have to convert to screen-space coordinates, by dividing X and Y by W.</p>
+						
+						<pre translate="no" class="shader">		i.shadowCoordinates.xy =
+			(i.position.xy + i.position.w) * 0.5 <ins>/ i.position.w</ins>;</pre>
+						
+						<figure>
+							<img src="part-7/receiving-shadows/incorrect-conversion.png" width="380" height="210">
+							<figcaption>Incorrect conversion.</figcaption>
+						</figure>
+						
+						<p>The result gets distorted. The shadows are stretched and curved. This happens because we do the division before interpolation. This is incorrect, the coordinates should be interpolated independently, before the division. So we have to move the division to the fragment shader.</p>
+						
+						<pre translate="no" class="shader">Interpolators MyVertexProgram (VertexData v) {
+	&hellip;
+
+	#if defined(SHADOWS_SCREEN)
+		i.shadowCoordinates.xy =
+			(i.position.xy + i.position.w) * 0.5<ins>;</ins> <del>// / i.position.w;</del>
+		i.shadowCoordinates.zw = i.position.zw;
+	#endif
+	
+	&hellip;
+}
+
+UnityLight CreateLight (Interpolators i) {
+	&hellip;
+
+	#if defined(SHADOWS_SCREEN)
+		float attenuation = tex2D(
+			_ShadowMapTexture,
+			i.shadowCoordinates.xy <ins>/ i.shadowCoordinates.w</ins>
+		);
+	#else
+		UNITY_LIGHT_ATTENUATION(attenuation, 0, i.worldPos);
+	#endif
+
+	&hellip;
+}</pre>
+						
+						<aside>
+							<h3>How does interpolation affect division?</h3>
+							<div>
+								<p>This is best illustrated with an example. Suppose that we're interpolating between the XW coordinate pairs (0, 1) and (1, 4). No matter how we do this, X / W starts at 0 and ends at &frac14;. But what about halfway between those points?</p>
+								
+								<p>If we divide before interpolating, then we end up halfway between 0 and &frac14;, which is &frac18;.</p>
+								
+								<p>If we divide after interpolating, then at the halfway point we end up with the coordinates (0.5, 2.5), which leads to the division 0.5 / 2.5, which is &frac15;, not &frac18;. So in this case the interpolation is not linear.</p>
+								
+								<figure>
+								<img src="part-7/receiving-shadows/lerp-division.png" width="200" height="200">
+								<figcaption>Different approach, different results.</figcaption>
+							</figure>
+							</div>
+						</aside>
+						
+						<figure>
+							<img src="part-7/receiving-shadows/shadows.png" width="380" height="210">
+							<figcaption>Correctly sampled shadows.</figcaption>
+						</figure>
+						
+						<p>At this point, your shadows will either appear correct, or upside down. If they are flipped, it means that your graphics API &ndash; Direct3D &ndash; has the screen-space Y coordinates go from 0 to 1 downwards, instead of upwards. To synchronize with this, flip the Y coordinate of the vertex.</p>
+						
+						<pre translate="no" class="shader">		i.shadowCoordinates.xy =
+			(<ins>float2(i.position.x, -i.position.y)</ins> + i.position.w) * 0.5;</pre>
+						
+						<figure>
+							<img src="part-7/receiving-shadows/flipped.png" width="380" height="210">
+							<figcaption>Flipped shadows.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Using Unity's Code</h3>
+						
+						<p>Unity's include file provide a collection of functions and macros to help us sample shadows. They take care of API differences and platform limitations. For example, we can use the <code class="shader">ComputeScreenPos</code> function from <em translate="no">UnityCG</em>.</p>
+
+						<p>UnityCG.</p>
+
+						<pre translate="no" class="shader">	#if defined(SHADOWS_SCREEN)
+		<ins>i.shadowCoordinates = ComputeScreenPos(i.position);</ins>
+	#endif</pre>
+
+						<aside>
+							<h3>What does <code class="shader">ComputeScreenPos</code> look like?</h3>
+							<div>
+								<p>It performs the same computations that we did. The <code class="shader">_ProjectParams.x</code> variable is &minus;1 when the Y coordinate needs to be flipped. Also, it takes care of texture alignment when using Direct3D9. There's also special logic required when doing single-pass stereoscopic rendering.</p>
+								
+								<pre translate="no" class="shader">inline float4 ComputeNonStereoScreenPos (float4 pos) {
+	float4 o = pos * 0.5f;
+	#if defined(UNITY_HALF_TEXEL_OFFSET)
+		o.xy = float2(o.x, o.y * _ProjectionParams.x) +
+			o.w * _ScreenParams.zw;
+	#else
+		o.xy = float2(o.x, o.y * _ProjectionParams.x) + o.w;
+	#endif
+	o.zw = pos.zw;
+	return o;
+}
+
+inline float4 ComputeScreenPos (float4 pos) {
+	float4 o = ComputeNonStereoScreenPos(pos);
+	#ifdef UNITY_SINGLE_PASS_STEREO
+		o.xy = TransformStereoScreenSpaceTex(o.xy, pos.w);
+	#endif
+	return o;
+}</pre>
+							</div>
+						</aside>
+						
+						<p>The <em translate="no">AutoLight</em> include file defines three useful macros. They are <code class="shader">SHADOW_COORDS</code>, <code class="shader">TRANSFER_SHADOW</code>, and <code class="shader">SHADOW_ATTENUATION</code>. When shadows are enabled, these macros perform the same work that we just did. They do nothing when there are no shadows.</p>
+
+						
+						<p><code class="shader">SHADOW_COORDS</code> defines the interpolator for shadow coordinates, when needed. I uses the <code class="shader">_ShadowCoord</code> name, which was what the compiler complained about earlier.</p>
+						
+						<pre translate="no" class="shader">struct Interpolators {
+	&hellip;
+	
+<del>//	#if defined(SHADOWS_SCREEN)</del>
+<del>//		float4 shadowCoordinates : TEXCOORD5;</del>
+<del>//	#endif</del>
+	<ins>SHADOW_COORDS(5)</ins>
+
+	&hellip;
+};</pre>
+						
+						<p><code class="shader">TRANSFER_SHADOW</code> fills these coordinates in the vertex program.</p>
+						
+						<pre translate="no" class="shader">Interpolators MyVertexProgram (VertexData v) {
+	&hellip;
+
+<del>//	#if defined(SHADOWS_SCREEN)</del>
+<del>//		i.shadowCoordinates = i.position;</del>
+<del>//	#endif</del>
+	<ins>TRANSFER_SHADOW(i);</ins>
+
+	&hellip;
+}</pre>
+						
+						<p>And <code class="shader">SHADOW_ATTENUATION</code> uses the coordinates to sample the shadow map in the fragment program.</p>
+						
+						<pre translate="no" class="shader">UnityLight CreateLight (Interpolators i) {
+	&hellip;
+
+	#if defined(SHADOWS_SCREEN)
+		float attenuation = <ins>SHADOW_ATTENUATION(i)</ins>;
+	#else
+		UNITY_LIGHT_ATTENUATION(attenuation, 0, i.worldPos);
+	#endif
+
+	&hellip;
+}</pre>
+						
+						<p>Actually, the <code class="shader">UNITY_LIGHT_ATTENUATION</code> macro already uses <code class="shader">SHADOW_ATTENUATION</code>. That's why we got that compiler error before. So we can suffice with using just that macro. The only change is that we have to use the interpolators as its second argument, while we just used zero before.</p>
+						
+						<pre translate="no" class="shader"><del>//	#if defined(SHADOWS_SCREEN)</del>
+<del>//		float attenuation = SHADOW_ATTENUATION(i);</del>
+<del>//	#else</del>
+	UNITY_LIGHT_ATTENUATION(attenuation, <ins>i</ins>, i.worldPos);
+<del>//	#endif</del></pre>
+						
+						<p>After rewriting our code to use these macros, we get new compile errors. This happens because Unity's macros unfortunately make assumptions about the vertex data and interpolator structures. First, it is assumed that the vertex position is named <code class="shader">vertex</code>, while we named it <code class="shader">position</code>. Second, it is assumed that the interpolator position is named <code class="shader">pos</code>, but we named it <code class="shader">position</code>.</p>
+						
+						<p>Let's be pragmatic and adopt these names too. They're only used in a few places anyway, so we don't have to change much.</p>
+						
+						<pre translate="no" class="shader">struct VertexData {
+	float4 <ins>vertex</ins> : POSITION;
+	&hellip;
+};
+
+struct Interpolators {
+	float4 <ins>pos</ins> : SV_POSITION;
+	&hellip;
+};
+
+&hellip;
+
+Interpolators MyVertexProgram (VertexData v) {
+	Interpolators i;
+	i.<ins>pos</ins> = mul(UNITY_MATRIX_MVP, v.<ins>vertex</ins>);
+	i.worldPos = mul(unity_ObjectToWorld, v.<ins>vertex</ins>);
+	&hellip;
+}</pre>
+						
+						<p>Our shadows should work again, and this time on as many platforms as Unity supports.</p>
+						
+						<aside>
+							<h3>What do these macros look like?</h3>
+							<div>
+								<p>Which macro versions you end up with depends on which shader keywords are enabled, and which features are supported. When <code class="shader">SHADOWS_SCREEN</code> is defined, you end up with the following code.</p>
+								
+								<pre translate="no" class="shader">#define SHADOW_COORDS(idx1) unityShadowCoord4 _ShadowCoord : TEXCOORD##idx1;
+
+#if defined(UNITY_NO_SCREENSPACE_SHADOWS)
+	UNITY_DECLARE_SHADOWMAP(_ShadowMapTexture);
+	#define TRANSFER_SHADOW(a) a._ShadowCoord = \
+		mul(unity_WorldToShadow[0], mul(unity_ObjectToWorld, v.vertex));
+
+	inline fixed unitySampleShadow (unityShadowCoord4 shadowCoord) {}
+		#if defined(SHADOWS_NATIVE)
+			fixed shadow =
+				UNITY_SAMPLE_SHADOW(_ShadowMapTexture, shadowCoord.xyz);
+			shadow = _LightShadowData.r + shadow * (1-_LightShadowData.r);
+			return shadow;
+		#else
+			unityShadowCoord dist =
+				SAMPLE_DEPTH_TEXTURE(_ShadowMapTexture, shadowCoord.xy);
+
+			// tegra is confused if we use _LightShadowData.x directly
+			// with "ambiguous overloaded function reference
+			// max(mediump float, float)"
+			unityShadowCoord lightShadowDataX = _LightShadowData.x;
+			unityShadowCoord threshold = shadowCoord.z;
+			return max(dist > threshold, lightShadowDataX);
+		#endif
+	}
+#else // UNITY_NO_SCREENSPACE_SHADOWS
+	sampler2D _ShadowMapTexture;
+	#define TRANSFER_SHADOW(a) a._ShadowCoord = ComputeScreenPos(a.pos);
+
+	inline fixed unitySampleShadow (unityShadowCoord4 shadowCoord) {
+		fixed shadow =
+			tex2Dproj(_ShadowMapTexture, UNITY_PROJ_COORD(shadowCoord)).r;
+		return shadow;
+	}
+#endif
+
+#define SHADOW_ATTENUATION(a) unitySampleShadow(a._ShadowCoord)</pre>
+								
+								<p>Note that the Z component of the shadow coordinates is only used when both <code class="shader">UNITY_NO_SCREENSPACE_SHADOWS</code> and <code class="shader">SHADOWS_NATIVE</code> are defined.</p>
+								
+								<p>The <code class="shader">tex2Dproj</code> function does the same as <code class="shader">tex2D</code>, but it also takes care of the XY / W division. You can see this when looking at the compiled code.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Multiple Shadows</h3>
+						
+						<p>The main directional light is now casting shadows, but the second directional light still doesn't. That's because we don't yet define <code class="shader">SHADOWS_SCREEN</code> in the additive pass. We could add a multi-compile statement to it, but <code class="shader">SHADOWS_SCREEN</code> only works for directional lights. To get the correct combination of keywords, change the existing multi-compile statement to one that also includes shadows.</p>
+						
+						<pre translate="no" class="shader">			#pragma multi_compile_fwdadd<ins>_fullshadows</ins></pre>
+						
+						<p>This adds four additional keywords into the mix, to support different light types.</p>
+						
+						<pre translate="no" class="shader">// -----------------------------------------
+// Snippet #1 platforms ffffffff:
+DIRECTIONAL DIRECTIONAL_COOKIE POINT POINT_COOKIE SHADOWS_CUBE SHADOWS_DEPTH
+SHADOWS_SCREEN SHADOWS_SOFT SPOT
+
+13 keyword variants used in scene:
+
+POINT
+DIRECTIONAL
+SPOT
+POINT_COOKIE
+DIRECTIONAL_COOKIE
+SHADOWS_DEPTH SPOT
+DIRECTIONAL SHADOWS_SCREEN
+DIRECTIONAL_COOKIE SHADOWS_SCREEN
+POINT SHADOWS_CUBE
+POINT_COOKIE SHADOWS_CUBE
+SHADOWS_DEPTH SHADOWS_SOFT SPOT
+POINT SHADOWS_CUBE SHADOWS_SOFT
+POINT_COOKIE SHADOWS_CUBE SHADOWS_SOFT</pre>
+						
+						<figure>
+							<img src="part-7/receiving-shadows/two-shadows.png" width="380" height="210">
+							<figcaption>Two directional lights casting shadows.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="part-7/receiving-shadows/receiving-shadows.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Spotlight Shadows</h2>
+					
+					<p>Now that we have dealt with directional lights, let's move on to spotlights. Disable the directional lights and add some spotlights with shadows to the scene. Surprise! Thanks to Unity's macros, spotlight shadows already work.</p>
+					
+					<figure>
+						<img src="part-7/spotlight-shadows/shadowed-spotlights.png" width="380" height="210">
+						<figcaption>Two spotlights with shadows.</figcaption>
+					</figure>
+					
+					<p>When looking at the frame debugger, you'll see that Unity does less work for spotlight shadows. There is no separate depth pass, and no screen-space shadow passes. Only the shadow maps are rendered.</p>
+					
+					<figure>
+						<img src="part-7/spotlight-shadows/render-steps.png" width="300" height="196">
+						<figcaption>Rendering with spotlight shadows.</figcaption>
+					</figure>
+					
+					<p>The shadow maps works the same as for directional lights. They're depth maps, rendered from the light's point of view. However, there are big differences between a directional light and a spotlight. The spotlight has an actual position, and its light rays aren't parallel. So the spotlight's camera has a perspective view, and cannot be more around arbitrarily. As a result, these lights cannot support shadow cascades.</p>
+					
+					<figure>
+						<img src="part-7/spotlight-shadows/shadow-map.png" width="352" height="352">
+						<figcaption>Shadow map, near plane set to 4.</figcaption>
+					</figure>
+					
+					<p>Although the camera setup is different, the shadow casting code is identical for both light types. The normal bias is only supported for directional shadows, but it's simply set to zero for other lights.</p>
+					
+					<section>
+						<h3>Sampling the Shadow Map</h3>
+						
+						<p>Because spotlights don't use screen-space shadows, the sampling code has to be different. But Unity's macros hide this difference from us.</p>
+						
+						<aside>
+							<h3>What do the macros look like, for spotlights?</h3>
+							<div>
+								<p>The shadow coordinates are found by converting the vertex positions to world space, and from there to the light's shadow space.</p>
+								
+								<pre translate="no" class="shader">#if defined (SHADOWS_DEPTH) &amp;&amp; defined (SPOT)
+	#define SHADOW_COORDS(idx1) \
+		unityShadowCoord4 _ShadowCoord : TEXCOORD##idx1;
+	#define TRANSFER_SHADOW(a) a._ShadowCoord = \
+		mul(unity_WorldToShadow[0], mul(unity_ObjectToWorld, v.vertex));
+	#define SHADOW_ATTENUATION(a) UnitySampleShadowmap(a._ShadowCoord)
+#endif</pre>
+							</div>
+						</aside>
+						
+						<p>We found directional shadows by simply sampling the screen-space shadow map. Unity took care of shadow filtering when creating that map, so we didn't need to worry about that. However, spotlights don't use screen-space shadows. So if we want to use soft shadows, we have to do the filtering in the fragment program.</p>
+						
+						<p>Then <code class="shader">SHADOW_ATTENUATION</code> macro uses the <code class="shader">UnitySampleShadowmap</code> function to sample the shadow map. This function is defined in <em translate="no">UnityShadowLibrary</em>, which <em translate="no">AutoLight</em> includes. When using hard shadows, the function samples the shadow map once. When using soft shadows, it samples the map four times and averages the result. The result isn't as good as the filtering used for screen-space shadows, but it is a lot faster.</p>
+						
+						<figure>
+							<img alt="hard" src="part-7/spotlight-shadows/hard.png" width="200" height="140">
+							<img alt="soft" src="part-7/spotlight-shadows/soft.png" width="200" height="140">
+							<figcaption>Hard vs. soft spotlight shadows.</figcaption>
+						</figure>
+
+						<aside>
+							<h3>What does <code class="shader">UnitySampleShadowmap</code> look like?</h3>
+							<div>
+								<p>There are two versions of this function, one for spotlights and one for point lights. Here's the one for spotlights.</p>
+								
+								<p><code class="shader">_ShadowOffsets</code> contains the offsets used for the four samples that are averaged to create soft shadows. In the code below, I've only shown the first of those four samples.</p>
+								
+								<pre translate="no" class="shader">#if !defined(SHADOWMAPSAMPLER_DEFINED)
+	UNITY_DECLARE_SHADOWMAP(_ShadowMapTexture);
+#endif
+
+// shadow sampling offsets
+#if defined (SHADOWS_SOFT)
+	float4 _ShadowOffsets[4];
+#endif
+
+inline fixed UnitySampleShadowmap (float4 shadowCoord) {
+	// DX11 feature level 9.x shader compiler (d3dcompiler_47 at least)
+	// has a bug where trying to do more than one shadowmap sample fails
+	// compilation with "inconsistent sampler usage". Until that is fixed,
+	// just never compile multi-tap shadow variant on d3d11_9x.
+	#if defined (SHADOWS_SOFT) &amp;&amp; !defined (SHADER_API_D3D11_9X)
+		// 4-tap shadows
+		#if defined (SHADOWS_NATIVE)
+			#if defined (SHADER_API_D3D9)
+				// HLSL for D3D9, when modifying the shadow UV coordinate,
+				// really wants to do some funky swizzles, assuming that Z
+				// coordinate is unused in texture sampling. So force it to
+				// do projective texture reads here, with .w being one.
+				float4 coord = shadowCoord / shadowCoord.w;
+				half4 shadows;
+				shadows.x = UNITY_SAMPLE_SHADOW_PROJ(
+					_ShadowMapTexture, coord + _ShadowOffsets[0]
+				);
+				&hellip;
+				shadows =_LightShadowData.rrrr +
+					shadows * (1-_LightShadowData.rrrr);
+			#else
+				// On other platforms,
+				// no need to do projective texture reads.
+				float3 coord = shadowCoord.xyz / shadowCoord.w;
+				half4 shadows;
+				shadows.x = UNITY_SAMPLE_SHADOW(
+					_ShadowMapTexture, coord + _ShadowOffsets[0]
+				);
+				&hellip;
+				shadows = _LightShadowData.rrrr +
+					shadows * (1-_LightShadowData.rrrr);
+			#endif
+		#else
+			float3 coord = shadowCoord.xyz / shadowCoord.w;
+			float4 shadowVals;
+			shadowVals.x = SAMPLE_DEPTH_TEXTURE(
+				_ShadowMapTexture, coord + _ShadowOffsets[0].xy
+			);
+			&hellip;
+			half4 shadows = (shadowVals &lt; coord.zzzz) ?
+				_LightShadowData.rrrr : 1.0f;
+		#endif
+
+		// average-4 PCF
+		half shadow = dot(shadows, 0.25f);
+
+	#else
+		// 1-tap shadows
+		#if defined (SHADOWS_NATIVE)
+			half shadow =
+				UNITY_SAMPLE_SHADOW_PROJ(_ShadowMapTexture, shadowCoord);
+			shadow = _LightShadowData.r + shadow * (1 - _LightShadowData.r);
+		#else
+			half shadow =
+				SAMPLE_DEPTH_TEXTURE_PROJ(
+					_ShadowMapTexture, UNITY_PROJ_COORD(shadowCoord)
+				) &lt; (shadowCoord.z / shadowCoord.w) ?
+				_LightShadowData.r : 1.0;
+		#endif
+	#endif
+	return shadow;
+}</pre>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="part-7/spotlight-shadows/spotlight-shadows.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Point Light Shadows</h2>
+					
+					<p>Now try some point lights. When you enable shadows for a point light, you will be greeted with a compile error. Apparently, <code class="shader">UnityDecodeCubeShadowDepth</code> is undefined. This error happens because <em translate="no">UnityShadowLibrary</em> depends on <em translate="no">UnityCG</em>, but doesn't explicitly include it. So we have to make sure that <em translate="no">UnityCG</em> is included first. We can do this by including <em translate="no">UnityPBSLighting</em> before including <em translate="no">AutoLight</em> in <em translate="no">My Lighting</em>.</p>
+					
+					<pre translate="no" class="shader"><ins>#include "UnityPBSLighting.cginc"</ins>
+#include "AutoLight.cginc"
+<del>//#include "UnityPBSLighting.cginc"</del></pre>
+					
+					<p>It compiles, but all objects in range of the lights end up black. There is something wrong with the shadow maps.</p>
+					
+					<figure>
+						<img src="part-7/point-light-shadows/incorrect-shadow-map.png" width="352" height="352">
+						<figcaption>An incorrect shadow map.</figcaption>
+					</figure>
+					
+					<p>When you inspect the shadow maps via the frame debugger, you will discover that not one, but six maps are rendered per light. This happens because point lights shine in all directions. As as result, the shadow map has to be a cube map. Cube maps are created by rendering the scene with the camera pointing in six different directions, once per face of the cube. So shadows for point lights are expensive.</p>
+					
+					<section>
+						<h3>Casting Shadows</h3>
+						
+						<p>Unfortunately, Unit doesn't use depth cube maps. Apparently, not enough platforms support them. So we cannot rely on the fragment's depth value in <em translate="no">My Shadows</em>. Instead, we'll have to output the fragment's distance as the result of the fragment program.</p>
+						
+						<p>When rendering point light shadow maps, Unity looks for a shadow caster variant with the <code class="shader">SHADOWS_CUBE</code> keyword be defined. The <code class="shader">SHADOWS_DEPTH</code> keyword is used for directional and spotlight shadows. To support this, add a special multi-compile directive for shadow casters to our pass.</p>
+						
+						<pre translate="no" class="shader">		Pass {
+			Tags {
+				"LightMode" = "ShadowCaster"
+			}
+
+			CGPROGRAM
+
+			#pragma target 3.0
+
+			<ins>#pragma multi_compile_shadowcaster</ins>
+			
+			#pragma vertex MyShadowVertexProgram
+			#pragma fragment MyShadowFragmentProgram
+			
+			#include "My Shadows.cginc"
+			
+			ENDCG
+		}</pre>
+						
+						<p>This adds the variants that we need.</p>
+
+						<pre translate="no" class="shader">// Snippet #2 platforms ffffffff:
+SHADOWS_CUBE SHADOWS_DEPTH
+
+2 keyword variants used in scene:
+
+SHADOWS_DEPTH
+SHADOWS_CUBE</pre>
+						
+						<p>Because points lights require such a different approach, let's create a separate set of program function for them.</p>
+
+						<pre translate="no" class="shader"><ins>#if defined(SHADOWS_CUBE)</ins>
+
+<ins>#else</ins>
+	float4 MyShadowVertexProgram (VertexData v) : SV_POSITION {
+		float4 position =
+			UnityClipSpaceShadowCasterPos(v.position.xyz, v.normal);
+		return UnityApplyLinearShadowBias(position);
+	}
+
+	half4 MyShadowFragmentProgram () : SV_TARGET {
+		return 0;
+	}
+<ins>#endif</ins></pre>
+						
+						<p>To figure out a fragment's distance from the light, we have to construct the world-space vector from the light to the fragment. We can do so by creating these vectors per vertex, and interpolating them. This requires an additional interpolator.</p>
+
+						<pre translate="no" class="shader">#if defined(SHADOWS_CUBE)
+	<ins>struct Interpolators {</ins>
+		<ins>float4 position : SV_POSITION;</ins>
+		<ins>float3 lightVec : TEXCOORD0;</ins>
+	<ins>};</ins>
+
+	<ins>Interpolators MyShadowVertexProgram (VertexData v) {</ins>
+		<ins>Interpolators i;</ins>
+		<ins>i.position = UnityObjectToClipPos(v.position);</ins>
+		<ins>i.lightVec =</ins>
+			<ins>mul(unity_ObjectToWorld, v.position).xyz - _LightPositionRange.xyz;</ins>
+		<ins>return i;</ins>
+	<ins>}</ins>
+	
+	<ins>float4 MyShadowFragmentProgram (Interpolators i) : SV_TARGET {</ins>
+		<ins>return 0;</ins>
+	<ins>}</ins>
+#else</pre>
+						
+						<p>In the fragment program, we take the length of the light vector and add the bias to it. Then we divide that by light's range to fit them in the 0&ndash;1 range. The <code class="shader">_LightPositionRange.w</code> variable contains the inverse of its range, so we have to multiply by this value. The result is output as a floating-point value.</p>
+
+						<pre translate="no" class="shader">	float4 MyShadowFragmentProgram (Interpolators i) : SV_TARGET {
+		<ins>float depth = length(i.lightVec) + unity_LightShadowBias.x;</ins>
+		<ins>depth *= _LightPositionRange.w;</ins>
+		return <ins>UnityEncodeCubeShadowDepth(depth)</ins>;
+	}</pre>
+					
+						<aside>
+							<h3>What does <code class="shader">UnityEncodeCubeShadowDepth</code> do?</h3>
+							<div>
+								<p>Unity prefers to use a floating-point cube map. When this is possible, this function does nothing. When this is not possible, Unity will encode the value so it is stored in the four channels of an 8-bit RGBA texture.</p>
+
+								<pre translate="no" class="shader">// Encoding/decoding [0..1) floats into 8 bit/channel RGBA.
+// Note that 1.0 will not be encoded properly.
+inline float4 EncodeFloatRGBA (float v) {
+	float4 kEncodeMul = float4(1.0, 255.0, 65025.0, 16581375.0);
+	float kEncodeBit = 1.0 / 255.0;
+	float4 enc = kEncodeMul * v;
+	enc = frac(enc);
+	enc -= enc.yzww * kEncodeBit;
+	return enc;
+}
+
+float4 UnityEncodeCubeShadowDepth (float z) {
+	#ifdef UNITY_USE_RGBA_FOR_POINT_SHADOWS
+		return EncodeFloatRGBA(min(z, 0.999));
+	#else
+		return z;
+	#endif
+}</pre>
+							</div>
+						</aside>
+
+						<figure>
+							<img src="part-7/point-light-shadows/correct-shadow-map.png" width="352" height="352">
+							<figcaption>Correct shadow map.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Sampling the Shadow Maps</h3>
+						
+						<p>Now that our shadow maps are correct, the point light shadows appear. Unity's macros take care of the sampling of those maps.</p>
+						
+						<figure>
+							<img src="part-7/point-light-shadows/shadowed-point-lights.png" width="380" height="210">
+							<figcaption>Shadowed point lights.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What do that macros look like, for point lights?</h3>
+							<div>
+								<p>In this case, the same light vector is constructed as when casting the shadows. This vector is then used to sample the shadow cube map. Note that the interpolator needs only three components, instead of four. We're not passing along homogeneous coordinates this time.</p>
+								
+								<pre translate="no" class="shader">#if defined (SHADOWS_CUBE)
+	#define SHADOW_COORDS(idx1) \
+		unityShadowCoord3 _ShadowCoord : TEXCOORD##idx1;
+	#define TRANSFER_SHADOW(a) a._ShadowCoord = \
+		mul(unity_ObjectToWorld, v.vertex).xyz - _LightPositionRange.xyz;
+	#define SHADOW_ATTENUATION(a) UnitySampleShadowmap(a._ShadowCoord)
+#endif</pre>
+								
+								<p>In this case, <code class="shader">UnitySampleShadowmap</code> samples a cube map instead of a 2D texture.</p>
+								
+								<pre translate="no" class="shader">samplerCUBE_float _ShadowMapTexture;
+inline float SampleCubeDistance (float3 vec) {
+	return UnityDecodeCubeShadowDepth(texCUBE(_ShadowMapTexture, vec));
+}
+
+inline half UnitySampleShadowmap (float3 vec) {
+	float mydist = length(vec) * _LightPositionRange.w;
+	mydist *= 0.97; // bias
+
+	#if defined (SHADOWS_SOFT)
+		float z = 1.0/128.0;
+		float4 shadowVals;
+		shadowVals.x = SampleCubeDistance(vec + float3( z, z, z));
+		shadowVals.y = SampleCubeDistance(vec + float3(-z,-z, z));
+		shadowVals.z = SampleCubeDistance(vec + float3(-z, z,-z));
+		shadowVals.w = SampleCubeDistance(vec + float3( z,-z,-z));
+		half4 shadows =
+			(shadowVals &lt; mydist.xxxx) ? _LightShadowData.rrrr : 1.0f;
+		return dot(shadows,0.25);
+	#else
+		float dist = SampleCubeDistance(vec);
+		return dist &lt; mydist ? _LightShadowData.r : 1.0;
+	#endif
+}</pre>
+							</div>
+						</aside>
+						
+						<p>Just like with spotlight shadows, the shadow map is sampled once for hard shadows, and four times for soft shadows. The big difference is that Unity doesn't support filtering for the shadow cube maps. As a result, the edges of the shadows are much harsher. So point light shadows are both expensive and aliased.</p>
+						
+						<figure>
+							<img alt="hard" src="part-7/point-light-shadows/hard.png" width="200" height="140">
+							<img alt="soft" src="part-7/point-light-shadows/soft.png" width="200" height="140">
+							<figcaption>Hard vs. soft point light shadows.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>How can I make nice soft lantern shadows?</h3>
+							<div>
+								<p>Use one or more shadowed spotlights. If there are no other shadow-casting objects nearby, you can use an unshadowed light with a cookie. That works for both spotlights and point lights, and is a lot cheaper to render.</p>
+							</div>
+						</aside>
+
+						<p>The next tutorial is <a href="part-8.1.html">Reflections</a>.</p>
+					</section>
+					
+					<a href="part-7/point-light-shadows/point-light-shadows.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="part-7/Rendering-7.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../tutorials.js"></script>
+	</body>
+</html>

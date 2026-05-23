@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/object-management/multiple-scenes/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/object-management/multiple-scenes/tutorial-image.jpg">
+		<meta property="og:title" content="Multiple Scenes">
+		<meta property="og:description" content="A Unity Object Management tutorial about working with multiple scenes.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Multiple Scenes</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/object-management/multiple-scenes/#article",
+				"headline": "Multiple Scenes",
+				"alternativeHeadline": "Loading Levels",
+				"datePublished": "2018-07-16",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Object Management tutorial about working with multiple scenes.",
+				"image": "https://catlikecoding.com/unity/tutorials/object-management/multiple-scenes/tutorial-image.jpg",
+				"dependencies": "Unity 2017.4.4f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/object-management/", "name": "Object Management" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				Game: 1,
+				GameDataReader: 1,
+				GameDataWriter: 1,
+				PersistableObject: 1,
+				PersistentStorage: 1,
+				Shape: 1,
+				ShapeFactory: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Object Management</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Multiple Scenes</h1>
+					<p>Loading Levels</p>
+					<ul>
+						<li>Create a scene in play mode.</li>
+						<li>Move objects between scenes.</li>
+						<li>Work with multiple scenes.</li>
+						<li>Support game levels.</li>
+					</ul>
+				</header>
+				
+				<p>This is the fourth tutorial in a series about <a href="../index.html">Object Management</a>. It's about putting objects in their own scene, working with multiple scenes at once, plus loading and unloading scenes.
+				
+				<p>This tutorial is made with Unity 2017.4.4f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A different level, a different time of day.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Pool Scene</h2>
+					
+					<p>When many shapes are instantiated while in play mode, the scene rapidly fills with objects and the hierarchy window can get quite cluttered. This can make it hard to find a specific object, and can also slow down the editor.</p>
+					
+					<figure>
+						<img src="pool-scene/single-scene.png" width="227" height="170">
+						<figcaption>Single scene, in play mode.</figcaption>
+					</figure>
+					
+					<p>Potential editor slowdowns can be prevented by collapsing the scene hierarchy, or by removing the hierarchy window, but then we can't see the objects anymore. Ideally, we could collapse all shape instances into a single entry in the hierarchy window, while everything else remains visible. There are two ways to do this.</p>
+					
+					<p>The first option is to create a root object and make all shapes children of that object. Then we can collapse the root object. Unfortunately, this can negatively impact our game's performance when shapes are changed. Whenever an object's active or transform state changes, all its parent objects are notified of this change. So it's best to avoid making objects children of another object when this isn't strictly necessary.</p>
+					
+					<p>The second option is to put all shapes in a separate scene. They remain root objects without parents, but become part of an extra scene, which can be collapsed in the hierarchy window. Scenes don't care about the state of their objects, so this doesn't slow the game down. This is the option that we'll use.</p>
+					
+					<section>
+						<h3>Creating a Scene While Playing</h3>
+						
+						<p>We want a dedicated scene for containing shape instances. As shape instances only exist in play mode, the scene also only needs to exist while we're in play mode. So we're going to create one via code, not via the editor.</p>
+						
+						<p><code>ShapeFactory</code> is responsible for creating, destroying, and recycling shapes, so it should also be responsible for the scene that holds them. To work directly with scenes, it needs to access code from the <code>UnityEngine.SceneManagement</code> namespace, so use it in the <code>ShapeFactory</code> class file.</p>
+						
+						<pre translate="no">using System.Collections.Generic;
+using UnityEngine;
+<ins>using UnityEngine.SceneManagement;</ins>
+
+[CreateAssetMenu]
+public class ShapeFactory : ScriptableObject {
+	&hellip;
+}</pre>
+						
+						<p>We'll create a pool scene to contain all shape instances that can be recycled. All the factory's shapes go into this pool and should never be removed from it. We can use a <code>Scene</code> field to keep track of this pool scene.</p>
+						
+						<pre translate="no">	<ins>Scene poolScene;</ins></pre>
+						
+						<p>We only need a scene when recycling is enabled. When not recycling, managing the instances can be left up to whoever requested them. So we only need to create a scene when we need pools. Thus, at the end of <code>CreatePools</code> invoke <code>SceneManager.CreateScene</code> to make a new scene and keep track of it. The scene needs a name, for which we can simply use the name of the factory. If you use multiple factories, they'd all get their own scene, so make sure to give each a unique name.</p>
+						
+						<pre translate="no">	void CreatePools () {
+		&hellip;
+		<ins>poolScene = SceneManager.CreateScene(name);</ins>
+	}</pre>
+						
+						<figure>
+							<img src="pool-scene/pool-scene.png" width="227" height="170">
+							<figcaption>Shape Factory pool scene.</figcaption>
+						</figure>
+						
+						<p>Now a <em translate="no">Shape Factory</em> scene appears the first time we create a shape while in play mode, although the shapes aren't put into it yet. The scene vanishes when we stop playing.</p>
+					</section>
+					
+					<section>
+						<h3>Putting Objects in the Pool Scene</h3>
+						
+						<p>When a game object is instantiated, it gets added to the active scene. In our case, the active scene is <em translate="no">Scene</em>, the only persistent scene in our project. It is possible to change the active scene, but we don't want the factory to mess with scenes. Instead, we can migrate our shapes to the pool scene after creating them, by invoking <code>SceneManager.MoveGameObjectToScene</code>, with the game object and scene as arguments.</p>
+						
+						<pre translate="no">	public Shape Get (int shapeId = 0, int materialId = 0) {
+		Shape instance;
+		if (recycle) {
+			&hellip;
+			if (lastIndex >= 0) {
+				&hellip;
+			}
+			else {
+				instance = Instantiate(prefabs[shapeId]);
+				instance.ShapeId = shapeId;
+				<ins>SceneManager.MoveGameObjectToScene(</ins>
+					<ins>instance.gameObject, poolScene</ins>
+				<ins>);</ins>
+			}
+		}
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="pool-scene/shapes-in-pool-scene.png" width="227" height="170">
+							<figcaption>Shapes put in the pool scene.</figcaption>
+						</figure>
+						
+						<p>From now on, shapes are neatly put in the <em translate="no">Shape Factory</em> scene, which you can collapse in the hierarchy window, or leave open when you want to take a look.</p>
+					</section>
+					
+					<section>
+						<h3>Recovering from Recompilation</h3>
+						
+						<p>The factory is working fine, at least in a build or as long as we remain in play mode. Unfortunately, a recompilation while in play mode messes up our recycling and pool scene.</p>
+						
+						<p>While Unity serializes the private fields of <code>MonoBehaviour</code> types when compiling, it doesn't do this for <code>ScriptableObject</code> types. This means that the list of pools is lost after a recompilation. The result of this is that <code>CreatePools</code> will get invoked again after a recompilation.</p>
+						
+						<aside>
+							<h3>Can't we just mark <code>pools</code> as <code>Serializable</code>?</h3>
+							<div>
+								<p>That will make Unity save the pools as part of the asset, persisting it between editor play sessions and including it in builds. That is not what we want.</p>
+							</div>
+						</aside>
+						
+						<p>The first obvious problem is that we try to create the pool scene again, which will fail because a scene with that name already exists. We can guard against this by checking whether the pool scene is already loaded, via the <code>Scene.isLoaded</code> property. If so, we abort before creating the scene.</p>
+						
+						<pre translate="no">	void CreatePools () {
+		&hellip;
+
+		<ins>if (poolScene.isLoaded) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+
+		poolScene = SceneManager.CreateScene(name);
+	}</pre>
+						
+						<p>This doesn't appear to work. That's because <code>Scene</code> is a struct, not a direct reference to the actual scene. As it is not serializable, a recompilation resets the struct to its default values, which indicates an unloaded scene. We have to request a fresh connection, via the <code>SceneManager.GetSceneByName</code> method.</p>
+						
+						<pre translate="no">		<ins>poolScene = SceneManager.GetSceneByName(name);</ins>
+		if (poolScene.isLoaded) {
+			return;
+		}
+		
+		poolScene = SceneManager.CreateScene(name);</pre>
+						
+						<p>This works, but we only really need to do this while working in the Unity editor, not in builds. We can check if we're in the editor via the <code>Application.isEditor</code> property.</p>
+						
+						<pre translate="no">		<ins>if (Application.isEditor) {</ins>
+			poolScene = SceneManager.GetSceneByName(name);
+			if (poolScene.isLoaded) {
+				return;
+			}
+		<ins>}</ins>
+
+		poolScene = SceneManager.CreateScene(name);</pre>
+						
+						<p>The second and slightly less obvious problem is that shape instances that were inactive before a recompilation never get reused. That's because we've lost the lists that kept track of them. We can solve this by repopulating the lists. First, retrieve an array containing all root game objects of the pool scene, via the <code>Scene.GetRootGameObjects</code> method.</p>
+						
+						<pre translate="no">		if (Application.isEditor) {
+			poolScene = SceneManager.GetSceneByName(name);
+			if (poolScene.isLoaded) {
+				<ins>GameObject[] rootObjects = poolScene.GetRootGameObjects();</ins>
+				return; 
+			}
+		}</pre>
+						
+						<aside>
+							<h3>Doesn't this create a temporary array?</h3>
+							<div>
+								<p>Yes. There's also a variant that uses a list parameter, which can be used to avoid the temporary array. But we're in the editor after a recompilation, so don't really need to worry about memory efficiency here.</p>
+							</div>
+						</aside>
+						
+						<p>Next, loop through all the objects and grab their shape component. As this is the factory scene, it should only contain shapes, so we always get a component. A null reference error after this point would indicate a problem elsewhere.</p>
+						
+						<pre translate="no">			if (poolScene.isLoaded) {
+				GameObject[] rootObjects = poolScene.GetRootGameObjects();
+				<ins>for (int i = 0; i &lt; rootObjects.Length; i++) {</ins>
+					<ins>Shape pooledShape = rootObjects[i].GetComponent&lt;Shape>();</ins>
+				<ins>}</ins>
+				return; 
+			}</pre>
+						
+						<p>Check whether the shape is active, via the <code>activeSelf</code> property of its game object. If it is not active, then we have a shape awaiting reuse and must add it to the appropriate pool list.</p>
+						
+						<pre translate="no">					Shape pooledShape = rootObjects[i].GetComponent&lt;Shape>();
+					<ins>if (!pooledShape.gameObject.activeSelf) {</ins>
+						<ins>pools[pooledShape.ShapeId].Add(pooledShape);</ins>
+					<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Shouldn't we use <code>activeInHierarchy</code> instead?</h3>
+							<div>
+								<p>That is not needed, because we're dealing with root objects.</p>
+							</div>
+						</aside>
+						
+						<p>Now our pools survive recompilation by rebuilding themselves when needed.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Level 1</h2>
+					
+					<p>Scenes aren't only useful for grouping objects in play mode. Often, projects are partitioned into multiple scenes. The most obvious configuration is one scene per game level. But a game usually has objects that do not belong to a single level, but to the entire game. Instead of putting a copy of those objects in every scene, they can be put in their own scene too. This allows you to break up your project into multiple scenes, but requires multiple scenes to be open at the same time while editing.</p>
+					
+					<section>
+						<h3>Multi-Scene Editing</h3>
+						
+						<p>We're going to split our game into two scenes. Our current scene is the main scene, so rename it to <em translate="no">Main Scene</em>. Then create a second scene via <em translate="no">File / New Scene</em>, named <em translate="no">Level 1</em>. This new scene represents the first level of our game.</p>
+						
+						<figure>
+							<img src="level-1/level-1-project.png" width="229" height="48">
+							<figcaption>Main scene and Level 1 scene.</figcaption>
+						</figure>
+						
+						<p>Now open the <em translate="no">Level 1</em> scene, while keeping the <em translate="no">Main Scene</em> open as well. This is done by dragging the scene from the project window into the hierarchy window. The <em translate="no">Level 1</em> scene will get added below <em translate="no">Main Scene</em>, just like our pool scene appears in play mode. <em translate="no">Main Scene</em> is displayed with bold text because it's still the active scene. If you'd enter play mode now, you end up with three scenes: main, level, and factory pool.</p>
+						
+						<figure>
+							<img src="level-1/two-scenes-open.png" width="227" height="164">
+							<figcaption>Two scenes at the same time.</figcaption>
+						</figure>
+						
+						<p>The idea is that the main scene contains everything needed to run the game, no matter which level we're playing. In our case, that's the main camera, the <em translate="no">Game</em> object, storage, canvas, and event system. But we'll make the lighting depend on the level. So delete the light from <em translate="no">Main Scene</em> and the camera from <em translate="no">Level 1</em>.</p>
+						
+						<figure>
+							<img src="level-1/camera-light.png" width="227" height="134">
+							<figcaption>One camera and one light.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Scene Lighting</h3>
+						
+						<p>The only thing that we changed is that we put the light in a separate scene, which is also open. The game should function just as before. However, there is a difference. It turns out that the environmental lighting has become very dark.</p>
+						
+						<figure>
+							<img src="level-1/too-dark.jpg" width="240" height="240">
+							<figcaption>Environmental lighting too dark.</figcaption>
+						</figure>
+						
+						<p>Besides being a collection of game objects, scenes also have their own lighting settings. The environmental lighting changed because the main scene no longer has a light in it, and as a result its environmental lighting has gone dark. We get this result because the lighting settings of the active scene is used.</p>
+						
+						<p>The level scene has a light in it, with matching environmental lighting. So to fix the lighting, we have to make <em translate="no">Level 1</em> the active scene. This can be done via the <em translate="no">Set Active Scene</em> option in the dropdown menu of each scene in the hierarchy window.</p>
+						
+						<figure>
+							<img alt="hierarchy" src="level-1/level-1-active-scene.png" width="227" height="134"><br>
+							<img alt="scene" src="level-1/correct-lighting.jpg" width="240" height="240">
+							<figcaption>Level 1 as the active scene.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Including Multiple Scenes in Builds</h3>
+						
+						<p>With <em translate="no">Level 1</em> as the active scene our game works as expected, at least in the editor. To make it work correct in a build as well we have to make sure that both scenes are included. Go to <em translate="no">File / Build Settings&hellip;</em> and make sure both scenes are added, either by clicking <em translate="no">Add Open Scenes</em> or by dragging them into the <em translate="no">Scenes In Build</em> list. Make sure that <em translate="no">Main Scene</em> has index 0 and <em translate="no">Level 1</em> has index 1.</p>
+						
+						<figure>
+							<img src="level-1/scenes-in-build.png" width="618" height="60">
+							<figcaption>Building both scenes.</figcaption>
+						</figure>
+						
+						<p>From now on, both scenes get added to builds, even when they are not open when building. You could unload a scene, via the <em translate="no">Unload Scene</em> option in its dropdown menu. That keeps it in the hierarchy window, but disabled.</p>
+						
+						<figure>
+							<img src="level-1/unloaded-scene.png" width="227" height="120">
+							<figcaption>Level 1 not loaded.</figcaption>
+						</figure>
+						
+						<p>You can also use the <em translate="no">Remove Scene</em> option. That unloads and removes it from the hierarchy window. It doesn't delete it from the project.</p>
+						
+						<figure>
+							<img src="level-1/removed-scene.png" width="227" height="106">
+							<figcaption>Level 1 removed from hierarchy.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Loading a Scene</h3>
+						
+						<p>Even though both scenes are included in builds, only the first scene&mdash;with index 0&mdash;gets loaded when the game build is run. This is the same as having only the main scene open in the editor when entering play mode. To make sure that both levels are loaded, we have to manually load <em translate="no">Level 1</em>.</p>
+						
+						<p>Add a <code>LoadLevel</code> method to <em translate="no">Game</em>. In it, invoke <code>SceneManager.LoadScene</code> with the name of our level as an argument.</p>
+						
+						<pre translate="no">using System.Collections.Generic;
+using UnityEngine;
+<ins>using UnityEngine.SceneManagement;</ins>
+
+public class Game : PersistableObject {
+
+	&hellip;
+
+	<ins>void LoadLevel () {</ins>
+		<ins>SceneManager.LoadScene("Level 1");</ins>
+	<ins>}</ins>
+
+	&hellip;
+}</pre>
+						
+						<p>Our game doesn't have a splash screen, logo intro, or main menu, so immediately load the level when it awakens.</p>
+						
+						<pre translate="no">	void Awake () {
+		shapes = new List&lt;Shape>();
+		<ins>LoadLevel();</ins>
+	}</pre>
+						
+						<p>This doesn't have the desired effect. Unity unloads all currently open scenes, then loads the requested scene. The result is that we end up with nothing but the light object. This is equivalent to double-clicking on a scene in the editor.</p>
+						
+						<p>What we want is to load the level scene in addition to what's already loaded, like we did earlier in the editor. This can be done by providing <code>LoadSceneMode.Additive</code> as an additional argument to <code>SceneManager.LoadScene</code>.</p>
+						
+						<pre translate="no">	void LoadLevel () {
+		SceneManager.LoadScene("Level 1"<ins>, LoadSceneMode.Additive</ins>);
+	}</pre>
+						
+						<p>Give it a try in the editor, without having <em translate="no">Level 1</em> loaded. It works, but unfortunately the environmental lighting is again not correct, though this time it is harder to spot. It is slightly too dark.</p>
+						
+						<figure>
+							<img src="level-1/incorrect-environmental-lighting.jpg" width="240" height="240">
+							<figcaption>Incorrect environmental lighting.</figcaption>
+						</figure>
+						
+						<p>Once again, we have to make sure that <em translate="no">Level 1</em> is the active scene, this time via code. It's done by invoking <code>SceneManager.SetActiveScene</code>, with a <code>Scene</code> parameter. We can get the required scene data via <code>SceneManager.GetSceneByName</code>.</p>
+						
+						<pre translate="no">	void LoadLevel () {
+		SceneManager.LoadScene("Level 1", LoadSceneMode.Additive);
+		<ins>SceneManager.SetActiveScene(SceneManager.GetSceneByName("Level 1"));</ins>
+	}</pre>
+						
+						<p>Unfortunately, this results in an error. <code>SceneManager.SetActiveScene</code> only works for scenes that are loaded, which it apparently isn't, even though we just invoked <code>LoadScene</code>. That's because loading scenes takes some time. The scene is only fully loaded on the next frame.</p>
+					</section>
+					
+					<section>
+						<h3>Waiting a Frame</h3>
+						
+						<p>Because a loaded scene doesn't become fully loaded immediately, we have to wait until the next frame before we make it the active scene. The easiest way to do this is by turning <code>LoadLevel</code> into a coroutine. Then we can yield once between invoking <code>LoadScene</code> and <code>SetActiveScene</code>, adding a delay of a single frame.</p>
+						
+						<pre translate="no"><ins>using System.Collections;</ins>
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+public class Game : PersistableObject {
+
+	&hellip;
+
+	void Awake () {
+		shapes = new List&lt;Shape>();
+		<ins>StartCoroutine(</ins>LoadLevel()<ins>)</ins>;
+	}
+
+	&hellip;
+
+	<ins>IEnumerator</ins> LoadLevel () {
+		SceneManager.LoadScene("Level 1", LoadSceneMode.Additive);
+		<ins>yield return null;</ins>
+		SceneManager.SetActiveScene(SceneManager.GetSceneByName("Level 1"));
+	}
+
+	&hellip;
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Baking Lighting</h3>
+						
+						<p>Although <em translate="no">Level 1</em> now correctly becomes the active scene, we still do not get correct environmental lighting. At least, not in the editor. Builds are fine, because all lighting gets properly included. But in the editor automatically generated lighting data doesn't work correctly when loading scenes in play mode. To ensure correct lighting in the editor, we have to turn off the <em translate="no">Auto Generate</em> option, found at the bottom of the lighting settings, opened via <em translate="no">Window / Lighting / Settings</em> or <em translate="no">Window / Rendering / Lighting Settings</em> depending on the Unity version.</p>
+						
+						<figure>
+							<img src="level-1/manual-lighting-generation.png" width="276" height="30">
+							<figcaption>Manual lighting generation.</figcaption>
+						</figure>
+						
+						<p>Open the <em translate="no">Level 1</em> scene, make sure that it is the active scene, and click <em translate="no">Generate Lighting</em>. Unity will bake the lighting data and save it in a folder next to the scene asset.</p>
+						
+						<figure>
+							<img src="level-1/scene-lighting-data.png" width="229" height="96">
+							<figcaption>Scene lighting data for level 1.</figcaption>
+						</figure>
+						
+						<p>These settings are per scene. You only have to manually bake <em translate="no">Level 1</em>. We don't use the lighting data of the main scene, so you can leave that one in auto-generate mode.</p>
+					</section>
+					
+					<section>
+						<h3>Asynchronous Loading</h3>
+						
+						<p>How long it takes to load a scene depends on how much it contains. In our case, it's a single light, so it loads very quickly. But in general it can take a while to load, which would freeze the game until finished. To prevent this, it is possible to load scenes asynchronously, via <code>SceneManager.LoadSceneAsync</code>. This begins the process of loading a scene and returns an <code>AsyncOperation</code> object reference, which can be used to check whether the scene has finished loading. Alternatively, it can be used to yield in a coroutine. Let's do that, instead of yielding exactly one frame.</p>
+						
+						<pre translate="no">	IEnumerator LoadLevel () {
+		<del>//SceneManager.LoadScene("Level 1", LoadSceneMode.Additive);</del>
+		<del>//yield return null;</del>
+		<ins>yield return SceneManager.LoadSceneAsync(</ins>
+			<ins>"Level 1", LoadSceneMode.Additive</ins>
+		<ins>);</ins>
+		SceneManager.SetActiveScene(SceneManager.GetSceneByName("Level 1"));
+	}</pre>
+						
+						<p>Now our game doesn't freeze when loading a level. This means that it's possible that our game's <code>Update</code> method gets invoked an arbitrary amount of times before the level is loaded and has become the active scene. This is a problem, because it makes it possible for the player to issue commands before the level has been loaded. To prevent this, the <code>Game</code> component must disable itself before beginning the loading process, and enable itself again after loading has finished.</p>
+						
+						<pre translate="no">	IEnumerator LoadLevel () {
+		<ins>enabled = false;</ins>
+		yield return SceneManager.LoadSceneAsync(
+			"Level 1", LoadSceneMode.Additive
+		);
+		SceneManager.SetActiveScene(SceneManager.GetSceneByName("Level 1"));
+		<ins>enabled = true;</ins>
+	}</pre>
+						
+						<p>In a more complex game, you would also show and hide a loading screen at these points.</p>
+					</section>
+					
+					<section>
+						<h3>Preventing Double Loading</h3>
+						
+						<p>Loading the level when the game starts works fine, but if we already have the level scene open in the editor we end up loading it a second time when entering play mode.</p>
+						
+						<figure>
+							<img src="level-1/loaded-twice.png" width="227" height="164">
+							<figcaption>Level 1 loaded twice.</figcaption>
+						</figure>
+						
+						<p>Because our level scene contains a light, we end up with two lights instead, leading to an overbright result.</p>
+						
+						<figure>
+							<img src="level-1/double-lighting.jpg" width="240" height="240">
+							<figcaption>Doubled lighting.</figcaption>
+						</figure>
+						
+						<p>Once again, this is only a problem when working in the editor. But it's something that we should deal with, because you typically work with an open level scene and enter play mode to test it. You don't want the level to be loaded a second time.</p>
+						
+						<p>To prevent a double loading a scene, check whether it is already loaded before invoking <code>LoadLevel</code> in <code>Awake</code>. If it is loaded, make sure that it is the active scene and then abort.</p>
+						
+						<pre translate="no">	void Awake () {
+		shapes = new List&lt;Shape>();
+
+		<ins>Scene loadedLevel = SceneManager.GetSceneByName("Level 1");</ins>
+		<ins>if (loadedLevel.isLoaded) {</ins>
+			<ins>SceneManager.SetActiveScene(loadedLevel);</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+
+		StartCoroutine(LoadLevel());
+	}</pre>
+						
+						<p>This doesn't work, again because the scene hasn't been marked as loaded yet. Trying it in <code>Awake</code> is too early, but if we delay a bit and use a <code>Start</code> method instead, it works. This is true for all game objects that are part of a scene. <code>Awake</code> gets invoked immediately when the scene is loaded, but doesn't count as loaded yet. <code>Start</code> and later <code>Update</code> invocation happens afterwards, when the scene is officially loaded.</p>
+						
+						
+						<pre translate="no">	<del>//void Awake () {</del>
+	<ins>void Start () {</ins>
+		shapes = new List&lt;Shape>();
+
+		&hellip;
+	}</pre>
+						
+						<p>All this is only necessary when we're in the editor.</p>
+						
+						<pre translate="no">	void Start () {
+		shapes = new List&lt;Shape>();
+
+		<ins>if (Application.isEditor) {</ins>
+			Scene loadedLevel = SceneManager.GetSceneByName("Level 1");
+			if (loadedLevel.isLoaded) {
+				SceneManager.SetActiveScene(loadedLevel);
+				return;
+			}
+		<ins>}</ins>
+
+		StartCoroutine(LoadLevel());
+	}</pre>
+					</section>
+				</section>
+				
+				<section>
+					<h2>More Levels</h2>
+					
+					<p>Some games have only a single level, but often there are multiple levels. So let's add another level and make it possible to switch between them.</p>
+					
+					<section>
+						<h3>Level 2</h3>
+						
+						<p>To make a second level, you can duplicate the <em translate="no">Level 1</em> scene and name it <em translate="no">Level 2</em>. To make them visually distinguishable, open the new scene and adjust its light. For example, set its X rotation to 1 instead of 50, representing a sun just above the horizon. Then bake the lighting of level 2.</p>
+						
+						<figure>
+							<img src="more-levels/level-2-scene.png" width="229" height="98">
+							<figcaption>Two level scenes.</figcaption>
+						</figure>
+						
+						<p>Also add level 2 to the build, assigning it build index 2.</p>
+						
+						<figure>
+							<img src="more-levels/level-2-build.png" width="618" height="76">
+							<figcaption>Main scene and two levels in build.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Detecting a Loaded Level</h3>
+						
+						<p>While it is possible to have both level scenes open at the same time, it mostly makes sense to work with only a single level. Maybe it's convenient to have multiple levels open to copy or move stuff around, but that should be temporary. When entering play mode, we expect to either have no or exactly one level open, besides the main scene. This works fine when level 1 is open, but if level 2 is open then level 1 gets loaded too when we enter play mode.</p>
+						
+						<figure>
+							<img src="more-levels/both-level-1-and-2.png" width="227" height="152">
+							<figcaption>Both levels loaded.</figcaption>
+						</figure>
+						
+						<p>To prevent this from happening we have to adjust our level detection in <code>Game.Start</code>. Instead of explicitly checking for <em translate="no">Level 1</em>, we have to check for any level. Currently we have two levels, but we should support at least a few more.</p>
+						
+						<p>What we can do is demand that all level scenes have their name contain the word <em translate="no">Level</em>, followed by a space. Then we can loop through all currently loaded scenes, check whether a scene's name contains the required string, and if so make that the active scene.</p>
+						
+						<p>To loop through all loaded scenes, we can use the <code>SceneManager.sceneCount</code> property to get the count and the <code>SceneManager.GetSceneAt</code> method to get a scene at a specific index.</p>
+						
+						<pre translate="no">	void Start () {
+		shapes = new List&lt;Shape>();
+
+		if (Application.isEditor) {
+			<del>//Scene loadedLevel = SceneManager.GetSceneByName("Level 1");</del>
+			<del>//if (loadedLevel.isLoaded) {</del>
+			<del>//	SceneManager.SetActiveScene(loadedLevel);</del>
+			<del>//	return;</del>
+			<del>//}</del>
+			<ins>for (int i = 0; i &lt; SceneManager.sceneCount; i++) {</ins>
+				<ins>Scene loadedScene = SceneManager.GetSceneAt(i);</ins>
+				<ins>if (loadedScene.name.Contains("Level ")) {</ins>
+					<ins>SceneManager.SetActiveScene(loadedScene);</ins>
+					<ins>return;</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+		}
+
+		StartCoroutine(LoadLevel());
+	}</pre>
+						
+						<p>Now the game sticks with <em translate="no">Level 2</em>, if it happens to be open in the editor. This makes it possible to directly play any level, without having to go through an in-game level selection.</p>
+						
+						<figure>
+							<img alt="hierarchy" src="more-levels/only-level-2.png" width="227" height="132"><br>
+							<img alt="scene" src="more-levels/level-2-lighting.jpg" width="240" height="240">
+							<figcaption>Only level 2.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Loading a Specific Level</h3>
+						
+						<p>In order to load a specific level inside the game, we have to adjust <code>LoadLevel</code>. Because we only have a few levels, we can manually assign them to the build, giving <em translate="no">Level 1</em> build index 1, <em translate="no">Level 2</em> index 2, and so on. To load one of these levels, we have to add the level's build index as a parameter. Then we use that index when loading the scene, and use <code>GetSceneByBuildIndex</code> instead of <code>GetSceneByName</code>.</p>
+						
+						<pre translate="no">	IEnumerator LoadLevel (<ins>int levelBuildIndex</ins>) {
+		enabled = false;
+		yield return SceneManager.LoadSceneAsync(
+			<ins>levelBuildIndex</ins>, LoadSceneMode.Additive
+		);
+		SceneManager.SetActiveScene(
+			SceneManager.<ins>GetSceneByBuildIndex(levelBuildIndex)</ins>
+		);
+		enabled = true;
+	}</pre>
+						
+						<p>By default we load the first level in <code>Start</code>, which has build index 1.</p>
+						
+						<pre translate="no">	void Start () {
+		&hellip;
+
+		StartCoroutine(LoadLevel(<ins>1</ins>));
+	}</pre>
+						
+						<aside>
+							<h3>How can we deal with many levels?</h3>
+							<div>
+								<p>If a game has many levels, then it is more practical to put them in separate asset bundles, which could possibly be downloaded on demand. This also makes it possible to update or add levels to the game later. Asset bundles are not covered by this tutorial.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Selecting Levels</h3>
+						
+						<p>For our simple small game, we'll use the most straightforward way to select a level. Simply press a number key to load the corresponding level. This works for up to nine levels. To make it easy to adjust how many levels we support, add a level count field to <code>Game</code>, then set it to 2 via the inspector.</p>
+						
+						<pre translate="no">	<ins>public int levelCount;</ins></pre>
+						
+						<figure>
+							<img src="more-levels/level-count.png" width="320" height="182">
+							<figcaption>Level count set to 2.</figcaption>
+						</figure>
+						
+						<p>Now we have to check whether the player pressed one of the number keys to load a level. We can do this by looping through all valid build indices. The corresponding key code is <code>KeyCode.Alpha0</code> plus the index. If the key is pressed, start loading that level and skip the rest of the <code>Update</code> method.</p>
+						
+						<pre translate="no">	void Update () {
+		&hellip;
+		else if (Input.GetKeyDown(loadKey)) {
+			BeginNewGame();
+			storage.Load(this);
+		}
+		<ins>else {</ins>
+			<ins>for (int i = 1; i &lt;= levelCount; i++) {</ins>
+				<ins>if (Input.GetKeyDown(KeyCode.Alpha0 + i)) {</ins>
+					<ins>StartCoroutine(LoadLevel(i));</ins>
+					<ins>return;</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+
+		&hellip;
+	}</pre>
+						
+						<aside>
+							<h3>Can't we support ten levels this way?</h3>
+							<div>
+								<p>Yes, if you do a special check for the tenth, bound to the zero key.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Unloading Levels</h3>
+						
+						<p>We can now switch between our two levels while in play mode, but each time the level gets loaded we get one more open scene, adding to the currently open levels instead of replacing them. That happens because we load them additively.</p>
+						
+						<figure>
+							<img src="more-levels/too-many-levels.png" width="227" height="90">
+							<figcaption>Too many loaded levels.</figcaption>
+						</figure>
+						
+						<p>We can prevent this by keeping track of the build index of the currently loaded level. So add a field for it.</p>
+						
+						<pre translate="no">	<ins>int loadedLevelBuildIndex;</ins></pre>
+						
+						<p>Initialize the index in <code>Start</code>, if we began with a level scene already loaded. Otherwise, it keeps its default value of zero.</p>
+						
+						<pre translate="no">				if (loadedScene.name.Contains("Level ")) {
+					SceneManager.SetActiveScene(loadedScene);
+					<ins>loadedLevelBuildIndex = loadedScene.buildIndex;</ins>
+					return;
+				}</pre>
+						
+						<p>After we finished loading a level, also update this index.</p>
+						
+						<pre translate="no">	IEnumerator LoadLevel (int levelBuildIndex) {
+		&hellip;
+		<ins>loadedLevelBuildIndex = levelBuildIndex;</ins>
+		enabled = true;
+	}</pre>
+						
+						<p>Now we can check whether the index is nonzero, before starting to load a level. If so, then there already is a level scene open. We must unload this scene first, which we do asynchronously by invoking <code>SceneManager.UnloadSceneAsync</code> with the old index. Yield on the unloading before moving on to load the next level.</p>
+						
+						<pre translate="no">	IEnumerator LoadLevel (int levelBuildIndex) {
+		enabled = false;
+		<ins>if (loadedLevelBuildIndex > 0) {</ins>
+			<ins>yield return SceneManager.UnloadSceneAsync(loadedLevelBuildIndex);</ins>
+		<ins>}</ins>
+		yield return SceneManager.LoadSceneAsync(
+			levelBuildIndex, LoadSceneMode.Additive
+		);
+		SceneManager.SetActiveScene(
+			SceneManager.GetSceneByBuildIndex(levelBuildIndex)
+		);
+		loadedLevelBuildIndex = levelBuildIndex;
+		enabled = true;
+	}</pre>
+						
+						<p>Finally, it makes sense to treat the loading of a level as the beginning of a new game, getting rid of all objects that have been spawned. So invoke <code>BeginNewGame</code> before loading another level.</p>
+						
+						<pre translate="no">				if (Input.GetKeyDown(KeyCode.Alpha0 + i)) {
+					<ins>BeginNewGame();</ins>
+					StartCoroutine(LoadLevel(i));
+					return;
+				}</pre>
+						
+						<aside>
+							<h3>Can we skip loading the level if we're loading the same one again?</h3>
+							<div>
+								<p>Suppose <em translate="no">Level 2</em> is currently loaded, and the player presses the <em translate="no">2</em> button. Then a new game begins, <em translate="no">Level 2</em> gets unloaded, then <em translate="no">Level 2</em> gets loaded. Can we suffice with just beginning a new game, skipping the unloading and loading of the same scene?</p>
+								
+								<p>In our case, the answer is yes, currently. The scenes only contain a single light. Nothing gets changed during play. In general, the answer is usually no, because the state of the scene can change a lot. It might be possible to reset the level to its initial state rather than reloading it, but it is questionable whether this is worth the effort to implement. As our levels load very quickly, we simply reload them.</p>
+							</div>
+						</aside>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Remembering the Level</h2>
+					
+					<p>At this point we can switch between levels during play, but saving and loading our game still ignores levels. As a result, we can save our shapes in one level and load them in another. We have to make sure that the game remembers which level was saved.</p>
+					
+					<section>
+						<h3>Saving the Level</h3>
+						
+						<p>Saving the level requires that we add additional data to our save file, making it incompatible with older versions of our game. So increment the save version, from 1 to 2.</p>
+						
+						<pre translate="no">	const int saveVersion = <ins>2</ins>;</pre>
+						
+						<p>When the game saves itself, now also write the build index of the currently open level. Let's do this after the shape count, but before writing the shapes.</p>
+						
+						<pre translate="no">	public override void Save (GameDataWriter writer) {
+		writer.Write(shapes.Count);
+		<ins>writer.Write(loadedLevelBuildIndex);</ins>
+		for (int i = 0; i &lt; shapes.Count; i++) {
+			&hellip;
+		}
+	}</pre>
+						
+						<p>This approach relies on the specific build indices of our levels, so we cannot change them after this point without breaking backwards compatibility, just like we cannot change the order of the shape prefabs of our factory.</p>
+					</section>
+					
+					<section>
+						<h3>Loading the Level</h3>
+						
+						<p>When loading, we first deal with the special case of the shape count, as usual. Then read the level build index, unless we have an older save file, in which case we always load <em translate="no">Level 1</em>. Then immediately start loading that level.</p>
+						
+						<pre translate="no">	public override void Load (GameDataReader reader) {
+		&hellip;
+		int count = version &lt;= 0 ? -version : reader.ReadInt();
+		<ins>StartCoroutine(LoadLevel(version &lt; 2 ? 1 : reader.ReadInt()));</ins>
+		for (int i = 0; i &lt; count; i++) {
+			&hellip;
+		}
+	}</pre>
+						
+						<p>With this approach, we start loading the level while we still need to read and create all shapes. As the level loading is asynchronous, the current level scene is still the loaded scene while we are reading and creating the shapes. Only later will the correct level become loaded and the active scene. This isn't a problem, because we're putting all shapes in a separate factory scene and they don't depend on anything from the levels. This might change in the future, making this process more complex. We'll deal with that when we need to.</p>
+						
+						<p>The next tutorial is <a href="../spawn-zones/index.html">Spawn Zones</a>.</p>
+					</section>
+					
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/object-management-04-multiple-scenes" class="repository">repository</a>
+					<a href="Multiple-Scenes.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

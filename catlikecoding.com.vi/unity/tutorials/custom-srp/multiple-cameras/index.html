@@ -1,0 +1,1298 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/custom-srp/multiple-cameras/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/custom-srp/multiple-cameras/tutorial-image.jpg">
+		<meta property="og:title" content="Multiple Cameras">
+		<meta property="og:description" content="A Unity Custom SRP tutorial about rendering with more than one camera.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Multiple Cameras</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/custom-srp/post-processing/#article",
+				"headline": "Multiple Cameras",
+				"alternativeHeadline": "Camera Blending and Rendering Layers",
+				"datePublished": "2020-10-26",
+				"dateModified": "2023-08-03",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Custom SRP tutorial about rendering with more than one camera.",
+				"image": "https://catlikecoding.com/unity/tutorials/custom-srp/post-processing/tutorial-image.jpg",
+				"dependencies": "Unity 2022.3.5f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/custom-srp/", "name": "Custom SRP" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				BloomSettings: 1,
+				CameraRenderer: 1,
+				CameraSettings: 1,
+				CascadeBlendMode: 1,
+				ChannelMixerSettings: 1,
+				ColorAdjustmentsSettings: 1,
+				ColorLUTResolution: 1,
+				CustomLightEditor: 1,
+				CustomRenderPipeline: 1,
+				CustomRenderPipelineAsset: 1,
+				CustomRenderPipelineCamera: 1,
+				CustomShaderGUI: 1,
+				Directional: 1,
+				DirectionalShadowData: 1,
+				FilterMode: 1,
+				FinalBlendMode: 1,
+				InputConfig: 1,
+				IntFloat: 1,
+				Lighting: 1,
+				MeshBall: 1,
+				Mode: 1,
+				Other: 1,
+				OtherShadowData: 1,
+				Pass: 1,
+				ReinterpretExtensions: 1,
+				RenderingLayerMaskDrawer: 1,
+				RenderingLayerMaskField : 1,
+				RenderingLayerMaskFieldAttribute: 1,
+				PerObjectMaterialProperties: 1,
+				PostFXSettings: 1,
+				PostFXStack: 1,
+				ShadowedDirLight: 1,
+				ShadowedOtherLight: 1,
+				ShadowData: 1,
+				Shadows: 1,
+				ShadowsMidtonesHighlightsSettings: 1,
+				ShadowMask: 1,
+				ShadowMode: 1,
+				ShadowSettings: 1,
+				SplitToningSettings: 1,
+				TextureSize: 1,
+				ToneMappingSettings: 1,
+				WhiteBalanceSettings: 1
+			};
+			
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../../scriptable-render-pipeline/reflections/index.html">Custom SRP</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Multiple Cameras</h1>
+					<p>Camera Blending and Rendering Layers</p>
+					<ul>
+						<li>Render multiple cameras with different post FX settings.</li>
+						<li>Layer cameras with custom blending.</li>
+						<li>Support rendering layer masks.</li>
+						<li>Mask lights per camera.</li>
+					</ul>
+				</header>
+				
+				<p>This is the 14th part of a tutorial series about creating a <a href="../../scriptable-render-pipeline/reflections/index.html">custom scriptable render pipeline</a>. This time we revisit rendering with multiple cameras, now with post FX added.</p>
+				
+				<p>This tutorial is made with Unity 2019.4.12f1 and upgraded to 2022.3.5f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Looking at the same scene in different ways.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Combining Cameras</h2>
+					
+					<p>Because culling, light processing, and shadow rendering is performed per camera it is a good idea to render as few cameras as possible per frame, ideally only one. But sometimes we do have to render multiple different points of view at the same time. Examples include split-screen multiplayer, rear-view mirrors, a top-down overlay, an in-game camera, and 3D character portraits.</p>
+					
+					<aside>
+						<h3>What about the avatar's hands and tools in a first-person game?</h3>
+						<div>
+							<p>Whatever the avatar in a first-person game is holding is often shown with a different field of view than the rest of the scene, for various reasons. This can be done via a second camera, but it can also be done by rendering with an adjusted view matrix while still using the same camera.</p>
+						</div>
+					</aside>
+					
+					<section>
+						<h3>Split Screen</h3>
+						
+						<p>Let's begin by considering a split-screen scenario, consisting of two side-by-side cameras. The left camera has the width of its viewport rect set to 0.5. The right camera also has a width of 0.5 and has its X position set to 0.5. If we don't use post FX then this works as expected.</p>
+						
+						<figure>
+							<img src="combining-cameras/split-screen-without-post-fx.png" width="470" height="230">
+							<figcaption>Split screen without post FX, showing two different views of the same scene.</figcaption>
+						</figure>
+						
+						<p>But if we enable post FX it fails. Both cameras render at the correct size but end up covering the entire camera target buffer, with only the last one visible.</p>
+						
+						<figure>
+							<img src="combining-cameras/split-screen-with-post-fx-incorrect.png" width="470" height="230">
+							<figcaption>Split screen with post FX, incorrect.</figcaption>
+						</figure>
+						
+						<p>This happens because an invocation of <code>SetRenderTarget</code> also resets the viewport to cover the entire target. To apply the viewport to the final post FX pass we have to set the viewport after setting the target and before drawing. Let's do this by duplicating <code>PostFXStack.Draw</code>, renaming it to <code>DrawFinal</code> and invoking <code>SetViewport</code> on the buffer directly after <code>SetRenderTarget</code>, with the camera's <code>pixelRect</code> as an argument. As this is the final draw we can replace all but the source parameter with hard-coded values.</p>
+						
+						<pre translate="no">	<ins>void DrawFinal (RenderTargetIdentifier from) {</ins>
+		buffer.SetGlobalTexture(fxSourceId, from);
+		buffer.SetRenderTarget(
+			<ins>BuiltinRenderTextureType.CameraTarget</ins>,
+			RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store
+		);
+		<ins>buffer.SetViewport(camera.pixelRect);</ins>
+		buffer.DrawProcedural(
+			Matrix4x4.identity, settings.Material,
+			(int)<ins>Pass.Final</ins>, MeshTopology.Triangles, 3
+		);
+	}</pre>
+						
+						<p>Invoke the new method instead of the regular <code>Draw</code> at the end of <code>DoColorGradingAndToneMapping</code>.</p>
+						
+						<pre translate="no">	void DoColorGradingAndToneMapping (int sourceId) {
+		&hellip;
+		<del>Draw(&hellip;)</del>
+		<ins>DrawFinal(sourceId)</ins>;
+		buffer.ReleaseTemporaryRT(colorGradingLUTId);
+	}</pre>
+						
+						<figure>
+							<img src="combining-cameras/split-screen-with-post-fx-correct.png" width="470" height="230">
+							<figcaption>Split screen with post FX, correct.</figcaption>
+						</figure>
+						
+						<p>If you have a tile-based GPU you can get rendering artifacts around the edges of the rendered viewports, going beyond its bounds. This happens because the part of tile regions that got masked out contain junk data. We fix this by loading the target when not using a full viewport. This is not specific to Unity 2022, but I noticed this issue because Apple Silicon Macs have tile-based GPUs and support the don't-care option, but they didn't exist when I wrote this series.</p>
+						
+						<pre translate="no">	<ins>static Rect fullViewRect = new Rect(0f, 0f, 1f, 1f);</ins>
+	
+	&hellip;
+	
+		void DrawFinal (RenderTargetIdentifier from) {
+		buffer.SetGlobalTexture(fxSourceId, from);
+		buffer.SetRenderTarget(
+			BuiltinRenderTextureType.CameraTarget,
+			<ins>camera.rect == fullViewRect ?</ins>
+				RenderBufferLoadAction.DontCare <ins>: RenderBufferLoadAction.Load</ins>,
+			RenderBufferStoreAction.Store
+		);
+		&hellip;
+	}</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Layering Cameras</h3>
+						
+						<p>Besides rendering to separate areas we can also make camera viewports overlap. The simplest example is to use a regular main camera that covers the entire screen and then add a second camera that renders later with the same view but a smaller viewport. I reduced the second viewport to half size and centered it by settings its XY position to 0.25.</p>
+						
+						<figure>
+							<img src="combining-cameras/two-camera-layers.png" width="470" height="230">
+							<figcaption>Two camera layers.</figcaption>
+						</figure>
+						
+						<p>If we're not using post FX then we can turn the top camera layer into a partially-transparent overlay by settings it to clear depth only. This removes its skybox, revealing the layer below. But this doesn't work when post FX are used because then we force it to <code>CameraClearFlags.Color€</code>, so we'll see the camera's background color instead, which is dark blue by default.</p>
+						
+						<figure>
+							<img src="combining-cameras/clear-depth-only-without-post-fx.png" width="470" height="230" alt="without">
+							<img src="combining-cameras/clear-depth-only-with-post-fx.png" width="470" height="230" alt="with">
+							<figcaption>Second camera set to clear depth, without and with post FX.</figcaption>
+						</figure>
+						
+						<p>One thing we could do to make layer transparency work with post FX is change the <em translate="no">PostFXStack</em> shader's final pass so it performs alpha blending instead of the default <code class="shader">One Zero</code> mode.</p>
+						
+						<pre class="shader">		Pass {
+			Name "Final"
+
+			<ins>Blend SrcAlpha OneMinusSrcAlpha</ins>
+			
+			HLSLPROGRAM
+				#pragma target 3.5
+				#pragma vertex DefaultPassVertex
+				#pragma fragment FinalPassFragment
+			ENDHLSL
+		}</pre>
+						
+						<p>This does require us to always load the target buffer in <code>FinalDraw</code>.</p>
+						
+						<pre translate="no">	void DrawFinal (RenderTargetIdentifier from) {
+		buffer.SetGlobalTexture(fxSourceId, from);
+		buffer.SetRenderTarget(
+			BuiltinRenderTextureType.CameraTarget,
+			RenderBufferLoadAction.<ins>Load</ins>, RenderBufferStoreAction.Store
+		);
+		&hellip;
+	}</pre>
+						
+						<p>Now set the overlay camera's background color's alpha to zero. This appears to work, as long we disable bloom. I added two very bright emissive objects to make it obvious whether bloom is active or not.</p>
+						
+						<figure>
+							<img src="combining-cameras/bloom-disabled.png" width="470" height="230" alt="disabled">
+							<img src="combining-cameras/bloom-enabled.png" width="470" height="230" alt="enabled">
+							<figcaption>Bloom disabled and enabled.</figcaption>
+						</figure>
+						
+						<p>It doesn't work with bloom because that effect currently doesn't preserve transparency. We can fix this by adjusting the final bloom pass so it keeps the original transparency from the high resolution source texture. We have to adjust both <code class="shader">BloomAddPassFragment</code> and <code class="shader">BloomScatterFinalPassFragment</code> because either could be used for the final draw.</p>
+						
+						<pre class="shader">float4 BloomAddPassFragment (Varyings input) : SV_TARGET {
+	&hellip;
+	<ins>float4</ins> highRes = <ins>GetSource2(input.screenUV)</ins>;
+	return float4(lowRes * _BloomIntensity + highRes<ins>.rgb</ins>, <ins>highRes.a</ins>);
+}
+
+&hellip;
+
+float4 BloomScatterFinalPassFragment (Varyings input) : SV_TARGET {
+	&hellip;
+	<ins>float4</ins> highRes = <ins>GetSource2(input.screenUV)</ins>;
+	lowRes += highRes<ins>.rgb</ins> - ApplyBloomThreshold(highRes<ins>.rgb</ins>);
+	return float4(lerp(highRes<ins>.rgb</ins>, lowRes, _BloomIntensity), <ins>highRes.a</ins>);
+}</pre>
+						
+						<figure>
+							<img src="combining-cameras/layered-with-bloom.png" width="470" height="230">
+							<figcaption>Layered with transparency and bloom.</figcaption>
+						</figure>
+						
+						<p>Transparency now works with bloom, but the bloom's contribution to transparent areas is no longer visible. We can preserve the bloom by switching the final pass to premultiplied alpha blending. This does require us to set the camera's background color to solid transparent black, as it will get added to the layer below.</p>
+						
+						<pre class="shader">			Name "Final"
+
+			Blend <ins>One</ins> OneMinusSrcAlpha</pre>
+						
+						<figure>
+							<img src="combining-cameras/bloom-premultiplied.png" width="470" height="230">
+							<figcaption>Bloom affects transparent areas.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Layered Alpha</h3>
+						
+						<p>Our current layering approach only works if our shaders produce sensible alpha values that work with camera layer blending. We didn't care about the written alpha values earlier because we never used them for anything. But now if two objects with alpha 0.5 end up rendering to the same texel the final alpha of that texel should be 0.25. And when either of the alpha values is 1 then the result should always be 1. And when the second alpha is zero then the original alpha should be retained. All those cases are covered by using <code class="shader">One OneMinusSrcAlpha</code> when blending alpha. We can configure the shader's blending mode for the alpha channel separately from the colors, by adding a comma followed by the modes for alpha after the color blend modes. Do this for the regular pass of both our <em translate="no">Lit</em> and <em translate="no">Unlit</em> shaders.</p>
+						
+						<pre class="shader">			Blend [_SrcBlend] [_DstBlend]<ins>, One OneMinusSrcAlpha</ins></pre>
+						
+						<p>This will work as long as appropriate alpha values are used, which typically means that objects that write depth should always produce an alpha of 1 as well. This seems straightforward for opaque materials, but if they end up using a base map which also contains varying alpha it will go wrong. And it can also go wrong for clip materials because they rely on an alpha threshold to discard fragments. If a fragment is clipped it goes fine, but if it isn't its alpha should become 1.</p>
+						
+						<figure>
+							<img src="combining-cameras/cubes-alpha-zero.png" width="470" height="230">
+							<figcaption>Opaque cubes with alpha zero add to the base layer instead of replacing it.</figcaption>
+						</figure>
+						
+						<p>The quickest way to make sure that alpha behaves correctly for our shaders is to add <code class="shader">_ZWrite</code> to the <code class="shader">UnityPerMaterial</code> buffer, both in <em translate="no">LitInput</em> and <em translate="no">UnlitInput</em>.</p>
+						
+						<pre class="shader">	UNITY_DEFINE_INSTANCED_PROP(float, _Cutoff)
+	<ins>UNITY_DEFINE_INSTANCED_PROP(float, _ZWrite)</ins></pre>
+						
+						<p>Then add a <code class="shader">GetFinalAlpha</code> function with an alpha parameter to both input files. It returns 1 if <code class="shader">_ZWrite</code> is set to 1 and the provided value otherwise.</p>
+						
+						<pre class="shader"><ins>float GetFinalAlpha (float alpha) {</ins>
+	<ins>return INPUT_PROP(_ZWrite) ? 1.0 : alpha;</ins>
+<ins>}</ins></pre>
+						
+						<p>Filter the surface alpha through this function in <code class="shader">LitPassFragment</code> to get the correct alpha value at the end.</p>
+						
+						<pre class="shader">float4 LitPassFragment (Varyings input) : SV_TARGET {
+	&hellip;
+	return float4(color, <ins>GetFinalAlpha(</ins>surface.alpha<ins>)</ins>);
+}</pre>
+						
+						<p>And do the same for the base alpha in <code class="shader">UnlitPassFragment</code>.</p>
+						
+						<pre class="shader">float4 UnlitPassFragment (Varyings input) : SV_TARGET {
+	&hellip;
+	return <ins>float4(base.rgb, GetFinalAlpha(base.a))</ins>;
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Custom Blending</h3>
+						
+						<p>Blending with the previous camera layer only makes sense for overlay cameras. The bottom camera would blend with whatever the initial contents of the camera target are, which are either random or the accumulation of previous frames, unless the editor provides a cleared target. So the first camera should use the <code class="shader">One Zero</code> mode for blending. To support replacement, overlay, and more exotic layering options we'll add a configurable final blend mode to cameras that gets used when post FX are enabled. We'll create a new serializable <code>CameraSettings</code> configuration class for these settings, like we did for shadows. Wrap both source and destination blend modes in a single inner <code>FinalBlendMode</code> struct for convenience, then set it to <code class="shader">One Zero</code> blending by default.</p>
+						
+						<pre translate="no"><ins>using System;</ins>
+<ins>using UnityEngine.Rendering;</ins>
+
+<ins>[Serializable]</ins>
+<ins>public class CameraSettings {</ins>
+	
+	<ins>[Serializable]</ins>
+	<ins>public struct FinalBlendMode {</ins>
+
+		<ins>public BlendMode source, destination;</ins>
+	<ins>}</ins>
+
+	<ins>public FinalBlendMode finalBlendMode = new FinalBlendMode {</ins>
+		<ins>source = BlendMode.One,</ins>
+		<ins>destination = BlendMode.Zero</ins>
+	<ins>};</ins>
+<ins>}</ins></pre>
+						
+						<p>We cannot directly add these settings to <code>Camera</code> components, so we'll create a supplementary <code>CustomRenderPipelineCamera</code> component. It can only be added once to a game object that is a camera, and only once. Give it a <code>CameraSettings</code> configuration field with accompanying getter property. Because the settings are a class the property has to ensure that one exists, so create a new settings object instance if needed. This would be the cause if the component hasn't been serialized by the editor yet, or after adding one to a camera at runtime.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>[DisallowMultipleComponent, RequireComponent(typeof(Camera))]</ins>
+<ins>public class CustomRenderPipelineCamera : MonoBehaviour {</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>CameraSettings settings = default;</ins>
+
+	<ins>public CameraSettings Settings => settings ?? (settings = new CameraSettings());</ins>
+<ins>}</ins></pre>
+						
+						<aside>
+							<h3>What does <code>??</code> do?</h3>
+							<div>
+								<p>It is the null-coalescing operator. It's shorthand for</p>
+								
+								<pre translate="no">	public CameraSettings Settings =>
+		settings == null ? settings = new CameraSettings() : settings;</pre>
+								
+								<p>An even more verbose form of the property would be</p>
+								
+								<pre translate="no">	public CameraSettings Settings {
+		get {
+			if (settings == null) {
+				settings = new CameraSettings();
+			}
+			return settings;
+		}
+	}</pre>
+							</div>
+						</aside>
+						
+						<p>Now we can get the camera's <code>CustomRenderPipelineCamera</code> component at the start of <code>CameraRenderer.Render</code>. To support cameras without custom settings we'll check if our component exists. If so we use its settings, otherwise we'll use a default settings objects that we create once and store a reference to in a static field. Then we pass along the final blend mode when we set up the stack.</p>
+						
+						<pre translate="no">	<ins>static CameraSettings defaultCameraSettings = new CameraSettings();</ins>
+
+	&hellip;
+
+	public void Render (&hellip;) {
+		this.context = context;
+		this.camera = camera;
+
+		<ins>var crpCamera = camera.GetComponent&lt;CustomRenderPipelineCamera>();</ins>
+		<ins>CameraSettings cameraSettings =</ins>
+			<ins>crpCamera ? crpCamera.Settings : defaultCameraSettings;</ins>
+		
+		&hellip;
+			postFXStack.Setup(
+			context, camera, postFXSettings, useHDR, colorLUTResolution<ins>,</ins>
+			<ins>cameraSettings.finalBlendMode</ins>
+		);
+		&hellip;
+	}</pre>
+						
+						<p><code>PostFXStack</code> now has to keep track of the camera's final blend mode.</p>
+						
+						<pre translate="no">	<ins>CameraSettings.FinalBlendMode finalBlendMode;</ins>
+
+	&hellip;
+	
+	public void Setup (
+		ScriptableRenderContext context, Camera camera, PostFXSettings settings,
+		bool useHDR, int colorLUTResolution<ins>, CameraSettings.FinalBlendMode finalBlendMode</ins>
+	) {
+		<ins>this.finalBlendMode = finalBlendMode;</ins>
+		&hellip;
+	}</pre>
+						
+						<p>So it can set new <em translate="no">_FinalSrcBlend</em> and <em translate="no">_FinalDstBlend</em> float shader properties at the start of <code>DrawFinal</code>. Also, we now also always need to load the target buffer if the destination blend mode isn't zero.</p>
+						
+						<pre translate="no">	<ins>int</ins>
+		<ins>finalSrcBlendId = Shader.PropertyToID("_FinalSrcBlend"),</ins>
+		<ins>finalDstBlendId = Shader.PropertyToID("_FinalDstBlend");</ins>
+	
+	&hellip;
+	
+	void DrawFinal (RenderTargetIdentifier from) {
+		<ins>buffer.SetGlobalFloat(finalSrcBlendId, (float)finalBlendMode.source);</ins>
+		<ins>buffer.SetGlobalFloat(finalDstBlendId, (float)finalBlendMode.destination);</ins>
+		buffer.SetGlobalTexture(fxSourceId, from);
+		buffer.SetRenderTarget(
+			BuiltinRenderTextureType.CameraTarget,
+			<ins>finalBlendMode.destination == BlendMode.Zero &amp;&amp;</ins> camera.rect == fullViewRect ?
+				<ins>RenderBufferLoadAction.DontCare :</ins> RenderBufferLoadAction.Load,
+			RenderBufferStoreAction.Store
+		);
+		&hellip;
+	}</pre>
+						
+						<p>Finally, use the new properties in the final pass instead of hard-coded blend modes.</p>
+						
+						<pre class="shader">			Name "Final"
+
+			Blend <ins>[_FinalSrcBlend]</ins> <ins>[_FinalDstBlend]</ins></pre>
+						
+						
+						<p>From now on cameras without our settings will overwrite the target buffer's contents, due to the default <code class="shader">One Zero</code> final blend mode. Overlay cameras have to be given a different final blend mode, typically <code class="shader">One OneMinusSrcAlpha</code>.</p>
+						
+						<figure>
+							<img src="combining-cameras/camera-settings.png" width="320" height="132">
+							<figcaption>Component with settings for overlay camera.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Render Textures</h3>
+						
+						<p>Besides creating a split-screen display or directly layering cameras it's also common to use a camera for an in-game display, or as part of the GUI. In these cases the camera's target has to be a render texture, either an asset or one created at runtime. As an example I created a 200&times;100 render texture via <em translate="no">Assets / Create / Render Texture</em>. I gave it no depth buffer because I render a camera with post FX to it, which creates its own intermediate render texture with a depth buffer.</p>
+						
+						<figure>
+							<img src="combining-cameras/render-texture.png" width="320" height="208">
+							<figcaption>Render texture asset.</figcaption>
+						</figure>
+						
+						<p>I then created a camera that renders the scene to this texture, by hooking it up to the camera's <em translate="no">Target Texture</em> property.</p>
+						
+						<figure>
+							<img src="combining-cameras/target-texture.png" width="320" height="102">
+							<figcaption>Camera target texture set.</figcaption>
+						</figure>
+						
+						<p>As with regular rendering the bottom camera has to use <code class="shader">One Zero</code> for its final blend mode. The editor will initially present a clear black texture, but after that the render texture will contain whatever was last rendered to it. Multiple cameras can render to the same render texture, with any viewport, as normal. The only difference is that Unity automatically renders cameras with render texture targets before those that render to a display. First cameras with target textures are rendered in order of increasing depth, then those without.</p>
+					</section>
+					
+					<section>
+						<h3>Unity UI</h3>
+						
+						<p>The render texture can be used like any regular texture. To display it via Unity's UI we'll have to use a game object with a raw image component, created via <em translate="no">GameObject / UI / Raw Image</em>.</p>
+						
+						<figure>
+							<img src="combining-cameras/raw-image-inspector.png" width="320" height="211" alt="inspector">
+							<img src="combining-cameras/raw-image-game.png" width="470" height="230" alt="game">
+							<figcaption>UI raw image, partially overlapping a button.</figcaption>
+						</figure>
+						
+						<p>The raw image uses the default UI material, which performs standard <code class="shader">SrcAlpha OneMinusSrcAlpha</code> blending. So transparency works, but bloom isn't additive and unless the texture is displayed pixel-perfect bilinear filtering will make the camera's black background color visible as a dark outline around transparent edges.</p>
+						
+						<p>To support other blend modes we'll have to create a custom UI shader. We'll simply do this by duplicating the <em translate="no">Default-UI</em> shader, adding support for configurable blending via <em translate="no">_SrcBlend</em> and <em translate="no">_DstBlend</em> shader properties. I also adjusted the shader code to better match the style of this tutorial series.</p>
+						
+						<pre class="shader">Shader "Custom RP/UI Custom Blending" {
+	Properties {
+		[PerRendererData] _MainTex ("Sprite Texture", 2D) = "white" {}
+		_Color ("Tint", Color) = (1,1,1,1)
+		_StencilComp ("Stencil Comparison", Float) = 8
+		_Stencil ("Stencil ID", Float) = 0
+		_StencilOp ("Stencil Operation", Float) = 0
+		_StencilWriteMask ("Stencil Write Mask", Float) = 255
+		_StencilReadMask ("Stencil Read Mask", Float) = 255
+		_ColorMask ("Color Mask", Float) = 15
+		[Toggle(UNITY_UI_ALPHACLIP)] _UseUIAlphaClip ("Use Alpha Clip", Float) = 0
+		<ins>[Enum(UnityEngine.Rendering.BlendMode)] _SrcBlend ("Src Blend", Float) = 1</ins>
+		<ins>[Enum(UnityEngine.Rendering.BlendMode)] _DstBlend ("Dst Blend", Float) = 0</ins>
+	}
+
+	SubShader {
+		Tags {
+			"Queue" = "Transparent"
+			"IgnoreProjector" = "True"
+			"RenderType" = "Transparent"
+			"PreviewType" = "Plane"
+			"CanUseSpriteAtlas" = "True"
+		}
+
+		Stencil {
+			Ref [_Stencil]
+			Comp [_StencilComp]
+			Pass [_StencilOp]
+			ReadMask [_StencilReadMask]
+			WriteMask [_StencilWriteMask]
+		}
+
+		Blend <ins>[_SrcBlend]</ins> <ins>[_DstBlend]</ins>
+		ColorMask [_ColorMask]
+		Cull Off
+		ZWrite Off
+		ZTest [unity_GUIZTestMode]
+
+		Pass { &hellip; }
+	}
+}</pre>
+						
+						<p>And here is the pass, unmodified except for style.</p>
+						
+						<pre class="shader">		Pass {
+			Name "Default"
+			
+			CGPROGRAM
+			#pragma vertex UIPassVertex
+			#pragma fragment UIPassFragment
+			#pragma target 2.0
+
+			#include "UnityCG.cginc"
+			#include "UnityUI.cginc"
+
+			#pragma multi_compile_local _ UNITY_UI_CLIP_RECT
+			#pragma multi_compile_local _ UNITY_UI_ALPHACLIP
+
+			struct Attributes {
+				float4 positionOS : POSITION;
+				float4 color : COLOR;
+				float2 baseUV : TEXCOORD0;
+				UNITY_VERTEX_INPUT_INSTANCE_ID
+			};
+
+			struct Varyings {
+				float4 positionCS : SV_POSITION;
+				float2 positionUI : VAR_POSITION;
+				float2 baseUV : VAR_BASE_UV;
+				float4 color : COLOR;
+				UNITY_VERTEX_OUTPUT_STEREO
+			};
+
+			sampler2D _MainTex;
+			float4 _MainTex_ST;
+			float4 _Color;
+			float4 _TextureSampleAdd;
+			float4 _ClipRect;
+
+			Varyings UIPassVertex (Attributes input) {
+				Varyings output;
+				UNITY_SETUP_INSTANCE_ID(input);
+				UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
+				output.positionCS = UnityObjectToClipPos(input.positionOS);
+				output.positionUI = input.positionOS.xy;
+				output.baseUV = TRANSFORM_TEX(input.baseUV, _MainTex);
+				output.color = input.color * _Color;
+				return output;
+			}
+
+			float4 UIPassFragment (Varyings input) : SV_Target {
+				float4 color =
+					(tex2D(_MainTex, input.baseUV) + _TextureSampleAdd) * input.color;
+				#if defined(UNITY_UI_CLIP_RECT)
+					color.a *= UnityGet2DClipping(input.positionUI, _ClipRect);
+				#endif
+				#if defined(UNITY_UI_ALPHACLIP)
+					clip (color.a - 0.001);
+				#endif
+				return color;
+			}
+			ENDCG
+		}</pre>
+						
+						<figure>
+							<img src="combining-cameras/raw-image-premultiplied.png" width="470" height="230">
+							<figcaption>Raw UI image using custom UI shader with premultiplied alpha blending.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Where can I find the default UI shader source code?</h3>
+							<div>
+								<p>Go to <a href="https://unity3d.com/get-unity/download/archive">Unity's download archive</a>, find the desired Unity version, and select <em translate="no">Built in shaders</em> from one of the dropdown menus. The shader is in the <em translate="no">DefaultResourcesExtra / UI</em> folder.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Post FX Settings Per Camera</h3>
+						
+						<p>When working with multiple cameras it should be possible to use different post FX per camera, so let's add support for it. Give <code>CameraSettings</code> a toggle to control whether it overrides the global post FX settings, along with its own <code>PostFXSettings</code> field.</p>
+						
+						<pre translate="no">	<ins>public bool overridePostFX = false;</ins>
+
+	<ins>public PostFXSettings postFXSettings = default;</ins></pre>
+						
+						<figure>
+							<img src="combining-cameras/override-post-fx-settings.png" width="320" height="78">
+							<figcaption>Camera post FX override settings.</figcaption>
+						</figure>
+						
+						<p>Have <code>CameraRenderer.Render</code> check whether the camera overrides the post FX settings. If so replace the settings provided by the render pipeline with the camera's.
+						
+						<pre translate="no">		var crpCamera = camera.GetComponent&lt;CustomRenderPipelineCamera>();
+		CameraSettings cameraSettings =
+			crpCamera ? crpCamera.Settings : defaultCameraSettings;
+
+		<ins>if (cameraSettings.overridePostFX) {</ins>
+			<ins>postFXSettings = cameraSettings.postFXSettings;</ins>
+		<ins>}</ins></pre>
+						
+						<p>Now each camera can either use the default or custom post FX. For example, I made the bottom camera use the default, turned off post FX for the overlay camera, and gave the render texture camera different post FX with a cold temperature shift and neutral tone mapping.</p>
+						
+						<figure>
+							<img src="combining-cameras/different-post-fx-settings.png" width="470" height="230">
+							<figcaption>Different post FX settings per camera.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Rendering Layers</h2>
+					
+					<p>When showing multiple camera views at the same time we don't always want to render the same scene for all cameras. For example, we could be rendering the main view and a character portrait. Unity supports only a single global scene at a time, so we must use a way to limit what each camera sees.</p>
+					
+					<section>
+						<h3>Culling Masks</h3>
+						
+						<p>Every game object belongs to a single layer. The scene window can filter which layers it displays via the <em translate="no">Layers</em> dropdown menu at the top right of the editor. Likewise, each camera has a <em translate="no">Culling Mask</em> property that can be used to limit what it displays the same way. This mask is applied during the culling step of rendering.</p>
+						
+						<p>Each object belongs to exactly one layer, while culling masks can include multiple layers. For example, you could have two cameras that both render the <em translate="no">Default</em> layer while one also renders <em translate="no">Ignore Raycasts</em> while the other instead also renders <em translate="no">Water</em>. Thus some objects show up for both cameras while others are only visible to one or the other, and yet other objects might not get rendered at all.</p>
+						
+						<figure>
+							<img src="rendering-layers/different-culling-masks.png" width="470" height="230">
+							<figcaption>Split screen with different culling masks per camera.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why does changing an object's layer do nothing?</h3>
+							<div>
+								<p>It should, but there's a bug where undo/redo for a layer change might not affect whether an object gets rendered or not. Toggling play mode or explicitly changing the layer again should fix this.</p>
+							</div>
+						</aside>
+						
+						<p>Lights also have culling masks. The idea is that an object that's culled for a light behaves as if that light doesn't exists. The object isn't lit by the light and doesn't cast a shadow for it. But if we try this out with a directional light only its shadows are affected.</p>
+						
+						<figure>
+							<img src="rendering-layers/culling-mask-directional-light.png" width="470" height="230">
+							<figcaption>Culling mask applied to directional light only affects shadows.</figcaption>
+						</figure>
+						
+						<p>The same happens if we tried it with another light type, if our RP's <em translate="no">Use Lights Per Object</em> option is disabled.</p>
+						
+						<figure>
+							<img src="rendering-layers/culling-mask-point-light.png" width="470" height="230">
+							<figcaption>Same culling mask applied to bright point light.</figcaption>
+						</figure>
+						
+						<p>If <em translate="no">Use Lights Per Object</em> is enabled then light culling works as it should, but for point and spot lights only.</p>
+						
+						<figure>
+							<img src="rendering-layers/culling-mask-point-light-per-object.png" width="470" height="230">
+							<figcaption>Point light with lights-per-object enabled.</figcaption>
+						</figure>
+						
+						<p>We get these results because the light's culling mask gets applied by Unity when it sends the per-object light indices to the GPU. So if we don't use those culling doesn't work. And it never works for directional lights because we always apply those to everything. Shadows do always get culled correctly because the light's culling mask is used like a camera's when rendering the shadow casters from the light's point of view.</p>
+						
+						<p>We cannot fully support culling masks for lights with our current approach. This limitation isn't a showstopper, HDRP also doesn't support culling masks for lights. Unity provides rendering layers as an alternative for SRPs. There are two benefits of using rendering layers instead of game-object layers. First, renderers aren't limited to only a single layer, which makes them much more flexible. Second, rendering layers aren't used for anything else, unlike default layers which are also used for physics.</p>
+						
+						<p>Before we move on to rendering layers, let's display a warning in the light's inspector when its culling mask is set to something else than <em translate="no">Everything</em>. The light's culling mask is made available via its <code>cullingMask</code> integer property with &minus;1 representing all layers. If the target of <code>CustomLightEditor</code> has its mask set to anything else invoke <code>EditorGUILayout.HelpBox</code> at the end of <code>OnInspectorGUI</code>, with a string indicating culling masks only affect shadows and <code>MessageType.Warning</code> to show a warning icon.</p>
+						
+						<pre translate="no">	public override void OnInspectorGUI() {
+		&hellip;
+
+		<ins>var light = target as Light;</ins>
+		<ins>if (light.cullingMask != -1) {</ins>
+			<ins>EditorGUILayout.HelpBox(</ins>
+				<ins>"Culling Mask only affects shadows.",</ins>
+				<ins>MessageType.Warning</ins>
+			<ins>);</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<img src="rendering-layers/culling-mask-warning.png" width="320" height="96">
+							<figcaption>Culling mask warning for lights.</figcaption>
+						</figure>
+						
+						<p>We can be a bit more specific, mentioning that the <em translate="no">Use Lights Per Object</em> setting makes a difference for lights that aren't directional.</p>
+						
+						<pre translate="no">			EditorGUILayout.HelpBox(
+				<ins>light.type == LightType.Directional€ ?</ins>
+					"Culling Mask only affects shadows." <ins>:</ins>
+					<ins>"Culling Mask only affects shadow unless Use Lights Per Objects is on."</ins>,
+				MessageType.Warning
+			);</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Adjusting the Rendering Layer Mask</h3>
+						
+						<p>When an SRP is used the inspectors of lights and <code>MeshRenderer</code> components expose a <em translate="no">Rendering Layer Mask</em> property that is hidden when the default RP is used.</p>
+						
+						<figure>
+							<img src="rendering-layers/mesh-renderer-rendering-layer-mask.png" width="320" height="196">
+							<figcaption>Rendering layer mask for <code>MeshRenderer</code>.</figcaption>
+						</figure>
+						
+						<p>By default the dropdown shows 32 layers, named <em translate="no">Layer1</em>, <em translate="no">Layer2</em>, etc. The names of these layers can be configured per RP, by overriding the <code>RenderPipelineAsset.renderingLayerMaskNames</code> getter property. As this is purely cosmetic for the dropdown menu we only need to do this for the Unity Editor. So turn <code>CustomRenderPipelineAsset</code> into a partial class.</p>
+						
+						<pre translate="no">public <ins>partial</ins> class CustomRenderPipelineAsset : RenderPipelineAsset { &hellip; }</pre>
+						
+						<p>And then create an editor-only script asset for it that overrides the property. It returns a <code>string</code> array, which we can create in a static constructor method. We'll start with the same names as the default, except with a space in between the <em translate="no">Layer</em> word and the number.</p>
+						
+						<pre translate="no"><ins>partial class CustomRenderPipelineAsset {</ins>
+
+<ins>#if UNITY_EDITOR</ins>
+
+	<ins>static string[] renderingLayerNames;</ins>
+
+	<ins>static CustomRenderPipelineAsset () {</ins>
+		<ins>renderingLayerNames = new string[32];</ins>
+		<ins>for (int i = 0; i &lt; renderingLayerNames.Length; i++) {</ins>
+			<ins>renderingLayerNames[i] = "Layer " + (i + 1);</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	<ins>public override string[] renderingLayerMaskNames => renderingLayerNames;</ins>
+
+<ins>#endif</ins>
+<ins>}</ins></pre>
+						
+						<p>This changes the rendering layer labels slightly. It works fine for <code>MeshRenderer</code> components, but unfortunately the light's property doesn't respond to changes. The rendering layer dropdown menu shows up, but adjustments don't get applied. We cannot directly fix this, but can add our own version of the property that does work. Begin by creating a <code>GUIContent</code> for it in <code>CustomLightEditor</code>, with the same label and a tooltip indicating that this is a functional version of the property above it.</p>
+						
+						<pre translate="no">	<ins>static GUIContent renderingLayerMaskLabel =</ins>
+		<ins>new GUIContent("Rendering Layer Mask", "Functional version of above property.");</ins></pre>
+						
+						<p>Then create a <code>DrawRenderingLayerMask</code> method that is an alternative of <code>LightEditor.DrawRenderingLayerMask</code> that does assign a changed value back to the property. To make the dropdown menu use the RP's layer names we cannot simply rely on <code>EditorGUILayout.PropertyField</code>. We have to grab the relevant property from the settings, make sure to handle mixed values of a multi-selection, grab the mask as an integer, show it, and assign a changed value back to the property. It's the last step that's missing from the default light inspector's version.</p>
+						
+						<p>Showing the dropdown is done by invoking <code>EditorGUILayout.MaskField</code> with the label, mask, and <code>GraphicsSettings.currentRenderPipeline.renderingLayerMaskNames</code> as arguments.</p>
+						
+						<pre translate="no">	<ins>void DrawRenderingLayerMask () {</ins>
+		<ins>SerializedProperty property = settings.renderingLayerMask;</ins>
+		<ins>EditorGUI.showMixedValue = property.hasMultipleDifferentValues;</ins>
+		<ins>EditorGUI.BeginChangeCheck();</ins>
+		<ins>int mask = property.intValue;</ins>
+		<ins>mask = EditorGUILayout.MaskField(</ins>
+			<ins>renderingLayerMaskLabel, mask,</ins>
+			<ins>GraphicsSettings.currentRenderPipeline.renderingLayerMaskNames</ins>
+		<ins>);</ins>
+		<ins>if (EditorGUI.EndChangeCheck()) {</ins>
+			<ins>property.intValue = mask;</ins>
+		<ins>}</ins>
+		<ins>EditorGUI.showMixedValue = false;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Invoke the new method directly after invoking <code>base.OnInspectorGUI</code>, so the extra <em translate="no">Rendering Layer Mask</em> property is shown directly below the nonfunctional one. Also, we now have to always invoke <code>ApplyModifiedProperties</code> to make sure that changes to the rendering layer mask are applied to the light.</p>
+						
+						<pre translate="no">	public override void OnInspectorGUI() {
+		base.OnInspectorGUI();
+		<ins>DrawRenderingLayerMask();</ins>
+		
+		if (
+			!settings.lightType.hasMultipleDifferentValues &amp;&amp;
+			(LightType)settings.lightType.enumValueIndex == LightType.Spot
+		)
+		{
+			settings.DrawInnerAndOuterSpotAngle();
+			<del>//settings.ApplyModifiedProperties();</del>
+		}
+
+		<ins>settings.ApplyModifiedProperties();</ins>
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="rendering-layers/rendering-layer-mask-light.png" width="320" height="72">
+							<figcaption>Extra rendering layer mask property for light.</figcaption>
+						</figure>
+						
+						<p>Our version of the property does apply changes, except that selecting the <em translate="no">Everything</em> or <em translate="no">Layer 32</em> options produce the same result as if <em translate="no">Nothing</em> was selected. This happens because the light's rendering layer mask is internally stored as an unsigned integer, a <code>uint</code>. This makes sense because it is used as a bit mask, but <code>SerializedProperty</code> only supports getting and setting a signed integer value.</p>
+						
+						<p>The <em translate="no">Everything</em> option is represented by &minus;1, which the property clamps to zero. And <em translate="no">Layer 32</em> corresponds to the highest bit, which represents a number one greater than <code>int.MaxValue</code>, which the property also replaces with zero.</p>
+						
+						<p>We can solve the second problem by simply removing the last layer, by reducing the amount of rendering layer names to 31. That's still plenty of layers. HDRP only supports eight.</p>
+						
+						<pre translate="no">		renderingLayerNames = new string[<ins>31</ins>];</pre>
+						
+						<p>By removing one layer the <em translate="no">Everything</em> option is now represented by a a value with all but the highest bit set, which matches <code>int.MaxValue</code>. So we can solve the first problem by showing &minus;1 while storing <code>int.MaxValue</code>. The default property doesn't do this, which is why it shows <em translate="no">Mixed...</em> instead of <em translate="no">Everything</em> when appropriate. HDRP also suffers from this.</p>
+						
+						<pre translate="no">		int mask = property.intValue;
+		<ins>if (mask == int.MaxValue) {</ins>
+			<ins>mask = -1;</ins>
+		<ins>}</ins>
+		mask = EditorGUILayout.MaskField(
+			renderingLayerMaskLabel, mask,
+			GraphicsSettings.currentRenderPipeline.renderingLayerMaskNames
+		);
+		if (EditorGUI.EndChangeCheck()) {
+			property.intValue = <ins>mask == -1 ? int.MaxValue :</ins> mask;
+		}</pre>
+						
+						<figure>
+							<img src="rendering-layers/functional-rendering-layer-mask-property.png" width="320" height="52">
+							<figcaption>Functional rendering layer mask property.</figcaption>
+						</figure>
+						
+						<p>We can finally correctly adjust the rendering layers mask property of lights. But the mask isn't used by default, so nothing changed. We can apply it to shadows by enabling <code>useRenderingLayerMaskTest</code> of the <code>ShadowDrawingSettings</code> in <code>Shadows</code>. Do this for all lights, so in <code>RenderDirectionalShadows</code>, <code>RenderSpotShadows</code>, and <code>RenderPointShadows</code>. We can now eliminate shadows by configuring rendering layer masks of objects and lights.</p>
+						
+						<pre translate="no">		var shadowSettings = new ShadowDrawingSettings(
+			&hellip;
+		) <ins>{</ins>
+			<ins>useRenderingLayerMaskTest = true</ins>
+		<ins>}</ins>;</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Sending a Mask to the GPU</h3>
+						
+						<p>To apply the rendering layer mask to lighting calculations of our <em translate="no">Lit</em> shader the masks of both the objects and the lights have to be available on the GPU side. To access the object's mask we have to add a <code class="shader">float4 unity_RenderingLayer</code> field to the <code class="shader">UnityPerDraw</code> structure in <em translate="no">UnityInput</em>, directly below <code class="shader">unity_WorldTransformParams</code>. The mask is stored in its first component.</p>
+						
+						<pre class="shader">	real4 unity_WorldTransformParams;
+
+	<ins>float4 unity_RenderingLayer;</ins></pre>
+						
+						<p>We'll add the mask to our <code class="shader">Surface</code> struct, as a <code class="shader">uint</code> because it is a bit mask.</p>
+						
+						<pre class="shader">struct Surface {
+	&hellip;
+	<ins>uint renderingLayerMask;</ins>
+};</pre>
+						
+						<p>When setting the surface's mask in <code class="shader">LitPassFragment</code> we have to use the <code class="shader">asuint</code> intrinsic function. This gets use the raw data, without performing a numeric type conversion from <code class="shader">float</code> to <code class="shader">uint</code>, which would alter the bit pattern.</p>
+						
+						<pre class="shader">	surface.dither = InterleavedGradientNoise(input.positionCS.xy, 0);
+	<ins>surface.renderingLayerMask = asuint(unity_RenderingLayer.x);</ins></pre>
+						
+						<p>We have to do the same for the <code class="shader">Light</code> struct, so give it a <code class="shader">uint</code> field for its rendering layer mask as well.</p>
+						
+						<pre class="shader">struct Light {
+	&hellip;
+	<ins>uint renderingLayerMask;</ins>
+};</pre>
+						
+						<p>We're responsible for sending the mask to the GPU. Let's do this by storing it in the unused fourth component of the <code class="shader">_DirectionalLightDirections</code> and <code class="shader">_OtherLightDirections</code> arrays. Add the <code class="shader">AndMasks</code> suffix to their names for clarity.</p>
+						
+						<pre class="shader">CBUFFER_START(_CustomLight)
+	&hellip;
+	float4 _DirectionalLightDirections<ins>AndMasks</ins>[MAX_DIRECTIONAL_LIGHT_COUNT];
+	&hellip;
+	float4 _OtherLightDirections<ins>AndMasks</ins>[MAX_OTHER_LIGHT_COUNT];
+	&hellip;
+CBUFFER_END</pre>
+						
+						<p>Copy the mask in <code class="shader">GetDirectionalLight</code>.</p>
+						
+						<pre class="shader">	light.direction = _DirectionalLightDirections<ins>AndMasks</ins>[index].xyz;
+	<ins>light.renderingLayerMask = asuint(_DirectionalLightDirectionsAndMasks[index].w);</ins></pre>
+						
+						<p>And in <code class="shader">GetOtherLight</code>.</p>
+						
+						<pre class="shader">	float3 spotDirection = _OtherLightDirections<ins>AndMasks</ins>[index].xyz;
+	<ins>light.renderingLayerMask = asuint(_OtherLightDirectionsAndMasks[index].w);</ins></pre>
+						
+						<p>On the CPU side, adjust the identifier and array names in our <code>Lighting</code> class to match. Then also copy the rendering layer mask of the lights. We start with <code>SetupDirectionalLight</code>, which now also needs to access the <code>Light</code> object directly. Let's add it as a parameter.</p>
+						
+						<pre translate="no">	void SetupDirectionalLight (
+		int index, int visibleIndex, ref VisibleLight visibleLight<ins>, Light light</ins>
+	) {
+		dirLightColors[index] = visibleLight.finalColor;
+		<ins>Vector4 dirAndMask</ins> = -visibleLight.localToWorldMatrix.GetColumn(2);
+		<ins>dirAndMask.w = light.renderingLayerMask;</ins>
+		<ins>dirLightDirectionsAndMasks[index] = dirAndMask;</ins>
+		dirLightShadowData[index] =
+			shadows.ReserveDirectionalShadows(<ins>light</ins>, visibleIndex);
+	}</pre>
+						
+						<p>Make the same change to <code>SetupSpotLight</code>, also adding a <code>Light</code> parameter to stay consistent.</p>
+						
+						<pre translate="no">	void SetupSpotLight (
+		int index, int visibleIndex, ref VisibleLight visibleLight<ins>, Light light</ins>
+	) {
+		&hellip;
+		<ins>Vector4 dirAndMask</ins> = -visibleLight.localToWorldMatrix.GetColumn(2);
+		<ins>dirAndMask.w = light.renderingLayerMask;</ins>
+		<ins>otherLightDirectionsAndMasks[index] = dirAndMask;</ins>
+
+		<del>//Light light = visibleLight.light;</del>
+		&hellip;
+		}</pre>
+						
+						<p>Then do this for <code>SetupPointLight</code>, which now also has to change <code>otherLightDirectionsAndMasks</code>. As it doesn't use the direction it can be set to zero.</p>
+						
+						<pre translate="no">	void SetupPointLight (
+		int index, int visibleIndex, ref VisibleLight visibleLight<ins>, Light light</ins>
+	) {
+		&hellip;
+		<ins>Vector4 dirAndmask = Vector4.zero;</ins>
+		<ins>dirAndmask.w = light.renderingLayerMask;</ins>
+		<ins>otherLightDirectionsAndMasks[index] = dirAndmask;</ins>
+		<del>//Light light = visibleLight.light;</del>
+		otherLightShadowData[index] =
+			shadows.ReserveOtherShadows(light, visibleIndex);
+	}</pre>
+						
+						<p>Now we have to grab the <code>Light</code> object once in <code>SetupLights</code> and pass it to all setup methods. We'll also do something else with the light here shortly.</p>
+						
+						<pre translate="no">			VisibleLight visibleLight = visibleLights[i];
+			<ins>Light light = visibleLight.light;</ins>
+			switch (visibleLight.lightType) {
+				case LightType.Directional:
+					if (dirLightCount &lt; maxDirLightCount) {
+						SetupDirectionalLight(
+							dirLightCount++, i, ref visibleLight<ins>, light</ins>
+						);
+					}
+					break;
+				case LightType.Point:
+					if (otherLightCount &lt; maxOtherLightCount) {
+						newIndex = otherLightCount;
+						SetupPointLight(otherLightCount++, i, ref visibleLight<ins>, light</ins>);
+					}
+					break;
+				case LightType.Spot:
+					if (otherLightCount &lt; maxOtherLightCount) {
+						newIndex = otherLightCount;
+						SetupSpotLight(otherLightCount++, i, ref visibleLight<ins>, light</ins>);
+					}
+					break;
+			}</pre>
+						
+						<p>Back to the GPU side, add a <code class="shader">RenderingLayersOverlap</code> function to <em translate="no">Lighting</em> that returns whether the masks of a surface and light overlap. This is done by checking whether the bitwise-AND of the bit masks is nonzero.</p>
+						
+						<pre class="shader"><ins>bool RenderingLayersOverlap (Surface surface, Light light) {</ins>
+	<ins>return (surface.renderingLayerMask & light.renderingLayerMask) != 0;</ins>
+<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Are bitwise operations supported in shaders?</h3>
+							<div>
+								<p>Yes, unless you're targeting OpenGL ES 2.0, which we don't.</p>
+							</div>
+						</aside>
+						
+						<p>Now we can use this method to check whether lighting needs to be added inside the three loops of <code class="shader">GetLighting</code>.</p>
+						
+						<pre class="shader">	for (int i = 0; i &lt; GetDirectionalLightCount(); i++) {
+		Light light = GetDirectionalLight(i, surfaceWS, shadowData);
+		<ins>if (RenderingLayersOverlap(surfaceWS, light)) {</ins>
+			color += GetLighting(surfaceWS, brdf, light);
+		<ins>}</ins>
+	}
+	
+	#if defined(_LIGHTS_PER_OBJECT)
+		for (int j = 0; j &lt; min(unity_LightData.y, 8); j++) {
+			int lightIndex = unity_LightIndices[j / 4][j % 4];
+			Light light = GetOtherLight(lightIndex, surfaceWS, shadowData);
+			<ins>if (RenderingLayersOverlap(surfaceWS, light)) {</ins>
+				color += GetLighting(surfaceWS, brdf, light);
+			<ins>}</ins>
+		}
+	#else
+		for (int j = 0; j &lt; GetOtherLightCount(); j++) {
+			Light light = GetOtherLight(j, surfaceWS, shadowData);
+			<ins>if (RenderingLayersOverlap(surfaceWS, light)) {</ins>
+				color += GetLighting(surfaceWS, brdf, light);
+			<ins>}</ins>
+		}
+	#endif</pre>
+						
+						<aside>
+							<h3>Can't we put the check in the other <code class="shader">GetLighting</code> function?</h3>
+							<div>
+								<p>Yes and that would result in a bit less code. However, the shader compiler would not generate a branch in that case. Lighting would always get calculated and discarded if not needed. You could force a branch with <code class="shader">UNITY_BRANCH</code>, but if you return zero when skipping a light you could still get the needless addition. You can also work around that, but at this point the code becomes convoluted for very little gain.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Reinterpreting an Int as a Float</h3>
+						
+						<p>Although the rendering masks affect the lighting at this point, it doesn't do so correctly. The <code>Light.renderingLayerMask</code> property exposes its bit mask as an <code>int</code> and it gets garbled during the conversion to <code>float</code> in the light setup methods. There is no way to directly send an array of integers to the GPU, so we have to somehow reinterpret an <code>int</code> as a <code>float</code> without conversion, but there is no direct equivalent of <code class="shader">asuint</code> available for C#.</p>
+						
+						<p>We cannot reinterpret data in C# as simple as in HLSL, because C# is strongly typed. What we can do is alias data types by using a union struct. We'll hide this approach by adding a <code>ReinterpretAsFloat</code> extension method to <code>int</code>. Create a static <code>ReinterpretExtensions</code> class for this method, which initially just performs a regular type conversion.</p>
+						
+						<pre translate="no"><ins>public static class ReinterpretExtensions {</ins>
+
+	<ins>public static float ReinterpretAsFloat (this int value) {</ins>
+		<ins>return value;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Use <code>ReinterpretAsFloat</code> in the three light setup methods instead of relying on an implicit cast.</p>
+						
+						<pre translate="no">		dirAndMask.w = light.renderingLayerMask<ins>.ReinterpretAsFloat()</ins>;</pre>
+						
+						<p>Then define a struct type inside <code>ReinterpretExtensions</code> with both an <code>int</code> and a <code>float</code> field. Initialize a default variable of this type in <code>ReinterpretAsFloat</code>, set its integer value, and then return its float value.</p>
+						
+						<pre translate="no">	<ins>struct IntFloat {</ins>
+
+		<ins>public int intValue;</ins>
+
+		<ins>public float floatValue;</ins>
+	<ins>}</ins>
+
+	public static float ReinterpretAsFloat (this int value) {
+		<ins>IntFloat converter = default;</ins>
+		<ins>converter.intValue = value;</ins>
+		return <ins>converter.floatValue</ins>;
+	}
+}</pre>
+						
+						<p>To turn this into a reinterpretation we have to make both fields of the struct overlap so they share the same data. This is possible because both types have a size of four bytes. We do this my making the struct's layout explicit, by attaching the <code>StructLayout</code> attribute to the type, set to <code>LayoutKind.Explicit</code>. Then we have to add the <code>FieldOffset</code> attribute to its fields to indicate where the field's data should be placed. Set both offsets to zero, so they overlap. These attributes come from the <code>System.Runtime.InteropServices</code> namespace.</p>
+						
+						<pre translate="no"><ins>using System.Runtime.InteropServices;</ins>
+
+public static class ReinterpretExtensions {
+
+	<ins>[StructLayout(LayoutKind.Explicit)]</ins>
+	struct IntFloat {
+
+		<ins>[FieldOffset(0)]</ins>
+		public int intValue;
+
+		<ins>[FieldOffset(0)]</ins>
+		public float floatValue;
+	}
+
+	&hellip;
+}</pre>
+						
+						<p>Now the <code>int</code> and <code>float</code> fields of the struct represent the same data, but interpreted differently. This keeps the bit mask intact and the rendering layer masks now work correctly.</p>
+						
+						<figure>
+							<img src="rendering-layers/directional-renderling-layer-mask.png" width="470" height="230">
+							<figcaption>Directional light ignores half the objects.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why not use unsafe code?</h3>
+							<div>
+								<p>That's possible, but unsafe code needs to be explicitly enabled for the project, which makes sharing code harder. Also, project teams might not be allowed to use unsafe code at all. The union struct approach avoids these issues.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Camera Rendering Layer Mask</h3>
+						
+						<p>We can also use rendering layer masks to limit what a camera renders, in addition to using their existing culling mask. <code>Camera</code> doesn't have a rendering layer mask property, but we can add it to <code>CameraSettings</code>. We'll make it an <code>int</code> because the light's mask is also exposed as an <code>int</code>. Set it to &minus;1 by default, representing all layers.</p>
+						
+						<pre translate="no">	<ins>public int renderingLayerMask = -1;</ins></pre>
+						
+						<figure>
+							<img src="rendering-layers/camera-rendering-layer-mask-int.png" width="320" height="98">
+							<figcaption>Camera rendering layer mask, exposed as integer.</figcaption>
+						</figure>
+						
+						<p>To expose the mask as a dropdown menu we'll have to create a custom GUI for it. But rather than create a custom editor for the entire <code>CameraSettings</code> class let's make one only for rendering layer masks.</p>
+						
+						<p>First, to indicate that a field represent a rendering layer mask, create a <code>RenderingLayerMaskFieldAttribute</code> class that extends <code>PropertyAttribute</code>. This is just a marker attribute that doesn't need to do anything else. Note that this is not an editor type so shouldn't be put in an <em translate="no">Editor</em> folder.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class RenderingLayerMaskFieldAttribute : PropertyAttribute {}</ins></pre>
+						
+						<p>Attach this attribute to our rendering layer mask field.</p>
+						
+						<pre translate="no">	<ins>[RenderingLayerMaskField]</ins>
+	public int renderingLayerMask = -1;</pre>
+						
+						<p>Now create a custom property drawer editor class that extends <code>PropertyDrawer</code>, with the <code>CustomPropertyDrawer</code> attribute for our attribute type. Copy the <code>CustomLightEditor.DrawRenderingLayerMask</code> into it, rename it to <code>Draw</code>, and make it public static. Then give it three parameters: a position <code>Rect</code>, a serialized property, and a <code>GUIContent</code> label. Use these to invoke <code>EditorGUI.MaskField</code> instead of <code>EditorGUILayout.MaskField</code>.</p>
+						
+						<pre translate="no"><ins>using UnityEditor;</ins>
+<ins>using UnityEngine;</ins>
+<ins>using UnityEngine.Rendering;</ins>
+
+<ins>[CustomPropertyDrawer(typeof(RenderingLayerMaskFieldAttribute))]</ins>
+<ins>public class RenderingLayerMaskDrawer : PropertyDrawer {</ins>
+
+	<ins>public static void Draw (</ins>
+		<ins>Rect position, SerializedProperty property, GUIContent label</ins>
+	<ins>) {</ins>
+		<del>//SerializedProperty property = settings.renderingLayerMask;</del>
+		EditorGUI.showMixedValue = property.hasMultipleDifferentValues;
+		EditorGUI.BeginChangeCheck();
+		int mask = property.intValue;
+		if (mask == int.MaxValue) {
+			mask = -1;
+		}
+		mask = <ins>EditorGUI</ins>.MaskField(
+			<ins>position, label</ins>, mask,
+			GraphicsSettings.currentRenderPipeline.renderingLayerMaskNames
+		);
+		if (EditorGUI.EndChangeCheck()) {
+			property.intValue = mask == -1 ? int.MaxValue : mask;
+		}
+		EditorGUI.showMixedValue = false;
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>We only have to treat &minus;1 separately if the property's underlying type is <code>uint</code>. This is the case if its <code>type</code> property is equal to <code>"uint"</code>.</p>
+						
+						<pre translate="no">		int mask = property.intValue;
+		<ins>bool isUint = property.type == "uint";</ins>
+		if (<ins>isUint &amp;&amp;</ins> mask == int.MaxValue) {
+			mask = -1;
+		}
+		&hellip;
+		if (EditorGUI.EndChangeCheck()) {
+			property.intValue = <ins>isUint &amp;&amp;</ins> mask == -1 ? int.MaxValue : mask;
+		}</pre>
+						
+						<p>Then override the <code>OnGUI</code> method, simply forwarding its invocation to <code>Draw</code>.</p>
+						
+						<pre translate="no">	<ins>public override void OnGUI (</ins>
+		<ins>Rect position, SerializedProperty property, GUIContent label</ins>
+	<ins>) {</ins>
+		<ins>Draw(position, property, label);</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="rendering-layers/camera-rendering-layer-mask.png" width="320" height="98">
+							<figcaption>Rendering layer mask dropdown menu.</figcaption>
+						</figure>
+						
+						<p>To make <code>Draw</code> easier to use add a version without a <code>Rect</code> parameter. Invoke <code>EditorGUILayout.GetControlRect</code> to get a single-line position rect from the layout engine.</p>
+						
+						<pre translate="no">	<ins>public static void Draw (SerializedProperty property,</ins> <ins>GUIContent label) {</ins>
+		<ins>Draw(EditorGUILayout.GetControlRect(), property, label);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can remove the <code>DrawRenderingLayerMask</code> method from <code>CustomLightEditor</code> and invoke <code>RenderingLayerMaskDrawer.Draw</code> instead.</p>
+						
+						<pre translate="no">	public override void OnInspectorGUI() {
+		base.OnInspectorGUI();
+		<del>//DrawRenderingLayerMask();</del>
+		<ins>RenderingLayerMaskDrawer.Draw(</ins>
+			<ins>settings.renderingLayerMask, renderingLayerMaskLabel</ins>
+		<ins>);</ins>
+		
+		&hellip;
+	}
+
+	<del>//void DrawRenderingLayerMask () { &hellip; }</del></pre>
+						
+						<p>To apply the camera's rendering layer mask add a parameter for it to <code>CameraRenderer.DrawVisibleGeometry</code> and pass it as an argument named <code>renderingLayerMask</code> to the <code>FilteringSettings</code> constructor method, cast to a <code>uint</code>.</p>
+						
+						<pre translate="no">	void DrawVisibleGeometry (
+		bool useDynamicBatching, bool useGPUInstancing, bool useLightsPerObject<ins>,</ins>
+		<ins>int renderingLayerMask</ins>
+	) {
+		&hellip;
+
+		var filteringSettings = new FilteringSettings(
+			RenderQueueRange.opaque<ins>, renderingLayerMask: (uint)renderingLayerMask</ins>
+		);
+
+		&hellip;
+	}</pre>
+						
+						<p>Then pass the rendering layer mask along when invoking <code>DrawVisibleGeometry</code> in <code>Render</code>.</p>
+						
+						<pre translate="no">		DrawVisibleGeometry(
+			useDynamicBatching, useGPUInstancing, useLightsPerObject<ins>,</ins>
+			<ins>cameraSettings.renderingLayerMask</ins>
+		);</pre>
+						
+						<p>It is now possible to use the more flexible rendering layer mask to control what the camera renders. For example, we can have some objects cast shadows even though the camera doesn't see them, without requiring special shadows-only objects.</p>
+						
+						
+						<figure>
+							<img src="rendering-layers/rendering-objects-not-affected-by-light.png" width="470" height="230">
+							<figcaption>Only rendering objects not affected by the light, plus the ground.</figcaption>
+						</figure>
+						
+						<p>One thing to keep in mind is that only the culling mask is used for culling, so if you exclude lots of objects the regular culling mask will perform better.</p>
+					</section>
+					
+					<section>
+						<h3>Masking Lights Per Camera</h3>
+						
+						<p>Although Unity's RPs don't do this, it's also possible to mask lights per camera, besides geometry. We'll again use rendering layers for this, but because it's nonstandard behavior let's make it optional by adding a toggle for it to <code>CameraSettings</code>.</p>
+						
+						<pre translate="no">	<ins>public bool maskLights = false;</ins></pre>
+						
+						<figure>
+							<img src="rendering-layers/mask-lights.png" width="320" height="78">
+							<figcaption>Camera set to mask lights.</figcaption>
+						</figure>
+						
+						<p>All we need to do to make this work is skip masked lights in <code>Lighting.SetupLights</code>. Add a rendering layer mask parameter to the method for this, then check whether each light's rendering layer mask overlaps the provided mask. If so proceed to the switch statement to set up the light, otherwise skip it.</p>
+						
+						<pre translate="no">	void SetupLights (bool useLightsPerObject<ins>, int renderingLayerMask</ins>) {
+		&hellip;
+		for (i = 0; i &lt; visibleLights.Length; i++) {
+			int newIndex = -1;
+			VisibleLight visibleLight = visibleLights[i];
+			Light light = visibleLight.light;
+			<ins>if ((light.renderingLayerMask &amp; renderingLayerMask) != 0) {</ins>
+				switch (visibleLight.lightType) {
+					&hellip;
+				}
+			<ins>}</ins>
+			if (useLightsPerObject) {
+				indexMap[i] = newIndex;
+			}
+		}
+		
+		&hellip;
+	}</pre>
+						
+						<p><code>Lighting.Setup</code> must pass the rendering layer mask along.</p>
+						
+						<pre translate="no">	public void Setup (
+		ScriptableRenderContext context, CullingResults cullingResults,
+		ShadowSettings shadowSettings, bool useLightsPerObject<ins>, int renderingLayerMask</ins>
+	) {
+		&hellip;
+		SetupLights(useLightsPerObject<ins>, renderingLayerMask</ins>);
+		&hellip;
+	}</pre>
+						
+						<p>And we have to provide the camera's mask in <code>CameraRenderer.Render</code>, but only if it applies to lights, otherwise use &minus;1.</p>
+						
+						<pre translate="no">		lighting.Setup(
+			context, cullingResults, shadowSettings, useLightsPerObject<ins>,</ins>
+			<ins>cameraSettings.maskLights ? cameraSettings.renderingLayerMask : -1</ins>
+		);</pre>
+						
+						<p>Now we can do things like have two cameras render the same scene, but with different lighting, without having to adjust the lights in between. This also makes it easy to render a separate scene like a character portrait at the world origin without having lighting from the main scene affect it. Note that this only applies to realtime lighting, fully baked light and the baked indirect contribution of mixed lights cannot be masked.</p>
+						
+						<figure>
+							<img src="rendering-layers/two-camera-different-lighting.png" width="470" height="230">
+							<figcaption>Two cameras seeing the same scene in a different light.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>How did you configure the masks for that scene?</h3>
+							<div>
+								<p>The rendering layer masks of all visible objects are set to everything. The directional light's mask is set to a single layer and the point light's mask is set to a different single layer. The left camera's mask is set to everything except the point light's layer. The right camera's mask is set to everything except the directional light's layer. The result is that each camera sees only one of the two lights.</p>
+							</div>
+						</aside>
+						
+						<p>The next tutorial is <a href="../particles/index.html">Particles</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/custom-srp-14-multiple-cameras/" class="repository">repository</a>
+					<a href="Multiple-Cameras.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

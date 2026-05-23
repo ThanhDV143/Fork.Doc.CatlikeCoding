@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/advanced-rendering/depth-of-field/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/advanced-rendering/depth-of-field/tutorial-image.jpg">
+		<meta property="og:title" content="Depth of Field">
+		<meta property="og:description" content="A Unity Advanced Rendering tutorial about creating a depth-of-field effect.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Depth of Field</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/advanced-rendering/depth-of-field/#article",
+				"headline": "Depth of Field",
+				"alternativeHeadline": "Blending Light",
+				"datePublished": "2018-02-28",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Advanced Rendering tutorial about creating a depth-of-field effect.",
+				"image": "https://catlikecoding.com/unity/tutorials/advanced-rendering/depth-of-field/tutorial-image.jpg",
+				"dependencies": "Unity 2017.3.0p3",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/advanced-rendering/", "name": "Advanced Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				DepthOfFieldEffect: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Advanced Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Depth of Field</h1>
+					<p>Bending Light</p>
+					<ul>
+						<li>Determine the circle of confusion.</li>
+						<li>Create bokeh.</li>
+						<li>Focus and unfocus an image.</li>
+						<li>Split and merge foreground and background.</li>
+					</ul>
+				</header>
+				
+				<p>This tutorial takes a look at how to create a depth-of-field post-processing effect. It follows the <a href="../bloom/index.html">Bloom</a> tutorial.
+				
+				<p>This tutorial is made with Unity 2017.3.0p3.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>To focus on something, unfocus everything else.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Setting the Scene</h2>
+					
+					<p>We perceive light because we sense photons hitting our retinas. Likewise, cameras can record light because photons hit their film or image sensor. In all cases, light gets focused to produce sharp images, but not everything can be in focus at the same time. Only things at a certain distance are in focus, while everything nearer or farther appears out of focus. This visual effect is known as depth-of-field. The specifics of how the out-of-focus projection looks is known as bokeh, which is Japanese for blur.</p>
+					
+					<p>Usually, we don't notice depth-of-field with our own eyes, because we're paying attention to what we're focusing on, not what lies outside our focus. It can be much more obvious in photos and videos, because we can look at parts of the image that weren't in the camera's focus. Although it is a physical limitation, bokeh can be used to great effect to guide the viewers attention. Thus, it is an artistic tool.</p>
+					
+					<p>GPUs don't need to focus light, they act like perfect cameras with infinite focus. This is great if you want to create sharp images, but unfortunate if you'd like to use depth-of-field for artistic purposes. But there are multiple ways to fake it. In this tutorial, we'll create a depth-of-field effect similar to the one found in Unity's post effect stack v2, although simplified as much as possible.</p>
+					
+					<section>
+						<h3>Setting the Scene</h3>
+						
+						<p>To test our own depth-of-field effect, create a scene with some objects at various distances. I used a 10&times;10 plane with our circuitry material tiled five times as the ground. It gives us a surface with large, sharp, high-frequency color changes. It's really a terrible material to work with, which makes it good for testing purposes. I put a bunch of objects on it and also floated four objects close to the camera. You can download the package of this section to grab this scene, or make your own.</p>
+						
+						<figure>
+							<img src="setting-the-scene/test-scene.png" width="390" height="250">
+							<figcaption>Test scene.</figcaption>
+						</figure>
+						
+						<p>We'll use the same setup for a new <em translate="no">DepthOfField</em> shader as we used for the <em translate="no">Bloom</em> shader. You can copy it and reduce it to a single pass that just performs a blit for now. However, this time we'll put the shader in the hidden menu category, which is excluded from the shader dropdown list. This is the only notable new thing worth marking.</p>
+						
+						<pre translate="no" class="shader">Shader <ins>"Hidden/DepthOfField"</ins> {
+	Properties {
+		_MainTex ("Texture", 2D) = "white" {}
+	}
+
+	CGINCLUDE
+		#include "UnityCG.cginc"
+
+		sampler2D _MainTex;
+		float4 _MainTex_TexelSize;
+
+		struct VertexData {
+			float4 vertex : POSITION;
+			float2 uv : TEXCOORD0;
+		};
+
+		struct Interpolators {
+			float4 pos : SV_POSITION;
+			float2 uv : TEXCOORD0;
+		};
+
+		Interpolators VertexProgram (VertexData v) {
+			Interpolators i;
+			i.pos = UnityObjectToClipPos(v.vertex);
+			i.uv = v.uv;
+			return i;
+		}
+
+	ENDCG
+
+	SubShader {
+		Cull Off
+		ZTest Always
+		ZWrite Off
+
+		Pass {
+			CGPROGRAM
+				#pragma vertex VertexProgram
+				#pragma fragment FragmentProgram
+
+				half4 FragmentProgram (Interpolators i) : SV_Target {
+					return tex2D(_MainTex, i.uv);
+				}
+			ENDCG
+		}
+	}
+}</pre>
+						
+						<p>Create a minimal <code>DepthOfFieldEffect</code> component, again using the same approach as for the bloom effect, but with the shader property hidden.</p>
+						
+						<pre translate="no">using UnityEngine;
+using System;
+
+[ExecuteInEditMode, ImageEffectAllowedInSceneView]
+public class <ins>DepthOfFieldEffect</ins> : MonoBehaviour {
+
+	<ins>[HideInInspector]</ins>
+	public Shader <ins>dofShader</ins>;
+
+	[NonSerialized]
+	Material <ins>dofMaterial</ins>;
+
+	void OnRenderImage (RenderTexture source, RenderTexture destination) {
+		if (dofMaterial == null) {
+			dofMaterial = new Material(dofShader);
+			dofMaterial.hideFlags = HideFlags.HideAndDontSave;
+		}
+
+		Graphics.Blit(source, destination, dofMaterial);
+	}
+}</pre>
+						
+						<p>Instead of requiring the correct shader to be assigned manually, we define it as the componen't default value. To do so, select the script in the editor and hook up the shader field at the top of the inspector. As the info text mentions, this ensures that when you add this component to something in the editor it'll copy this reference, which is convenient.</p>
+						
+						<figure>
+							<img src="setting-the-scene/default-shader-reference.png" width="320" height="112">
+							<figcaption>Default shader reference.</figcaption>
+						</figure>
+						
+						<p>Attach our new effect as the only one to the camera. Once again, we assume that we're rendering in linear HDR space, so configure the project and camera accordingly. Also, because we need to read from the depth buffer, this effect doesn't work correctly when using MSAA. So disallow the camera from using it. Also note that because we'll rely on the depth buffer, the effect doesn't take transparent geometry into account.</p>
+						
+						<figure>
+							<img src="setting-the-scene/camera.png" width="320" height="160">
+							<figcaption>HDR camera without MSAA and with depth-of-field.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>So we cannot use it together with transparent objects?</h3>
+							<div>
+								<p>Transparent objects will appear to be affected, but using the depth information of whatever is behind them. This is a limitation of all techniques that use the depth buffer. You can still use transparency, but it'll only look acceptable if such objects have a solid surface close enough behind them. That surface will provide surrogate depth information. You could also render transparent geometry after the effect, but this is only acceptable if there is no opaque geometry in front of them.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="setting-the-scene/setting-the-scene.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Circle of Confusion</h2>
+					
+					<p>The simplest form of camera is a perfect pinhole camera. Like all cameras, it has an image plane on which the light is projected and recorded. In front of the image plane is a tiny hole &ndash; known as the aperture &ndash; just large enough to allow a single light ray to pass through it. Things in front of the camera emit or reflect light in many directions, producing a lot of light rays. For every point, only a single ray is able to pass through the hole and gets recorded.</p>
+					
+					<figure>
+						<img src="circle-of-confusion/perfect-pinhole.png" width="360" height="250">
+						<figcaption>Recording three points.</figcaption>
+					</figure>
+					
+					<aside>
+						<h3>Is the projected image flipped?</h3>
+						<div>
+							<p>Indeed it is. All images recorded with cameras, including your eyes, are flipped. The image is flipped again during further processing, so you don't need to worry about it.</p>
+						</div>
+					</aside>
+					
+					<p>Because only a single ray of light is captured per point, the image is always sharp. Unfortunately a single light ray isn't very bright, so the resulting image is hardly visible. You'd have to wait a while for enough light to accumulate to get a clear image, which means that this camera requires a long exposure time. This isn't a problem when the scene is static, but everything that moves even a little will produce a lot of motion blur. So it isn't a practical camera and cannot be used to record sharp videos.</p>
+					
+					<p>To be able to reduce the exposure time, light has to accumulate more quickly. The only way to do this is by recording multiply light rays at the same time. This can be done by increasing the radius of the aperture. Assuming the hole is round, this means that each point will be projected on the image plane with a cone of light instead of a line. So we receive more light, but it no longer ends up at a single point. Instead, it gets projected as a disc. How large an area is covered depends on the distance between the point, hole, and image plane. The result is a brighter but unfocused image.</p>
+					
+					<figure>
+						<img src="circle-of-confusion/pinhole-camera.png" width="360" height="250">
+						<figcaption>Using a larger aperture.</figcaption>
+					</figure>
+					
+					<p>To focus the light again, we have to somehow take an incoming cone of light and bring it back to a single point. This is done by putting a lens in the camera's hole. The lens bends light in such a way that dispersing light gets focused again. This can produce a bright and sharp projection, but only for points at a fixed distance from the camera. The light from points further away won't be focused enough, while the light from points too close to the camera are focused too much. In both cases we again end up projecting points as discs, their size depending on how much out of focus they are. This unfocused projection is known as the circle of confusion, CoC for short.</p>
+					
+					<figure>
+						<img src="circle-of-confusion/lens-camera.png" width="360" height="250">
+						<figcaption>Only one point is in focus.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Visualizing the CoC</h3>
+						
+						<p>The radius of the circle of confusion is a measure of how out-of-focus the projection of a point is. Let's begin by visualizing this value. Add a constant to <code>DepthOfFieldEffect</code> to indicate our first pass, the circle-of-confusion pass. Explicitly use this pass when blitting.</p>
+						
+						<pre translate="no">	<ins>const int circleOfConfusionPass = 0;</ins>
+
+	&hellip;
+
+	void OnRenderImage (RenderTexture source, RenderTexture destination) {
+		&hellip;
+
+		Graphics.Blit(source, destination, dofMaterial<ins>, circleOfConfusionPass</ins>);
+	}</pre>
+						
+						<p>Because the CoC depends on the distance from the camera, we need to read from the depth buffer. In fact, the depth buffer is exactly what we need, because a camera's focus region is a plane parallel to the camera, assuming the lens and image plane are aligned and perfect. So sample from the depth texture, convert to linear depth and render that.</p>
+						
+						<pre translate="no" class="shader">	CGINCLUDE
+		#include "UnityCG.cginc"
+
+		sampler2D _MainTex<ins>, _CameraDepthTexture</ins>;
+		&hellip;
+
+	ENDCG
+
+	SubShader {
+		&hellip;
+
+		Pass { <ins>// 0 circleOfConfusionPass</ins>
+			CGPROGRAM
+				#pragma vertex VertexProgram
+				#pragma fragment FragmentProgram
+
+				half4 FragmentProgram (Interpolators i) : SV_Target {
+<del>//					return tex2D(_MainTex, i.uv);</del>
+					<ins>half depth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv);</ins>
+					<ins>depth = LinearEyeDepth(depth);</ins>
+					<ins>return depth;</ins>
+				}
+			ENDCG
+		}
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Choosing a Simple CoC</h3>
+						
+						<p>We're not interested in the raw depth value, but the CoC value. To determine this, we have to decided on a focus distance. This is the distance between the camera and the focus plane, where everything is perfectly sharp. Add a public field for it to our effect component and use a range like 0.1&ndash;100 and a default of 10.</p>
+						
+						<pre translate="no">	<ins>[Range(0.1f, 100f)]</ins>
+	<ins>public float focusDistance = 10f;</ins></pre>
+						
+						<p>The size of the CoC increases with the distance of a point to the focus plane. The exact relationship depends on the camera and its  configuration, which can get rather complex. It's possible to simulate real cameras, but we'll use a simple focus range so it's easier to understand and control. Our CoC will go from zero to its maximum inside this range, relative to the focus distance. Give it a field with a range like 0.1&ndash;10 and a default of 3.</p>
+						
+						<pre translate="no">	<ins>[Range(0.1f, 10f)]</ins>
+	<ins>public float focusRange = 3f;</ins></pre>
+						
+						<figure>
+							<img src="circle-of-confusion/focus-distance-range.png" width="320" height="74">
+							<figcaption>Sliders for focus distance and range.</figcaption>
+						</figure>
+						
+						<p>These configuration options are needed by our shader, so set them before we blit.</p>
+						
+						<pre translate="no">		<ins>dofMaterial.SetFloat("_FocusDistance", focusDistance);</ins>
+		<ins>dofMaterial.SetFloat("_FocusRange", focusRange);</ins>
+
+		Graphics.Blit(source, destination, dofMaterial, circleOfConfusionPass);</pre>
+						
+						<p>Add the required variables to the shader. As we use them to work with the depth buffer, we'll use <code class="shader">float</code> as their type when calculating the CoC. As we're using half-based HDR buffers, we'll stick to <code class="shader">half</code> for other values, though this doesn't matter on desktop hardware.</p>
+						
+						<pre translate="no" class="shader">		sampler2D _MainTex, _CameraDepthTexture;
+		float4 _MainTex_TexelSize;
+
+		<ins>float _FocusDistance, _FocusRange;</ins></pre>
+						
+						<p>Using the depth `d`, focus distance `f`, and focus range `r`, we can find the CoC via `(d-f)/r`.</p>
+						
+						<pre translate="no" class="shader">				half4 FragmentProgram (Interpolators i) : SV_Target {
+					float depth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv);
+					depth = LinearEyeDepth(depth);
+<del>//					return depth;</del>
+
+					<ins>float coc = (depth - _FocusDistance) / _FocusRange;</ins>
+					<ins>return coc;</ins>
+				}</pre>
+						
+						<figure>
+							<img src="circle-of-confusion/coc.png" width="390" height="250">
+							<figcaption>Raw CoC.</figcaption>
+						</figure>
+						
+						<p>This results in positive CoC values for points beyond the focus distance, and negative CoC values for points in front of it. The values &minus;1 and 1 represent the maximum CoC, so we should make sure the CoC values don't exceed that, by clamping.</p>
+						
+						<pre translate="no" class="shader">					float coc = (depth - _FocusDistance) / _FocusRange;
+					<ins>coc = clamp(coc, -1, 1);</ins>
+					return coc;</pre>
+						
+						<p>We keep the negative CoC values so we can distinguish between foreground and background points. To see the negative CoC values, you could color them, let's say with red.</p>
+						
+						<pre translate="no" class="shader">					coc = clamp(coc, -1, 1);
+					<ins>if (coc &lt; 0) {</ins>
+						<ins>return coc * -half4(1, 0, 0, 1);</ins>
+					<ins>}</ins>
+					return coc;</pre>
+						
+						<figure>
+							<img src="circle-of-confusion/coc-negative-red.png" width="390" height="250">
+							<figcaption>Negative CoC is red.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Buffering the CoC</h3>
+						
+						<p>We'll need the CoC to scale the point's projection, but we'll do that in another pass. So we'll store the CoC values in a temporary buffer. Because we only need to store a single value, we can suffice with a single-channel texture, using <code>RenderTextureFormat.RHalf</code>. Also, this buffer contains CoC data, not color values. So it should always be treated as linear data. Let's make this explicit, even though we assume that we're rendering in linear space.</p>
+						
+						<p>Blit to the CoC buffer and then add a new blit to copy that buffer to the destination. Finally, release the buffer.</p>
+						
+						<pre translate="no">		<ins>RenderTexture coc = RenderTexture.GetTemporary(</ins>
+			<ins>source.width, source.height, 0,</ins>
+			<ins>RenderTextureFormat.RHalf, RenderTextureReadWrite.Linear</ins>
+		<ins>);</ins>
+
+		Graphics.Blit(source, <ins>coc,</ins> dofMaterial, circleOfConfusionPass);
+		<ins>Graphics.Blit(coc, destination);</ins>
+
+		<ins>RenderTexture.ReleaseTemporary(coc);</ins></pre>
+						
+						<p>Because we're using a texture that only has an R channel, the entire CoC visualization is now red. We need to store the actual CoC values, so remove the coloration of the negative ones. Also, we can change the return type of the fragment function to a single value.</p>
+						
+						<pre translate="no" class="shader"><del>//				half4</del>
+				<ins>half</ins> FragmentProgram (Interpolators i) : SV_Target {
+					float depth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv);
+					depth = LinearEyeDepth(depth);
+
+					float coc = (depth - _FocusDistance) / _FocusRange;
+					coc = clamp(coc, -1, 1);
+<del>//					if (coc &lt; 0) {</del>
+<del>//						return coc * -half4(1, 0, 0, 1);</del>
+<del>//					}</del>
+					return coc;
+				}</pre>
+					</section>
+					
+					<a href="circle-of-confusion/circle-of-confusion.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Bokeh</h2>
+					
+					<p>While the CoC determines the strength of the bokeh effect per point, it's the aperture that determines how it looks. Basically, an image is composed of many projections of the aperture's shape on the image plane. So one way to create bokeh is to render a sprite for each texel using its color, with size and opacity based on its CoC. This approach is actually used in some cases, but it can be very expensive due to the massive amount of overdraw.</p>
+					
+					<p>Another approach is to work in the opposite direction. Instead of projecting a single fragment onto many, each fragment accumulates colors from all texels that might influence it. This technique doesn't require the generation of extra geometry, but requires taking many texture samples. We'll use this approach.</p>
+					
+					<section>
+						<h3>Accumulating the Bokeh</h3>
+						
+						<p>Create a new pass for the generation of the bokeh effect. Start by simply passing through the colors of the main texture. We don't care about its alpha channel.</p>
+						
+						<pre translate="no" class="shader">		Pass { // 0 CircleOfConfusionPass
+			&hellip;
+		}
+
+		<ins>Pass { // 1 bokehPass</ins>
+			<ins>CGPROGRAM</ins>
+				<ins>#pragma vertex VertexProgram</ins>
+				<ins>#pragma fragment FragmentProgram</ins>
+
+				<ins>half4 FragmentProgram (Interpolators i) : SV_Target {</ins>
+					<ins>half3 color = tex2D(_MainTex, i.uv).rgb;</ins>
+					<ins>return half4(color, 1);</ins>
+				<ins>}</ins>
+			<ins>ENDCG</ins>
+		<ins>}</ins></pre>
+						
+						<p>Use this pass for the second and final blit, with the source texture as input. We'll ignore the CoC data for now, assuming that the entire image fully out of focus.</p>
+						
+						<pre translate="no">	const int circleOfConfusionPass = 0;
+	<ins>const int bokehPass = 1;</ins>
+
+	&hellip;
+
+	void OnRenderImage (RenderTexture source, RenderTexture destination) {
+		&hellip;
+
+		Graphics.Blit(source, coc, dofMaterial, circleOfConfusionPass);
+		<ins>Graphics.Blit(source, destination, dofMaterial, bokehPass);</ins>
+<del>//		Graphics.Blit(coc, destination);</del>
+
+		RenderTexture.ReleaseTemporary(coc);
+	}</pre>
+						
+						<p>To create the bokeh effect, we have to average the colors around the fragment that we're working on. We'll start by taking the average of a block of 9&times;9 texels centered on the current fragment. This requires 81 samples in total.</p>
+						
+						<pre translate="no" class="shader">				half4 FragmentProgram (Interpolators i) : SV_Target {
+<del>//					half3 color = tex2D(_MainTex, i.uv).rgb;</del>
+					<ins>half3 color = 0;</ins>
+					<ins>for (int u = -4; u &lt;= 4; u++) {</ins>
+						<ins>for (int v = -4; v &lt;= 4; v++) {</ins>
+							<ins>float2 o = float2(u, v) * _MainTex_TexelSize.xy;</ins>
+							<ins>color += tex2D(_MainTex, i.uv + o).rgb;</ins>
+						<ins>}</ins>
+					<ins>}</ins>
+					<ins>color *= 1.0 / 81;</ins>
+					return half4(color, 1);</pre>
+						
+						<figure>
+							<img src="bokeh/square-bokeh.png" width="390" height="250">
+							<figcaption>Square bokeh.</figcaption>
+						</figure>
+						
+						<p>The result is a blockier image. Effectively, we're using a square aperture. The image also became brighter, because the influence of very bright fragments gets spread out over a larger area. This is more like bloom than depth-of-field, but an exaggerated effect makes it easier to see what's going on. So we'll keep it too bright for now and tone it down later.</p>
+						
+						<p>Because our simple bokeh approach is based on the texel size, its visual size depends on the target resolution. Lowering the resolution increases the texel size, which increases the aperture and the bokeh effect. For the rest of this tutorial, I'll use half-resolution screenshots to make individual texels easier to see. As a result, the dimensions of the bokeh shape is doubled.</p>
+						
+						<figure>
+							<img src="bokeh/square-bokeh-half-resolution.png" width="390" height="250">
+							<figcaption>The same scene at half resolution.</figcaption>
+						</figure>
+						
+						<p>Gathering samples in a 9&times;9 texel block already requires 81 samples, which is a lot. If we'd want to double the bokeh dimensions, we'd need to increase that to a 17&times;17. That would require 289 samples per fragment, which is far too much. But we could double the sampling area without increasing the amount of samples, by simply doubling the sample offset.</p>
+						
+						<pre translate="no" class="shader">							float2 o = float2(u, v) * _MainTex_TexelSize.xy <ins>* 2</ins>;</pre>
+						
+						<figure>
+							<img src="bokeh/square-bokeh-sparse.png" width="390" height="250">
+							<figcaption>Sparse sampling.</figcaption>
+						</figure>
+						
+						<p>We've now doubled the radius of the aperture, but we're taking too few samples to cover it entirely. The resulting undersampling breaks up the aperture projection, turning it into a dotted region. It's like we're using a camera with a grid of 9&times;9 holes instead of a single opening. While this doesn't look nice, it allows us to clearly see the individual samples.</p>
+					</section>
+					
+					<section>
+						<h3>Round Bokeh</h3>
+						
+						<p>The ideal aperture is round, not square, and produces a bokeh consisting of many overlapping discs. We can turn our bokeh shape into a disc with a radius of four steps by simply discarding those samples that have too large an offset. How many samples are included determines the weight of the accumulated color, which we can use to normalize it.</p>
+						
+						<pre translate="no" class="shader">					half3 color = 0;
+					float weight = 0;
+					for (int u = -4; u &lt;= 4; u++) {
+						for (int v = -4; v &lt;= 4; v++) {
+<del>//							float2 o = float2(u, v) * _MainTex_TexelSize.xy * 2;</del>
+							<ins>float2 o = float2(u, v);</ins>
+							<ins>if (length(o) &lt;= 4) {</ins>
+								<ins>o *= _MainTex_TexelSize.xy * 2;</ins>
+								color += tex2D(_MainTex, i.uv + o).rgb;
+								<ins>weight += 1;</ins>
+							<ins>}</ins>
+						}
+					}
+					color *= 1.0 / <ins>weight</ins>;
+					return half4(color, 1);</pre>
+						
+						<figure>
+							<img src="bokeh/round-bokeh.png" width="390" height="250">
+							<figcaption>Round bokeh.</figcaption>
+						</figure>
+						
+						<p>Instead of checking whether each sample is valid, we can define an array with all offsets that matter and loop through it. This also means that we aren't constrained to a regular grid. As we're sampling a disc, it makes more sense to use a pattern of spirals or concentric circles. Instead of coming up with a pattern ourselves, let's use one of the sampling kernels of Unity's post effect stack v2, defined in <em translate="no">DiskKernels.hlsl</em>. These kernels contain offsets within the unit circle. The smallest kernel consists of 16 samples: a center point with a ring of 5 samples around it and another ring of 10 samples around that.</p>
+						
+						<pre translate="no" class="shader">				<ins>// From https://github.com/Unity-Technologies/PostProcessing/</ins>
+				<ins>// blob/v2/PostProcessing/Shaders/Builtins/DiskKernels.hlsl</ins>
+				<ins>static const int kernelSampleCount = 16;</ins>
+				<ins>static const float2 kernel[kernelSampleCount] = {</ins>
+					<ins>float2(0, 0),</ins>
+					<ins>float2(0.54545456, 0),</ins>
+					<ins>float2(0.16855472, 0.5187581),</ins>
+					<ins>float2(-0.44128203, 0.3206101),</ins>
+					<ins>float2(-0.44128197, -0.3206102),</ins>
+					<ins>float2(0.1685548, -0.5187581),</ins>
+					<ins>float2(1, 0),</ins>
+					<ins>float2(0.809017, 0.58778524),</ins>
+					<ins>float2(0.30901697, 0.95105654),</ins>
+					<ins>float2(-0.30901703, 0.9510565),</ins>
+					<ins>float2(-0.80901706, 0.5877852),</ins>
+					<ins>float2(-1, 0),</ins>
+					<ins>float2(-0.80901694, -0.58778536),</ins>
+					<ins>float2(-0.30901664, -0.9510566),</ins>
+					<ins>float2(0.30901712, -0.9510565),</ins>
+					<ins>float2(0.80901694, -0.5877853),</ins>
+				<ins>};</ins>
+
+				half4 FragmentProgram (Interpolators i) : SV_Target {
+					&hellip;
+				}</pre>
+						
+						<p>Loop through these offsets and use them to accumulate samples. To keep the same disk radius, multiply the offsets by 8.</p>
+						
+						<pre translate="no" class="shader">				half4 FragmentProgram (Interpolators i) : SV_Target {
+					half3 color = 0;
+<del>//					float weight = 0;</del>
+<del>//					for (int u = -4; u &lt;= 4; u++) {</del>
+<del>//						for (int v = -4; v &lt;= 4; v++) {</del>
+<del>//							&hellip;</del>
+<del>//						}</del>
+<del>//					}</del>
+					<ins>for (int k = 0; k &lt; kernelSampleCount; k++) {</ins>
+						<ins>float2 o = kernel[k];</ins>
+						<ins>o *= _MainTex_TexelSize.xy * 8;</ins>
+						<ins>color += tex2D(_MainTex, i.uv + o).rgb;</ins>
+					<ins>}</ins>
+					color *= 1.0 / <ins>kernelSampleCount</ins>;
+					return half4(color, 1);
+				}</pre>
+						
+						<figure>
+							<img src="bokeh/disk-kernel-small.png" width="390" height="250">
+							<figcaption>Using the small kernel.</figcaption>
+						</figure>
+						
+						<p>The more samples a kernel has, the higher its quality. <em translate="no">DiskKernels.hlsl</em> contains a few and you could copy all and compare them. For this tutorial, I'll use the medium kernel, which also has two rings but a total of 22 samples.</p>
+						
+						<pre translate="no" class="shader">				<ins>#define BOKEH_KERNEL_MEDIUM</ins>
+
+				// From https://github.com/Unity-Technologies/PostProcessing/
+				// blob/v2/PostProcessing/Shaders/Builtins/DiskKernels.hlsl
+				<ins>#if defined(BOKEH_KERNEL_SMALL)</ins>
+					static const int kernelSampleCount = 16;
+					static const float2 kernel[kernelSampleCount] = {
+						&hellip;
+					};
+				<ins>#elif defined (BOKEH_KERNEL_MEDIUM)</ins>
+					<ins>static const int kernelSampleCount = 22;</ins>
+					<ins>static const float2 kernel[kernelSampleCount] = {</ins>
+						<ins>float2(0, 0),</ins>
+						<ins>float2(0.53333336, 0),</ins>
+						<ins>float2(0.3325279, 0.4169768),</ins>
+						<ins>float2(-0.11867785, 0.5199616),</ins>
+						<ins>float2(-0.48051673, 0.2314047),</ins>
+						<ins>float2(-0.48051673, -0.23140468),</ins>
+						<ins>float2(-0.11867763, -0.51996166),</ins>
+						<ins>float2(0.33252785, -0.4169769),</ins>
+						<ins>float2(1, 0),</ins>
+						<ins>float2(0.90096885, 0.43388376),</ins>
+						<ins>float2(0.6234898, 0.7818315),</ins>
+						<ins>float2(0.22252098, 0.9749279),</ins>
+						<ins>float2(-0.22252095, 0.9749279),</ins>
+						<ins>float2(-0.62349, 0.7818314),</ins>
+						<ins>float2(-0.90096885, 0.43388382),</ins>
+						<ins>float2(-1, 0),</ins>
+						<ins>float2(-0.90096885, -0.43388376),</ins>
+						<ins>float2(-0.6234896, -0.7818316),</ins>
+						<ins>float2(-0.22252055, -0.974928),</ins>
+						<ins>float2(0.2225215, -0.9749278),</ins>
+						<ins>float2(0.6234897, -0.7818316),</ins>
+						<ins>float2(0.90096885, -0.43388376),</ins>
+					<ins>};</ins>
+				<ins>#endif</ins></pre>
+						
+						<figure>
+							<img src="bokeh/disk-kernel-medium.png" width="390" height="250">
+							<figcaption>Using the medium kernel.</figcaption>
+						</figure>
+						
+						<p>This gives us a higher-quality kernel, while it's still easy to distinguish between the two sample rings, so we can see how our effect works.</p>
+					</section>
+					
+					<section>
+						<h3>Blurring Bokeh</h3>
+						
+						<p>Although a specialized sampling kernel is better than using a regular grid, it still requires a lot of samples to get a decent bokeh. To cover more ground with the same amount of samples, we can create the effect at half resolution, just like the bloom effect. This will blur the bokeh somewhat, but that is an acceptable price to pay.</p>
+						
+						<p>To work at half resolution, we have to first blit to a half-size texture, create the bokeh at that resolution, then bit back to full resolution. This requires two additional temporary textures.</p>
+						
+						<pre translate="no">		<ins>int width = source.width / 2;</ins>
+		<ins>int height = source.height / 2;</ins>
+		<ins>RenderTextureFormat format = source.format;</ins>
+		<ins>RenderTexture dof0 = RenderTexture.GetTemporary(width, height, 0, format);</ins>
+		<ins>RenderTexture dof1 = RenderTexture.GetTemporary(width, height, 0, format);</ins>
+
+		Graphics.Blit(source, coc, dofMaterial, circleOfConfusionPass);
+		<ins>Graphics.Blit(source, dof0);</ins>
+		<ins>Graphics.Blit(dof0, dof1, dofMaterial, bokehPass);</ins>
+		<ins>Graphics.Blit(dof1, destination);</ins>
+<del>//		Graphics.Blit(source, destination, dofMaterial, bokehPass);</del>
+
+		RenderTexture.ReleaseTemporary(coc);
+		<ins>RenderTexture.ReleaseTemporary(dof0);</ins>
+		<ins>RenderTexture.ReleaseTemporary(dof1);</ins></pre>
+						
+						<p>To keep the same bokeh size, we also have to halve the sampling offset.</p>
+						
+						<pre translate="no" class="shader">						o *= _MainTex_TexelSize.xy * <ins>4</ins>;</pre>
+						
+						<figure>
+							<img src="bokeh/half-resolution-bokeh.png" width="390" height="250">
+							<figcaption>Using half resolution for bokeh.</figcaption>
+						</figure>
+						
+						<p>We're now getting more solid bokeh, but the samples are still not fully connected yet. We either have to reduce the bokeh size or blur more. Instead of downsampling further, we'll add an extra blur pass after creating the bokeh, so it's a postfilter pass.</p>
+						
+						<pre translate="no">	const int circleOfConfusionPass = 0;
+	const int bokehPass = 1;
+	<ins>const int postFilterPass = 2;</ins></pre>
+						
+						<p>We perform the postfilter pass at half resolution, for which we can reuse the first temporary half-size texture.</p>
+						
+						<pre translate="no">		Graphics.Blit(source, coc, dofMaterial, circleOfConfusionPass);
+		Graphics.Blit(source, dof0);
+		Graphics.Blit(dof0, dof1, dofMaterial, bokehPass);
+		<ins>Graphics.Blit(dof1, dof0, dofMaterial, postFilterPass);</ins>
+		Graphics.Blit(<ins>dof0</ins>, destination);</pre>
+						
+						<p>The postfilter pass will perform a small Gaussian blur while staying at the same resolution, by using a box filter with a half-texel offset. This leads to overlapping samples, creating a 3&times;3 kernel known as a tent filter.</p>
+						
+						<figure>
+							<img alt="sampling" src="bokeh/tent-filter.png" width="140" height="140">
+							<img alt="weights" src="bokeh/tent-filter-weights.png" width="140" height="140">
+							<figcaption>3&times;3 tent filter.</figcaption>
+						</figure>
+						
+						<pre translate="no" class="shader">		<ins>Pass { // 2 postFilterPass</ins>
+			<ins>CGPROGRAM</ins>
+				<ins>#pragma vertex VertexProgram</ins>
+				<ins>#pragma fragment FragmentProgram</ins>
+
+				<ins>half4 FragmentProgram (Interpolators i) : SV_Target {</ins>
+					<ins>float4 o = _MainTex_TexelSize.xyxy * float2(-0.5, 0.5).xxyy;</ins>
+					<ins>half4 s =</ins>
+						<ins>tex2D(_MainTex, i.uv + o.xy) +</ins>
+						<ins>tex2D(_MainTex, i.uv + o.zy) +</ins>
+						<ins>tex2D(_MainTex, i.uv + o.xw) +</ins>
+						<ins>tex2D(_MainTex, i.uv + o.zw);</ins>
+					<ins>return s * 0.25;</ins>
+				<ins>}</ins>
+			<ins>ENDCG</ins>
+		<ins>}</ins></pre>
+						
+						<figure>
+							<img src="bokeh/post-filter.png" width="390" height="250">
+							<figcaption>With a tent filter.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Bokeh Size</h3>
+						
+						<p>Thanks to the postfilter pass, our bokeh looks acceptable at a radius of 4 half-resolution texels. The bokeh isn't perfectly smooth, which can be interpreted as the effect of an imperfect or dirty lens. But this is only really visible for very bright projections on top of darker backgrounds, and we're currently greatly exaggerating this effect. But you might prefer a higher-quality bokeh at reduced size, or prefer an even larger but worse one. So let's make the bokeh radius configurable via a field, with range 1&ndash;10 and a default of 4, expressed in half-resolution texels. We shouln't use a radius smaller than 1, because then we mostly end up with simply the blur effect from the downsampling instead of a bokeh effect.</p>
+						
+						<pre translate="no">	<ins>[Range(1f, 10f)]</ins>
+	<ins>public float bokehRadius = 4f;</ins></pre>
+						
+						<figure>
+							<img src="bokeh/bokeh-radius.png" width="320" height="92">
+							<figcaption>Slider for bokeh radius.</figcaption>
+						</figure>
+						
+						<p>Pass the radius to the shader.</p>
+						
+						<pre translate="no">		<ins>dofMaterial.SetFloat("_BokehRadius", bokehRadius);</ins>
+		dofMaterial.SetFloat("_FocusDistance", focusDistance);
+		dofMaterial.SetFloat("_FocusRange", focusRange);</pre>
+						
+						<p>Add a shader variable for it, again using a <code class="shader">float</code> as it's used for texture sampling.</p>
+						
+						<pre translate="no" class="shader">		float <ins>_BokehRadius,</ins> _FocusDistance, _FocusRange;</pre>
+						
+						<p>Finally, use the configurable radius instead of the fixed value 4.</p>
+						
+						<pre translate="no" class="shader">						float2 o = kernel[k];
+						o *= _MainTex_TexelSize.xy * <ins>_BokehRadius</ins>;</pre>
+						
+						<figure>
+							<video width="390" height="250" controls loop muted>
+								<source src="bokeh/radius.mp4" type="video/mp4">
+							</video>
+							<figcaption>Configurable bokeh radius.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="bokeh/bokeh.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Focusing</h2>
+					
+					<p>By now we can determine the size of the circle of confusion and we can create the bokeh effect at maximum size. The next step is to combine these to render a variable bokeh, simulating camera focus.</p>
+					
+					<section>
+						<h3>Downsampling CoC</h3>
+						
+						<p>Because we're creating bokeh at half resolution, we also need the CoC data at half resolution. A default blit or texture sample simply averages adjacent texels, which doesn't make sense for depth values or things derived from it, like the CoC. So we'll have to downsample ourselves, with a custom prefilter pass.</p>
+						
+						<pre translate="no">	const int circleOfConfusionPass = 0;
+	<ins>const int preFilterPass = 1;</ins>
+	const int bokehPass = <ins>2</ins>;
+	const int postFilterPass = <ins>3</ins>;</pre>
+						
+						<p>Besides the source texture, the prefilter pass also needs to read from the CoC texture. So pass it to the shader before downsampling.</p>
+						
+						<pre translate="no">		<ins>dofMaterial.SetTexture("_CoCTex", coc);</ins>
+
+		Graphics.Blit(source, coc, dofMaterial, circleOfConfusionPass);
+		Graphics.Blit(source, dof0<ins>, dofMaterial, preFilterPass</ins>);
+		Graphics.Blit(dof0, dof1, dofMaterial, bokehPass);
+		Graphics.Blit(dof1, dof0, dofMaterial, postFilterPass);
+		Graphics.Blit(dof0, destination);</pre>
+						
+						<p>Add the corresponding texture variable to the shader.</p>
+						
+						<pre translate="no" class="shader">		sampler2D _MainTex, _CameraDepthTexture<ins>, _CoCTex</ins>;</pre>
+						
+						<p>Next, create a new pass to perform the downsampling. The color data can be retrieved with a single texture sample. But the CoC value needs special care. Begin by sampling from the four high-resolution texels corresponding to the low-resolution texel, and average them. Store the result in the alpha channel.</p>
+						
+						<pre translate="no" class="shader">		<ins>Pass { // 1 preFilterPass</ins>
+			<ins>CGPROGRAM</ins>
+				<ins>#pragma vertex VertexProgram</ins>
+				<ins>#pragma fragment FragmentProgram</ins>
+
+				<ins>half4 FragmentProgram (Interpolators i) : SV_Target {</ins>
+					<ins>float4 o = _MainTex_TexelSize.xyxy * float2(-0.5, 0.5).xxyy;</ins>
+					<ins>half coc0 = tex2D(_CoCTex, i.uv + o.xy).r;</ins>
+					<ins>half coc1 = tex2D(_CoCTex, i.uv + o.zy).r;</ins>
+					<ins>half coc2 = tex2D(_CoCTex, i.uv + o.xw).r;</ins>
+					<ins>half coc3 = tex2D(_CoCTex, i.uv + o.zw).r;</ins>
+					
+					<ins>half coc = (coc0 + coc1 + coc2 + coc3) * 0.25;</ins>
+
+					<ins>return half4(tex2D(_MainTex, i.uv).rgb, coc);</ins>
+				<ins>}</ins>
+			<ins>ENDCG</ins>
+		<ins>}</ins>
+
+		Pass { // <ins>2</ins> bokehPass
+			&hellip;
+		}
+
+		Pass { // <ins>3</ins> postFilterPass
+			&hellip;
+		}</pre>
+						
+						<aside>
+							<h3>Why not use texture gathering?</h3>
+							<div>
+								<p>You could use that instead, but I stick to regular texture sampling, because I haven't covered gathering yet and it's not universally supported.</p>
+							</div>
+						</aside>
+						
+						<p>This would be a regular downsample, but we don't want that. Instead, we'll just take the most extreme CoC value of the four texels, either positive or negative.</p>
+						
+						<pre translate="no" class="shader"><del>//					half coc = (coc0 + coc1 + coc2 + coc3) * 0.25;</del>
+					<ins>half cocMin = min(min(min(coc0, coc1), coc2), coc3);</ins>
+					<ins>half cocMax = max(max(max(coc0, coc1), coc2), coc3);</ins>
+					<ins>half coc = cocMax >= -cocMin ? cocMax : cocMin;</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Using the Correct CoC</h3>
+						
+						<p>To use the correct CoC radius, we have to scale the CoC value by the bokeh radius when we calculate it in the first pass.</p>
+						
+						<pre translate="no" class="shader">					float coc = (depth - _FocusDistance) / _FocusRange;
+					coc = clamp(coc, -1, 1) <ins>* _BokehRadius</ins>;</pre>
+						
+						<p>To determine whether a kernel sample contributes to the bokeh of a fragment, we have to check whether the CoC of that sample overlaps this fragment. We need to know the kernel radius used for this sample, which is simply the length of its offset, so compute it. We measure this in texels, so we have to do this before compensating for the texel size.</p>
+						
+						<pre translate="no" class="shader">					for (int k = 0; k &lt; kernelSampleCount; k++) {
+						float2 o = kernel[k] <ins>* _BokehRadius</ins>;
+<del>//						o *= _MainTex_TexelSize.xy * _BokehRadius;</del>
+						<ins>half radius = length(o);</ins>
+						<ins>o *= _MainTex_TexelSize.xy;</ins>
+						color += tex2D(_MainTex, i.uv + o).rgb;
+					}</pre>
+						
+						<aside>
+							<h3>Do we have to calculate the radius per sample?</h3>
+							<div>
+								<p>You could also precompute them and store that in a constant array, along with the offsets.</p>
+							</div>
+						</aside>
+						
+						<p>If the sample's CoC is at least as large as the kernel radius used for its offset, then that point's projection ends up overlapping the fragment. If not, then that point doesn't influence this fragment and should be skipped. This means that we must once again keep track of the accumulated color's weight to normalize it.</p>
+						
+						<pre translate="no" class="shader">					half3 color = 0;
+					<ins>half weight = 0;</ins>
+					for (int k = 0; k &lt; kernelSampleCount; k++) {
+						float2 o = kernel[k] * _BokehRadius;
+						half radius = length(o);
+						o *= _MainTex_TexelSize.xy;
+<del>//						color += tex2D(_MainTex, i.uv + o).rgb;</del>
+						<ins>half4 s = tex2D(_MainTex, i.uv + o);</ins>
+
+						<ins>if (abs(s.a) >= radius) {</ins>
+							<ins>color += s.rgb;</ins>
+							<ins>weight += 1;</ins>
+						<ins>}</ins>
+					}
+					color *= 1.0 / <ins>weight</ins>;</pre>
+						
+						<figure>
+							<img src="focusing/bokeh-based-on-coc.png" width="390" height="250">
+							<figcaption>Bokeh based on CoC.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Smoothing the Sampling</h3>
+						
+						<p>Our image now contains bokeh discs of varying sizes, but the transition between sizes is abrupt. To see why this happens, increase the bokeh size so you can see the individual samples and play with the focus range or distance.</p>
+						
+						<figure>
+							<video width="390" height="250" controls loop muted>
+								<source src="focusing/samples-excluded.mp4" type="video/mp4">
+							</video>
+							<figcaption>Samples are excluded based on their CoC.</figcaption>
+						</figure>
+						
+						<p>Samples in the same ring of the kernel tend to have roughly the same CoC values, which means that they tend to get discarded or included at the same time. The result is that we mostly end up with three cases: no rings, one ring, and two rings. It also turns out that two kernel samples never get included, which means that their unscaled kernel radius is actually slightly larger than 1.</p>
+						
+						<p>We can mitigate both problems by relaxing our criteria for including a sample. Instead of completely discarding samples, we'll assign them a weight in the 0&ndash;1 range. This weight depends on the CoC and offset radius, for which we can use a separate function.</p>
+						
+						<pre translate="no" class="shader">				<ins>half Weigh (half coc, half radius) {</ins>
+					<ins>return coc >= radius;</ins>
+				<ins>}</ins>
+
+				half4 FragmentProgram (Interpolators i) : SV_Target {
+					half3 color = 0;
+					half weight = 0;
+					for (int k = 0; k &lt; kernelSampleCount; k++) {
+						&hellip;
+
+<del>//						if (abs(s.a) >= radius) {</del>
+<del>//							color += s;</del>
+<del>//							weight += 1;</del>
+<del>//						}</del>
+						<ins>half sw = Weigh(abs(s.a), radius);</ins>
+						<ins>color += s.rgb * sw;</ins>
+						<ins>weight += sw;</ins>
+					}
+					color *= 1.0 / weight;
+					return half4(color, 1);
+				}</pre>
+						
+						<p>As a weighing function we can use the CoC minus the radius, clamped to 0&ndash;1. By adding a small value and then dividing by it, we introduce an offset and turn it into a steep ramp. The result is a smoother transition and all kernel samples can get included.</p>
+						
+						<pre translate="no" class="shader">				half Weigh (half coc, half radius) {
+<del>//					return coc >= radius;</del>
+					<ins>return saturate((coc - radius + 2) / 2);</ins>
+				}</pre>
+						
+						<figure>
+							<video width="390" height="250" controls loop muted>
+								<source src="focusing/smoothed-threshold.mp4" type="video/mp4">
+							</video>
+							<figcaption>Smoothed sampling threshold.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Staying in Focus</h3>
+						
+						<p>A downside of working at half resolution is that the entire image is downsampled, which enforces a minimum amount of blurring. But fragments that are in focus shouldn't be affected by the depth-of-field effect at all. To keep those fragments sharp, we have to combine the half-resolution effect with the full-resolution source image and blend between them based on the CoC.</p>
+						
+						<p>Replace the final blit of our effect with one that goes from source to destination, using a new combine pass. This pass also needs access to the final depth-of-field texture, so pass that to the shader as well.</p>
+						
+						<pre translate="no">	const int circleOfConfusionPass = 0;
+	const int preFilterPass = 1;
+	const int bokehPass = 2;
+	const int postFilterPass = 3;
+	<ins>const int combinePass = 4;</ins>
+
+	&hellip;
+
+	void OnRenderImage (RenderTexture source, RenderTexture destination) {
+		&hellip;
+
+		dofMaterial.SetTexture("_CoCTex", coc);
+		<ins>dofMaterial.SetTexture("_DoFTex", dof0);</ins>
+
+		Graphics.Blit(source, coc, dofMaterial, circleOfConfusionPass);
+		Graphics.Blit(source, dof0, dofMaterial, preFilterPass);
+		Graphics.Blit(dof0, dof1, dofMaterial, bokehPass);
+		Graphics.Blit(dof1, dof0, dofMaterial, postFilterPass);
+		<ins>Graphics.Blit(source, destination, dofMaterial, combinePass);</ins>
+<del>//		Graphics.Blit(dof0, destination);</del>
+
+		&hellip;
+	}</pre>
+						
+						<p>Add a variable for the DoF texture.</p>
+						
+						<pre translate="no" class="shader">		sampler2D _MainTex, _CameraDepthTexture, _CoCTex<ins>, _DoFTex</ins>;</pre>
+						
+						<p>And create the new pass, initially performing a simple pass-through of the source.</p>
+						
+						<pre translate="no" class="shader">		<ins>Pass { // 4 combinePass</ins>
+			<ins>CGPROGRAM</ins>
+				<ins>#pragma vertex VertexProgram</ins>
+				<ins>#pragma fragment FragmentProgram</ins>
+
+				<ins>half4 FragmentProgram (Interpolators i) : SV_Target {</ins>
+					<ins>half4 source = tex2D(_MainTex, i.uv);</ins>
+
+					<ins>half3 color = source.rgb;</ins>
+					<ins>return half4(color, source.a);</ins>
+				<ins>}</ins>
+			<ins>ENDCG</ins>
+		<ins>}</ins></pre>
+						
+						<p>The source color is fully in-focus. The DoF texture contains a mix of both in-focus and unfocused fragments, but even its focused fragments are blurred. So we have to use the source for all focused fragments. But we cannot suddenly switch from one texture to the other, we have to blend the transition. Let's say that fragments with an absolute CoC below 0.1 are fully in focus and should use the source texture. And let's say that fragments with an absolute CoC above 1 should fully use the DoF texture. We blend in between, using the <code class="shader">smoothstep</code> function.</p>
+						
+						<pre translate="no" class="shader">					half4 source = tex2D(_MainTex, i.uv);
+					<ins>half coc = tex2D(_CoCTex, i.uv).r;</ins>
+					<ins>half4 dof = tex2D(_DoFTex, i.uv);</ins>
+
+					<ins>half dofStrength = smoothstep(0.1, 1, abs(coc));</ins>
+					half3 color = <ins>lerp(source.rgb, dof.rgb, dofStrength)</ins>;
+					return half4(color, source.a );</pre>
+						
+						<figure>
+							<img src="focusing/in-focus.png" width="390" height="250">
+							<figcaption>Sharp in-focus region.</figcaption>
+						</figure>
+						
+						<p>The transition region is arbitrary. In our case, using 1 as the upper bound means that the DoF effect is at full strength when the CoC has a radius of a single texel. You can increase the blend range to go past this point, more aggressively blending between sharp and bokeh data. A reduced blend range will reveal more of the DoF texture that's only affected by the downsample blurring.</p>
+					</section>
+					
+					<section>
+						<h3>Splitting Foreground and Background</h3>
+						
+						<p>Unfortunately, blending with the source image produces incorrect results when there is an unfocused foreground in front of a focused background. This happens because the foreground should be partially projected on top of the background, which our DoF effect does, but we eliminate this by choosing to use the source image, based on the background's CoC. To deal with this, we somehow have to split the foreground and background.</p>
+						
+						<p>Let's begin by only including kernel samples that are in the background, so when their CoC is positive. We can do this using the maximum of 0 and the CoC instead of the absolute CoC when weighing the sample. Because this makes it possible to end up with zero samples, make sure to keep the division valid, for example by adding 1 when the weight is 0.</p>
+						
+						<pre translate="no" class="shader">				half4 FragmentProgram (Interpolators i) : SV_Target {
+					half3 <ins>bgColor</ins> = 0;
+					half <ins>bgWeight</ins> = 0;
+					for (int k = 0; k &lt; kernelSampleCount; k++) {
+						float2 o = kernel[k] * _BokehRadius;
+						half radius = length(o);
+						o *= _MainTex_TexelSize.xy;
+						half4 s = tex2D(_MainTex, i.uv + o);
+
+						half <ins>bgw</ins> = Weigh(<ins>max(0, s.a)</ins>, radius);
+						<ins>bgColor</ins> += s.rgb * <ins>bgw</ins>;
+						<ins>bgWeight </ins>+= <ins>bgw</ins>;
+					}
+					<ins>bgColor</ins> *= 1 / <ins>(bgWeight + (bgWeight == 0))</ins>;
+					
+					<ins>half3 color = bgColor;</ins>
+					return half4(color, 1);
+				}</pre>
+						
+						<figure>
+							<img src="focusing/background.png" width="390" height="250">
+							<figcaption>Background only, still blending with source.</figcaption>
+						</figure>
+						
+						<p>This eliminates the contribution of the foreground, but now we can see that part of the background gets projected onto the foreground. This shouldn't happen, because the foreground is in the way. We can cut out those cases by using the minimum of the sample's CoC and the CoC of the fragment we're working on.</p>
+						
+						<pre translate="no" class="shader">					<ins>half coc = tex2D(_MainTex, i.uv).a;</ins>
+					
+					half3 bgColor = 0;
+					half bgWeight = 0;
+					for (int k = 0; k &lt; kernelSampleCount; k++) {
+						&hellip;
+
+						half bgw = Weigh(max(0, <ins>min(</ins>s.a<ins>, coc)</ins>), radius);
+						bgColor += s.rgb * bgw;
+						bgWeight += bgw;
+					}</pre>
+						
+						<figure>
+							<img src="focusing/no-foreground.png" width="390" height="250">
+							<figcaption>Cutting out the foreground.</figcaption>
+						</figure>
+						
+						<p>Next, keep track of the foreground color as well. The foreground's weight is based on the negative CoC, so it becomes positive.</p>
+						
+						<pre translate="no" class="shader">					half3 bgColor = 0<ins>, fgColor = 0</ins>;
+					half bgWeight = 0<ins>, fgWeight = 0</ins>;
+					for (int k = 0; k &lt; kernelSampleCount; k++) {
+						float2 o = kernel[k] * _BokehRadius;
+						half radius = length(o);
+						o *= _MainTex_TexelSize.xy;
+						half4 s = tex2D(_MainTex, i.uv + o);
+
+						half bgw = Weigh(max(0, s.a), radius);
+						bgColor += s.rgb * bgw;
+						bgWeight += bgw;
+
+						<ins>half fgw = Weigh(-s.a, radius);</ins>
+						<ins>fgColor += s.rgb * fgw;</ins>
+						<ins>fgWeight += fgw;</ins>
+					}
+					bgColor *= 1 / (bgWeight + (bgWeight == 0));
+					<ins>fgColor *= 1 / (fgWeight + (fgWeight == 0));</ins>
+					half3 color = <ins>fgColor</ins>;</pre>
+						
+						<figure>
+							<img src="focusing/foreground.png" width="390" height="250">
+							<figcaption>Foreground only.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Recombing Foreground and Background</h3>
+						
+						<p>We're not going to put the foreground and background in separate buffers. Instead, we'll keep the data in a single buffer. Because the foreground sits in front of the background, we'll use it when we have at least a single foreground sample. We can do this smoothly by interpolating between background and foreground based on the foreground weight, up to 1.</p>
+						
+						<pre translate="no" class="shader">					fgColor *= 1 / (fgWeight + (fgWeight == 0));
+					<ins>half bgfg = min(1, fgWeight);</ins>
+					half3 color = <ins>lerp(bgColor, fgColor, bgfg);</ins></pre>
+						
+						<figure>
+							<img src="focusing/recombined.png" width="390" height="250">
+							<figcaption>Recombined.</figcaption>
+						</figure>
+						
+						<p>To fix the blending with the source image, we have to modify how we blend with the foreground. The combine pass needs to know how the foreground and background were mixed, using the <code class="shader">bgfg</code> interpolator, so put it in the alpha channel of the DoF texture.</p>
+						
+						<pre translate="no" class="shader">					half bgfg = min(1, fgWeight);
+					half3 color = lerp(bgColor, fgColor, bgfg);
+					return half4(color, <ins>bgfg</ins>);</pre>
+						
+						<p>In the combine pass, we now first have to interpolate based on the positive CoC, to factor in the background. Then we have to interpolate the result again with the DoF, using the foreground weight. This results in a nonlinear interpolation between the source and DoF, making the DoF slightly stronger.</p>
+						
+						<pre translate="no" class="shader"><del>//					half dofStrength = smoothstep(0.1, 1, abs(coc));</del>
+					<ins>half dofStrength = smoothstep(0.1, 1, coc);</ins>
+					half3 color = lerp(
+						source.rgb, dof.rgb,
+						dofStrength <ins>+ dof.a - dofStrength * dof.a</ins>
+					);</pre>
+						
+						<aside>
+							<h3>How does that interpolation work?</h3>
+							<div>
+								<p>We have the source `a`, DoF `b`, background interpolator `x` and foreground interpolator `y`. The first interpolation is `c_0 = a + (b - a)x`. The second interpolation is `c_1 = c_0 + (b - c_0)y`.</p>
+								
+								<p>`c_1 = (a + (b - a)x) + (b - (a + (b - a)x))y`</p>
+								
+								<p>`c_1 = a + (b - a)x + by - (ay +(b - a)xy)`</p>
+								
+								<p>`c_1 = a + (b - a)x + by - ay - (b - a)xy`</p>
+								
+								<p>`c_1 = a + (b - a)x + (b - a)y - (b - a)xy`</p>
+								
+								<p>`c_1 = a + (b - a)(x + y - xy)`</p>
+								
+								<p>Hence, we interpolate between `a` and `b` with interpolator `x + y - xy`.</p>
+							</div>
+						</aside>
+						
+						<figure>
+							<img src="focusing/preserved-foreground.png" width="390" height="250">
+							<figcaption>Preserved foreground, but lost focus.</figcaption>
+						</figure>
+						
+						<p>The foreground now dominates the image, wiping out the focused region again. That happens because it's at full strength if even a single kernel sample belongs to the foreground. To make it proportional, divide <code class="shader">bgfg</code> by the total amount of samples.</p>
+						
+						<pre translate="no" class="shader">					half bgfg = min(1, fgWeight <ins>/ kernelSampleCount</ins>);</pre>
+						
+						<figure>
+							<img src="focusing/proportional-foreground.png" width="390" height="250">
+							<figcaption>Proportional foreground.</figcaption>
+						</figure>
+						
+						<p>That made the foreground too weak, and it also caused artifacts to appear around its edges. We have to boost it again, using some factor. As we're dealing with a disc, let's use &pi;. That makes the foreground stronger than before the split, but not too bad. You could try another factor if you find the effect too strong or weak.</p>
+						
+						<pre translate="no" class="shader">					half bgfg =
+						min(1, fgWeight <ins>* 3.14159265359 / kernelSampleCount</ins>);</pre>
+						
+						<figure>
+							<img src="focusing/boosted-foreground.png" width="390" height="250">
+							<figcaption>Boosted foreground.</figcaption>
+						</figure>
+						
+						<p>Unfortunately can we still get some artifacts around the edges of the foreground. It's very obvious along the bottom left corner of the plane in the above screenshot. This is caused by a sudden transition to the far-away background that's also out of focus. Here a large portion of the kernel samples end up in the background, weakening the foreground influence. To deal with that, we can switch back to once again using the absolute CoC in the combine pass.</p>
+						
+						<pre translate="no" class="shader">					half dofStrength = smoothstep(0.1, 1, <ins>abs(coc)</ins>);</pre>
+						
+						<figure>
+							<img src="focusing/fixed-foreground.png" width="390" height="250">
+							<figcaption>Foreground edge without artifacts.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Toning Down the Bokeh</h3>
+						
+						<p>We wrap up by toning down the strength of the bokeh. It shouldn't change the overall brightness of the image much. We can achieve this by using a weighed average when downsampling in the prefilter pass, instead of just averaging the colors of the four texels. We'll weight each color `c` using `1 / (1 + (c_r vv c_g vv c_b))`.</p>
+						
+						<pre translate="no" class="shader">				<ins>half Weigh (half3 c) {</ins>
+					<ins>return 1 / (1 + max(max(c.r, c.g), c.b));</ins>
+				<ins>}</ins>
+
+				half4 FragmentProgram (Interpolators i) : SV_Target {
+					float4 o = _MainTex_TexelSize.xyxy * float2(-0.5, 0.5).xxyy;
+
+					<ins>half3 s0 = tex2D(_MainTex, i.uv + o.xy).rgb;</ins>
+					<ins>half3 s1 = tex2D(_MainTex, i.uv + o.zy).rgb;</ins>
+					<ins>half3 s2 = tex2D(_MainTex, i.uv + o.xw).rgb;</ins>
+					<ins>half3 s3 = tex2D(_MainTex, i.uv + o.zw).rgb;</ins>
+
+					<ins>half w0 = Weigh(s0);</ins>
+					<ins>half w1 = Weigh(s1);</ins>
+					<ins>half w2 = Weigh(s2);</ins>
+					<ins>half w3 = Weigh(s3);</ins>
+
+					<ins>half3 color = s0 * w0 + s1 * w1 + s2 * w2 + s3 * w3;</ins>
+					<ins>color /= max(w0 + w1 + w2 + w3, 0.00001);</ins>
+
+					half coc0 = tex2D(_CoCTex, i.uv + o.xy).r;
+					&hellip;
+					half coc = cocMax >= -cocMin ? cocMax : cocMin;
+
+<del>//					return half4(tex2D(_MainTex, i.uv).rgb, coc);</del>
+					<ins>return half4(color, coc);</ins>
+				}</pre>
+						
+						<figure>
+							<img src="focusing/weighed-bokeh.png" width="390" height="250">
+							<figcaption>Weighed bokeh effect.</figcaption>
+						</figure>
+						
+						<p>You now have a simple depth-of-field effect that's a rough equivalent of the one found in Unity's post effect stack v2. Turning it into a production-quality effect would require a lot of tuning, or you could use the knowledge of how it works to tweak Unity's version.</p>
+					</section>
+					
+					<a href="focusing/focusing.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Depth-of-Field.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

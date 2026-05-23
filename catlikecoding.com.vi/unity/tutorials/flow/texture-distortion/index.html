@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/flow/texture-distortion/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/flow/texture-distortion/tutorial-image.jpg">
+		<meta property="og:title" content="Texture Distortion">
+		<meta property="og:description" content="A Unity Flow tutorial about distorting a texture to simulate flowing surfaces.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Texture Distortion</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/flow/texture-distortion/#article",
+				"headline": "Texture Distortion",
+				"alternativeHeadline": "Faking Liquid",
+				"datePublished": "2018-05-30",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Flow tutorial about distorting a texture to simulate flowing surfaces.",
+				"image": "https://catlikecoding.com/unity/tutorials/flow/texture-distortion/tutorial-image.jpg",
+				"dependencies": "Unity 2017.4.4f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/flow/", "name": "Flow" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {};
+			
+			var defaultCodeClass = 'shader';
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Flow</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Texture Distortion</h1>
+					<p>Faking Liquid</p>
+					<ul>
+						<li>Adjust UV coordinates with a flow map.</li>
+						<li>Create a seamless animation loop.</li>
+						<li>Control the flow appearance.</li>
+						<li>Use a derivative map to add bumps.</li>
+					</ul>
+				</header>
+				
+				<p>This is the first tutorial in a series about creating the appearance of <a href="../index.html">flowing materials</a>. In this case, it's done by using a flow map to distort a texture. This tutorial assumes you've gone through the <a href="../../basics/index.html">Basics</a> series, plus the <a href="../../rendering/index.html">Rendering</a> series up to at least <a href="../../rendering/part-6.1.html"> part 6, Bumpiness</a>.
+				
+				<p>This tutorial is made with Unity 2017.4.4f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Stretching and squashing a texture in multiple directions.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Animating UV</h2>
+					
+					<p>When a liquid doesn't move, it is visually indistinguishable from a solid. Are you looking at water, jelly, or glass? Is that still pool frozen or not? To be sure, disturb it and observe whether it deforms, and if so how. Merely creating a material that looks like moving water isn't enough, it actually has to move. Otherwise it's like a glass sculpture of water, or water frozen in time. That's good enough for a picture, but not for a movie or a game.</p>
+					
+					<p>Most of the time, we just want a surface to be made out of water, or mud, or lava, or some magical effect that visually behaves like a liquid. It doesn't need to be interactive, just appear believable when casually observed. So we don't need to come up with a complex water physics simulation. All we need is some movement added to a regular material. This can be done by animating the UV coordinates used for texturing.</p>
+					
+					<p>The technique used in this tutorial was first publicly described in detail by Alex Vlachos from Valve, in the SIGGRAPH2010 presentation <em translate="no">Water Flow in Portal 2</em>.</p>
+					
+					<section>
+						<h3>Sliding Surface Shader</h3>
+						
+						<p>For this tutorial, you can start with a new project, set to use linear color space rendering. If you're using Unity 2018, select the default 3D pipeline, not lightweight or HD. Then create a new standard surface shader. As we're going to simulate a flowing surface by distorting texture mapping, name it <em translate="no">DistortionFlow</em>. Below is the new shader, with all comments and unneeded parts removed.</p>
+						
+						<pre translate="no">Shader "Custom/DistortionFlow" {
+	Properties {
+		_Color ("Color", Color) = (1,1,1,1)
+		_MainTex ("Albedo (RGB)", 2D) = "white" {}
+		_Glossiness ("Smoothness", Range(0,1)) = 0.5
+		_Metallic ("Metallic", Range(0,1)) = 0.0
+	}
+	SubShader {
+		Tags { "RenderType"="Opaque" }
+		LOD 200
+
+		CGPROGRAM
+		#pragma surface surf Standard fullforwardshadows
+		#pragma target 3.0
+
+		sampler2D _MainTex;
+
+		struct Input {
+			float2 uv_MainTex;
+		};
+
+		half _Glossiness;
+		half _Metallic;
+		fixed4 _Color;
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			fixed4 c = tex2D(_MainTex, IN.uv_MainTex) * _Color;
+			o.Albedo = c.rgb;
+			o.Metallic = _Metallic;
+			o.Smoothness = _Glossiness;
+			o.Alpha = c.a;
+		}
+		ENDCG
+	}
+
+	FallBack "Diffuse"
+}</pre>
+						
+						<p>To make it easy to see how the UV coordinates are deformed, you can use <a href="animating-uv/uv.png">this test texture</a>.</p>
+						
+						<figure>
+							<img src="animating-uv/uv.png" width="256" height="256">
+							<figcaption>UV test texture.</figcaption>
+						</figure>
+						
+						<p>Create a material that uses our shader, with the test texture as its albedo map. Set its tiling to 4 so we can see how the texture repeats. Then add a quad to the scene with this material. For best viewing, rotate it 90&deg; around its X axis so it lies flat in the XZ plane. That makes it easy to look at it from any angle.</p>
+						
+						<figure>
+							<img alt="material" src="animating-uv/material.png" width="320" height="248"><br>
+							<img alt="quad" src="animating-uv/quad.jpg" width="360" height="160">
+							<figcaption>Distortion Flow material on a quad.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Flowing UV</h3>
+						
+						<p>The code for flowing UV coordinates is generic, so we'll put it in a separate <em translate="no">Flow.cginc</em> include file. All it needs to contain is a <code>FlowUV</code> function that has a UV and a time parameter. It should return the new flowed UV coordinates. We begin with the most straightforward displacement, which is simply adding the time to both coordinates.</p>
+						
+						<pre translate="no"><ins>#if !defined(FLOW_INCLUDED)</ins>
+<ins>#define FLOW_INCLUDED</ins>
+
+<ins>float2 FlowUV (float2 uv, float time) {</ins>
+	<ins>return uv + time;</ins>
+<ins>}</ins>
+
+<ins>#endif</ins></pre>
+						
+						<p>Include this file in our shader and invoke <code>FlowUV</code> with the main texture coordinates and the current time, which Unity makes available via <code>_Time.y</code>. Then use the new UV coordinates to sample our texture.</p>
+						
+						<pre translate="no">		<ins>#include "Flow.cginc"</ins>
+
+		sampler2D _MainTex;
+
+		&hellip;
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			<ins>float2 uv = FlowUV(IN.uv_MainTex, _Time.y);</ins>
+			fixed4 c = tex2D(_MainTex, <ins>uv</ins>) * _Color;
+			o.Albedo = c.rgb;
+			o.Metallic = _Metallic;
+			o.Smoothness = _Glossiness;
+			o.Alpha = c.a;
+		}</pre>
+						
+						<figure>
+							<video width="360" height="160" controls loop muted>
+								<source src="animating-uv/diagonally-sliding.mp4" type="video/mp4">
+							</video>
+							<figcaption>Diagonally sliding UV.</figcaption>
+						</figure>
+						
+						<p>As we're increasing both coordinates by the same amount, the texture slides diagonally. Because we adding the time, it slides from top right to bottom left. And because we're using the default wrap mode for our texture, the animation loops every second.</p>
+						
+						<p>The animation is only visible when the time value increases. This is the case when the editor is in play mode, but you can also enable time progression in edit mode, by enabling <em translate="no">Animated Materials</em> via the <em translate="no">Scene</em> window toolbar.</p>
+						
+						<figure>
+							<img src="animating-uv/animated-materials.png" width="168" height="122">
+							<figcaption>Animated Materials enabled.</figcaption>
+						</figure>
+						
+						<p>Actually, the time value used by materials increases each time the editor redraws the scene. So when <em translate="no">Animated Materials</em> is disabled you will see the texture slide a bit each time you edit something. <em translate="no">Animated Materials</em> just forces the editor to redraw the scene all the time. So only turn it on when you need it.</p>
+					</section>
+					
+					<section>
+						<h3>Flow Direction</h3>
+						
+						<p>Instead of always flowing in the same direction, you can use a velocity vector to control the direction and speed of the flow. You could add this vector as a property to the material. However, then we're still limited to using the same vector for the entire material, which looks like a rigid sliding surface. To make make something look like flowing liquid, it has to locally change over time besides moving in general.</p>
+						
+						<p>We could get rid of the static appearance by adding another velocity vector, using that to sample the texture a second time, and combining both samples. When using two slightly different vectors, we end up with a morphing texture. However, we're still limited to flowing the entire surface the same way. This is often sufficient for open water or straight flows, but not in more complex situations.</p>
+						
+						<p>To support more interesting flows, we must somehow vary the flow vector across the surface of our material. The most straightforward way to do this is via a flow map. This is a texture that contains 2D vectors. <a href="animating-uv/flowmap.png">Here</a> is such a texture, with the vector's U component in the R channel and the V component in the G channel. It doesn't need to be large, because we don't need sharp sudden changes and we can rely on bilinear filtering to keep it smooth.</p>
+						
+						<figure>
+							<img src="animating-uv/flowmap.png" width="128" height="128">
+							<figcaption>Flow map.</figcaption>
+						</figure>
+						
+						<p>This texture was created with curl noise, which is explained in the <a href="https://catlikecoding.com/unity/tutorials/noise-derivatives/">Noise Derivatives</a> tutorial, but the details of its creation don't matter. It contains multiple clockwise and counterclockwise rotating flows, without any sources or sinks. Make sure that it is imported as a regular 2D texture that isn't sRGB, as it doesn't contain color data.</p>
+						
+						<figure>
+							<img src="animating-uv/texture-import.png" width="320" height="154">
+							<figcaption>Import as non-sRGB texture.</figcaption>
+						</figure>
+						
+						<p>Add a property for the flow map to our material. It doesn't need a separate UV tiling and offset, so give it the <code>NoScaleOffset</code> attribute. The default is that there is no flow, which corresponds to a black texture.</p>
+						
+						<pre translate="no">		_MainTex ("Albedo (RGB)", 2D) = "white" {}
+		<ins>[NoScaleOffset] _FlowMap ("Flow (RG)", 2D) = "black" {}</ins></pre>
+						
+						<figure>
+							<img src="animating-uv/material-flowmap.png" width="320" height="162">
+							<figcaption>Material with flow map.</figcaption>
+						</figure>
+						
+						<p>Add a variable for the flow map and sample it to get the flow vector. Then temporarily visualize it by using it as the albedo.</p>
+						
+						<pre translate="no">		sampler2D _MainTex<ins>, _FlowMap</ins>;
+
+		&hellip;
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			<ins>float2 flowVector = tex2D(_FlowMap, IN.uv_MainTex).rg;</ins>
+			float2 uv = FlowUV(IN.uv_MainTex, _Time.y);
+			fixed4 c = tex2D(_MainTex, uv) * _Color;
+			o.Albedo = c.rgb;
+			<ins>o.Albedo = float3(flowVector, 0);</ins>
+			&hellip;
+		}</pre>
+						
+						<figure>
+							<img src="animating-uv/tiled-flow.jpg" width="360" height="160">
+							<figcaption>Tiled flow vectors.</figcaption>
+						</figure>
+						
+						<p>The texture appears brighter in the scene, because it's linear data. That's fine, because we're not supposed to use it as a color anyway. As the main UV coordinates of the surface shader use the tiling and offset of the main texture, our flow map gets tiled as well. We don't need a tiling flow map, so set the material's tiling back to 1.</p>
+						
+						<figure>
+							<img alt="material" src="animating-uv/material-no-tiling.png" width="320" height="70"><br>
+							<img alt="quad" src="animating-uv/flow-no-tiling.jpg" width="360" height="160">
+							<figcaption>Flow vectors without tiling.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Directed Sliding</h3>
+						
+						<p>Now that we have flow vectors, we can add support for them to our <code>FlowUV</code> function. Add a parameter for them, then multiply them with the time before subtracting from the original UV. We subtract because that makes the flow go in the direction of the vector.</p>
+						
+						<pre translate="no">float2 FlowUV (float2 uv, <ins>float2 flowVector,</ins> float time) {
+	return uv - <ins>flowVector *</ins> time;
+}</pre>
+						
+						<p>Pass the flow vector to the function, but before doing so make sure that the vector is valid. Like with a normal map, the vector can point in any direction, so can contain negative components. Therefore, the vector is encoded the same way as in a normal map. We have to manually decode it. Also, revert to the original albedo.</p>
+						
+						<pre translate="no">			float2 flowVector = tex2D(_FlowMap, IN.uv_MainTex).rg <ins>* 2 - 1</ins>;
+			float2 uv = FlowUV(IN.uv_MainTex, <ins>flowVector,</ins> _Time.y);
+			fixed4 c = tex2D(_MainTex, uv) * _Color;
+			o.Albedo = c.rgb;
+<del>//			o.Albedo = float3(flowVector, 0);</del></pre>
+						
+						<figure>
+							<img src="animating-uv/distortion.jpg" width="360" height="160">
+							<figcaption>too much distortion.</figcaption>
+						</figure>
+						
+						<p>We quickly end up with a texture that is way too distorted. This happens because the texture gets moved in multiple directions, stretching and squashing it more and more as time progresses. To prevent it from turning into a mess, we have to reset the animation at some point. The simplest way to do this is by only using the fractional part of the time for the animation. Thus, it progresses from 0 up to 1 as normal, but then resets to 0, forming a sawtooth pattern.</p>
+						
+						<figure>
+							<img src="animating-uv/sawtooth.png" width="300" height="150">
+							<figcaption>Sawtooth progress.</figcaption>
+						</figure>
+						
+						<p>As this is particular to the flow animation and not time in general, create the sawtooth progression in <code>FlowUV</code>.</p>
+						
+						<pre translate="no">float2 FlowUV (float2 uv, float2 flowVector, float time) {
+	<ins>float progress = frac(time);</ins>
+	return uv - flowVector * <ins>progress</ins>;
+}</pre>
+						
+						<figure>
+							<video width="360" height="160" controls loop muted>
+								<source src="animating-uv/resetting-progression-compressed.mp4" type="video/mp4">
+							</video>
+							<figcaption>Resetting the progression each second.</figcaption>
+						</figure>
+						
+						<p>We can now see that the texture indeed gets deformed in different directions and at different speeds. Besides the sudden reset, what is most obvious is that the texture quickly becomes blocky as its deformation increases. This is caused by the compression of the flow map. The default compression setting uses the DXT1 format, which is where the blockiness comes from. These artifacts are typically not obvious when using organic textures, but are glaring when deforming clear patterns, like our test texture. So I've used an uncompressed flow map for all screenshots and movies in this tutorial.</p>
+						
+						<figure>
+							<video width="360" height="160" controls loop muted>
+								<source src="animating-uv/resetting-progression-uncompressed.mp4" type="video/mp4">
+							</video>
+							<figcaption>Without compression.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why not just use a higher resolution flow map?</h3>
+							<div>
+								<p>While that is possible, flow maps often cover large areas and thus end up with low effective resolution. As long as you're not using extreme deformation, there is no problem. The deformations shown in this tutorial are very strong, to make them visually obvious.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="animating-uv/animating-uv.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Seamless Looping</h2>
+					
+					<p>At this point we can animate a nonuniform flow, but it resets each second. To make it loop without discontinuity, we have to somehow get the UV back to their original values, before distortion. Time only goes forward, so we cannot rewind the distortion. Trying that would result in a flow that goes back and forth instead of in a consistent direction. We have to find another way.</p>
+					
+					<section>
+						<h3>Blend Weight</h3>
+						
+						<p>We cannot avoid resetting the progression of the distortion, but we can try to hide it. What we could do is fade the texture to black as we approach maximum distortion. If we also start with black and fade in the texture at the start, then the sudden reset happens when the entire surface is black. While this is very obvious, at least there is no sudden visual discontinuity.</p>
+						
+						<p>To make the fading possible, let's add a blend weight to the output of our <code>FlowUV</code> function, renaming it to <code>FlowUVW</code>. The weight is put in the third component, which has effectively been 1 up to now, so let's start with that.</p>
+						
+						<pre translate="no">float3 <ins>FlowUVW</ins> (float2 uv, float2 flowVector, float time) {
+	float progress = frac(time);
+	<ins>float3 uvw;</ins>
+	<ins>uvw.xy =</ins> uv - flowVector * progress;
+	<ins>uvw.z = 1;</ins>
+	<ins>return uvw;</ins>
+}</pre>
+						
+						<p>We can fade the texture by multiplying it with the weight that is now available to our shader.</p>
+						
+						<pre translate="no">			<ins>float3 uvw</ins> = <ins>FlowUVW</ins>(IN.uv_MainTex, flowVector, _Time.y);
+			fixed4 c = tex2D(_MainTex, <ins>uvw.xy</ins>) <ins>* uvw.z</ins> * _Color;</pre>
+					</section>
+					
+					<section>
+						<h3>Seesaw</h3>
+						
+						<p>Now we must create a weight function `w(p)` where `w(0) = w(1) = 0`. And halfway it should reach full strength, so `w(1/2) = 1`. The simplest function that matches these criteria is a triangle wave, `w(p) = 1 - |1 - 2p|`. Use that for our weight.</p>
+						
+						<figure>
+							<img src="seamless-looping/triangle.png" width="300" height="150">
+							<figcaption>Sawtooth with matching triangle wave.</figcaption>
+						</figure>
+						
+						<pre translate="no">	uvw.z = <ins>1 - abs(1 - 2 * progress)</ins>;</pre>
+						
+						<figure>
+							<video width="360" height="160" controls loop muted>
+								<source src="seamless-looping/triangle-wave-modulation.mp4" type="video/mp4">
+							</video>
+							<figcaption>Triangle wave modulation.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why not use a smoother function?</h3>
+							<div>
+								<p>You could also use a sine wave or apply the smoothstep function. But those functions make the shader more complex, while not affecting the final result much. A triangle wave is sufficient.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Time Offset</h3>
+						
+						<p>While technically we have removed the visual discontinuity, we have introduced a black pulsing effect. The pulsing is very obvious because it happens everywhere at once. It might be less obvious if we could spread it out over time. We can do this by offsetting the time by a varying amount across the surface. Some low-frequency Perlin noise is very suitable for this. Instead of adding another texture, we'll pack the noise in our flow map. <a href="seamless-looping/flowmap.png">Here</a> is the same flow map as before, but now with noise in its A channel. The noise is unrelated to the flow vectors.</p>
+						
+						<figure>
+							<img src="seamless-looping/flowmap.png" width="128" height="128">
+							<figcaption>Flow map with noise in A channel.</figcaption>
+						</figure>
+						
+						<p>To indicate that we expect noise in the flow map, update its label.</p>
+						
+						<pre translate="no">		[NoScaleOffset] _FlowMap ("Flow (RG<ins>, A noise</ins>)", 2D) = "black" {}</pre>
+						
+						<p>Sample the noise and add it to the time before passing it to <code>FlowUVW</code>.</p>
+						
+						<pre translate="no">			float2 flowVector = tex2D(_FlowMap, IN.uv_MainTex).rg * 2 - 1;
+			<ins>float noise = tex2D(_FlowMap, IN.uv_MainTex).a;</ins>
+			<ins>float time = _Time.y + noise;</ins>
+			float3 uvw = FlowUVW(IN.uv_MainTex, flowVector, <ins>time</ins>);</pre>
+						
+						<figure>
+							<video width="360" height="160" controls loop muted>
+								<source src="seamless-looping/time-with-offset.mp4" type="video/mp4">
+							</video>
+							<figcaption>Time with offset.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why sample the flow map twice?</h3>
+							<div>
+								<p>Just to point out that the shader compiler will optimize that into a single texture sample.</p>
+							</div>
+						</aside>
+						
+						<p>The black pulse is still there, but it has changed into a wave that spreads across the surface in an organic way. This is much easier to obfuscate than uniform pulsing. As a bonus, the time offset also made the progression of the distortion nonuniform, resulting in a more varied distortion overall.</p>
+					</section>
+					
+					<section>
+						<h3>Combining Two Distortions</h3>
+						
+						<p>Instead of fading to black, we could blend with something else, for example the original undistorted texture. But then we would see a fixed texture fade in and out, which would destroy the illusion of flow. We can solve that by blending with another distorted texture. This requires us to sample the texture twice, each with different UVW data.</p>
+						
+						<p>So we end up with two pulsing patterns, A and B. When A's weight is 0, B's should be 1, and vice versa. That way the black pulse is hidden. This is done by shifting the phase of B by half its period, which means adding 0.5 to its time. But that's a detail of how <code>FlowUVW</code> works, so let's just add a boolean parameter to indicate whether we want the UVW for the A or B variant.</p>
+						
+						<pre translate="no">float3 FlowUVW (float2 uv, float2 flowVector, float time<ins>, bool flowB</ins>) {
+	<ins>float phaseOffset = flowB ? 0.5 : 0;</ins>
+	float progress = frac(time <ins>+ phaseOffset</ins>);
+	float3 uvw;
+	uvw.xy = uv - flowVector * progress;
+	uvw.z = 1 - abs(1 - 2 * progress);
+	return uvw;
+}</pre>
+						
+						<figure>
+							<img src="seamless-looping/double-triangle.png" width="300" height="150">
+							<figcaption>Weights of A and B always sum to 1.</figcaption>
+						</figure>
+						
+						<p>We now have to invoke <code>FlowUVW</code> twice, once with <code>false</code> and once with <code>true</code> as its last argument. Then sample the texture twice, multiply both with their weights, and add them to arrive at the final albedo.</p>
+						
+						<pre translate="no">			float time = _Time.y + noise;
+
+			float3 <ins>uvwA</ins> = FlowUVW(IN.uv_MainTex, flowVector, time<ins>, false</ins>);
+			<ins>float3 uvwB = FlowUVW(IN.uv_MainTex, flowVector, time, true);</ins>
+
+			<ins>fixed4 texA = tex2D(_MainTex, uvwA.xy) * uvwA.z;</ins>
+			<ins>fixed4 texB = tex2D(_MainTex, uvwB.xy) * uvwB.z;</ins>
+
+			fixed4 c = <ins>(texA + texB)</ins> * _Color;</pre>
+						
+						<figure>
+							<video width="360" height="160" controls loop muted>
+								<source src="seamless-looping/blending-two-phases.mp4" type="video/mp4">
+							</video>
+							<figcaption>Blending two phases.</figcaption>
+						</figure>
+						
+						<p>The black pulsing wave is no longer visible. The wave is still there, but now forms the transition between the two phases, which is far less obvious.</p>
+						
+						<p>A side effect of blending between two patterns offset by half their period is that our animation's duration has been halved. It now loops twice per second. But we don't have to use the same pattern twice. We can offset the UV coordinates of B by half a unit. This makes the patterns different&mdash;while using the same texture&mdash;without introducing any directional bias.</p>
+						
+						<pre translate="no">	uvw.xy = uv - flowVector * progress <ins>+ phaseOffset;</ins></pre>
+						
+						<figure>
+							<video width="360" height="160" controls loop muted>
+								<source src="seamless-looping/different-uv.mp4" type="video/mp4">
+							</video>
+							<figcaption>Different UV for A and B.</figcaption>
+						</figure>
+						
+						<p>Because we use a regular test pattern, the white grid lines of A and B overlap. But the colors of their squares are different. As a result, the final animation alternates between two color configurations, and again takes a second to repeat.</p>
+					</section>
+					
+					<section>
+						<h3>Jumping UV</h3>
+						
+						<p>Besides always offsetting the UV of A and B by half a unit, it is also possible to offset the UV per phase. That will cause the animation to change over time, so it takes longer before it loops back to the exact same state.</p>
+						
+						<p>We could simply slide the UV coordinates based on time, but that would cause the whole animation to slide, introducing a directional bias. We can avoid visual sliding by keeping the UV offset constant during each phase, and jumping to a new offset between phases. In other words, we make the UV jump each time the weight is zero. This is done by adding some jump offset to the UV, multiplied by the integer portion of the time. Adjust <code>FlowUVW</code> to support this, with a new parameter to specify the jump vector.</p>
+						
+						<pre translate="no">float3 FlowUVW (
+	float2 uv, float2 flowVector, <ins>float2 jump,</ins> float time, bool flowB
+) {
+	float phaseOffset = flowB ? 0.5 : 0;
+	float progress = frac(time + phaseOffset);
+	float3 uvw;
+	uvw.xy = uv - flowVector * progress + phaseOffset;
+	<ins>uvw.xy += (time - progress) * jump;</ins>
+	uvw.z = 1 - abs(1 - 2 * progress);
+	return uvw;
+}</pre>
+						
+						<p>Add two parameters to our shader to control the jump. We use two floats instead of a single vector, so we can use range sliders. Because we're blending between two patterns that are offset by half, our animation already contains the UV offset sequence `0 -> 1/2` per phase. The jump offset gets added on top of this. This means that if we were to jump by half, the progression would become `0 -> 1/2 -> 1/2 -> 0` over two phases, which is not what we want. We should jump by a quarter at most, which produces `0 -> 1/2 -> 1/4 -> 3/4 -> 1/2 -> 0 -> 3/4 -> 1/4` over four phases. A negative offset of at most a quarter is also possible. That would produce the sequence `0 -> 1/2 -> 3/4 -> 1/4 -> 1/2 -> 0 -> 1/4 -> 3/4`.</p>
+						
+						<pre translate="no">		[NoScaleOffset] _FlowMap ("Flow (RG, A noise)", 2D) = "black" {}
+		<ins>_UJump ("U jump per phase", Range(-0.25, 0.25)) = 0.25</ins>
+		<ins>_VJump ("V jump per phase", Range(-0.25, 0.25)) = 0.25</ins></pre>
+						
+						<p>Add the required float variables to our shader, use them to construct the jump vector, and pass it to <code>FlowUVW</code>.</p>
+						
+						<pre translate="no">		sampler2D _MainTex, _FlowMap;
+		<ins>float _UJump, _VJump;</ins>
+
+		&hellip;
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			float2 flowVector = tex2D(_FlowMap, IN.uv_MainTex).rg * 2 - 1;
+			float noise = tex2D(_FlowMap, IN.uv_MainTex).a;
+			float time = _Time.y + noise;
+			<ins>float2 jump = float2(_UJump, _VJump);</ins>
+
+			float3 uvwA = FlowUVW(IN.uv_MainTex, flowVector, <ins>jump,</ins> time, false);
+			float3 uvwB = FlowUVW(IN.uv_MainTex, flowVector, <ins>jump,</ins> time, true);
+
+			&hellip;
+		}</pre>
+						
+						<figure>
+							<img src="seamless-looping/material.png" width="320" height="112" alt="inspector"><br>
+							<video width="360" height="160" controls loop muted>
+								<source src="seamless-looping/maximum-jump.mp4" type="video/mp4">
+							</video>
+							<figcaption>Material with maximum jump.</figcaption>
+						</figure>
+						
+						<p>At maximum jump we end up with a sequence of eight UV offsets before it repeats. As we go through two offsets per phase and each phase is one second long, our animation now loops every four seconds.</p>
+					</section>
+					
+					<section>
+						<h3>Analyzing Jumps</h3>
+						
+						<p>To better see how UV jumping works, you can set the flow vectors to zero so you can focus on the offsets. First, consider the animation without any jump, just the original alternating patterns.</p>
+						
+						<figure>
+							<video width="360" height="160" controls loop muted>
+								<source src="seamless-looping/jump-0.mp4" type="video/mp4">
+							</video>
+							<figcaption>Jump 0, duration 1s.</figcaption>
+						</figure>
+						
+						<p>You can see that each square is alternating between two colors. You can also see that we're alternating between the same texture offset by half, but this is not immediately obvious and there is no directional bias. Next, look at the animation with maximum jump in both dimensions.</p>
+						
+						<figure>
+							<video width="360" height="160" controls loop muted>
+								<source src="seamless-looping/jump-25.mp4" type="video/mp4">
+							</video>
+							<figcaption>Jump 0.25, duration 4s.</figcaption>
+						</figure>
+						
+						<p>The result looks different, because jumping by a quarter causes the grid lines of our test texture to move, alternating between squares and crosses. The white lines still do not show a directional bias, but the colored squares now do. The pattern moves diagonally, but not in an immediately obvious way. It takes half a step forward, then a quarter step back, repeat. Had we used the minimum jump of &minus;0.25, then it would take half a step forward, followed by a quarter step forward, repeat. To make the directional bias more obvious, use a jump that isn't symmetrical, for example 0.2.</p>
+						
+						<figure>
+							<video width="360" height="160" controls loop muted>
+								<source src="seamless-looping/jump-20.mp4" type="video/mp4">
+							</video>
+							<figcaption>Jump 0.2, duration 2.5s.</figcaption>
+						</figure>
+						
+						<p>In this case, the white grid lines also appear to move. But because we're still using a large jump that is fairly close to symmetrical, the movement can be interpreted to go in multiple directions, depending on how you focus on the image. If you change your focus, you can easily lose track of the direction you thought it was flowing.</p>
+						
+						<p>Because we're using a jump of 0.2, the animation repeats after five phases, so five seconds. However, because we blend between two offset phases there is a potential crossover point in the middle of each phase. If the animation would loop after an odd number of phases, it actually loops twice as the phases cross halfway. So in this case the duration is only 2.5s.</p>
+						
+						<p>You don't have to jump U and V by the same amount. Besides changing the nature of the directional bias, using different jump values per dimension also affects the loop duration. For example, consider an U jump of 0.25 and a V jump of 0.1. U loops every four cycles, while V loops every ten. So after four cycles U has looped, but V hasn't yet, so the animation hasn't completed a loop either. Only when both U and V complete a cycle at the end of the same phase do we reach the end of the animation. When using rational numbers for the jumps, the loop duration is equal to the least common multiple of their denominators. In the case of 0.25 and 0.1, that's 4 and 10, for which the least common multiple is 20.</p>
+						
+						<p>There is no obvious way to pick a jump vector so you end up with a long loop duration. For example, if we use 0.25 and 0.2 instead of 0.25 and 0.1, do we get a longer or shorter duration? As the least common multiple of 4 and 5 is also 20, the duration is the same. Also, while you could come up with values that theoretically take a long time or even forever to loop, most aren't practically useful. We cannot perceive changes that are too small, plus there's numerical precision limitations, which can cause theoretically good jump values to appear either unchanging under casual observation, or to loop much quicker than expected.</p>
+						
+						<p>I think good jump values&mdash;besides zero&mdash;sit somewhere between 0.2 and 0.25, either positive or negative. I've come up with `6/25 = 0.24` and `5/24 ~~ 0.2083333` as a nice simple pair that fits the criteria. The first value completes six jump cycles after 25 phases, while the second completes five cycles after 24 phases. The total theoretical loop takes 600 phases, which is ten minutes at the speed of one phase per second.</p>
+						
+						<p>I'll leave the jump values at zero for the rest of this tutorial, just so I can keep the looping animations short.</p>
+					</section>
+					
+					<a href="seamless-looping/seamless-looping.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Animation Tweaks</h2>
+					
+					<p>Now that we have a basic flow animation, let's add some more configuration options to it, so we can fine-tune its appearance.</p>
+					
+					<section>
+						<h3>Tiling</h3>
+						
+						<p>First, let's make it possible to tile the texture that gets distorted. We cannot rely on the main tiling and offset of the surface shader, because that also affects the flow map. Instead, we need a separate tiling property for the texture. It typically only makes sense to distort a square texture, so we only need a single tiling value.</p>
+						
+						<p>To keep the flow the same regardless of the tiling, we have to apply it to the UV after flowing, but before adding the offset for phase B. So it has to be done in <code>FlowUVW</code>, which means that our function needs a tiling parameter.</p>
+						
+						<pre translate="no">float3 FlowUVW (
+	float2 uv, float2 flowVector, float2 jump,
+	<ins>float tiling,</ins> float time, bool flowB
+) {
+	&hellip;
+<del>//	uvw.xy = uv - flowVector * progress + phaseOffset;</del>
+	<ins>uvw.xy = uv - flowVector * progress;</ins>
+	<ins>uvw.xy *= tiling;</ins>
+	<ins>uvw.xy += phaseOffset;</ins>
+	&hellip;
+}</pre>
+						
+						<p>Add a tiling property to our shader as well, with 1 as the default value.</p>
+						
+						<pre translate="no">		_UJump ("U jump per phase", Range(-0.25, 0.25)) = 0.25
+		_VJump ("V jump per phase", Range(-0.25, 0.25)) = -0.25
+		<ins>_Tiling ("Tiling", Float) = 1</ins></pre>
+						
+						<p>Then add the needed variable and pass it to <code>FlowUVW</code>.</p>
+						
+						<pre translate="no">		float _UJump, _VJump<ins>, _Tiling</ins>;
+
+		&hellip;
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			&hellip;
+
+			float3 uvwA = FlowUVW(
+				IN.uv_MainTex, flowVector, jump, <ins>_Tiling,</ins> time, false
+			);
+			float3 uvwB = FlowUVW(
+				IN.uv_MainTex, flowVector, jump, <ins>_Tiling,</ins> time, true
+			);
+
+			&hellip;
+		}</pre>
+						
+						<figure>
+							<img src="animation-tweaks/material-tiling.png" width="320" height="56" alt="inspector"><br>
+							<video width="360" height="160" controls loop muted>
+								<source src="animation-tweaks/tiling-2.mp4" type="video/mp4">
+							</video>
+							<figcaption>Tiling set to 2, duration still 1s.</figcaption>
+						</figure>
+						
+						<p>When tiling is set to 2, the animation appears to flow twice as fast as before. But that's just because the texture has been scaled. The animation still takes one second to loop, when not jumping the UV.</p>
+					</section>
+					
+					<section>
+						<h3>Animation Speed</h3>
+						
+						<p>The speed of the animation can be directly controlled by scaling the time. This affects the entire animation, so also its duration. Add a speed shader property to support this.</p>
+						
+						<pre translate="no">		_Tiling ("Tiling", Float) = 1
+		<ins>_Speed ("Speed", Float) = 1</ins></pre>
+						
+						<p>Simply multiply <code>_Time.y</code> by the corresponding variable. The noise value should be added afterwards, so the time offset remains unaffected.</p>
+						
+						<pre translate="no">		float _UJump, _VJump, _Tiling<ins>, _Speed</ins>;
+
+		&hellip;
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			float2 flowVector = tex2D(_FlowMap, IN.uv_MainTex).rg * 2 - 1;
+			float noise = tex2D(_FlowMap, IN.uv_MainTex).a;
+			float time = _Time.y <ins>* _Speed</ins> + noise;
+			&hellip;
+		}</pre>
+						
+						<figure>
+							<img src="animation-tweaks/material-speed.png" width="320" height="38" alt="inspector"><br>
+							<video width="360" height="160" controls loop muted>
+								<source src="animation-tweaks/animation-speed.mp4" type="video/mp4">
+							</video>
+							<figcaption>Speed set to 0.5, duration now 2s.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Flow Strength</h3>
+						
+						<p>The velocity of the flow is dictated by the flow map. We can speed it up or slow it down by adjusting the animation speed, but that also affects the phase length and animation duration. Another way to change the apparent flow speed is by scaling the flow vectors. By adjusting the strength of the flow we can speed it up, slow it down, or even reverse it, without affecting time. This also changes the amount of distortion. Add a <em translate="no">Flow Strength</em> shader property to make this possible.</p>
+						
+						<pre translate="no">		_Speed ("Speed", Float) = 1
+		<ins>_FlowStrength ("Flow Strength", Float) = 1</ins></pre>
+						
+						<p>Simply multiply the flow vector by the corresponding variable before using it.</p>
+						
+						<pre translate="no">		float _UJump, _VJump, _Tiling, _Speed<ins>, _FlowStrength</ins>;
+
+		&hellip;
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			float2 flowVector = tex2D(_FlowMap, IN.uv_MainTex).rg * 2 - 1;
+			<ins>flowVector *= _FlowStrength;</ins>
+			&hellip;
+		}</pre>
+						
+						<figure>
+							<img src="animation-tweaks/material-flow-strength.png" width="320" height="38" alt="inspector"><br>
+							<video width="360" height="160" controls loop muted>
+								<source src="animation-tweaks/flow-strength.mp4" type="video/mp4">
+							</video>
+							<figcaption>Flow strength set to 0.25, duration still 2s.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Flow Offset</h3>
+						
+						<p>Another possible tweak is to control where the animation starts. Up to this point we've always started at zero distortion at the beginning of each phase, progressing to maximum distortion. As the phase's weight reaches 1 at the halfway point, the pattern is most clear when the distortion is at half strength. Thus, we mostly see a half-distorted texture. This configuration is often fine, but not always. For example, in Portal 2 the floating debris texture is mostly seen in its undistorted state. This is done by offsetting the flow by &minus;0.5 when distorting the UV coordinates.</p>
+						
+						<p>Let's support this too, by adding a <code>flowOffset</code> parameter to <code>FlowUVW</code>. Add it to the progress when multiplying with the flow vector only.</p>
+						
+						<pre translate="no">float3 FlowUVW (
+	float2 uv, float2 flowVector, float2 jump,
+	<ins>float flowOffset,</ins> float tiling, float time, bool flowB
+) {
+	float phaseOffset = flowB ? 0.5 : 0;
+	float progress = frac(time + phaseOffset);
+	float3 uvw;
+	uvw.xy = uv - flowVector * <ins>(</ins>progress <ins>+ flowOffset)</ins>;
+	uvw.xy *= tiling;
+	uvw.xy += phaseOffset;
+	uvw.xy += (time - progress) * jump;
+	uvw.z = 1 - abs(1 - 2 * progress);
+	return uvw;
+}</pre>
+						
+						<p>Next, add a property to control the flow offset the shader. Its practical values are 0 and &minus;0.5, but you can experiment with other values as well.</p>
+						
+						<pre translate="no">		_FlowStrength ("Flow Strength", Float) = 1
+		<ins>_FlowOffset ("Flow Offset", Float) = 0</ins></pre>
+						
+						<p>Pass the corresponding variable to <code>FlowUVW</code>.</p>
+						
+						<pre translate="no">		float _UJump, _VJump, _Tiling, _Speed, _FlowStrength<ins>, _FlowOffset</ins>;
+
+		&hellip;
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			&hellip;
+
+			float3 uvwA = FlowUVW(
+				IN.uv_MainTex, flowVector, jump,
+				<ins>_FlowOffset,</ins> _Tiling, time, false
+			);
+			float3 uvwB = FlowUVW(
+				IN.uv_MainTex, flowVector, jump,
+				<ins>_FlowOffset,</ins> _Tiling, time, true
+			);
+
+			&hellip;
+		}</pre>
+						
+						<figure>
+							<img src="animation-tweaks/material-flow-offset.png" width="320" height="38" alt="inspector"><br>
+							<video width="360" height="160" controls loop muted>
+								<source src="animation-tweaks/flow-offset.mp4" type="video/mp4">
+							</video>
+							<figcaption>Flow offset set to &minus;0.5.</figcaption>
+						</figure>
+						
+						<p>With a flow offset of &minus;0.5 there is no distortion at the peak of each phase. But the overall result is still distorted, due to the time offset.</p>
+					</section>
+					
+					<a href="animation-tweaks/animation-tweaks.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Texturing</h2>
+					
+					<p>Our distortion flow shader is now fully functional. Let's see how it looks with something else than the test texture that we've been using so far.</p>
+					
+					<section>
+						<h3>Abstract Water</h3>
+						
+						<p>The most common use of the distortion effect is to simulate a water surface. But because the distortion can be in any direction we cannot use a texture that suggests a specific flow direction. It's not really possible to make correct waves without suggesting a direction, but we don't need to be realistic. It just has to look like water when the texture is distorted and blended. For example, <a href="texturing/water.png">here</a> is a simple noise texture that combines one octave of low-frequency Perlin and Voronoi noise. It's an abstract grayscale representation of water, dark at the bottom and light at the top of waves.</p>
+						
+						<figure>
+							<img src="texturing/water.png" width="128" height="128">
+							<figcaption>Water texture.</figcaption>
+						</figure>
+						
+						<p>Use this texture for the albedo map of our material. Besides that, I've used no jump, a tiling of 3, speed of 0.5, flow strength of 0.1, and no flow offset.</p>
+						
+						<figure>
+							<img src="texturing/material.png" width="320" height="312" alt="inspector"><br>
+							<video width="360" height="160" controls loop muted>
+								<source src="texturing/flowing-water.mp4" type="video/mp4">
+							</video>
+							<figcaption>Flowing water.</figcaption>
+						</figure>
+						
+						<p>Even though the noise texture by itself doesn't really look like water, the distorted and animated result is starting to look like it. You can also check how it would look without distortion, by temporarily setting the flow strength to zero. This would represent stationary water, and it should look at least somewhat acceptable.</p>
+						
+						<figure>
+							<video width="360" height="160" controls loop muted>
+								<source src="texturing/stationary-water.mp4" type="video/mp4">
+							</video>
+							<figcaption>Stationary water.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Normal Map</h3>
+						
+						<p>The albedo map is only a preview, as flowing water is mostly defined by the way its surface changes vertically, which alters how it interacts with light. We need a normal map for that. <a href="texturing/water-normal.png">Here</a> is one, created by interpreting the albedo texture as a height map, but with the heights scaled by 0.1 so the effect isn't too strong.</p>
+						
+						<figure>
+							<img src="texturing/water-normal.png" width="128" height="128">
+							<figcaption>Normal map.</figcaption>
+						</figure>
+						
+						<p>Add a shader property for the normal map.</p>
+						
+						<pre translate="no">		[NoScaleOffset] _FlowMap ("Flow (RG, A noise)", 2D) = "black" {}
+		<ins>[NoScaleOffset] _NormalMap ("Normals", 2D) = "bump" {}</ins></pre>
+						
+						<p>Sample the normal map for both A and B, apply their weights, and use their normalized sum as the final surface normal.</p>
+						
+						<pre translate="no">		sampler2D _MainTex, _FlowMap, <ins>_NormalMap</ins>;
+		&hellip;
+		
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			&hellip;
+
+			<ins>float3 normalA = UnpackNormal(tex2D(_NormalMap, uvwA.xy)) * uvwA.z;</ins>
+			<ins>float3 normalB = UnpackNormal(tex2D(_NormalMap, uvwB.xy)) * uvwB.z;</ins>
+			<ins>o.Normal = normalize(normalA + normalB);</ins>
+				
+			fixed4 texA = tex2D(_MainTex, uvwA.xy) * uvwA.z;
+			fixed4 texB = tex2D(_MainTex, uvwB.xy) * uvwB.z;
+				
+			&hellip;
+		}</pre>
+						
+						<p>Add the normal map to our material. Also increase its smoothness to something like 0.7, then change the light so you get plenty of specular reflections. I kept the view the same but rotated the directional light 180&deg; to (50, 150, 0). Also set albedo to black, so we only see the effect of animating normals.</p>
+						
+						<figure>
+							<img src="texturing/material-normals.png" width="320" height="382" alt="inspector"><br>
+							<video width="360" height="160" controls loop muted>
+								<source src="texturing/flowing-water-normals.mp4" type="video/mp4">
+							</video>
+							<figcaption>Flowing water.</figcaption>
+						</figure>
+						
+						<p>The distorted and animated normal map creates a pretty convincing illusion of flowing water. But how does it hold up when the flow strength is zero?</p>
+						
+						<figure>
+							<video width="360" height="160" controls loop muted>
+								<source src="texturing/stationary-water-normals.mp4" type="video/mp4">
+							</video>
+							<figcaption>Stationary water.</figcaption>
+						</figure>
+						
+						<p>At first glance it might look fine, but if you focus on specific highlights it quickly becomes obvious that they alternate between two states. Fortunately, this can be solved by using jump values other than zero.</p>
+						
+						<figure>
+							<video width="360" height="160" controls loop muted>
+								<source src="texturing/maximum-jump-normals.mp4" type="video/mp4">
+							</video>
+							<figcaption>Maximum jump, speed set to 1.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Derivative Map</h3>
+						
+						<p>Although the resulting normals look good, averaging normals doesn't make much sense. As explained in <a href="../../rendering/part-6.1.html">Rendering 6, Bumpiness</a>, the correct approach would be to convert the normal vectors to height derivatives, add them, and then convert back to a normal vector. This is especially true for waves that travel across a surface.</p>
+						
+						<p>As we're typically using DXT5nm compression for our normal maps, we first have to reconstruct the Z component of both normals&mdash;which requires a square root computation&mdash;then convert to derivatives, combine, and normalize. But we don't need the original normal vectors, so we could also skip the conversion by storing the derivatives in a map, instead of the normals.</p>
+						
+						<p>A derivative map works just like a normal map, except it contains the height derivatives in the X and Y dimensions. However, without extra scaling the derivative map can only support surface angles up to 45&deg;, because the derivative of that is 1. As you typically won't use such steep waves, that limitation is acceptable.</p>
+						
+						<p><a href="texturing/water-derivative-height.png">Here</a> is a derivative map describing the same surface as the earlier normal map, with the X derivative stored in the A channel and the Y derivative stored in the G channel, just like a normal map. As a bonus, it also contains the original height map in its B channel. But again the derivatives are calculated by scaling the height by 0.1.</p>
+						
+						<figure>
+							<img src="texturing/water-derivative-height.png" width="128" height="128">
+							<figcaption>Derivative plus height map.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why not store the height scaled by 0.1 too?</h3>
+							<div>
+								<p>The height data is stored at full strength to minimize loss of precision.</p>
+							</div>
+						</aside>
+						
+						<p>As the texture isn't a normal map, import it as a regular 2D texture. Make sure to indicate that it is not an sRGB texture.</p>
+						
+						<figure>
+							<img src="texturing/derivative-height-import.png" width="320" height="156">
+							<figcaption>Import settings.</figcaption>
+						</figure>
+						
+						<p>Replace the normal map shader property with one for our derivate-plus-height map.</p>
+						
+						<pre translate="no"><del>//		[NoScaleOffset] _NormalMap ("Normals", 2D) = "bump" {}</del>
+		<ins>[NoScaleOffset] _DerivHeightMap ("Deriv (AG) Height (B)", 2D) = "black" {}</ins></pre>
+						
+						<p>Replace the shader variable, sampling, and normal construction as well. We cannot use <code>UnpackNormal</code> anymore, so create a custom <code>UnpackDerivativeHeight</code> function that puts the correct data channels in a float vector and decodes the derivatives.</p>
+						
+						<pre translate="no">		sampler2D _MainTex, _FlowMap, <ins>_DerivHeightMap</ins>;
+		&hellip;
+		
+		<ins>float3 UnpackDerivativeHeight (float4 textureData) {</ins>
+			<ins>float3 dh = textureData.agb;</ins>
+			<ins>dh.xy = dh.xy * 2 - 1;</ins>
+			<ins>return dh;</ins>
+		<ins>}</ins>
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			&hellip;
+
+<del>//			float3 normalA = UnpackNormal(tex2D(_NormalMap, uvwA.xy)) * uvwA.z;</del>
+<del>//			float3 normalB = UnpackNormal(tex2D(_NormalMap, uvwB.xy)) * uvwB.z;</del>
+<del>//			o.Normal = normalize(normalA + normalB);</del>
+
+			<ins>float3 dhA =</ins>
+				<ins>UnpackDerivativeHeight(tex2D(_DerivHeightMap, uvwA.xy)) * uvwA.z;</ins>
+			<ins>float3 dhB =</ins>
+				<ins>UnpackDerivativeHeight(tex2D(_DerivHeightMap, uvwB.xy)) * uvwB.z;</ins>
+			<ins>o.Normal = normalize(float3(-(dhA.xy + dhB.xy), 1));</ins>
+
+			&hellip;
+		}</pre>
+						
+						<figure>
+							<img src="texturing/material-derivative.png" width="320" height="144">
+							<figcaption>With derivative map instead of normal map.</figcaption>
+						</figure>
+						
+						<p>The resulting surface normals look almost the same as when using the normal map, they're just cheaper to compute. As we now also have access to the height data, we could use this to colorize the surface as well. This can be useful for debugging, so let's temporarily replace the original albedo.</p>
+						
+						<pre translate="no">			o.Albedo = c.rgb;
+			<ins>o.Albedo = dhA.z + dhB.z;</ins></pre>
+						
+						<figure>
+							<img src="texturing/height-as-color.jpg" width="360" height="160">
+							<figcaption>Using height as albedo.</figcaption>
+						</figure>
+						
+						<p>The surface appears lighter than when using the albedo texture, even through both contain the same height data. It's different because we're now using linear data, while the albedo texture is interpreted as sRGB data. To get the same result, we would have to manually convert the height data from gamma to linear color space. We can approximate this by simply squaring it.</p>
+						
+						<pre translate="no">			o.Albedo = <ins>pow(</ins>dhA.z + dhB.z<ins>, 2)</ins>;</pre>
+						
+						<figure>
+							<img src="texturing/height-squared-as-color.jpg" width="360" height="160">
+							<figcaption>Using squared height.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Height Scale</h3>
+						
+						<p>Another benefit of working with derivatives instead of normal vectors is that they can be easily scaled. The derived normals will match the adjusted surface. This makes it possible to correctly scale the height of the waves. Let's add a height scale property to our shader to support this.</p>
+						
+						<pre translate="no">		_FlowOffset ("Flow Offset", Float) = 0
+		<ins>_HeightScale ("Height Scale", Float) = 1</ins></pre>
+						
+						<p>All we need to do is factor the height scale into the sampled derivative plus height data.</p>
+						
+						<pre translate="no">		<ins>float _HeightScale;</ins>
+
+		&hellip;
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			&hellip;
+
+			float3 dhA =
+				UnpackDerivativeHeight(tex2D(_DerivHeightMap, uvwA.xy)) *
+				<ins>(</ins>uvwA.z <ins>* _HeightScale)</ins>;
+			float3 dhB =
+				UnpackDerivativeHeight(tex2D(_DerivHeightMap, uvwB.xy)) *
+				<ins>(</ins>uvwB.z <ins>* _HeightScale)</ins>;
+			&hellip;
+		}</pre>
+						
+						<p>But we can go a step further. We can make the height scale variable, based on the flow speed. The idea is that you get higher waves when there is strong flow, and lower waves when there is weak flow. To control this, add a second height scale property, for the modulated height based on flow speed. The other property remains a constant scale. The final height scale is found by combining both.</p>
+						
+						<pre translate="no">		_HeightScale ("Height Scale<ins>, Constant</ins>", Float) = <ins>0.25</ins>
+		<ins>_HeightScaleModulated ("Height Scale, Modulated", Float) = 0.75</ins></pre>
+						
+						<p>The flow speed is equal to the length of the flow vector. Multiply it by the modulating scale, then add the constant scale, and use that as the final scale for the derivatives plus height.</p>
+						
+						<pre translate="no">		float _HeightScale<ins>, _HeightScaleModulated</ins>;
+
+		&hellip;
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			&hellip;
+
+			<ins>float finalHeightScale =</ins>
+				<ins>length(flowVector) * _HeightScaleModulated + _HeightScale;</ins>
+
+			float3 dhA =
+				UnpackDerivativeHeight(tex2D(_DerivHeightMap, uvwA.xy)) *
+				(uvwA.z * <ins>finalHeightScale</ins>);
+			float3 dhB =
+				UnpackDerivativeHeight(tex2D(_DerivHeightMap, uvwB.xy)) *
+				(uvwB.z * <ins>finalHeightScale</ins>);
+			&hellip;
+		}</pre>
+						
+						<p>While you could base the height scale purely on the flow speed, it is a good idea to use at least a small constant scale, so the surface doesn't become flat where there is no flow. For example, use a constant scale of 0.1 and a modulated scale of 9. They don't need to add up to 1, the settings depend both on how strong you want the final normals to be and how much variety you want.</p>
+						
+						<figure>
+							<img src="texturing/material-height-strength.png" width="320" height="56" alt="material"><br>
+							<video width="360" height="160" controls loop muted>
+								<source src="texturing/height-strength.mp4" type="video/mp4">
+							</video>
+							<figcaption>Constant plus modulated height strength.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Flow Plus Speed</h3>
+						
+						<p>Rather than calculate the flow speed in the shader, we can store it in the flow map. While filtering during sampling can change the length of vectors nonlinearly, this difference only becomes significant when two very different vectors are interpolated. That would only be the case if there were sudden directional changes in our flow map. As long as we don't have those, sampling stored speed vectors produces almost the same result. Plus, it's not essential to get an exact match when modulating the height scale.</p>
+						
+						<p><a href="texturing/flow-speed-noise.png">Here</a> is the same flow map as before, but now with the speed values stored in its B channel.</p>
+						
+						<figure>
+							<img src="texturing/flow-speed-noise.png" width="128" height="128">
+							<figcaption>Flow map with speed in B channel.</figcaption>
+						</figure>
+						
+						<p>Use the sampled data instead of calculating the speed ourselves. As speed doesn't have a direction, it should not be converted, unlike the velocity vector.</p>
+						
+						<pre translate="no">		void surf (Input IN, inout SurfaceOutputStandard o) {
+<del>//			float flowVector = tex2D(_FlowMap, IN.uv_MainTex).rg * 2 - 1;</del>
+			<ins>float3 flow = tex2D(_FlowMap, IN.uv_MainTex).rgb;</ins>
+			<ins>flow.xy = flow.xy * 2 - 1;</ins>
+			<ins>flow *= _FlowStrength;</ins>
+			&hellip;
+
+			float3 uvwA = FlowUVW(
+				IN.uv_MainTex, <ins>flow.xy</ins>, jump,
+				_FlowOffset, _Tiling, time, false
+			);
+			float3 uvwB = FlowUVW(
+				IN.uv_MainTex, <ins>flow.xy</ins>, jump,
+				_FlowOffset, _Tiling, time, true
+			);
+
+			float finalHeightScale =
+				<ins>flow.z</ins> * _HeightScaleModulated + _HeightScale;
+
+			&hellip;
+		}</pre>
+						
+						<p>We wrap up by restoring the original albedo. I also change the material color to a blue tint, specifically (78, 131, 169).</p>
+						
+						<pre translate="no"><del>//			o.Albedo = pow(dhA.z + dhB.z, 2);</del></pre>
+						
+						<figure>
+							<video width="360" height="160" controls loop muted>
+								<source src="texturing/final-water.mp4" type="video/mp4">
+							</video>
+							<figcaption>Final water, with maximum jump.</figcaption>
+						</figure>
+						
+						<p>The most important quality of a believable water effect is how good its animated surface normals are. Once those are good, you could can add effects like more advanced reflections, transparency, and refraction. But even without those additional features, the surface will already be interpreted as water.</p>
+						
+						<p>The next tutorial is <a href="../directional-flow/index.html">Directional Flow</a>.</p>
+					</section>
+					
+					<a href="texturing/texturing.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Texture-Distortion.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

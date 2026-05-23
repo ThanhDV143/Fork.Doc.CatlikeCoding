@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/hex-map/part-5/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/hex-map/part-5/tutorial-image.jpg">
+		<meta property="og:title" content="Hex Map 5">
+		<meta property="og:description" content="A Unity Hex Map tutorial about supporting large maps. Part 5 of 27.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hex Map 5</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/hex-map/part-5/#article",
+				"headline": "Hex Map 5",
+				"alternativeHeadline": "Larger Maps",
+				"datePublished": "2016-05-24",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Hex Map tutorial about supporting large maps. Part 5 of 27.",
+				"image": "https://catlikecoding.com/unity/tutorials/hex-map/part-5/tutorial-image.jpg",
+				"dependencies": "Unity 5.3.1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/hex-map/", "name": "Hex Map" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				EdgeVertices: 1,
+				HexCell: 1,
+				HexEdgeType: 1,
+				HexCoordinates: 1,
+				HexCoordinatesDrawer: 1,
+				HexDirection: 1,
+				HexDirectionExtensions: 1,
+				HexGrid: 1,
+				HexGridChunk: 1,
+				HexMapCamera: 1,
+				HexMapEditor: 1,
+				HexMesh: 1,
+				HexMetrics: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Hex Map</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hex Map 5</h1>
+					<p>Larger Maps</p>
+					<ul>
+						<li>Split the grid into chunks.</li>
+						<li>Control the camera.</li>
+						<li>Paint color and elevation separately.</li>
+						<li>Use a larger cell brush.</li>
+					</ul>
+				</header>
+
+				<p>This tutorial is the fifth part of a series about <a href="../index.html">hexagon maps</a>. Up to this point we've worked with a very small map. It's time we scale it up.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>It's time to get big.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Grid Chunks</h2>
+					
+					<p>We cannot make our grid too large, because we run into the limits of what can fit in a single mesh. The solution? Use more than one mesh. To do so, we have to partition our grid into multiple chunks. We'll use rectangular chunks of a fixed size.</p>
+					
+					<figure>
+						<img src="grid-chunks/chunks.png" width="400" height="258">
+						<figcaption>Partitioning a grid into 3 by 3 segments.</figcaption>
+					</figure>
+					
+					<p>Let's use 5 by 5 blocks, so that's 25 cells per chunk. Define that in <code>HexMetrics</code>.</p>
+					
+					<pre translate="no">	<ins>public const int chunkSizeX = 5, chunkSizeZ = 5;</ins></pre>
+					
+					<aside>
+						<h3>What is a good chunk size?</h3>
+						<div>
+							<p>It depends. Using larger chunks means that you'll have fewer but larger meshes. This leads to fewer draw calls. But smaller chunks work better with frustum culling, which leads to fewer triangles being drawn. The pragmatic approach is to just pick a size and fine-tune later.</p>
+						</div>
+					</aside>
+					
+					<p>Now we can no longer use any size for our grid, we have to use multiples of the chunk size. So let's change <code>HexGrid</code> so it defines its size in chunks instead of individual cells. Set it to 4 by 3 chunks by default, for a total of 12 chunks and 300 cells. This gives us a nice small test map.</p>
+					
+					<pre translate="no">	<ins>public int chunkCountX = 4, chunkCountZ = 3;</ins></pre>
+					
+					<p>We'll still use <code>width</code> and <code>height</code>, but they should become private. We'll also rename these fields to <code>cellCountX</code> and <code>cellCountZ</code>. Use your editor to rename all occurrences of these variables in one go. Now it's clear when we're dealing with chunk or cell counts.</p>
+					
+					<pre translate="no"><del>//	public int width = 6;</del>
+<del>//	public int height = 6;</del>
+	
+	<ins>int cellCountX, cellCountZ;</ins></pre>
+					
+					
+					<figure>
+						<img src="grid-chunks/chunk-count.png" width="320" height="148">
+						<figcaption>Specifying size in chunks.</figcaption>
+					</figure>
+					
+					<p>Adjust <code>Awake</code> so the cell counts are derived from the chunk counts before they are needed. Put the creation of the cells in their own method as well, to keep <code>Awake</code> tidy.</p>
+					
+					<pre translate="no">	void Awake () {
+		HexMetrics.noiseSource = noiseSource;
+
+		gridCanvas = GetComponentInChildren&lt;Canvas>();
+		hexMesh = GetComponentInChildren&lt;HexMesh>();
+
+		<ins>cellCountX = chunkCountX * HexMetrics.chunkSizeX;</ins>
+		<ins>cellCountZ = chunkCountZ * HexMetrics.chunkSizeZ;</ins>
+
+		<ins>CreateCells();</ins>
+	}
+
+	<ins>void CreateCells () {</ins>
+		cells = new HexCell[cellCountZ * cellCountX];
+
+		for (int z = 0, i = 0; z &lt; cellCountZ; z++) {
+			for (int x = 0; x &lt; cellCountX; x++) {
+				CreateCell(x, z, i++);
+			}
+		}
+	<ins>}</ins></pre>
+					
+					<section>
+						<h3>Chunk Prefab</h3>
+						
+						<p>We need a new component type to represents our grid chunks.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+<ins>using UnityEngine.UI;</ins>
+
+<ins>public class HexGridChunk : MonoBehaviour {</ins>
+<ins>}</ins></pre>
+						
+						<p>Next, create a chunk prefab. Do this by duplicating the <em translate="no">Hex Grid</em> object and renaming it to <em translate="no">Hex Grid Chunk</em>. Remove its <code>HexGrid</code> component and give it a <code>HexGridChunk</code> component instead. Then turn it into a prefab and remove the object from the scene.</p>
+						
+						<figure>
+							<img alt="project" src="grid-chunks/chunk-prefab-project.png" width="148" height="50"><br>
+							<img alt="inspector" src="grid-chunks/chunk-prefab-inspector.png" width="320" height="156">
+							<figcaption>Chunk prefab, with its own canvas and mesh.</figcaption>
+						</figure>
+						
+						<p>As <code>HexGrid</code> will be instantiating these chunks, give it a reference to the chunk prefab.</p>
+						
+						<pre translate="no">	<ins>public HexGridChunk chunkPrefab;</ins></pre>
+						
+						<figure>
+							<img src="grid-chunks/grid-with-chunk-prefab.png" width="320" height="166">
+							<figcaption>Now with chunks.</figcaption>
+						</figure>
+						
+						
+						<p>Instantiating chunks looks a lot like instantiating cells. Keep track of them with an array, and use a double loop to fill it.</p>
+						
+						<pre translate="no">	<ins>HexGridChunk[] chunks;</ins>
+
+	void Awake () {
+		&hellip;
+
+		<ins>CreateChunks();</ins>
+		CreateCells();
+	}
+
+	<ins>void CreateChunks () {</ins>
+		<ins>chunks = new HexGridChunk[chunkCountX * chunkCountZ];</ins>
+
+		<ins>for (int z = 0, i = 0; z &lt; chunkCountZ; z++) {</ins>
+			<ins>for (int x = 0; x &lt; chunkCountX; x++) {</ins>
+				<ins>HexGridChunk chunk = chunks[i++] = Instantiate(chunkPrefab);</ins>
+				<ins>chunk.transform.SetParent(transform);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>The initialization of a chunk is similar to how we used to initialize the hex grid. It sets things up in <code>Awake</code> and triangulates in <code>Start</code>. It need a reference to its canvas and mesh, and an array for its cells. However, it will not create these cells. We'll still let the grid do that.</p>
+						
+						<pre translate="no">public class HexGridChunk : MonoBehaviour {
+
+	<ins>HexCell[] cells;</ins>
+
+	<ins>HexMesh hexMesh;</ins>
+	<ins>Canvas gridCanvas;</ins>
+
+	<ins>void Awake () {</ins>
+		<ins>gridCanvas = GetComponentInChildren&lt;Canvas>();</ins>
+		<ins>hexMesh = GetComponentInChildren&lt;HexMesh>();</ins>
+
+		<ins>cells = new HexCell[HexMetrics.chunkSizeX * HexMetrics.chunkSizeZ];</ins>
+	<ins>}</ins>
+	
+	<ins>void Start () {</ins>
+		<ins>hexMesh.Triangulate(cells);</ins>
+	<ins>}</ins>
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Assigning Cells to Chunks</h3>
+						
+						<p><code>HexGrid</code> is still creating all the cells. This is fine, but it now has to add each cell to the correct chunk, instead of setting them up with its own mesh and canvas.</p>
+						
+						<pre translate="no">	void CreateCell (int x, int z, int i) {
+		&hellip;
+
+		HexCell cell = cells[i] = Instantiate&lt;HexCell>(cellPrefab);
+<del>//		cell.transform.SetParent(transform, false);</del>
+		cell.transform.localPosition = position;
+		cell.coordinates = HexCoordinates.FromOffsetCoordinates(x, z);
+		cell.color = defaultColor;
+
+		&hellip;
+
+		Text label = Instantiate&lt;Text>(cellLabelPrefab);
+<del>//		label.rectTransform.SetParent(gridCanvas.transform, false);</del>
+		label.rectTransform.anchoredPosition =
+			new Vector2(position.x, position.z);
+		label.text = cell.coordinates.ToStringOnSeparateLines();
+		cell.uiRect = label.rectTransform;
+
+		cell.Elevation = 0;
+
+		<ins>AddCellToChunk(x, z, cell);</ins>
+	}
+	
+	<ins>void AddCellToChunk (int x, int z, HexCell cell) {</ins>
+	<ins>}</ins></pre>
+						
+						<p>We can find the correct chunk via integer divisions of <code>x</code> and <code>z</code> by the chunk sizes.</p>
+						
+						<pre translate="no">	void AddCellToChunk (int x, int z, HexCell cell) {
+		<ins>int chunkX = x / HexMetrics.chunkSizeX;</ins>
+		<ins>int chunkZ = z / HexMetrics.chunkSizeZ;</ins>
+		<ins>HexGridChunk chunk = chunks[chunkX + chunkZ * chunkCountX];</ins>
+	}</pre>
+						
+						<p>Using the intermediate results, we can also determine the cell's index local to its chunk. Once we have that, we can add the cell to the chunk.</p>
+						
+						<pre translate="no">	void AddCellToChunk (int x, int z, HexCell cell) {
+		int chunkX = x / HexMetrics.chunkSizeX;
+		int chunkZ = z / HexMetrics.chunkSizeZ;
+		HexGridChunk chunk = chunks[chunkX + chunkZ * chunkCountX];
+
+		<ins>int localX = x - chunkX * HexMetrics.chunkSizeX;</ins>
+		<ins>int localZ = z - chunkZ * HexMetrics.chunkSizeZ;</ins>
+		<ins>chunk.AddCell(localX + localZ * HexMetrics.chunkSizeX, cell);</ins>
+	}</pre>
+						
+						<p>The <code>HexGridChunk.AddCell</code> method then puts the cell in its own array. Then it sets the parents of the cell and its UI.</p>
+						
+						<pre translate="no">	<ins>public void AddCell (int index, HexCell cell) {</ins>
+		<ins>cells[index] = cell;</ins>
+		<ins>cell.transform.SetParent(transform, false);</ins>
+		<ins>cell.uiRect.SetParent(gridCanvas.transform, false);</ins>
+	<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Cleaning Up</h3>
+						
+						<p>At this point <code>HexGrid</code> can get rid of its canvas and hex mesh child objects and code.</p>
+						
+						<pre translate="no"><del>//	Canvas gridCanvas;</del>
+<del>//	HexMesh hexMesh;</del>
+
+	void Awake () {
+		HexMetrics.noiseSource = noiseSource;
+
+<del>//		gridCanvas = GetComponentInChildren&lt;Canvas>();</del>
+<del>//		hexMesh = GetComponentInChildren&lt;HexMesh>();</del>
+
+		&hellip;
+	}
+
+<del>//	void Start () {</del>
+<del>//		hexMesh.Triangulate(cells);</del>
+<del>//	}</del>
+
+<del>//	public void Refresh () {</del>
+<del>//		hexMesh.Triangulate(cells);</del>
+<del>//	}</del></pre>
+						
+						<p>Because we got rid of <code>Refresh</code>, <code>HexMapEditor</code> should no longer use it.</p>
+						
+						<pre translate="no">	void EditCell (HexCell cell) {
+		cell.color = activeColor;
+		cell.Elevation = activeElevation;
+<del>//		hexGrid.Refresh();</del>
+	}</pre>
+						
+						<figure>
+							<img src="grid-chunks/clean-hex-grid.png" width="120" height="80">
+							<figcaption>Cleaned up hex grid.</figcaption>
+						</figure>
+						
+						<p>After entering play mode, the map will still look the same. But the object hierarchy will be different. <em translate="no">Hex Grid</em> now spawns child chunk objects, which contain the cells, along with their mesh and canvas.</p>
+						
+						<figure>
+							<img src="grid-chunks/chunk-child-objects.png" width="170" height="410">
+							<figcaption>Child chunks in play mode.</figcaption>
+						</figure>
+						
+						<p>There is probably something wrong with the cell labels. We initially set the label's width to 5. This was enough to show two symbols, which was fine for the small map that we used up to this point. But now we can get coordinates like &minus;10, which have three symbols. These won't fit and will be cut off. To fix this, increase the cell label width to 10, or even more.</p>
+					
+						<figure>
+							<img alt="inspector" src="grid-chunks/cell-label-width.png" width="320" height="128">
+							<img alt="scene" src="grid-chunks/4x3-chunks.png" width="420" height="170">
+							<figcaption>Wider cell labels.</figcaption>
+						</figure>
+						
+						<p>We can now create much larger maps! As we generate the entire grid on startup, it might take a while before huge maps are created. But once that's finished, you have a large area to play with.</p>
+					</section>
+					
+					<section>
+						<h3>Fixing Editing</h3>
+						
+						<p>Right now editing doesn't seem to work, because we no longer refresh the grid. We have to refresh the individual chunks, so let's add a <code>Refresh</code> method to <code>HexGridChunk</code>.</p>
+						
+						<pre translate="no">	<ins>public void Refresh () {</ins>
+		<ins>hexMesh.Triangulate(cells);</ins>
+	<ins>}</ins></pre>
+						
+						<p>When do we invoke this method? We used to refresh the entire grid every time, because there was only a single mesh. But now we have many chunks. Instead of refreshing them all every time, it would be much more efficient if we only refresh those chunks that have changed. Editing large maps would become very sluggish otherwise.</p>
+						
+						<p>How do we know which chunk to refresh? A simple way is to make sure each cell knows which chunk it belongs to. Then the cell can refresh its chunk whenever it is changed. So give <code>HexCell</code> a reference to its chunk.</p>
+						
+						<pre translate="no">	<ins>public HexGridChunk chunk;</ins></pre>
+						
+						<p><code>HexGridChunk</code> can assign itself to the cell when it is added.</p>
+						
+						<pre translate="no">	public void AddCell (int index, HexCell cell) {
+		cells[index] = cell;
+		<ins>cell.chunk = this;</ins>
+		cell.transform.SetParent(transform, false);
+		cell.uiRect.SetParent(gridCanvas.transform, false);
+	}</pre>
+						
+						<p>With that hooked up, add a <code>Refresh</code> method to <code>HexCell</code> as well. Whenever a cell is refreshed, it simply refreshes its chunk.</p>
+						
+						<pre translate="no">	<ins>void Refresh () {</ins>
+		<ins>chunk.Refresh();</ins>
+	<ins>}</ins>
+</pre>
+						
+						<p>We don't need to make <code>HexCell.Refresh</code> public, because the cell itself knows best when it has changed. For example, after it has adjusted its elevation.</p>
+						
+						<pre translate="no">	public int Elevation {
+		get {
+			return elevation;
+		}
+		set {
+			&hellip;
+			<ins>Refresh();</ins>
+		}
+	}</pre>
+						
+						<p>Actually, it would only need to refresh if its elevation has been set to a different value. It won't even need to recompute anything if we assign the same elevation to it later. So we can bail out at the start of the setter.</p>
+						
+						<pre translate="no">	public int Elevation {
+		get {
+			return elevation;
+		}
+		set {
+			<ins>if (elevation == value) {</ins>
+				<ins>return;</ins>
+			<ins>}</ins>
+			&hellip;
+		}
+	}</pre>
+						
+						<p>However, this will also skip the computation the first time the elevation is set to zero, because that is currently the grid's default elevation. To prevent this, make sure that the initial value is something that will never be used.</p>
+						
+						<pre translate="no">	int elevation <ins>= int.MinValue</ins>;</pre>
+						
+						<aside>
+							<h3>What's <code>int.MinValue</code>?</h3>
+							<div>
+								<p>It is the lowest value that an integer can have. As C# integers are 32 bit numbers, there are 2<sup>32</sup> possible integers, divided between positive and negative numbers, and zero. One bit is used to indicate whether a number is negative.</p>
+								
+								<p>The minimum is &minus;2<sup>31</sup> = &minus;2,147,483,648. We'll never use that elevation level!</p>
+								
+								<p>The maximum is 2<sup>31</sup> &minus; 1 = 2,147,483,647. It's one less than 2<sup>31</sup> because of zero.</p>
+							</div>
+						</aside>
+						
+						<p>To detect a change to a cell's color, we have to turn it into a property  as well. Rename it to the capitalized <code>Color</code>, then turn it into a property with a private <code>color</code> variable. The default color value is transparent black, which is fine.</p>
+						
+						<pre translate="no">	<ins>public Color Color {</ins>
+		<ins>get {</ins>
+			<ins>return color;</ins>
+		<ins>}</ins>
+		<ins>set {</ins>
+			<ins>if (color == value) {</ins>
+				<ins>return;</ins>
+			<ins>}</ins>
+			<ins>color = value;</ins>
+			<ins>Refresh();</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	<ins>Color color;</ins></pre>
+						
+						<p>We now get null-reference exceptions when entering play mode. That's because we set the color and elevation to their default values, before assigning the cell to its chunk. It is fine that we don't refresh the chunks at this point, because we'll triangulate them all after initialization is done. In other words, only refresh the chunk if it has been assigned.</p>
+						
+						<pre translate="no">	void Refresh () {
+		<ins>if (chunk) {</ins>
+			chunk.Refresh();
+		<ins>}</ins>
+	}</pre>
+						
+						<p>We can once again edit cells! However, there is a problem. Seams can appear when painting along chunk boundaries.</p>
+						
+						<figure>
+							<img src="grid-chunks/incorrect-editing.png" width="270" height="270">
+							<figcaption>Errors at chunk boundaries.</figcaption>
+						</figure>
+						
+						<p>This makes sense, because when one cell changes, all connections with its neighbors change as well. And those neighbors can end up in different chunks. The simplest solution is to refresh the chunks of all neighbors as well, if they're different.</p>
+						
+						<pre translate="no">	void Refresh () {
+		if (chunk) {
+			chunk.Refresh();
+			<ins>for (int i = 0; i &lt; neighbors.Length; i++) {</ins>
+				<ins>HexCell neighbor = neighbors[i];</ins>
+				<ins>if (neighbor != null &amp;&amp; neighbor.chunk != chunk) {</ins>
+					<ins>neighbor.chunk.Refresh();</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+		}
+	}</pre>
+						
+						<p>While this works, we can end up refreshing a single chunk multiple times. And once we start painting more than one cell at a time, this will only get worse.</p>
+						
+						<p>But we don't have to immediately triangulate when a chunk is refreshed. Instead, we can take note that an update is needed, and triangulate once editing is finished.</p>
+						
+						<p>Because <code>HexGridChunk</code> doesn't do anything else, we can use its enabled state to signal that an update is needed. Whenever it is refreshed, we enable the component. Enabling it multiple times doesn't change anything. Later on, the component is updated. We'll triangulate at that point, and disable the component again.</p>
+							
+						<p>We'll use <code>LateUpdate</code> instead of <code>Update</code>, so we can be sure that triangulation happens after editing is finished for the current frame.</p>
+						
+						<pre translate="no">	public void Refresh () {
+<del>//		hexMesh.Triangulate(cells);</del>
+		<ins>enabled = true;</ins>
+	}
+
+	<ins>void LateUpdate () {</ins>
+		<ins>hexMesh.Triangulate(cells);</ins>
+		<ins>enabled = false;</ins>
+	<ins>}</ins></pre>
+						
+						<aside>
+							<h3>What is the difference between <code>Update</code> and <code>LateUpdate</code>?</h3>
+							<div>
+								<p>Each frame, the <code>Update</code> methods of enabled components are invoked at some point, in arbitrary order. After that's finished, the same happens with <code>LateUpdate</code> methods. So there are two update steps, an early and a late one.</p>
+							</div>
+						</aside>
+						
+						<p>Because our component is enabled by default, we don't need to explicitly triangulate in <code>Start</code> anymore. So we can remove that method.</p>
+						
+						<pre translate="no"><del>//	void Start () {</del>
+<del>//		hexMesh.Triangulate(cells);</del>
+<del>//	}</del></pre>
+						
+						<figure>
+							<img src="grid-chunks/20x20-chunks.png" width="440" height="200">
+							<figcaption>20 by 20 chunks, containing 10,000 cells.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Sharing Lists</h3>
+						
+						<p>Although we have significantly changed how we triangulate our grid, <code>HexMesh</code> is still the same. All it needs is an array of cells, and it will do its job. Whether there is a single or many hex meshes doesn't matter. But we hadn't considered using multiple of them yet. Maybe there is an improvement we could make?</p>
+						
+						<p>The lists that <code>HexMesh</code> uses are effectively temporary buffers. They are only used during triangulation. And chunks are triangulated one at a time. So we really only need one set of lists, not one set per hex mesh object. We can do so by making the lists static.</p>
+						
+						<pre translate="no">	<ins>static</ins> List&lt;Vector3> vertices <ins>= new List&lt;Vector3>()</ins>;
+	<ins>static</ins> List&lt;Color> colors <ins>= new List&lt;Color>()</ins>;
+	<ins>static</ins> List&lt;int> triangles <ins>= new List&lt;int>()</ins>;
+
+	void Awake () {
+		GetComponent&lt;MeshFilter>().mesh = hexMesh = new Mesh();
+		meshCollider = gameObject.AddComponent&lt;MeshCollider>();
+		hexMesh.name = "Hex Mesh";
+<del>//		vertices = new List&lt;Vector3>();</del>
+<del>//		colors = new List&lt;Color>();</del>
+<del>//		triangles = new List&lt;int>();</del>
+	}</pre>
+						
+						<aside>
+							<h3>Do static lists make much of a difference?</h3>
+							<div>
+								<p>It is a simple change to make and reflects how the lists are used. So it's worth doing, even though we shouldn't worry much about performance at this point.</p>
+								
+								<p>It is a bit more efficient, as far less memory allocations are needed when the lists are shared. When using 20 by 20 chunks, it saves just over 100MB.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="grid-chunks/grid-chunks.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Camera Controls</h2>
+					
+					<p>Having a large map is nice, but it is no good if we cannot see it. To reach the entire map, we have to move the camera around. Zooming would also be quite handy. So let's create a camera rig that allows this.</p>
+					
+					<p>Create an empty object and name it <em translate="no">Hex Map Camera</em>. Reset its transform component so it sits at the origin, without any rotation or scale adjustment. Give it a child object named <em translate="no">Swivel</em> and give that one a child object named <em translate="no">Stick</em>. Make the main camera a child of the stick, and reset its transform component.</p>
+					
+					<figure>
+						<img src="camera-controls/hierarchy.png" width="140" height="70">
+						<figcaption>Camera hierarchy.</figcaption>
+					</figure>
+					
+					<p>The job of the swivel is to control the angle at which the camera looks at the map. Set its rotation to (45, 0, 0). The stick controls how far away the camera is. Set its position to (0, 0, -45).</p>
+					
+					<p>Now we need a component to control this rig. Assign this component to the root of the camera hierarchy. Give it a reference to its swivel and stick, retrieving them in <code>Awake</code>.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class HexMapCamera : MonoBehaviour {</ins>
+
+	<ins>Transform swivel, stick;</ins>
+
+	<ins>void Awake () {</ins>
+		<ins>swivel = transform.GetChild(0);</ins>
+		<ins>stick = swivel.GetChild(0);</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+					
+					<figure>
+						<img src="camera-controls/inspector.png" width="320" height="156">
+						<figcaption>Hex map camera.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Zooming</h3>
+						
+						<p>The first feature we'll support is zooming. We can keep track of the current zoom level with a float variable. A value of 0 means that we are fully zoomed out, while a value of 1 is fully zoomed in. Let's start at maximum zoom.</p>
+						
+						<pre translate="no">	<ins>float zoom = 1f;</ins></pre>
+						
+						<p>Zooming is usually done with the mouse wheel, or an analogous input method. We can do so by using the default <em translate="no">Mouse ScrollWheel</em> input axis. Add an <code>Update</code> method that checks whether there is any input delta, and if so invoke a method to adjust the zoom.</p>
+						
+						<pre translate="no">	<ins>void Update () {</ins>
+		<ins>float zoomDelta = Input.GetAxis("Mouse ScrollWheel");</ins>
+		<ins>if (zoomDelta != 0f) {</ins>
+			<ins>AdjustZoom(zoomDelta);</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+	
+	<ins>void AdjustZoom (float delta) {</ins>
+	<ins>}</ins></pre>
+						
+						<p>To adjust the zoom level, simply add the delta to it, then clamp to keep it in the 0&ndash;1 range.</p>
+						
+						<pre translate="no">	void AdjustZoom (float delta) {
+		<ins>zoom = Mathf.Clamp01(zoom + delta);</ins>
+	}</pre>
+						
+						<p>As we zoom in and out, the distance of the camera should change accordingly. We do this by adjusting the stick's Z position. Add two public floats to configure the stick's position at minimum and maximum zoom. As we're developing on a relatively small map, set them to -250 and -45.</p>
+						
+						<pre translate="no">	<ins>public float stickMinZoom, stickMaxZoom;</ins></pre>
+						
+						<p>After adjusting the zoom, linearly interpolate between these two values based on the new zoom value. Then update the stick's position.</p>
+						
+						<pre translate="no">	void AdjustZoom (float delta) {
+		zoom = Mathf.Clamp01(zoom + delta);
+
+		<ins>float distance = Mathf.Lerp(stickMinZoom, stickMaxZoom, zoom);</ins>
+		<ins>stick.localPosition = new Vector3(0f, 0f, distance);</ins>
+	}</pre>
+						
+						<figure>
+							<img src="camera-controls/stick-min-max.png" width="320" height="76" alt="inspector"><br>
+							<video width="320" height="200" controls loop muted>
+								<source src="camera-controls/stick-min-max.mp4" type="video/mp4">
+							</video>
+							<figcaption>Stick min and max.</figcaption>
+						</figure>
+						
+						<p>Zooming now works, but it is currently not that useful. Typically, games have their camera transition to a top-down view as it zooms out. We can do so by rotating the swivel. So add min and max variables for the swivel as well. Set them to 90 and 45.</p>
+						
+						<pre translate="no">	<ins>public float swivelMinZoom, swivelMaxZoom;</ins></pre>
+						
+						<p>Just like with the arm position, interpolate to find the appropriate zoom angle. Then set the swivel's rotation.</p>
+						
+						<pre translate="no">	void AdjustZoom (float delta) {
+		zoom = Mathf.Clamp01(zoom + delta);
+
+		float distance = Mathf.Lerp(stickMinZoom, stickMaxZoom, zoom);
+		stick.localPosition = new Vector3(0f, 0f, distance);
+
+		<ins>float angle = Mathf.Lerp(swivelMinZoom, swivelMaxZoom, zoom);</ins>
+		<ins>swivel.localRotation = Quaternion.Euler(angle, 0f, 0f);</ins>
+	}</pre>
+						
+						<figure>
+							<img src="camera-controls/swivel-min-max.png" width="320" height="112" alt="inspector"><br>
+							<video width="320" height="200" controls loop muted>
+								<source src="camera-controls/swivel-min-max.mp4" type="video/mp4">
+							</video>
+							<figcaption>Swivel min and max.</figcaption>
+						</figure>
+						
+						<p>You can tweak how quickly the zoom changes by adjusting the sensitivity of the scroll wheel input settings. You can find it via <em translate="no">Edit / Project Settings / Input</em>. For example, decreasing it from its default 0.1 to 0.025 results in a slower, smoother zoom experience.</p>
+						
+						<figure>
+							<img src="camera-controls/scroll-wheel-input.png" width="320" height="290">
+							<figcaption>Scroll wheel input settings.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Moving</h3>
+						
+						<p>Next up is camera movement. We have to check for movement in the X and Z direction in <code>Update</code>, just like we do for zoom. We can use the default <em translate="no">Horizontal</em> and <em translate="no">Vertical</em> input axes for this. This allows use to move the camera with the arrow keys and the WASD keys.</p>
+						
+						<pre translate="no">	void Update () {
+		float zoomDelta = Input.GetAxis("Mouse ScrollWheel");
+		if (zoomDelta != 0f) {
+			AdjustZoom(zoomDelta);
+		}
+
+		<ins>float xDelta = Input.GetAxis("Horizontal");</ins>
+		<ins>float zDelta = Input.GetAxis("Vertical");</ins>
+		<ins>if (xDelta != 0f || zDelta != 0f) {</ins>
+			<ins>AdjustPosition(xDelta, zDelta);</ins>
+		<ins>}</ins>
+	}
+
+	<ins>void AdjustPosition (float xDelta, float zDelta) {</ins>
+	<ins>}</ins></pre>
+						
+						<p>The most straightforward approach is to fetch the current position of the camera rig, add the X and Z deltas to it, and assign the result back to the rig's position.</p>
+						
+						<pre translate="no">	void AdjustPosition (float xDelta, float zDelta) {
+		<ins>Vector3 position = transform.localPosition;</ins>
+		<ins>position += new Vector3(xDelta, 0f, zDelta);</ins>
+		<ins>transform.localPosition = position;</ins>
+	}</pre>
+						
+						<p>This gets the camera moving while we hold down the arrow or WASD keys, but not at a consistent velocity. It depends on the frame rate. To determine the distance to move, we have use the time delta, as well as a desired movement speed. So add a public <code>moveSpeed</code> variable and set it to 100. Then factor that and the time delta into the position delta.</p>
+						
+						<pre translate="no">	<ins>public float moveSpeed;</ins>
+						
+	void AdjustPosition (float xDelta, float zDelta) {
+		<ins>float distance = moveSpeed * Time.deltaTime;</ins>
+		
+		Vector3 position = transform.localPosition;
+		position += new Vector3(xDelta, 0f, zDelta) <ins>* distance</ins>;
+		transform.localPosition = position;
+	}</pre>
+						
+						<figure>
+							<img src="camera-controls/move-speed.png" width="320" height="130">
+							<figcaption>Move speed.</figcaption>
+						</figure>
+						
+						<p>We can now move with a constant velocity along either the X or Z axis. But when moving along both at the same time &ndash; diagonally &ndash; we end up going faster. To fix this, we have to normalize the delta vector. That allows us to use it as a direction.</p>
+
+						<pre translate="no">	void AdjustPosition (float xDelta, float zDelta) {
+		<ins>Vector3 direction =</ins> new Vector3(xDelta, 0f, zDelta)<ins>.normalized;</ins>
+		float distance = moveSpeed * Time.deltaTime;
+
+		Vector3 position = transform.localPosition;
+		position += <ins>direction</ins> * distance;
+		transform.localPosition = position;
+	}</pre>
+						
+						<p>Diagonal movement is now correct, but all of a sudden the camera keeps moving for quite a while after we release all keys. This happens because the input axes don't immediately jump to their extreme values when a key in pressed. Instead, they take a while to get there. The same is true for when you release the keys. It takes a while before the axes return to zero. However, because we normalize the input values, we maintain maximum velocity all the time.</p>
+						
+						<p>We could adjust the input settings to get rid of the delays, but they give a smooth feeling to the input which is worth keeping. What we can do is apply the most extreme axis value as a damping factor to the movement.</p>
+						
+						<pre translate="no">		Vector3 direction = new Vector3(xDelta, 0f, zDelta).normalized;
+		<ins>float damping = Mathf.Max(Mathf.Abs(xDelta), Mathf.Abs(zDelta));</ins>
+		float distance = moveSpeed <ins>* damping</ins> * Time.deltaTime;
+</pre>
+						
+						<figure>
+							<video width="320" height="200" controls loop muted>
+								<source src="camera-controls/damped-movement.mp4" type="video/mp4">
+							</video>
+							<figcaption>Damped movement.</figcaption>
+						</figure>
+						
+						<p>Movement now works fine, at least when zoomed in. When zoomed out, it is way too slow. We should speed up when zooming out. This can be done by replacing our single <code>moveSpeed</code> variable with two for minimum and maximum zoom, and interpolate. Set them to 400 and 100.</p>
+						
+						<pre translate="no"><del>//	public float moveSpeed;</del>
+	<ins>public float moveSpeedMinZoom, moveSpeedMaxZoom;</ins>
+
+	void AdjustPosition (float xDelta, float zDelta) {
+		Vector3 direction = new Vector3(xDelta, 0f, zDelta).normalized;
+		float damping = Mathf.Max(Mathf.Abs(xDelta), Mathf.Abs(zDelta));
+		float distance =
+			<ins>Mathf.Lerp(moveSpeedMinZoom, moveSpeedMaxZoom, zoom)</ins> *
+			damping * Time.deltaTime;
+
+		Vector3 position = transform.localPosition;
+		position += direction * distance;
+		transform.localPosition = position;
+	}</pre>
+						
+						<figure>
+							<img src="camera-controls/move-speed-zoomed.png" width="320" height="148" alt="inspector"><br>
+							<video width="320" height="200" controls loop muted>
+								<source src="camera-controls/move-speed-zoom-level.mp4" type="video/mp4">
+							</video>
+							<figcaption>Move speed changes with zoom level.</figcaption>
+						</figure>
+						
+						<p>Now we can move around the map quickly! In fact, we can also move far beyond the edges of the map. This isn't desirable. The camera should stay inside the map. To enforce this, we have to know the bounds of the map, so we need a reference to the grid. Add one and hook it up.</p>
+						
+						<pre translate="no">	<ins>public HexGrid grid;</ins></pre>
+						
+						<figure>
+							<img src="camera-controls/grid.png" width="320" height="166">
+							<figcaption>Need to query the grid size.</figcaption>
+						</figure>
+						
+						<p>After coming up with a new position, clamp it via a new method.</p>
+						
+						<pre translate="no">	void AdjustPosition (float xDelta, float zDelta) {
+		&hellip;
+		transform.localPosition = <ins>ClampPosition(</ins>position<ins>)</ins>;
+	}
+	
+	<ins>Vector3 ClampPosition (Vector3 position) {</ins>
+		<ins>return position;</ins>
+	<ins>}</ins></pre>
+						
+						<p>The X position has a minimum of zero, and a maximum defined by the map size.</p>
+						
+						<pre translate="no">	Vector3 ClampPosition (Vector3 position) {
+		<ins>float xMax =</ins>
+			<ins>grid.chunkCountX * HexMetrics.chunkSizeX *</ins>
+			<ins>(2f * HexMetrics.innerRadius);</ins>
+		<ins>position.x = Mathf.Clamp(position.x, 0f, xMax);</ins>
+
+		return position;
+	}</pre>
+						
+						<p>The same goes for the Z position.</p>
+						
+						<pre translate="no">	Vector3 ClampPosition (Vector3 position) {
+		float xMax =
+			grid.chunkCountX * HexMetrics.chunkSizeX *
+			(2f * HexMetrics.innerRadius);
+		position.x = Mathf.Clamp(position.x, 0f, xMax);
+
+		<ins>float zMax =</ins>
+			<ins>grid.chunkCountZ * HexMetrics.chunkSizeZ *</ins>
+			<ins>(1.5f * HexMetrics.outerRadius);</ins>
+		<ins>position.z = Mathf.Clamp(position.z, 0f, zMax);</ins>
+
+		return position;
+	}</pre>
+						
+						<p>Actually, this is a little inaccurate. The origin lies at the center of a cell, not to the left of it. So we want the camera to stop at the center of the rightmost cells as well. To do so, subtract half a cell from the X maximum.</p>
+						
+						<pre translate="no">		float xMax =
+			<ins>(</ins>grid.chunkCountX * HexMetrics.chunkSizeX <ins>- 0.5f)</ins> *
+			(2f * HexMetrics.innerRadius);
+		position.x = Mathf.Clamp(position.x, 0f, xMax);</pre>
+						
+						<p>For the same reason, the Z maximum has to be decreased as well. Because the metrics are a little different, we have to subtract a full cell.</p>
+						
+						<pre translate="no">		float zMax =
+			<ins>(</ins>grid.chunkCountZ * HexMetrics.chunkSizeZ <ins>- 1)</ins> *
+			(1.5f * HexMetrics.outerRadius);
+		position.z = Mathf.Clamp(position.z, 0f, zMax);</pre>
+						
+						<p>We are done with movement, except for one little detail. Sometimes the UI responds to the arrow keys, which ends up moving the slider while moving the camera. This happens when the UI considers itself active, after you clicked on it and are still hovering over it with the cursor.</p>
+						
+						<p>You can prevent the UI from listening to key input. This is done by instructing the <em translate="no">EventSystem</em> object to not <em translate="no">Send Navigation Events</em>.</p>
+						
+						<figure>
+							<img src="camera-controls/no-navigation-events.png" width="320" height="94">
+							<figcaption>No more navigation events.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Rotating</h3>
+						
+						<p>Want to see what's behind a cliff? It sure would be handy if we could rotate the camera! So let's add that feature.</p>
+						
+						<p>What zoom level we're at doesn't matter for rotation, so one speed suffices. Add a public <code>rotationSpeed</code> variable and set it to 180 degrees. Check the rotation delta in <code>Update</code> by sampling the <em translate="no">Rotation</em> axis, and adjust the rotation if needed.</p>
+						
+						<pre translate="no">	<ins>public float rotationSpeed;</ins>
+
+	void Update () {
+		float zoomDelta = Input.GetAxis("Mouse ScrollWheel");
+		if (zoomDelta != 0f) {
+			AdjustZoom(zoomDelta);
+		}
+
+		<ins>float rotationDelta = Input.GetAxis("Rotation");</ins>
+		<ins>if (rotationDelta != 0f) {</ins>
+			<ins>AdjustRotation(rotationDelta);</ins>
+		<ins>}</ins>
+
+		float xDelta = Input.GetAxis("Horizontal");
+		float zDelta = Input.GetAxis("Vertical");
+		if (xDelta != 0f || zDelta != 0f) {
+			AdjustPosition(xDelta, zDelta);
+		}
+	}
+
+	<ins>void AdjustRotation (float delta) {</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="camera-controls/rotation-speed.png" width="320" height="184">
+							<figcaption>Rotation speed.</figcaption>
+						</figure>
+						
+						<p>Actually, there is no default <em translate="no">Rotation</em> axis. We have to create it ourselves. Go to the input settings and duplicate the topmost <em translate="no">Vertical</em> entry. Change the duplicate's name to <em translate="no">Rotation</em> and set its keys to QE and the comma and dot.</p>
+						
+						<figure>
+							<img src="camera-controls/rotation-input.png" width="320" height="190">
+							<figcaption>Rotation input axis.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>I downloaded a unitypackage, why does it not have this input?</h3>
+							<div>
+								<p>The input settings are project-wide settings. As such, they are not included in unity packages. Fortunately, it is easy to add it yourself. If you don't, you'll get an exception complaining about a missing input axis.</p>
+							</div>
+						</aside>
+						
+						<p>Keep track of the rotation angle and adjust it in <code>AdjustRotation</code>. Then rotate the entire camera rig.</p>
+						
+						<pre translate="no">	<ins>float rotationAngle;</ins>
+	
+	void AdjustRotation (float delta) {
+		<ins>rotationAngle += delta * rotationSpeed * Time.deltaTime;</ins>
+		<ins>transform.localRotation = Quaternion.Euler(0f, rotationAngle, 0f);</ins>
+	}</pre>
+						
+						<p>As a full circle is 360 degrees, wrap the rotation angle so it stays within 0 and 360.</p>
+						
+						<pre translate="no">	void AdjustRotation (float delta) {
+		rotationAngle += delta * rotationSpeed * Time.deltaTime;
+		<ins>if (rotationAngle &lt; 0f) {</ins>
+			<ins>rotationAngle += 360f;</ins>
+		<ins>}</ins>
+		<ins>else if (rotationAngle >= 360f) {</ins>
+			<ins>rotationAngle -= 360f;</ins>
+		<ins>}</ins>
+		transform.localRotation = Quaternion.Euler(0f, rotationAngle, 0f);
+	}</pre>
+						
+						<figure>
+							<video width="320" height="200" controls loop muted>
+								<source src="camera-controls/rotation.mp4" type="video/mp4">
+							</video>
+							<figcaption>Rotation in action.</figcaption>
+						</figure>
+						
+						<p>Rotation now works. When trying it out, you'll notice that the movement is absolute. So after rotating 180 degrees movement becomes the opposite of what you'd expect. It is a lot more user-friendly if movement was relative to the camera's point of view. We can make it so by multiplying the current rotation with the movement direction.</p>
+						
+						<pre translate="no">	void AdjustPosition (float xDelta, float zDelta) {
+		Vector3 direction =
+			<ins>transform.localRotation *</ins>
+			new Vector3(xDelta, 0f, zDelta).normalized;
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<video width="320" height="200" controls loop muted>
+								<source src="camera-controls/relative-movement.mp4" type="video/mp4">
+							</video>
+							<figcaption>Relative movement.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="camera-controls/camera-controls.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Advanced Editing</h2>
+					
+					<p>Now that we have a larger map to work with, our map editor tools can use an upgrade. Editing one cell at a time is quite limiting, so a larger brush size is a good idea. It would also be handy if we can decide to only paint color or elevation, leaving the other as it was.</p>
+					
+					<section>
+						<h3>Optional Color and Elevation</h3>
+						
+						<p>We can make colors optional by adding a blank option to the toggle group. Duplicate one of the color toggles and change its label to <em translate="no">---</em> or something else that indicated that it is not a color. Then set the argument of its <em translate="no">On Value Changed</em> event to &minus;1.</p>
+						
+						<figure>
+							<img src="advanced-editing/not-a-color-index.png" width="320" height="86">
+							<figcaption>Not a valid color index.</figcaption>
+						</figure>
+						
+						<p>Of course this is an invalid index for our color array. We can use it to determine whether we should apply a color to the cells or not.</p>
+						
+						<pre translate="no">	<ins>bool applyColor;</ins>
+
+	public void SelectColor (int index) {
+		<ins>applyColor = index >= 0;</ins>
+		<ins>if (applyColor) {</ins>
+			activeColor = colors[index];
+		<ins>}</ins>
+	}
+	
+	void EditCell (HexCell cell) {
+		<ins>if (applyColor) {</ins>
+			cell.Color = activeColor;
+		<ins>}</ins>
+		cell.Elevation = activeElevation;
+	}</pre>
+						
+						<p>The elevation is controlled via a slider, so we cannot really build a switch into that. Instead, we can use a separate toggle to turn elevation editing on and off. Set it on by default.</p>
+						
+						<pre translate="no">	<ins>bool applyElevation = true;</ins>
+	
+	void EditCell (HexCell cell) {
+		if (applyColor) {
+			cell.Color = activeColor;
+		}
+		<ins>if (applyElevation) {</ins>
+			cell.Elevation = activeElevation;
+		<ins>}</ins>
+	}</pre>
+						
+						<p>Add a new elevation toggle to the UI. I also put everything in a new panel and made the elevation slider to horizontal, to make the UI neater.</p>
+						
+						<figure>
+							<img src="advanced-editing/optional-color-elevation.png" width="108" height="188">
+							<figcaption>Optional color and elevation.</figcaption>
+						</figure>
+						
+						<p>To toggle the elevation, we need a new method to connect it with the UI.</p>
+						
+						<pre translate="no">	<ins>public void SetApplyElevation (bool toggle) {</ins>
+		<ins>applyElevation = toggle;</ins>
+	<ins>}</ins></pre>
+						
+						<p>When you hook it up to the elevation toggle, make sure that you use the dynamic bool method, at the top of the method list. The correct versions does not show a checkbox in the inspector.</p>
+						
+						<figure>
+							<img src="advanced-editing/set-apply-elevation.png" width="320" height="86">
+							<figcaption>Passing along the state of the elevation toggle.</figcaption>
+						</figure>
+						
+						<p>You can now choose to paint only colors or only elevation. Or both, as usual. You can even choose to paint neither, but that isn't very useful right now.</p>
+						
+						<figure>
+							<video width="320" height="200" controls loop muted>
+								<source src="advanced-editing/color-elevation.mp4" type="video/mp4">
+							</video>
+							<figcaption>Switching between color and elevation.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why does elevation turn off when I select a color?</h3>
+							<div>
+								<p>This happens when all the toggles belong to the same toggle group. You probably duplicated one of the color choice toggles and adjusted it, but didn't clear its toggle group.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Brush Size</h3>
+						
+						<p>To support a variable brush size, add a <code>brushSize</code> integer variable and a method to set it via the UI. We'll use a slider, so we have to convert from float to int again.</p>
+						
+						<pre translate="no">	<ins>int brushSize;</ins>
+
+	<ins>public void SetBrushSize (float size) {</ins>
+		<ins>brushSize = (int)size;</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="advanced-editing/brush-size-slider.png" width="108" height="234">
+							<figcaption>Brush size slider.</figcaption>
+						</figure>
+						
+						<p>You can create the new slider by duplicating the elevation slider. Change its maximum value to 4 and hook it up to the correct method. I also gave it a label.</p>
+						
+						<figure>
+							<img src="advanced-editing/brush-size-slider-inspector.png" width="320" height="196">
+							<figcaption>Brush size slider settings.</figcaption>
+						</figure>
+						
+						<p>Now that we can end up editing more than one cell, we should use an <code>EditCells</code> method. This method will take care of invoking <code>EditCell</code> for all cells that are affected. The originally selected cell will act as the center of our brush.</p>
+						
+						<pre translate="no">	void HandleInput () {
+		Ray inputRay = Camera.main.ScreenPointToRay(Input.mousePosition);
+		RaycastHit hit;
+		if (Physics.Raycast(inputRay, out hit)) {
+			<ins>EditCells</ins>(hexGrid.GetCell(hit.point));
+		}
+	}
+
+	<ins>void EditCells (HexCell center) {</ins>
+	<ins>}</ins>
+	
+	void EditCell (HexCell cell) {
+		&hellip;
+	}</pre>
+						
+						<p>The brush size defines the radius of the effect of our edit. At radius 0, it is just the center cell. At radius 1, it is the center and its neighbors. At radius 2, it includes the neighbors of its direct neighbors as well. And so on.</p>
+						
+						<figure>
+							<img src="advanced-editing/brush-diagram.png" width="400" height="369">
+							<figcaption>Up to radius 3.</figcaption>
+						</figure>
+						
+						<p>To edit all the cells, we have to loop through them. First, we need the X and Z coordinates of the center.</p>
+						
+						<pre translate="no">	void EditCells (HexCell center) {
+		<ins>int centerX = center.coordinates.X;</ins>
+		<ins>int centerZ = center.coordinates.Z;</ins>
+	}</pre>
+						
+						<p>We find the minimum Z coordinate by subtracting the radius. That defines row zero. Starting at that row, let's loop until have covered the row at the center.</p>
+						
+						<pre translate="no">	void EditCells (HexCell center) {
+		int centerX = center.coordinates.X;
+		int centerZ = center.coordinates.Z;
+
+		<ins>for (int r = 0, z = centerZ - brushSize; z &lt;= centerZ; z++, r++) {</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>The first cell of the bottom row has the same X coordinate as the center cell. This coordinate decreases as the row number increases.</p>
+						
+						<p>The last cell always has an X coordinate equal to the center's plus the radius.</p>
+						
+						<p>Now we can loop through each row and retrieve the cells via their coordinates.</p>
+						
+						<pre translate="no">		for (int r = 0, z = centerZ - brushSize; z &lt;= centerZ; z++, r++) {
+			<ins>for (int x = centerX - r; x &lt;= centerX + brushSize; x++) {</ins>
+				<ins>EditCell(hexGrid.GetCell(new HexCoordinates(x, z)));</ins>
+			<ins>}</ins>
+		}</pre>
+						
+						<p>We don't have a <code>HexGrid.GetCell</code> method with a coordinates parameter yet, so create it. Convert to offset coordinates and retrieve the cell.</p>
+						
+						<pre translate="no">	<ins>public HexCell GetCell (HexCoordinates coordinates) {</ins>
+		<ins>int z = coordinates.Z;</ins>
+		<ins>int x = coordinates.X + z / 2;</ins>
+		<ins>return cells[x + z * cellCountX];</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="advanced-editing/brush-bottom-half.png" width="240" height="200">
+							<figcaption>Bottom half of brush, size 2.</figcaption>
+						</figure>
+						
+						<p>The rest of the brush can be covered by looping from the top down to the center. In this case, the logic is mirrored, and the center row should be excluded.</p>
+						
+						<pre translate="no">	void EditCells (HexCell center) {
+		int centerX = center.coordinates.X;
+		int centerZ = center.coordinates.Z;
+
+		for (int r = 0, z = centerZ - brushSize; z &lt;= centerZ; z++, r++) {
+			for (int x = centerX - r; x &lt;= centerX + brushSize; x++) {
+				EditCell(hexGrid.GetCell(new HexCoordinates(x, z)));
+			}
+		}
+		<ins>for (int r = 0, z = centerZ + brushSize; z > centerZ; z--, r++) {</ins>
+			<ins>for (int x = centerX - brushSize; x &lt;= centerX + r; x++) {</ins>
+				<ins>EditCell(hexGrid.GetCell(new HexCoordinates(x, z)));</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<img src="advanced-editing/brush-complete.png" width="240" height="200">
+							<figcaption>Entire brush, size 2.</figcaption>
+						</figure>
+						
+						<p>This works, unless our brush ends up extending beyond the bounds of the grid. When that happens, you get an index-out-of-range exception. To prevent this, check the bounds in <code>HexGrid.GetCell</code> and return <code>null</code> when a nonexistent cell is requested.</p>
+						
+						<pre translate="no">	public HexCell GetCell (HexCoordinates coordinates) {
+		int z = coordinates.Z;
+		<ins>if (z &lt; 0 || z >= cellCountZ) {</ins>
+			<ins>return null;</ins>
+		<ins>}</ins>
+		int x = coordinates.X + z / 2;
+		<ins>if (x &lt; 0 || x >= cellCountX) {</ins>
+			<ins>return null;</ins>
+		<ins>}</ins>
+		return cells[x + z * cellCountX];
+	}</pre>
+						
+						<p>To prevent a null-reference-exception, <code>HexMapEditor</code> should check that it really has a cell, before editing it.</p>
+						
+						<pre translate="no">	void EditCell (HexCell cell) {
+		<ins>if (cell) {</ins>
+			if (applyColor) {
+				cell.Color = activeColor;
+			}
+			if (applyElevation) {
+				cell.Elevation = activeElevation;
+			}
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<video width="320" height="200" controls loop muted>
+								<source src="advanced-editing/brush-sizes.mp4" type="video/mp4">
+							</video>
+							<figcaption>Using multiple brush sizes.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Toggling Cell Labels</h3>
+						
+						<p>Most of the time, you probably don't need to see the cell labels. So let's make them optional. As each chunk manages its own canvas, add a <code>ShowUI</code> method to <code>HexGridChunk</code>. When the UI should be visible, activate the canvas. Otherwise, deactivate it.</p>
+						
+						<pre translate="no">	<ins>public void ShowUI (bool visible) {</ins>
+		<ins>gridCanvas.gameObject.SetActive(visible);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Let's hide the UI by default.</p>
+						
+						<pre translate="no">	void Awake () {
+		gridCanvas = GetComponentInChildren&lt;Canvas>();
+		hexMesh = GetComponentInChildren&lt;HexMesh>();
+
+		cells = new HexCell[HexMetrics.chunkSizeX * HexMetrics.chunkSizeZ];
+		<ins>ShowUI(false);</ins>
+	}</pre>
+						
+						<p>As the UI is toggled for the entire map, add a <code>ShowUI</code> method to <code>HexGrid</code> as well. It simply passes the request on to its chunks.</p>
+						
+						<pre translate="no">	<ins>public void ShowUI (bool visible) {</ins>
+		<ins>for (int i = 0; i &lt; chunks.Length; i++) {</ins>
+			<ins>chunks[i].ShowUI(visible);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p><code>HexMapEditor</code> gets the same method as well, forwarding the request to the grid.</p>
+						
+						<pre translate="no">	<ins>public void ShowUI (bool visible) {</ins>
+		<ins>hexGrid.ShowUI(visible);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Finally, we can add a toggle to the UI and hook it up.</p>
+						
+						<figure>
+							<img src="advanced-editing/labels-toggle.png" width="108" height="260">
+							<figcaption>Labels toggle.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../part-6.1.html">Rivers</a>.</p>
+					</section>
+					
+					<a href="advanced-editing/advanced-editing.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Hex-Map-5.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

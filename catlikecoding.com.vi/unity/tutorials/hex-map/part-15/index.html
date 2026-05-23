@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/hex-map/part-15/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/hex-map/part-15/tutorial-image.jpg">
+		<meta property="og:title" content="Hex Map 15">
+		<meta property="og:description" content="A Unity Hex Map tutorials about calculating distances between cells. Part 15 of 27.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hex Map 15</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/hex-map/part-15/#article",
+				"headline": "Hex Map 15",
+				"alternativeHeadline": "Distances",
+				"datePublished": "2017-03-26",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Hex Map tutorials about calculating distances between cells. Part 15 of 27.",
+				"image": "https://catlikecoding.com/unity/tutorials/hex-map/part-15/tutorial-image.jpg",
+				"dependencies": "Unity 5.5.0",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/hex-map/", "name": "Hex Map" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				EdgeVertices: 1,
+				HexCell: 1,
+				HexEdgeType: 1,
+				HexCoordinates: 1,
+				HexCoordinatesDrawer: 1,
+				HexDirection: 1,
+				HexDirectionExtensions: 1,
+				HexFeatureCollection: 1,
+				HexFeatureManager: 1,
+				HexGrid: 1,
+				HexGridChunk: 1,
+				HexHash: 1,
+				HexMapCamera: 1,
+				HexMapEditor: 1,
+				HexMesh: 1,
+				HexMetrics: 1,
+				ListPool: 1,
+				NewMapMenu: 1,
+				OptionalToggle: 1,
+				SaveLoadItem: 1,
+				SaveLoadMenu: 1,
+				TextureArrayWizard: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Hex Map</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hex Map 15</h1>
+					<p>Distances</p>
+					<ul>
+						<li>Show grid lines.</li>
+						<li>Toggle between edit and navigation mode.</li>
+						<li>Calculate distances between cells.</li>
+						<li>Find a way around obstacles.</li>
+						<li>Deal with varying movement costs.</li>
+					</ul>
+				</header>
+
+				<p>This is part 15 of a tutorial series about <a href="../index.html">hexagon maps</a>. Now that we can create decent maps, we're going to look at navigation.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>The shortest path isn't always a straight line.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Showing the Grid</h2>
+					
+					<p>Navigating our maps is done by traveling from cell to cell. You'll have to move through a sequence of cells to go anywhere. To make it easier to judge distances, let's add the option to show the hexagonal grid that our maps are based on.</p>
+					
+					<section>
+						<h3>Grid Texture</h3>
+						
+						<p>Despite the irregularities of our map mesh, the underlying grid is perfectly regular. We can visualize it by projecting a grid pattern onto the map. We can do that with a tiling grid texture.</p>
+						
+						<figure>
+							<img src="showing-the-grid/grid.png" width="256" height="256">
+							<figcaption>Tiling grid texture.</figcaption>
+						</figure>
+						
+						<p>The above texture contains a small portion of an hexagonal grid. It covers 2 by 2 cells. This area is rectangular, but not a square. Because the texture itself is a square, the pattern appears stretched. We'll have to compensate for this when sampling it.</p>
+					</section>
+					
+					<section>
+						<h3>Projecting the Grid</h3>
+						
+						<p>To project the grid pattern, we have to add a texture property to our <em translate="no">Terrain</em> shader.</p>
+						
+						<pre translate="no" class="shader">	Properties {
+		_Color ("Color", Color) = (1,1,1,1)
+		_MainTex ("Terrain Texture Array", 2DArray) = "white" {}
+		<ins>_GridTex ("Grid Texture", 2D) = "white" {}</ins>
+		_Glossiness ("Smoothness", Range(0,1)) = 0.5
+		_Metallic ("Metallic", Range(0,1)) = 0.0
+	}</pre>
+						
+						<figure>
+							<img src="showing-the-grid/material-inspector.png" width="320" height="206">
+							<figcaption>Terrain material with grid texture.</figcaption>
+						</figure>
+						
+						<p>Sample the texture using the world XZ coordinates, then multiply it with the albedo. As the grid lines of the texture are gray, this will burn the pattern into the terrain.</p>
+						
+						<pre translate="no" class="shader">		<ins>sampler2D _GridTex;</ins>
+
+		&hellip;
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			fixed4 c =
+				GetTerrainColor(IN, 0) +
+				GetTerrainColor(IN, 1) +
+				GetTerrainColor(IN, 2);
+
+			<ins>fixed4 grid = tex2D(_GridTex, IN.worldPos.xz);</ins>
+			
+			o.Albedo = c.rgb * <ins>grid *</ins> _Color;
+			o.Metallic = _Metallic;
+			o.Smoothness = _Glossiness;
+			o.Alpha = c.a;
+		}</pre>
+						
+						<figure>
+							<img src="showing-the-grid/multiplied.png" width="370" height="220">
+							<figcaption>Albedo multiplied with tiny grid.</figcaption>
+						</figure>
+						
+						<p>We have to scale the pattern so it fits the cells of our map. The forward distance between adjacent cell centers is 15, twice that to move two cells straight up. So we have to divide our grid's V coordinates by 30. And the inner radius of our cells is 5&radic;3, so four times that is needed to move two cells to the right. Thus we have to divide the grid's U coordinates by 20&radic;3.</p>
+						
+						<pre translate="no" class="shader">			<ins>float2 gridUV = IN.worldPos.xz;</ins>
+			<ins>gridUV.x *= 1 / (4 * 8.66025404);</ins>
+			<ins>gridUV.y *= 1 / (2 * 15.0);</ins>
+			fixed4 grid = tex2D(_GridTex, <ins>gridUV</ins>);</pre>
+						
+						<figure>
+							<img src="showing-the-grid/scaled.png" width="370" height="220">
+							<figcaption>Correctly sized grid cells.</figcaption>
+						</figure>
+						
+						<p>The grid lines now match the map cells. Just like the terrain textures, they ignore elevation. So the lines can get stretched along cliffs.</p>
+						
+						<figure>
+							<img src="showing-the-grid/elevation.png" width="390" height="220">
+							<figcaption>Projection on elevated cells.</figcaption>
+						</figure>
+						
+						<p>The grid deformation is usually not that bad, especially when looking a the map from a distance.</p>
+						
+						<figure>
+							<img src="showing-the-grid/distance.png" width="440" height="230">
+							<figcaption>Grid from a distance.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Toggling the Grid</h3>
+						
+						<p>While seeing the grid is handy, you might not always want it visible. For example, when taking a screenshot. Also, not everyone prefers to see the grid all the time. So let's make it optional. We're going to add a multi-compile directive to our shader to create a variant with and without the grid. We'll use the <code class="shader">GRID_ON</code> keyword to control this. Conditional shader compilation is explained in the <a href="../../rendering/part-5.1.html">Rendering 5, Multiple Lights</a> tutorial.</p>
+						
+						<pre translate="no" class="shader">		#pragma surface surf Standard fullforwardshadows vertex:vert
+		#pragma target 3.5
+
+		<ins>#pragma multi_compile _ GRID_ON</ins></pre>
+						
+						<p>When declaring the <code class="shader">grid</code> variable, first set it to 1. That will result in no grid. Then only sample the grid texture for the variant that has the <code class="shader">GRID_ON</code> keyword defined.</p>
+						
+						<pre translate="no" class="shader">			<ins>fixed4 grid = 1;</ins>
+			<ins>#if defined(GRID_ON)</ins>
+				float2 gridUV = IN.worldPos.xz;
+				gridUV.x *= 1 / (4 * 8.66025404);
+				gridUV.y *= 1 / (2 * 15.0);
+				<ins>grid</ins> = tex2D(_GridTex, gridUV);
+			<ins>#endif</ins>
+			
+			o.Albedo = c.rgb * grid * _Color;</pre>
+						
+						<p>As the <code class="shader">GRID_ON</code> keyword is not enabled for our terrain shader, the grid will have disappeared. To enable it again, we'll add a toggle to our map editor UI. To make this possible, <code>HexMapEditor</code> must get a reference to our <em translate="no">Terrain</em> material, and a method to either enable or disable the <code class="shader">GRID_ON</code> keyword.</p>
+						
+						<pre translate="no">	<ins>public Material terrainMaterial;</ins>
+	
+	&hellip;
+	
+	<ins>public void ShowGrid (bool visible) {</ins>
+		<ins>if (visible) {</ins>
+			<ins>terrainMaterial.EnableKeyword("GRID_ON");</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>terrainMaterial.DisableKeyword("GRID_ON");</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="showing-the-grid/editor-inspector.png" width="320" height="74">
+							<figcaption>Hex map editor with material reference.</figcaption>
+						</figure>
+						
+						<p>Add a <em translate="no">Grid</em> toggle to the UI and connect it with the <code>ShowGrid</code> method.</p>
+						
+						<figure>
+							<img src="showing-the-grid/ui.png" width="108" height="332">
+							<figcaption>Grid toggle.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Staying Consistent</h3>
+						
+						<p>We can now toggle the grid while in play mode. The first time we try this, the grid starts out disable and will become visible once we enable the toggle. Disabling the toggle will make the grid disappear again. However, if we exit play mode while the grid is visible, it will still be visible the next time we enter play mode, even though the toggle is disabled.</p>
+						
+						<p>This happens because we're adjusting the keyword of the shared <em translate="no">Terrain</em> material. We're editing the material asset, so the change persist in the Unity editor. It would not persist in a build.</p>
+						
+						<p>To make sure that we always begin without the grid, disable the <code class="shader">GRID_ON</code> keyword when <code>HexMapEditor</code> awakens.</p>
+						
+						<pre translate="no">	<ins>void Awake () {</ins>
+		<ins>terrainMaterial.DisableKeyword("GRID_ON");</ins>
+	<ins>}</ins></pre>
+					</section>
+					
+					<a href="showing-the-grid/showing-the-grid.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Edit Mode</h2>
+					
+					<p>If we want to control movement across our map, we have to interact with it. At minimum, we have to select a cell to serve as the starting point of our journey. But clicking a cell will edit it. We could disable all editing options manually, but that's inconvenient. Also, we don't want to trigger movement calculations when editing the map. So let's add a toggle to control whether we're in edit mode or not.</p>
+					
+					<section>
+						<h3>Edit Toggle</h3>
+						
+						<p>Add a boolean <code>editMode</code> field to <code>HexMapEditor</code> along with a method to set it. Then add another toggle to the UI to control it. Let's start in navigation mode, so edit mode is disabled by default.</p>
+						
+						<pre translate="no">	<ins>bool editMode;</ins>
+	
+	&hellip;
+
+	<ins>public void SetEditMode (bool toggle) {</ins>
+		<ins>editMode = toggle;</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="edit-mode/ui.png" width="108" height="352">
+							<figcaption>Edit mode toggle.</figcaption>
+						</figure>
+						
+						<p>To actually disable editing, make the invocation of <code>EditCells</code> dependent on <code>editMode</code>.</p>
+						
+						<pre translate="no">	void HandleInput () {
+		Ray inputRay = Camera.main.ScreenPointToRay(Input.mousePosition);
+		RaycastHit hit;
+		if (Physics.Raycast(inputRay, out hit)) {
+			HexCell currentCell = hexGrid.GetCell(hit.point);
+			if (previousCell &amp;&amp; previousCell != currentCell) {
+				ValidateDrag(currentCell);
+			}
+			else {
+				isDrag = false;
+			}
+			<ins>if (editMode) {</ins>
+				EditCells(currentCell);
+			<ins>}</ins>
+			previousCell = currentCell;
+		}
+		else {
+			previousCell = null;
+		}
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Debug Labels</h3>
+						
+						<p>We currently don't have units to move across the map. Instead, we'll visualize movement distances. We can use the already existing cell labels for that. So make them visible when we're not in edit mode.</p>
+						
+						<pre translate="no">	public void SetEditMode (bool toggle) {
+		editMode = toggle;
+		<ins>hexGrid.ShowUI(!toggle);</ins>
+	}</pre>
+						
+						<p>As we start in navigation mode, the labels should be visible by default. Currently, <code>HexGridChunk.Awake</code> disables the them, which it should no longer do.</p>
+						
+						<pre translate="no">	void Awake () {
+		gridCanvas = GetComponentInChildren&lt;Canvas>();
+
+		cells = new HexCell[HexMetrics.chunkSizeX * HexMetrics.chunkSizeZ];
+<del>//		ShowUI(false);</del>
+	}</pre>
+						
+						<figure>
+							<img src="edit-mode/coordinate-labels.png" width="300" height="160">
+							<figcaption>Coordinate labels.</figcaption>
+						</figure>
+						
+						<p>The cell coordinates are now visible directly after entering play mode. But we're not interested in seeing the coordinates. We'll use the labels to display distances. As that's just one number per cell, we can increase the font size to make them easier to read. Adjust the <em translate="no">Hex Cell Label</em> prefab so it uses a bold font at size 8.</p>
+						
+						<figure>
+							<img src="edit-mode/bold-8.png" width="320" height="90">
+							<figcaption>Bold font size 8 labels.</figcaption>
+						</figure>
+						
+						<p>We'll now see big labels after entering play mode. Only the first coordinate per cell ends up visible, the others no longer fit.</p>
+						
+						<figure>
+							<img src="edit-mode/big-labels.png" width="300" height="160">
+							<figcaption>Big labels.</figcaption>
+						</figure>
+						
+						<p>As we don't need the coordinates anymore, remove the assignment to <code>label.text</code> in <code>HexGrid.CreateCell</code>.</p>
+						
+						<pre translate="no">	void CreateCell (int x, int z, int i) {
+		&hellip;
+
+		Text label = Instantiate&lt;Text>(cellLabelPrefab);
+		label.rectTransform.anchoredPosition =
+			new Vector2(position.x, position.z);
+<del>//		label.text = cell.coordinates.ToStringOnSeparateLines();</del>
+		cell.uiRect = label.rectTransform;
+
+		&hellip;
+	}</pre>
+						
+						<p>You can also remove the <em translate="no">Labels</em> toggle from the UI, and its accompanying <code>HexMapEditor.ShowUI</code> method.</p>
+						
+						<pre translate="no"><del>//	public void ShowUI (bool visible) {</del>
+<del>//		hexGrid.ShowUI(visible);</del>
+<del>//	}</del></pre>
+						
+						<figure>
+							<img src="edit-mode/ui-no-label-toggle.png" width="108" height="352">
+							<figcaption>No more label toggle.</figcaption>
+						</figure>
+						
+					</section>
+					
+					<a href="edit-mode/edit-mode.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Finding Distances</h2>
+					
+					<p>Now that we have a navigation mode with labels, we can start showing distances. What we'll do is select a cell, then display the distance to this cell for all the cells on the map.</p>
+					
+					<section>
+						<h3>Showing Distances</h3>
+						
+						<p>To keep track of a cell's distance, add a integer <code>distance</code> field to <code>HexCell</code>. This represents the distance between that cell and the selected cell. So it will be zero for the selected cell itself, 1 for its direct neighbors, and so on.</p>
+						
+						<pre translate="no">	<ins>int distance;</ins></pre>
+						
+						<p>When the distance is set, we should update the cell's label to show its value. <code>HexCell</code> has a reference to the <code>RectTransform</code> of its UI object. We'll have to invoke <code>GetComponent&lt;Text></code> on it to get to the label. Note that <code>Text</code> is in the <code>UnityEngine.UI</code> namespace, so use that at the top of the script.</p>
+						
+						<pre translate="no">	<ins>void UpdateDistanceLabel () {</ins>
+		<ins>Text label = uiRect.GetComponent&lt;Text>();</ins>
+		<ins>label.text = distance.ToString();</ins>
+	<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Shouldn't we store a direct reference to the <code>Text</code> component?</h3>
+							<div>
+								<p>You could. I'm not bothering with that, because the labels are only used to show that our navigation code is working. Once we're sure of that, we won't use them anymore.</p>
+							</div>
+						</aside>
+						
+						<p>Make a public property to get and set the cell's distance and also update its label.</p>
+						
+						<pre translate="no">	<ins>public int Distance {</ins>
+		<ins>get {</ins>
+			<ins>return distance;</ins>
+		<ins>}</ins>
+		<ins>set {</ins>
+			<ins>distance = value;</ins>
+			<ins>UpdateDistanceLabel();</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Add a public <code>FindDistancesTo</code> method to <code>HexGrid</code> with a cell parameter. For now, just set the distance of every cell to zero.</p>
+						
+						<pre translate="no">	<ins>public void FindDistancesTo (HexCell cell) {</ins>
+		<ins>for (int i = 0; i &lt; cells.Length; i++) {</ins>
+			<ins>cells[i].Distance = 0;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>In <code>HexMapEditor.HandleInput</code>, invoke the new method with the current cell, if it's not in edit mode.</p>
+						
+						<pre translate="no">			if (editMode) {
+				EditCells(currentCell);
+			}
+			<ins>else {</ins>
+				<ins>hexGrid.FindDistancesTo(currentCell);</ins>
+			<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Distances Between Coordinates</h3>
+						
+						<p>Now all cells will show the number zero when when we touch one, while in navigation mode. But of course they should show their actual distance to the touched cell. We can use the cell coordinates to compute their distance. So let's assume <code>HexCoordinates</code> has a <code>DistanceTo</code> method, and use it in <code>HexGrid.FindDistancesTo</code>.</p>
+						
+						<pre translate="no">	public void FindDistancesTo (HexCell cell) {
+		for (int i = 0; i &lt; cells.Length; i++) {
+			cells[i].Distance =
+				<ins>cell.coordinates.DistanceTo(cells[i].coordinates);</ins>
+		}
+	}</pre>
+						
+						<p>Now add the <code>DistanceTo</code> method to <code>HexCoordinates</code>. It has to compare its own coordinates with that of another set. Let's start with only considering the X dimension, by subtracting the X coordinates from each other.</p>
+						
+						<pre translate="no">	<ins>public int DistanceTo (HexCoordinates other) {</ins>
+		<ins>return x - other.x;</ins>
+	<ins>}</ins></pre>
+						
+						<p>This will result in an offset along X, relative to the selected cell. But distances cannot be negative, so we have to return the absolute difference between the X coordinates.</p>
+						
+						<pre translate="no">		return <ins>x &lt; other.x ? other.x - x :</ins> x - other.x;</pre>
+						
+						<figure>
+							<img src="finding-distances/x-distances.png" width="200" height="174">
+							<figcaption>X distances.</figcaption>
+						</figure>
+						
+						<p>This gives us the correct distances, if we only take one dimension into consideration. But our hex grid has three dimensions. So let's add up the distances in all three dimensions, and see what we get.</p>
+						
+						<pre translate="no">		return
+			<ins>(</ins>x &lt; other.x ? other.x - x : x - other.x<ins>) +</ins>
+			<ins>(Y &lt; other.Y ? other.Y - Y : Y - other.Y) +</ins>
+			<ins>(z &lt; other.z ? other.z - z : z - other.z)</ins>;</pre>
+						
+						<figure>
+							<img src="finding-distances/xyz-distances.png" width="200" height="174">
+							<figcaption>XYZ distances summed.</figcaption>
+						</figure>
+						
+						<p>It turns out that we get double the actual distance. So to get the final distance we have to halve the sum.</p>
+						
+						<pre translate="no">		return
+			<ins>(</ins>(x &lt; other.x ? other.x - x : x - other.x) +
+			(Y &lt; other.Y ? other.Y - Y : Y - other.Y) +
+			(z &lt; other.z ? other.z - z : z - other.z)<ins>) / 2</ins>;</pre>
+						
+						<figure>
+							<img src="finding-distances/actual-distances.png" width="200" height="174">
+							<figcaption>Actual distances.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why is the sum double the distance?</h3>
+							<div>
+								<p>Remember that our grid uses cube coordinates. The sum of these coordinates is always zero, for example (1, &minus;3, 2). The positive and negative coordinates cancel each other out. Taking their absolute values moves all coordinates to the positive side. The result is equal to twice the largest absolute coordinate. Also, note that the distance of a cell to the origin is equal to its largest absolute coordinate. So we could have used the maximum of the absolute coordinate differences as well.</p>
+								
+								<figure>
+									<img src="finding-distances/cube-coordinates.png" width="400" height="369">
+									<figcaption>Cube coordinates.</figcaption>
+								</figure>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="finding-distances/finding-distances.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Dealing with Obstacles</h2>
+					
+					<p>The distances that we compute match the lengths of the shortest paths from the selected cell to every other cell. You cannot find a path with a shorter length. But these paths are only guaranteed to be valid if there's nothing that blocks travel. Cliffs, water, and other obstacles might force us to make a detour. Some cells might not be reachable at all.</p>
+					
+					<p>To be able to find our way around obstacles, we have to use a different approach than simply computing the distance between coordinates. We can no longer evaluate each cell in isolation. Instead, we have to search our map until we have found every cell that can be reached.</p>
+					
+					<section>
+						<h3>Visualizing the Search</h3>
+						
+						<p>Searching through the map is an iterative process. To understand what we're doing, it's useful to be able to see each step of the search. We can do so by turning our search algorithm into a coroutine, which requires us to use the <code>System.Collections</code> namespace. An update frequency of 60 iterations per second is slow enough that we can see what's happening, without taking too long on a small map.</p>
+					
+						<pre translate="no">	public void FindDistancesTo (HexCell cell) {
+		<ins>StartCoroutine(Search(cell));</ins>
+	<ins>}</ins>
+
+	<ins>IEnumerator Search (HexCell cell) {</ins>
+		<ins>WaitForSeconds delay = new WaitForSeconds(1 / 60f);</ins>
+		for (int i = 0; i &lt; cells.Length; i++) {
+			<ins>yield return delay;</ins>
+			cells[i].Distance =
+				cell.coordinates.DistanceTo(cells[i].coordinates);
+		}
+	}</pre>
+						
+						<p>We should ensure that only a single search is active at any time. So stop all coroutines before starting a new search.</p>
+						
+						<pre translate="no">	public void FindDistancesTo (HexCell cell) {
+		<ins>StopAllCoroutines();</ins>
+		StartCoroutine(Search(cell));
+	}
+</pre>
+						
+						<p>Also, we should stop searching when another map is loaded.</p>
+						
+						<pre translate="no">	public void Load (BinaryReader reader, int header) {
+		<ins>StopAllCoroutines();</ins>
+		&hellip;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Breadth-First Search</h3>
+						
+						<p>Before we even begin searching, we know that the distance to the selected cell is zero. And of course the distance of all its neighbors is 1, as long as they can be reached. We can then look at one of these neighbors. This cell likely has neighbors of its own that are reachable and don't have a distance yet. If so, the distance of these neighbors must be 2. We can repeat this for all neighbors at distance 1. After that, we repeat it for all neighbors at distance 2. And so on, until we have reached all cells.</p>
+						
+						<p>So we first find all the cells at distance 1, then we find all those at distance 2, then those at distance 3, until finished. This guarantees that we find the smallest distance to every reachable cell. This algorithm is known as breadth-first search.</p>
+						
+						<p>For this to work, we have to know whether we've already determined the distance of a cell. Often, this is done by putting them in a collection known as the finished or closed set. But we can set the cell's distance to <code>int.MaxValue</code> to indicate that we haven't visited it yet. We have to do this for all cells, right before searching.</p>
+						
+						<pre translate="no">	IEnumerator Search (HexCell cell) {
+		<ins>for (int i = 0; i &lt; cells.Length; i++) {</ins>
+			<ins>cells[i].Distance = int.MaxValue;</ins>
+		<ins>}</ins>
+		
+		&hellip;
+	}</pre>
+						
+						<p>We can also use this to hide the labels of unvisited cells, by adjusting <code>HexCell.UpdateDistanceLabel</code>. That way, we start each search with a clean map.</p>
+						
+						<pre translate="no">	void UpdateDistanceLabel () {
+		Text label = uiRect.GetComponent&lt;Text>();
+		label.text = <ins>distance == int.MaxValue ? "" :</ins> distance.ToString();
+	}</pre>
+						
+						<p>Next, we have to keep track of which cells we have to visit, and in what order. This collection is often known as the frontier or the open set. We simply have to process cells in the same order that we encountered them. We can use a <code>Queue</code> for that, which is part of the <code>System.Collections.Generic</code> namespace. The selected cell is the first to be put in this queue, at distance zero.</p>
+						
+						<pre translate="no">	IEnumerator Search (HexCell cell) {
+		for (int i = 0; i &lt; cells.Length; i++) {
+			cells[i].Distance = int.MaxValue;
+		}
+
+		WaitForSeconds delay = new WaitForSeconds(1 / 60f);
+		<ins>Queue&lt;HexCell> frontier = new Queue&lt;HexCell>();</ins>
+		<ins>cell.Distance = 0;</ins>
+		<ins>frontier.Enqueue(cell);</ins>
+<del>//		for (int i = 0; i &lt; cells.Length; i++) {</del>
+<del>//			yield return delay;</del>
+<del>//			cells[i].Distance =</del>
+<del>//				cell.coordinates.DistanceTo(cells[i].coordinates);</del>
+<del>//		}</del>
+	}</pre>
+						
+						<p>From this point, the algorithm loops as long as there is something in the queue. Each iteration, the front-most cell is taken out of the queue.</p>
+						
+						<pre translate="no">		frontier.Enqueue(cell);
+		<ins>while (frontier.Count > 0) {</ins>
+			<ins>yield return delay;</ins>
+			<ins>HexCell current = frontier.Dequeue();</ins>
+		<ins>}</ins></pre>
+						
+						<p>We now have a current cell, which could be at any distance. Next, we add all its neighbors to the queue, one step further away from the selected cell.</p>
+						
+						<pre translate="no">		while (frontier.Count > 0) {
+			yield return delay;
+			HexCell current = frontier.Dequeue();
+			<ins>for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++) {</ins>
+				<ins>HexCell neighbor = current.GetNeighbor(d);</ins>
+				<ins>if (neighbor != null) {</ins>
+					<ins>neighbor.Distance = current.Distance + 1;</ins>
+					<ins>frontier.Enqueue(neighbor);</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+		}
+</pre>
+						
+						<p>But we should only add cells that we haven't given a distance yet.</p>
+						
+						<pre translate="no">				if (neighbor != null <ins>&amp;&amp; neighbor.Distance == int.MaxValue</ins>) {
+					neighbor.Distance = current.Distance + 1;
+					frontier.Enqueue(neighbor);
+				}</pre>
+						
+						<figure>
+							<video width="320" height="206" controls loop muted>
+								<source src="dealing-with-obstacles/breadth-first-search.mp4" type="video/mp4">
+							</video>
+							<figcaption>Breadth-first search.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Avoiding Water</h3>
+						
+						<p>After verifying that breath-first search finds the correct distances on a featureless map, we can begin adding obstacles. We'll do this by refusing to add cells to the queue when various conditions are met.</p>
+						
+						<p>We're actually already skipping some cells. Those that don't exist, and those that we already gave a distance. Let's rewrite our code so we explicitly skip the neighbor in those cases.</p>
+						
+						<pre translate="no">			for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++) {
+				HexCell neighbor = current.GetNeighbor(d);
+				<ins>if (neighbor == null || neighbor.Distance != int.MaxValue) {</ins>
+					<ins>continue;</ins>
+				<ins>}</ins>
+				<ins>neighbor.Distance = current.Distance + 1;</ins>
+				<ins>frontier.Enqueue(neighbor);</ins>
+			}</pre>
+						
+						<p>Let's also skip all cells that are underwater. This means that we're only considering land travel when finding the shortest distances.</p>
+
+						<pre translate="no">				if (neighbor == null || neighbor.Distance != int.MaxValue) {
+					continue;
+				}
+				<ins>if (neighbor.IsUnderwater) {</ins>
+					<ins>continue;</ins>
+				<ins>}</ins></pre>
+						
+						<figure>
+							<video width="320" height="228" controls loop muted>
+								<source src="dealing-with-obstacles/without-swimming.mp4" type="video/mp4">
+							</video>
+							<figcaption>Distances without swimming.</figcaption>
+						</figure>
+						
+						<p>The algorithm still finds the shortest distances, but now avoids all water. As a result, underwater cells never get a distance, and neither do disconnected landmasses. The only time that an underwater cell gets a distance is when it is the selected cell.</p>
+					</section>
+					
+					<section>
+						<h3>Avoiding Cliffs</h3>
+						
+						<p>We can also use the edge type to determine whether we can visit a neighbor. For example, we can let cliffs block travel. By still allowing travel along slopes, cells on opposite sides of a cliff could both be reachable, but via different paths. So they can end up with very different distances.</p>
+						
+						<pre translate="no">				if (neighbor.IsUnderwater) {
+					continue;
+				}
+				<ins>if (current.GetEdgeType(neighbor) == HexEdgeType.Cliff) {</ins>
+					<ins>continue;</ins>
+				<ins>}</ins></pre>
+						
+						<figure>
+							<video width="320" height="210" controls loop muted>
+								<source src="dealing-with-obstacles/without-cliffs.mp4" type="video/mp4">
+							</video>
+							<figcaption>Distances without climbing cliffs.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="dealing-with-obstacles/dealing-with-obstacles.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Movement Costs</h2>
+					
+					<p>We can avoid cells and edges, but these choices are binary. Another possibility is that it's easier to travel in some directions than in others. In this case, distance is measured in effort or time requirement.</p>
+					
+					<section>
+						<h3>Fast Roads</h3>
+						
+						<p>It makes sense that it is easy and fast to travel via roads, so let's make edges with roads cheaper to cross. As we're using integers to express movement distance, we'll leave roads at 1 and increase the cost for crossing other edges to 10. That's a big difference, which it makes it easy to see whether we get correct results.</p>
+						
+						<pre translate="no">				<ins>int distance = current.Distance;</ins>
+				<ins>if (current.HasRoadThroughEdge(d)) {</ins>
+					<ins>distance += 1;</ins>
+				<ins>}</ins>
+				<ins>else {</ins>
+					<ins>distance += 10;</ins>
+				<ins>}</ins>
+				neighbor.Distance = <ins>distance</ins>;</pre>
+						
+						<figure>
+							<img src="movement-costs/roads-wrong.png" width="370" height="240">
+							<figcaption>Roads with incorrect distances.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Sorting the Frontier</h3>
+						
+						<p>Unfortunately, it turns out that breath-first search cannot cope with varying movement costs. It assumes that cells are added to the frontier in order of ascending distance, which is no longer true. What we need is a priority queue, which is a queue that sorts itself. There is no standard priority queue available, because there is no universal best way to program one.</p>
+						
+						<p>We could create our own priority queue, but we'll leave that optimization for a later tutorial. Right now, we can simply replace the queue with a list, which has a <code>Sort</code> method.</p>
+						
+						<pre translate="no">		<ins>List</ins>&lt;HexCell> frontier = new <ins>List</ins>&lt;HexCell>();
+		cell.Distance = 0;
+		frontier.<ins>Add</ins>(cell);
+		while (frontier.Count > 0) {
+			yield return delay;
+			HexCell current = frontier<ins>[0]</ins>;
+			<ins>frontier.RemoveAt(0);</ins>
+			for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++) {
+				&hellip;
+				neighbor.Distance = distance;
+				frontier.<ins>Add</ins>(neighbor);
+			}
+		}</pre>
+						
+						<aside>
+							<h3>Can't we use <code>ListPool&lt;HexCell></code>?</h3>
+							<div>
+								<p>Sure, go ahead. I'm not using that optimization here, specifically to point out that this is unoptimized code for the sole purpose of demonstrating the algorithm.</p>
+							</div>
+						</aside>
+						
+						<p>To keep the frontier valid, we have to sort it after adding a cell to it. Technically, we could delay sorting until all the neighbors of a cell have been added, but again don't worry about optimizations at this point.</p>
+						
+						<p>We want to sort the cells by their distance. To do so, we have to invoke the list's sort method with a reference to a method that performs this comparison.</p>
+						
+						<pre translate="no">				frontier.Add(neighbor);
+				<ins>frontier.Sort((x, y) => x.Distance.CompareTo(y.Distance));</ins>
+</pre>
+						
+						<aside>
+							<h3>How does that <code>Sort</code> method work?</h3>
+							<div>
+								<p>We're using an anonymous inline method. It's a shorthand way of writing methods, which relies on the compiler to figure out the types of the parameters. The above code is equivalent to using an explicit static method.</p>
+								
+								<pre translate="no">				frontier.Sort(CompareDistances);
+	
+	&hellip;
+	
+	static int CompareDistances (HexCell x, HexCell y) {
+		return x.Distance.CompareTo(y.Distance);
+	}</pre>
+							</div>
+						</aside>
+						
+						<figure>
+							<img src="movement-costs/sorted.png" width="370" height="240">
+							<figcaption>Sorted frontier, still wrong.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Updating the Frontier</h3>
+						
+						<p>We get better results now that the frontier is sorted, but there are still mistakes. That's because when a cell is added to the frontier, it's not guaranteed that we've found the shortest distance to this cell. This means that we can no longer skip neighbors that already have a distance. Instead, we have to check whether we found a shorter path. If so, we have to adjust the neighbor's distance instead of adding it to the frontier.</p>
+						
+						<pre translate="no">				HexCell neighbor = current.GetNeighbor(d);
+				if (<ins>neighbor == null</ins>) {
+					continue;
+				}
+				if (neighbor.IsUnderwater) {
+					continue;
+				}
+				if (current.GetEdgeType(neighbor) == HexEdgeType.Cliff) {
+					continue;
+				}
+				int distance = current.Distance;
+				if (current.HasRoadThroughEdge(d)) {
+					distance += 1;
+				}
+				else {
+					distance += 10;
+				}
+				<ins>if (neighbor.Distance == int.MaxValue) {</ins>
+					neighbor.Distance = distance;
+					frontier.Add(neighbor);
+				<ins>}</ins>
+				<ins>else if (distance &lt; neighbor.Distance) {</ins>
+					<ins>neighbor.Distance = distance;</ins>
+				<ins>}</ins>
+				frontier.Sort((x, y) => x.Distance.CompareTo(y.Distance));</pre>
+						
+						<figure>
+							<video width="320" height="206" controls loop muted>
+								<source src="movement-costs/correct-distances.mp4" type="video/mp4">
+							</video>
+							<figcaption>Correct distances.</figcaption>
+						</figure>
+						
+						<p>Now we get the correct distances, taking movement costs into account. You can see that the distances of some cells start out too long, but get corrected before they're taken out of the frontier. This approach is known as Dijksta's algorithm, named after Edsger Dijkstra who first came up with it.</p>
+					</section>
+					
+					<section>
+						<h3>Slopes</h3>
+						
+						<p>We don't need to limit ourselves to different costs for roads only. For example, let's reduce the cost for crossing flat edges without a road to 5, leaving slopes without a road at 10.</p>
+						
+						<pre translate="no">				<ins>HexEdgeType edgeType = current.GetEdgeType(neighbor);</ins>
+				if (<ins>edgeType</ins> == HexEdgeType.Cliff) {
+					continue;
+				}
+				int distance = current.Distance;
+				if (current.HasRoadThroughEdge(d)) {
+					distance += 1;
+				}
+				else {
+					distance += <ins>edgeType == HexEdgeType.Flat ? 5 : 10</ins>;
+				}</pre>
+						
+						<figure>
+							<img src="movement-costs/slopes.png" width="370" height="240">
+							<figcaption>Slopes require more effort, while roads are always fast.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Terrain Features</h3>
+						
+						<p>We can add costs for the presence of terrain features as well. For example, many games make it harder to move through forests. In our case, let's just add all feature levels to the distance. Once again, a road makes all this irrelevant.</p>
+						
+						<pre translate="no">				if (current.HasRoadThroughEdge(d)) {
+					distance += 1;
+				}
+				else {
+					distance += edgeType == HexEdgeType.Flat ? 5 : 10;
+					<ins>distance += neighbor.UrbanLevel + neighbor.FarmLevel +</ins>
+						<ins>neighbor.PlantLevel;</ins>
+				}
+</pre>
+						
+						<figure>
+							<img src="movement-costs/features.png" width="370" height="240">
+							<figcaption>Features slow you down, when there's no road.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Walls</h3>
+						
+						<p>Finally, let's take walls into consideration as well. Walls should block movement, unless there is a road passing through them.</p>
+						
+						<pre translate="no">				if (current.HasRoadThroughEdge(d)) {
+					distance += 1;
+				}
+				<ins>else if (current.Walled != neighbor.Walled) {</ins>
+					<ins>continue;</ins>
+				<ins>}</ins>
+				else {
+					distance += edgeType == HexEdgeType.Flat ? 5 : 10;
+					distance += neighbor.UrbanLevel + neighbor.FarmLevel +
+						neighbor.PlantLevel;
+				}</pre>
+						
+						<figure>
+							<img src="movement-costs/walls.png" width="370" height="240">
+							<figcaption>Walls keep you out, so find a gate.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../part-16/index.html">Pathfinding</a>.</p>
+					</section>
+					
+					<a href="movement-costs/movement-costs.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Hex-Map-15.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

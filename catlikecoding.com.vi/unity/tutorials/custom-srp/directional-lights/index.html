@@ -1,0 +1,1508 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/custom-srp/directional-lights/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/custom-srp/directional-lights/tutorial-image.jpg">
+		<meta property="og:title" content="Directional Lights">
+		<meta property="og:description" content="A Unity Custom SRP tutorial about shading with multiple directional lights.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Directional Lights</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/custom-srp/directional-lights/#article",
+				"headline": "Directional Lights",
+				"alternativeHeadline": "Direct Illumination",
+				"datePublished": "2019-11-30",
+				"dateModified": "2023-08-03",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Custom SRP tutorial about shading with multiple directional lights.",
+				"image": "https://catlikecoding.com/unity/tutorials/custom-srp/directional-lights/tutorial-image.jpg",
+				"dependencies": "Unity 2022.3.5f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/custom-srp/", "name": "Custom SRP" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				CameraRenderer: 1,
+				CustomRenderPipeline: 1,
+				CustomRenderPipelineAsset: 1,
+				CustomShaderGUI: 1,
+				Lighting: 1,
+				MeshBall: 1,
+				PerObjectMaterialProperties: 1
+			};
+			
+			var defaultCodeClass = "shader";
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../../scriptable-render-pipeline/reflections/index.html">Custom SRP</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Directional Lights</h1>
+					<p>Direct Illumination</p>
+					<ul>
+						<li>Use normal vectors to calculate lighting.</li>
+						<li>Support up to four directional lights.</li>
+						<li>Apply a BRDF.</li>
+						<li>Make lit transparent materials.</li>
+						<li>Create a custom shader GUI with presets.</li>
+					</ul>
+				</header>
+				
+				<p>This is the third part of a tutorial series about creating a <a href="../../scriptable-render-pipeline/reflections/index.html">custom scriptable render pipeline</a>. It adds support for shading with multiple directional lights.</p>
+				
+				<p>This tutorial is made with Unity 2019.2.12f1 and upgraded to 2022.3.5f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A variety of spheres illuminated by four lights.</figcaption>
+				</figure>
+								
+				<section>
+					<h2>Lighting</h2>
+					
+					<p>If we want to create a more realistic scene then we'll have to simulate how light interacts with surfaces. This requires a more complex shader than the unlit one that we currently have.</p>
+					
+					<section>
+						<h3>Lit Shader</h3>
+						
+						<p>Duplicate the <em translate="no">UnlitPass</em> HLSL file and rename it to <em translate="no">LitPass</em>. Adjust the include guard define and the vertex and fragment function names to match. We'll add lighting calculations later.</p>
+						
+						<pre translate="no">#ifndef <ins>CUSTOM_LIT_PASS_INCLUDED</ins>
+#define <ins>CUSTOM_LIT_PASS_INCLUDED</ins>
+
+&hellip;
+
+Varyings <ins>LitPassVertex</ins> (Attributes input) { &hellip; }
+
+float4 <ins>LitPassFragment</ins> (Varyings input) : SV_TARGET { &hellip; }
+
+#endif</pre>
+						
+						<p>Also duplicate the <em translate="no">Unlit</em> shader and rename it to <em translate="no">Lit</em>. Change its menu name, the file it includes, and the functions it uses. Let's also change the default color to gray, as a fully white surface in a well-lit scene can appear very bright. The Universal pipeline uses a gray color by default as well.</p>
+						
+						<pre translate="no">Shader <ins>"Custom RP/Lit"</ins> {
+	
+	Properties {
+		_BaseMap("Texture", 2D) = "white" {}
+		_BaseColor("Color", Color) = (<ins>0.5, 0.5, 0.5</ins>, 1.0)
+		&hellip;
+	}
+
+	SubShader {
+		Pass {
+			&hellip;
+			#pragma vertex <ins>LitPassVertex</ins>
+			#pragma fragment <ins>LitPassFragment</ins>
+			#include <ins>"LitPass.hlsl"</ins>
+			ENDHLSL
+		}
+	}
+}</pre>
+						
+						<p>We're going to use a custom lighting approach, which we'll indicate by setting the light mode of our shader to <em translate="no">CustomLit</em>. Add a <code>Tags</code> block to the <code>Pass</code>, containing <code>"LightMode" = "CustomLit"</code>.</p>
+						
+						<pre translate="no">		Pass {
+			<ins>Tags {</ins>
+				<ins>"LightMode" = "CustomLit"</ins>
+			<ins>}</ins>
+
+			&hellip;
+		}</pre>
+						
+						<p>To render objects that use this pass we have to include it in <code class="csharp">CameraRenderer</code>. First add a shader tag identifier for it.</p>
+						
+						<pre class="csharp" translate="no">	static ShaderTagId
+		unlitShaderTagId = new ShaderTagId("SRPDefaultUnlit")<ins>,</ins>
+		<ins>litShaderTagId = new ShaderTagId("CustomLit")</ins>;</pre>
+						
+						<p>Then add it to the passes to be rendered in <code class="csharp">DrawVisibleGeometry</code>, like we did in <code class="csharp">DrawUnsupportedShaders</code>.</p>
+						
+						<pre class="csharp" translate="no">		var drawingSettings = new DrawingSettings(
+			unlitShaderTagId, sortingSettings
+		) {
+			enableDynamicBatching = useDynamicBatching,
+			enableInstancing = useGPUInstancing
+		};
+		<ins>drawingSettings.SetShaderPassName(1, litShaderTagId);</ins></pre>
+						
+						<p>Now we can create a new opaque material, though at this point it produces the same results an as unlit material.</p>
+						
+						<figure>
+							<img src="lighting/opaque-material.png" width="320" height="42">
+							<figcaption>Default opaque material.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Normal Vectors</h3>
+						
+						<p>How well an object is lit depends on multiple factors, including the relative angle between the light and surface. To know the surface's orientation we need to access the surface normal, which is a unit-length vector pointing straight away from it. This vector is part of the vertex data, defined in object space just like the position. So add it to <code>Attributes</code> in <em translate="no">LitPass</em>.</p>
+						
+						<pre translate="no">struct Attributes {
+	float3 positionOS : POSITION;
+	<ins>float3 normalOS : NORMAL;</ins>
+	float2 baseUV : TEXCOORD0;
+	UNITY_VERTEX_INPUT_INSTANCE_ID
+};</pre>
+						
+						<p>Lighting is calculated per fragment, so we have to add the normal vector to <code>Varyings</code> as well. We'll perform the calculations in world space, so name it <code>normalWS</code>.</p>
+						
+						<pre translate="no">struct Varyings {
+	float4 positionCS : SV_POSITION;
+	<ins>float3 normalWS : VAR_NORMAL;</ins>
+	float2 baseUV : VAR_BASE_UV;
+	UNITY_VERTEX_INPUT_INSTANCE_ID
+};</pre>
+						
+						<p>We can use <code>TransformObjectToWorldNormal</code> from <em translate="no">SpaceTransforms</em> to convert the normal to world space in <code>LitPassVertex</code>.</p>
+						
+						<pre translate="no">	output.positionWS = TransformObjectToWorld(input.positionOS);
+	output.positionCS = TransformWorldToHClip(positionWS);
+	<ins>output.normalWS = TransformObjectToWorldNormal(input.normalOS);</ins></pre>
+						
+						<aside>
+							<h3>How does <code>TransformObjectToWorldNormal</code> work?</h3>
+							<div>
+								<p>When you check the code you'll see that it uses one of two approaches, based on whether <code>UNITY_ASSUME_UNIFORM_SCALING</code> is defined.</p>
+								
+								<p>When <code>UNITY_ASSUME_UNIFORM_SCALING</code> is defined it invokes <code>TransformObjectToWorldDir</code>, which does the same as <code>TransformObjectToWorld</code> except that it ignores the translation part, as we're dealing with a direction vector instead of a position. But the vector also gets uniformly scaled, so it should get normalized later.</p>
+								
+								<p>In the other case uniform scaling is not assumed. This is more complicated, because when an object gets deformed by nonuniform scaling the normal vectors have to get scaled in reverse to match the new surface orientation. This requires a multiplication with the transposed <code>UNITY_MATRIX_I_M</code> matrix instead, plus normalization.</p>
+								
+								<figure>
+									<img src="lighting/scaling-incorrect.png" width="150" height="100" alt="incorrect">
+									<img src="lighting/scaling-correct.png" width="160" height="100" alt="correct">
+									<figcaption>Incorrect and correct normal transformation.</figcaption>
+								</figure>
+								
+								<p>Using <code>UNITY_ASSUME_UNIFORM_SCALING</code> is a slight optimization, which you can enable by defining it yourself. However, it makes more of a difference when GPU instancing is used, because then an array of <code>UNITY_MATRIX_I_M</code> matrices has to be send to the GPU. Avoiding that when not needed is worthwhile. You can enable it by adding the <code>#pragma instancing_options assumeuniformscaling</code> directive to the shader, but only do this if you're exclusively rendering objects with uniform scale.</p>
+							</div>
+						</aside>
+						
+						<p>To verify whether we get a correct normal vector in <code>LitPassFragment</code> we can use it as a color.</p>
+						
+						<pre translate="no">	<ins>base.rgb = input.normalWS;</ins>
+	return base;</pre>
+						
+						
+						<figure>
+							<img src="lighting/world-normals.png" width="180" height="180">
+							<figcaption>World-space normal vectors.</figcaption>
+						</figure>
+						
+						<p>Negative values cannot be visualized, so they're clamped to zero.</p>
+					</section>
+					
+					<section>
+						<h3>Interpolated Normals</h3>
+						
+						<p>Although the normal vectors are unit-lengh in the vertex program, linear interpolation across triangles affects their length. We can visualize the error by rendering the difference between one and the vector's length, magnified by ten to make it more obvious.</p>
+						
+						<pre translate="no">	base.rgb = <ins>abs(length(</ins>input.normalWS<ins>) - 1.0) * 10.0</ins>;</pre>
+						
+						<figure>
+							<img src="lighting/interpolated-normal-error.png" width="180" height="180">
+							<figcaption>Interpolated normal error, exaggerated.</figcaption>
+						</figure>
+						
+						<p>We can smooth out the interpolation distortion by normalizing the normal vector in <code>LitPassFragment</code>. The difference isn't really noticeable when just looking at the normal vectors, but it's more obvious when used for lighting.</p>
+						
+						<pre translate="no">	base.rgb = <ins>normalize(input.normalWS)</ins>;</pre>
+						
+						<figure>
+							<img src="lighting/normalization-after-interpolation.png" width="270" height="130">
+							<figcaption>Normalization after interpolation.</figcaption>
+						</figure>
+						
+					</section>
+					
+					<section>
+						<h3>Surface Properties</h3>
+						
+						<p>Lighting in a shader is about simulating the interactions between light that hits a surface, which means that we must keep track of the surface's properties. Right now we have a normal vector and a base color. We can split the latter in two: the RGB color and the alpha value. We'll be using this data in a few places, so let's define a convenient <code>Surface</code> struct to contain all relevant data. Put it in a separate <em translate="no">Surface</em> HLSL file in the <em translate="no">ShaderLibrary</em> folder.</p>
+						
+						<pre translate="no"><ins>#ifndef CUSTOM_SURFACE_INCLUDED</ins>
+<ins>#define CUSTOM_SURFACE_INCLUDED</ins>
+
+<ins>struct Surface {</ins>
+	<ins>float3 normal;</ins>
+	<ins>float3 color;</ins>
+	<ins>float alpha;</ins>
+<ins>};</ins>
+
+<ins>#endif</ins></pre>
+						
+						<aside>
+							<h3>Shouldn't we define the normal as <code>normalWS</code>?</h3>
+							<div>
+								<p>We could, but the surface doesn't care in what space the normal is defined. Lighting calculations could be performed in any proper 3D space. So we leave the space undefined. When filling the data we just have to use the same space everywhere. We'll use world space, but we could switch to another space later and everything would still work the same.</p>
+							</div>
+						</aside>
+						
+						<p>Include it in <em translate="no">LitPass</em>, after <em translate="no">Common</em>. That way we can keep <em translate="no">LitPass</em> short. We'll put specialized code in its own HLSL file from now on, to make it easier to locate the relevant functionality.</p>
+						
+						<pre translate="no">#include "../ShaderLibrary/Common.hlsl"
+<ins>#include "../ShaderLibrary/Surface.hlsl"</ins></pre>
+						
+						<p>Define a <code>surface</code> variable in <em translate="no">LitPassFragment</em> and fill it. Then the final result becomes the surface's color and alpha.</p>
+						
+						<pre translate="no">	<ins>Surface surface;</ins>
+	<ins>surface.normal</ins> = normalize(input.normalWS);
+	<ins>surface.color = base.rgb;</ins>
+	<ins>surface.alpha = base.a;</ins>
+
+	return <ins>float4(surface.color, surface.alpha)</ins>;</pre>
+						
+						<aside>
+							<h3>Isn't that inefficient code?</h3>
+							<div>
+								<p>It makes no difference, because the shader compiler generates highly optimized programs, completely rewriting our code. The struct is purely for our convenience. You can inspect the compiler's work via the <em translate="no">Compile and show code</em> button in the shader's inspector.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Calculating Lighting</h3>
+						
+						<p>To calculate the actual lighting we'll create a <code>GetLighting</code> function that has a <code>Surface</code> parameter. Initially have it return the Y component of the surface normal. As this is lighting functionality we'll put it in a separate <em translate="no">Lighting</em> HLSL file.</p>
+						
+						<pre translate="no"><ins>#ifndef CUSTOM_LIGHTING_INCLUDED</ins>
+<ins>#define CUSTOM_LIGHTING_INCLUDED</ins>
+
+<ins>float3 GetLighting (Surface surface) {</ins>
+	<ins>return surface.normal.y;</ins>
+<ins>}</ins>
+
+<ins>#endif</ins></pre>
+						
+						<p>Include it in <em translate="no">LitPass</em>, after including <em translate="no">Surface</em> because <em translate="no">Lighting</em> depends on it.</p>
+						
+						<pre translate="no">#include "../ShaderLibrary/Surface.hlsl"
+<ins>#include "../ShaderLibrary/Lighting.hlsl"</ins></pre>
+						
+						<aside>
+							<h3>Why not include <em translate="no">Surface</em> in <em translate="no">Lighting</em>?</h3>
+							<div>
+								<p>We could do that, but we'll end up with multiple files depending on multiple other files. I choose to instead put all include statements in one place, which makes the dependencies clear. That also makes it easy to replace one file with another, to change how the shader works, as long as the new file defines the same functionality that others rely on.</p>
+							</div>
+						</aside>
+						
+						<p>Now we can get the lighting in <code>LitPassFragment</code> and use that for the RGB part of the fragment.</p>
+						
+						<pre translate="no">	<ins>float3 color = GetLighting(surface);</ins>
+	return float4(<ins>color</ins>, surface.alpha);</pre>
+						
+						<figure>
+							<img src="lighting/diffuse-lighting-from-above.png" width="180" height="180">
+							<figcaption>Diffuse lighting from above.</figcaption>
+						</figure>
+						
+						<p>At this point the result is the Y component of the surface normal, so it is one at the top of the sphere and drops down to zero at its sides. Below that the result becomes negative, reaching &minus;1 at the bottom, but we cannot see negative values. It matches the cosine of the angle between the normal and up vectors. Ignoring the negative part, this visually matches diffuse lighting of a directional light pointing straight down. The finishing touch would be to factor the surface color into the result in <code>GetLighting</code>, interpreting it as the surface albedo.</p>
+						
+						<pre translate="no">float3 GetLighting (Surface surface) {
+	return surface.normal.y <ins>* surface.color</ins>;
+}</pre>
+						
+						<figure>
+							<img src="lighting/albedo.png" width="180" height="180">
+							<figcaption>Albedo applied.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What does albedo mean?</h3>
+							<div>
+								<p>Albedo means whiteness in Latin. It's a measure of how much light is diffusely reflected by a surface. If albedo isn't fully white then part of the light energy gets absorbed instead of reflected.</p>
+							</div>
+						</aside>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Lights</h2>
+					
+					<p>To perform proper lighting we also need to know the properties of the light. In this tutorial we'll limit ourselves to directional lights only. A directional light represents a source of light so far away that its position doesn't matter, only its direction. This is a simplification, but it's good enough to simulate the Sun's light on Earth and other situations where incoming light is more or less unidirectional.</p>
+					
+					<section>
+						<h3>Light Structure</h3>
+						
+						<p>We'll use a struct to store the light data. For now we can suffice with a color and a direction. Put it in a separate <em translate="no">Light</em> HLSL file. Also define a <code>GetDirectionalLight</code> function that returns a configured directional light. Initially use a white color and the up vector, matching the light data that we're currently using. Note that the light's direction is thus defined as the direction from where the light is coming, not where it is going.</p>
+						
+						<pre translate="no"><ins>#ifndef CUSTOM_LIGHT_INCLUDED</ins>
+<ins>#define CUSTOM_LIGHT_INCLUDED</ins>
+
+<ins>struct Light {</ins>
+	<ins>float3 color;</ins>
+	<ins>float3 direction;</ins>
+<ins>};</ins>
+
+<ins>Light GetDirectionalLight () {</ins>
+	<ins>Light light;</ins>
+	<ins>light.color = 1.0;</ins>
+	<ins>light.direction = float3(0.0, 1.0, 0.0);</ins>
+	<ins>return light;</ins>
+<ins>}</ins>
+
+<ins>#endif</ins></pre>
+						
+						<p>Include the file in <em translate="no">LitPass</em> before <em translate="no">Lighting</em>.</p>
+						
+						<pre translate="no"><ins>#include "../ShaderLibrary/Light.hlsl"</ins>
+#include "../ShaderLibrary/Lighting.hlsl"</pre>
+					</section>
+					
+					<section>
+						<h3>Lighting Functions</h3>
+						
+						<p>Add an <code>IncomingLight</code> function to <em translate="no">Lighting</em> that calculates how much incoming light there is for a given surface and light. For an arbitrary light direction we have to take the dot product of the surface normal and the direction. We can use the <code>dot</code> function for that. The result should be modulated by the light's color.
+						
+						<pre translate="no"><ins>float3 IncomingLight (Surface surface, Light light) {</ins>
+	<ins>return dot(surface.normal, light.direction) * light.color;</ins>
+<ins>}</ins></pre>
+						
+						<aside>
+							<h3>What's a dot product?</h3>
+							<div>
+								<p>The dot product between two vectors is geometrically defined as `A * B =  ||A|| &nbsp; ||B|| &nbsp; cos theta`. This means that it is the cosine of the angle between the vectors, multiplied by their lengths. So in the case of two unit-length vectors `A * B = cos theta`.</p>
+								
+								<p>Algebraically, it is defined as `A * B = sum_(i=1)^n A_i B_i = A_1 B_1 + A_2 B_2 + &hellip; + A_n B_n`. This means that you can compute it by multiplying all component pairs and summing them.</p>
+								
+								<pre translate="no">float dotProduct = a€.x * b€.x + a€.y * b€.y + a€.z * b€.z;</pre>
+								
+								<p>Visually, this operation projects one vector straight down to the other, as if casting a shadow on it. In doing so, you end up with a right triangle of which the bottom side's length is the result of the dot product. And if both vectors are unit length, that's the cosine of their angle.</p>
+								
+								<figure>
+									<img src="lights/dot-product.png" width="135" height="110">
+									<figcaption>Dot product.</figcaption>
+								</figure>
+							</div>
+						</aside>
+						
+						<p>But this is only correct when the surface is oriented toward the light. When the dot product is negative we have to clamp it to zero, which we can do via the <code>saturate</code> function.</p>
+						
+						<pre translate="no">float3 IncomingLight (Surface surface, Light light) {
+	return <ins>saturate(</ins>dot(surface.normal, light.direction)<ins>)</ins> * light.color;
+}</pre>
+						
+						<aside>
+							<h3>What does <code>saturate</code> do?</h3>
+							<div>
+								<p>It clamps the value so it lies between zero and one inclusive. We only need to specify a minimum because the dot product should never be greater than one, but saturation is such a common shader operation that it usually a free operation modifier.</p>
+							</div>
+						</aside>
+						
+						<p>Add another <code>GetLighting</code> function, which returns the final lighting for a surface and light. For now it's the incoming light multiplied by the surface color. Define it above the other function.</p>
+						
+						<pre translate="no"><ins>float3 GetLighting (Surface surface, Light light) {</ins>
+	<ins>return IncomingLight(surface, light) * surface.color;</ins>
+<ins>}</ins></pre>
+						
+						<p>Finally, adjust the <code>GetLighting</code> function that only has a surface parameter so it invokes the other one, using <code>GetDirectionalLight</code> to provide the light data.</p>
+						
+						<pre translate="no">float3 GetLighting (Surface surface) {
+	return <ins>GetLighting(surface, GetDirectionalLight())</ins>;
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Sending Light Data to the GPU</h3>
+						
+						<p>Instead of always using a white light from above we should use the light of the current scene. The default scene came with a directional light that represents the Sun, has a slightly yellowish color&mdash;FFF4D6 hexadecimal&mdash;and is rotated 50&deg; around the X axis and &minus;30&deg; around the Y axis. If such a light doesn't exist create one.</p>
+						
+						<p>To make the light's data accessible in the shader we'll have to create uniform values for it, just like for shader properties. In this case we'll define two <code>float3</code> vectors: <code>_DirectionalLightColor</code> and <code>_DirectionalLightDirection</code>. Put them in a <code>_CustomLight</code> buffer defined at the top of <em translate="no">Light</em>.</p>
+						
+						<pre translate="no"><ins>CBUFFER_START(_CustomLight)</ins>
+	<ins>float3 _DirectionalLightColor;</ins>
+	<ins>float3 _DirectionalLightDirection;</ins>
+<ins>CBUFFER_END</ins></pre>
+						
+						<p>Use these values instead of constants in <code>GetDirectionalLight</code>.</p>
+						
+						<pre translate="no">Light GetDirectionalLight () {
+	Light light;
+	light.color = <ins>_DirectionalLightColor</ins>;
+	light.direction = <ins>_DirectionalLightDirection</ins>;
+	return light;
+}</pre>
+						
+						<p>Now our RP must send the light data to the GPU. We'll create a new <code class="csharp">Lighting</code> class for that. It works like <code class="csharp">CameraRenderer</code> but for lights. Give it a public <code class="csharp">Setup</code> method with a context parameter, in which it invokes a separate <code class="csharp">SetupDirectionalLight</code> method. Although not strictly necessary, let's also give it a dedicated command buffer that we execute when done, which can be handy for debugging. The alternative would be to add a buffer parameter.</p>
+						
+						<pre class="csharp" translate="no"><ins>using UnityEngine;</ins>
+<ins>using UnityEngine.Rendering;</ins>
+
+<ins>public class Lighting {</ins>
+
+	<ins>const string bufferName = "Lighting";</ins>
+
+	<ins>CommandBuffer buffer = new CommandBuffer {</ins>
+		<ins>name = bufferName</ins>
+	<ins>};</ins>
+	
+	<ins>public void Setup (ScriptableRenderContext context) {</ins>
+		<ins>buffer.BeginSample(bufferName);</ins>
+		<ins>SetupDirectionalLight();</ins>
+		<ins>buffer.EndSample(bufferName);</ins>
+		<ins>context.ExecuteCommandBuffer(buffer);</ins>
+		<ins>buffer.Clear();</ins>
+	<ins>}</ins>
+	
+	<ins>void SetupDirectionalLight () {}</ins>
+<ins>}</ins></pre>
+						
+						<p>Keep track of the identifiers of the two shader properties.</p>
+						
+						<pre class="csharp" translate="no">	<ins>static int</ins>
+		<ins>dirLightColorId = Shader.PropertyToID("_DirectionalLightColor"),</ins>
+		<ins>dirLightDirectionId = Shader.PropertyToID("_DirectionalLightDirection");</ins></pre>
+						
+						<p>We can access the scene's main light via <code class="csharp">RenderSettings.sun</code>. That gets us the most important directional light by default and it can also be explicitly configured via <em translate="no">Window / Rendering / Lighting Settings</em>. Use <code class="csharp">CommandBuffer.SetGlobalVector</code> to send the light data to the GPU. The color is the light's color in linear space, while the direction is the light transformation's forward vector negated.</p>
+						
+						<pre class="csharp" translate="no">	void SetupDirectionalLight () {
+		<ins>Light light = RenderSettings.sun;</ins>
+		<ins>buffer.SetGlobalVector(dirLightColorId, light.color.linear);</ins>
+		<ins>buffer.SetGlobalVector(dirLightDirectionId, -light.transform.forward);</ins>
+	}</pre>
+						
+						<aside>
+							<h3>Doesn't <code class="csharp">SetGlobalVector</code> require a <code class="csharp">Vector4</code>?</h3>
+							<div>
+								<p>Yes, vectors send to the GPU always have four components, even if we define them with less. The extra components are implicitly masked out in the shader. Likewise, there's an implicit conversion from <code class="csharp">Vector3</code> to <code class="csharp">Vector4</code>, though not in the other direction.</p>
+							</div>
+						</aside>
+						
+						<p>The light's <code class="csharp">color</code> property is its configured color, but lights also have a separate intensity factor. The final color is both multiplied.</p>
+						
+						<pre class="csharp" translate="no">		buffer.SetGlobalVector(
+			dirLightColorId, light.color.linear <ins>* light.intensity</ins>
+		);</pre>
+						
+						<p>Give <code class="csharp">CameraRenderer</code> a <code class="csharp">Lighting</code> instance and use it to set up the lighting before drawing the visible geometry.</p>
+						
+						<pre class="csharp" translate="no">	<ins>Lighting lighting = new Lighting();</ins>
+
+	public void Render (
+		ScriptableRenderContext context, Camera camera,
+		bool useDynamicBatching, bool useGPUInstancing
+	) {
+		&hellip;
+
+		Setup();
+		<ins>lighting.Setup(context);</ins>
+		DrawVisibleGeometry(useDynamicBatching, useGPUInstancing);
+		DrawUnsupportedShaders();
+		DrawGizmos();
+		Submit();
+	}</pre>
+						<figure>
+							<img src="lights/lit-by-sun.png" width="180" height="180">
+							<figcaption>Lit by the sun.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Visible Lights</h3>
+						
+						<p>When culling Unity also figures out which lights affect the space visible to the camera. We can rely on that information instead of the global sun. To do so <code class="csharp">Lighting</code> needs access to the culling results, so add a parameter for that to <code class="csharp">Setup</code> and store it in a field for convenience. Then we can support more than one light, so replace the invocation of <code class="csharp">SetupDirectionalLight</code> with a new <code class="csharp">SetupLights</code> method.</p>
+						
+						<pre class="csharp" translate="no">	<ins>CullingResults cullingResults;</ins>
+
+	public void Setup (
+		ScriptableRenderContext context<ins>, CullingResults cullingResults</ins>
+	) {
+		<ins>this.cullingResults = cullingResults;</ins>
+		buffer.BeginSample(bufferName);
+		<del>//SetupDirectionalLight();</del>
+		<ins>SetupLights();</ins>
+		&hellip;
+	}
+	
+	<ins>void SetupLights () {}</ins></pre>
+						
+						<p>Add the culling results as an argument when invoking <code class="csharp">Setup</code> in <code class="csharp">CameraRenderer.Render</code>.</p>
+						
+						<pre class="csharp" translate="no">		lighting.Setup(context<ins>, cullingResults</ins>);</pre>
+						
+						<p>Now <code class="csharp">Lighting.SetupLights</code> can retrieve the required data via the <code class="csharp">visibleLights</code> property of the culling results. It's made available as a <code class="csharp">Unity.Collections.NativeArray</code> with the <code class="csharp">VisibleLight</code> element type.</p>
+						
+						<pre class="csharp" translate="no"><ins>using Unity.Collections;</ins>
+using UnityEngine;
+using UnityEngine.Rendering;
+
+public class Lighting {
+	&hellip;
+
+	void SetupLights () {
+		<ins>NativeArray&lt;VisibleLight> visibleLights = cullingResults.visibleLights;</ins>
+	}
+
+	&hellip;
+}</pre>
+						
+						<aside>
+							<h3>What's a <code class="csharp">NativeArray</code>?</h3>
+							<div>
+								<p>It's a struct that acts like an array, but provides a connection to a native memory buffer. It makes it possible to efficiently share data between managed C# code and the native Unity engine code.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Multiple Directional Lights</h3>
+						
+						<p>Using the visible light data makes it possible to support multiple directional lights, but we have to send the data of all those lights to the GPU. So instead of a pair of vectors we'll use two <code class="csharp">Vector4</code> arrays, plus an integer for the light count. We'll also define a maximum amount of directional lights, which we can use to initialize two array fields to buffer the data. Let's set the maximum to four, which should be enough for most scenes.</p>
+						
+						<pre class="csharp" translate="no">	<ins>const int maxDirLightCount = 4;</ins>
+
+	static int
+		<del>//dirLightColorId = Shader.PropertyToID("_DirectionalLightColor"),</del>
+		<del>//dirLightDirectionId = Shader.PropertyToID("_DirectionalLightDirection");</del>
+		<ins>dirLightCountId = Shader.PropertyToID("_DirectionalLightCount"),</ins>
+		<ins>dirLightColorsId = Shader.PropertyToID("_DirectionalLightColors"),</ins>
+		<ins>dirLightDirectionsId = Shader.PropertyToID("_DirectionalLightDirections");</ins>
+
+	<ins>static Vector4[]</ins>
+		<ins>dirLightColors = new Vector4[maxDirLightCount],</ins>
+		<ins>dirLightDirections = new Vector4[maxDirLightCount];</ins></pre>
+						
+						<aside>
+							<h3>Why not use structured buffers?</h3>
+							<div>
+								<p>That's possible, but I won't because shader support for structured buffers isn't good enough yet. Either they're not supported at all, are only in fragment programs, or perform worse than regular arrays. The good news is that the specifics of how data is passed between CPU and GPU only matter in a few places, so it's is easy to change. That's another benefit of using the <code>Light</code> struct.</p>
+							</div>
+						</aside>
+						
+						<p>Add an index and a <code class="csharp">VisibleLight</code> parameter to <code class="csharp">SetupDirectionalLight</code>. Have it set the color and direction elements with the supplied index. In this case the final color is provided via the <code class="csharp">VisibleLight.finalColor</code> property. The forward vector can be found via the <code class="csharp">VisibleLight.localToWorldMatrix</code> property. It's the third column of the matrix and once again has to be negated.</p>
+						
+						<pre class="csharp" translate="no">	void SetupDirectionalLight (<ins>int index, VisibleLight visibleLight</ins>) {
+		<ins>dirLightColors[index] = visibleLight.finalColor;</ins>
+		<ins>dirLightDirections[index] = -visibleLight.localToWorldMatrix.GetColumn(2);</ins>
+	}</pre>
+						
+						<p>The final color already applied the light's intensity, but by default Unity doesn't convert it to linear space. We have to set <code class="csharp">GraphicsSettings.lightsUseLinearIntensity</code> to <code class="csharp">true</code>, which we can do once in the constructor of <code class="csharp">CustomRenderPipeline</code>.</p>
+						
+						<pre class="csharp" translate="no">	public CustomRenderPipeline (
+		bool useDynamicBatching, bool useGPUInstancing, bool useSRPBatcher
+	) {
+		this.useDynamicBatching = useDynamicBatching;
+		this.useGPUInstancing = useGPUInstancing;
+		GraphicsSettings.useScriptableRenderPipelineBatching = useSRPBatcher;
+		<ins>GraphicsSettings.lightsUseLinearIntensity = true;</ins>
+	}</pre>
+						
+						<p>Next, loop through all visible lights in <code class="csharp">Lighting.SetupLights</code> and invoke <code class="csharp">SetupDirectionalLight</code> for each element. Then invoke <code class="csharp">SetGlobalInt</code> and <code class="csharp">SetGlobalVectorArray</code> on the buffer to send the data to the GPU.</p>
+						
+						<pre class="csharp" translate="no">		NativeArray&lt;VisibleLight> visibleLights = cullingResults.visibleLights;
+		<ins>for (int i = 0; i &lt; visibleLights.Length; i++) {</ins>
+			<ins>VisibleLight visibleLight = visibleLights[i];</ins>
+			<ins>SetupDirectionalLight(i, visibleLight);</ins>
+		<ins>}</ins>
+
+		<ins>buffer.SetGlobalInt(dirLightCountId, visibleLights.Length);</ins>
+		<ins>buffer.SetGlobalVectorArray(dirLightColorsId, dirLightColors);</ins>
+		<ins>buffer.SetGlobalVectorArray(dirLightDirectionsId, dirLightDirections);</ins></pre>
+						
+						<p>But we only support up to four directional lights, so we should abort the loop when we reach that maximum. Let's keep track of the directional light index separate from the loop's iterator.</p>
+						
+						<pre class="csharp" translate="no">		<ins>int dirLightCount = 0;</ins>
+		for (int i = 0; i &lt; visibleLights.Length; i++) {
+			VisibleLight visibleLight = visibleLights[i];
+			SetupDirectionalLight(<ins>dirLightCount++</ins>, visibleLight);
+			<ins>if (dirLightCount >= maxDirLightCount) {</ins>
+				<ins>break;</ins>
+			<ins>}</ins>
+		}
+
+		buffer.SetGlobalInt(dirLightCountId, <ins>dirLightCount</ins>);</pre>
+						
+						<p>Because we only support directional lights we should ignore other light types. We can do this by checking whether the <code class="csharp">lightType</code> property of the visible lights is equal to <code class="csharp">LightType.Directional</code>.</p>
+						
+						<pre class="csharp" translate="no">			VisibleLight visibleLight = visibleLights[i];
+			<ins>if (visibleLight.lightType == LightType.Directional) {</ins>
+				SetupDirectionalLight(dirLightCount++, visibleLight);
+				if (dirLightCount >= maxDirLightCount) {
+					break;
+				}
+			<ins>}</ins></pre>
+						
+						<p>This works, but the <code class="csharp">VisibleLight</code> struct is rather big. Ideally we only retrieve it once from the native array and don't also pass it as a regular argument to <code class="csharp">SetupDirectionalLight</code>, because that copies it. We can use the same trick that Unity uses for the <code class="csharp">ScriptableRenderContext.DrawRenderers</code> method, which is passing the argument by reference.</p>
+						
+						<pre class="csharp" translate="no">				SetupDirectionalLight(dirLightCount++, <ins>ref</ins> visibleLight);</pre>
+						
+						<p>That requires us to also define the parameter as a reference.</p>
+						
+						<pre class="csharp" translate="no">	void SetupDirectionalLight (int index, <ins>ref</ins> VisibleLight visibleLight) { &hellip; }</pre>
+					</section>
+					
+					<section>
+						<h3>Shader Loop</h3>
+						
+						<p>Adjust the <code>_CustomLight</code> buffer in <em translate="no">Light</em> so it matches our new data format. In this case we'll explicitly use <code>float4</code> for the array types. Arrays have a fixed size in shaders, they cannot be resized. Make sure to use the same maximum that we defined in <code class="csharp">Lighting</code>.</p>
+						
+						<pre translate="no"><ins>#define MAX_DIRECTIONAL_LIGHT_COUNT 4</ins>
+
+CBUFFER_START(_CustomLight)
+	<del>//float4 _DirectionalLightColor;</del>
+	<del>//float4 _DirectionalLightDirection;</del>
+	<ins>int _DirectionalLightCount;</ins>
+	<ins>float4 _DirectionalLightColors[MAX_DIRECTIONAL_LIGHT_COUNT];</ins>
+	<ins>float4 _DirectionalLightDirections[MAX_DIRECTIONAL_LIGHT_COUNT];</ins>
+CBUFFER_END</pre>
+						
+						<p>Add a function to get the directional light count and adjust <code>GetDirectionalLight</code> so it retrieves the data for a specific light index.</p>
+						
+						<pre translate="no"><ins>int GetDirectionalLightCount () {</ins>
+	<ins>return _DirectionalLightCount;</ins>
+<ins>}</ins>
+
+Light GetDirectionalLight (<ins>int index</ins>) {
+	Light light;
+	light.color = <ins>_DirectionalLightColors[index].rgb</ins>;
+	light.direction = <ins>_DirectionalLightDirections[index].xyz</ins>;
+	return light;
+}</pre>
+						
+						<aside>
+							<h3>Is there a difference between <code>rgb</code> and <code>xyz</code>?</h3>
+							<div>
+								<p>They're semantic aliases. Swizzling using <code>rgba</code> and <code>xyzw</code> is equivalent.</p>
+							</div>
+						</aside>
+						
+						<p>Then adjust <code>GetLight</code> for a surface so it uses a <code>for</code> loop to accumulate the contribution of all directional lights.</p>
+						
+						<pre translate="no">float3 GetLighting (Surface surface) {
+	<ins>float3 color = 0.0;</ins>
+	<ins>for (int i = 0; i &lt; GetDirectionalLightCount(); i++) {</ins>
+		<ins>color += GetLighting(surface, GetDirectionalLight(i));</ins>
+	<ins>}</ins>
+	return <ins>color</ins>;
+}</pre>
+						
+						<figure>
+							<img src="lights/four-directional-lights.png" width="180" height="180">
+							<figcaption>Four directional lights.</figcaption>
+						</figure>
+						
+						<p>Now our shader supports up to four directional lights. Usually only a single directional light is needed to represent the Sun or Moon, but maybe there's a scene on a planet with multiple suns. Directional lights could also be used to approximate multiple large light rigs, for example those of a big stadium.</p>
+						
+						<p>If your game always has a single directional light then you could get rid of the loop, or make multiple shader variants. But for this tutorial we'll keep it simple and stick to a single general-purpose loop. The best performance is always achieved by ripping out everything that you do not need, although it doesn't always make a significant difference.</p>
+					</section>
+					
+					<section>
+						<h3>Shader Target Level</h3>
+						
+						<p>Loops with a variable length used to be a problem for shaders, but modern GPUs can deal with them without issues, especially when all fragments of a draw call iterate over the same data in the same way. However, the OpenGL ES 2.0 and WebGL 1.0 graphics APIs can't deal with such loops by default. We could make it work by incorporating a hard-coded maximum, for example by having <code>GetDirectionalLight</code> return <code>min(_DirectionalLightCount, MAX_DIRECTIONAL_LIGHT_COUNT)</code>. This makes it possible to unroll the loop, turning it into a sequence of conditional code blocks. Unfortunately the resulting shader code is a mess and performance goes down fast. On very old-fashioned hardware all code blocks will always get executed, their contribution controlled via conditional assignments. While we could make this work it makes the code more complex, because we'd have to make other adjustments as well. So I opt to ignore these limitations and turn off WebGL 1.0 and OpenGL ES 2.0 support in builds for the sake of simplicity. They don't support linear lighting anyway. We can also avoid compiling OpenGL ES 2.0 shader variants for them by raising the target level of our shader pass to 3.5, via the <code>#pragma target 3.5</code> directive. Let's be consistent and do this for both shaders.</p>
+						
+						<pre translate="no">			HLSLPROGRAM
+			<ins>#pragma target 3.5</ins>
+			&hellip;
+			ENDHLSL</pre>
+						
+					</section>
+				</section>
+				
+				<section>
+					<h2>BRDF</h2>
+					
+					<p>We're currently using a very simplistic lighting model, appropriate for perfectly diffuse surfaces only. We can achieve more varied and realistic lighting by applying a bidirectional reflectance distribution function, BRDF for short. There are many such functions. We'll use the same one that's used by the Universal RP, which trades some realism for performance.</p>
+					
+					<section>
+						<h3>Incoming Light</h3>
+						
+						<p>When a beam of light hits a surface fragment head-on then all its energy will affect the fragment. For simplicity we'll assume that the beam's width matches the fragment's. This is the case where the light direction `L` and surface normal `N` align, so `N*L=1`. When they don't align at least part of the beam misses the surface fragment, so less energy affects the fragment. The energy portion that affects the fragment is `N*L`. A negative results means that the surface is oriented away from the light, so it cannot be affected by it.</p>
+						
+						<figure>
+							<img src="brdf/incoming-light.png" width="270" height="165">
+							<figcaption>Incoming light portion.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Outgoing Light</h3>
+						
+						<p>We don't see the light that arrives at a surface directly. We only see the portion that bounces off the surface and arrives at the camera or our eyes. If the surface were a perfectly flat mirror then the light would reflect off it, with an outgoing angle equal to the incoming angle. We would only see this light if the camera were aligned with it. This is known as specular reflection. It's a simplification of light interaction, but it's good enough for our purposes.</p> 
+						
+						<figure>
+							<img src="brdf/specular-reflection.png" width="240" height="150">
+							<figcaption>Perfect specular reflection.</figcaption>
+						</figure>
+						
+						<p>But if the surface isn't perfectly flat then the light gets scattered, because the fragment effectively consists of many smaller fragments that have different orientations. This splits the beam of light into smaller beams that go in different directions, which effectively blurs the specular reflection. We could end up seeing some of the scattered light even when not aligned with the perfect reflection direction.</p>
+						
+						<figure>
+							<img src="brdf/scattered-reflection.png" width="240" height="150">
+							<figcaption>Scattered specular reflection.</figcaption>
+						</figure>
+						
+						<p>Besides that, the light also penetrates the surface, bounces around, and exits at different angles, plus other things that we don't need to consider. Taken to the extreme, we end up with a perfectly diffuse surface that scatters light evenly in all possible directions. This is the lighting that we're currently calculating in our shader.</p> 
+						
+						<figure>
+							<img src="brdf/diffuse-reflection.png" width="240" height="150">
+							<figcaption>Perfect diffuse reflection.</figcaption>
+						</figure>
+						
+						<p>No matter where the camera is, the amount of diffused light received from the surface is the same. But this means that the light energy that we observe is far less than the amount that arrived at the surface fragment. This suggests that we should scale the incoming light by some factor. However, because the factor is always the same we can bake it into the light's color and intensity. Thus the final light color that we use represents the amount observed when reflected from a perfectly white diffuse surface fragment illuminated head-on. This is a tiny fraction of the total amount of light that is actually emitted. There are other ways to configure lights, for example by specifying lumen or lux, which make it easier to configure realistic light sources, but we'll stick with the current approach.</p>
+						
+					</section>
+					
+					<section>
+						<h3>Surface Properties</h3>
+						
+						<p>Surfaces can be perfectly diffuse, perfect mirrors, or anything in between. There are multiple ways in which we could control this. We'll use the metallic workflow, which requires us to add two surface properties to the <em translate="no">Lit</em> shader.</p>
+						
+						<p>The first property is whether a surface is metallic or nonmetalic, also known as a dielectric. Because a surface can contain a mix of both we'll add a range 0&ndash;1 slider for it, with 1 indicating that it is fully metallic. The default is fully dielectric.</p>
+						
+						<p>The second property controls how smooth the surface is. We'll also use a range 0&ndash;1 slider for this, with 0 being perfectly rough and 1 being perfectly smooth. We'll use 0.5 as the default.</p>
+						
+						<pre translate="no">		<ins>_Metallic ("Metallic", Range(0, 1)) = 0</ins>
+		<ins>_Smoothness ("Smoothness", Range(0, 1)) = 0.5</ins></pre>
+						
+						<figure>
+							<img src="brdf/metallic-smoothness.png" width="320" height="92">
+							<figcaption>Material with metallic and smoothness sliders.</figcaption>
+						</figure>
+						
+						<p>Add the properties to the <code>UnityPerMaterial</code> buffer.</p>
+						
+						<pre translate="no">UNITY_INSTANCING_BUFFER_START(UnityPerMaterial)
+	UNITY_DEFINE_INSTANCED_PROP(float4, _BaseMap_ST)
+	UNITY_DEFINE_INSTANCED_PROP(float4, _BaseColor)
+	UNITY_DEFINE_INSTANCED_PROP(float, _Cutoff)
+	<ins>UNITY_DEFINE_INSTANCED_PROP(float, _Metallic)</ins>
+	<ins>UNITY_DEFINE_INSTANCED_PROP(float, _Smoothness)</ins>
+UNITY_INSTANCING_BUFFER_END(UnityPerMaterial)</pre>
+						
+						<p>And also to the <code>Surface</code> struct.</p>
+						
+						<pre translate="no">struct Surface {
+	float3 normal;
+	float3 color;
+	float alpha;
+	<ins>float metallic;</ins>
+	<ins>float smoothness;</ins>
+};</pre>
+						
+						<p>Copy them to the surface in <code>LitPassFragment</code>.</p>
+						
+						<pre translate="no">	Surface surface;
+	surface.normal = normalize(input.normalWS);
+	surface.color = base.rgb;
+	surface.alpha = base.a;
+	<ins>surface.metallic = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Metallic);</ins>
+	<ins>surface.smoothness =</ins>
+		<ins>UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Smoothness);</ins></pre>
+						
+						<p>And also add support for them to <code class="csharp">PerObjectMaterialProperties</code>.</p>
+						
+						<pre class="csharp" translate="no">	static int
+		baseColorId = Shader.PropertyToID("_BaseColor"),
+		cutoffId = Shader.PropertyToID("_Cutoff")<ins>,</ins>
+		<ins>metallicId = Shader.PropertyToID("_Metallic"),</ins>
+		<ins>smoothnessId = Shader.PropertyToID("_Smoothness");</ins>
+
+	&hellip;
+
+	[SerializeField, Range(0f, 1f)]
+	float alphaCutoff = 0.5f<ins>, metallic = 0f, smoothness = 0.5f</ins>;
+
+	&hellip;
+
+	void OnValidate () {
+		&hellip;
+		<ins>block.SetFloat(metallicId, metallic);</ins>
+		<ins>block.SetFloat(smoothnessId, smoothness);</ins>
+		GetComponent&lt;Renderer>().SetPropertyBlock(block);
+	}
+}</pre>
+					</section>
+					
+					<section>
+						<h3>BRDF Properties</h3>
+						
+						<p>We'll use the surface properties to calculate the BRDF equation. It tells us how much light we end up seeing reflected off a surface, which is a combination of diffuse reflection and specular reflection. We need to split the surface color in a diffuse and a specular part, and we'll also need to know how rough the surface is. Let's keep track of these three values in a <code>BRDF</code> struct, put in a separate <em translate="no">BRDF</em> HLSL file.</p>
+						
+						<pre translate="no"><ins>#ifndef CUSTOM_BRDF_INCLUDED</ins>
+<ins>#define CUSTOM_BRDF_INCLUDED</ins>
+
+<ins>struct BRDF {</ins>
+	<ins>float3 diffuse;</ins>
+	<ins>float3 specular;</ins>
+	<ins>float roughness;</ins>
+<ins>};</ins>
+
+<ins>#endif</ins></pre>
+						
+						<p>Add a function to get the BRDF data for a given surface. Start with a perfect diffuse surface, so the diffuse part is equal to the surface color while specular is black and roughness is one.</p>
+						
+						<pre translate="no"><ins>BRDF GetBRDF (Surface surface) {</ins>
+	<ins>BRDF brdf;</ins>
+	<ins>brdf.diffuse = surface.color;</ins>
+	<ins>brdf.specular = 0.0;</ins>
+	<ins>brdf.roughness = 1.0;</ins>
+	<ins>return brdf;</ins>
+<ins>}</ins></pre>
+						
+						<p>Include <em translate="no">BRDF</em> after <em translate="no">Light</em> and before <em translate="no">Lighting</em>.</p>
+						
+						<pre translate="no">#include "../ShaderLibrary/Common.hlsl"
+#include "../ShaderLibrary/Surface.hlsl"
+#include "../ShaderLibrary/Light.hlsl"
+<ins>#include "../ShaderLibrary/BRDF.hlsl"</ins>
+#include "../ShaderLibrary/Lighting.hlsl"</pre>
+						
+						<p>Add a <code>BRDF</code> parameter to both <code>GetLighting</code> functions, then multiply the incoming light with the diffuse portion instead of the entire surface color.</p>
+						
+						<pre translate="no">float3 GetLighting (Surface surface, <ins>BRDF brdf,</ins> Light light) {
+	return IncomingLight(surface, light) * <ins>brdf.diffuse</ins>;
+}
+
+float3 GetLighting (Surface surface<ins>, BRDF brdf</ins>) {
+	float3 color = 0.0;
+	for (int i = 0; i &lt; GetDirectionalLightCount(); i++) {
+		color += GetLighting(surface, <ins>brdf,</ins> GetDirectionalLight(i));
+	}
+	return color;
+}</pre>
+						
+						<p>Finally, get the BRDF data in <code>LitPassFragment</code> and pass it to <code>GetLighting</code>.</p>
+						
+						<pre translate="no">	<ins>BRDF brdf = GetBRDF(surface);</ins>
+	float3 color = GetLighting(surface<ins>, brdf</ins>);</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Reflectivity</h3>
+						
+						<p>How reflective a surface is varies, but in general metals reflect all light via specular reflection and have zero diffuse reflection. So we'll declare reflectivity to be equal to the metallic surface property. Light that gets reflected doesn't get diffused, so we should scale the diffuse color by one minus the reflectivity in <code>GetBRDF</code>.</p>
+						
+						<pre translate="no">	<ins>float oneMinusReflectivity = 1.0 - surface.metallic;</ins>
+
+	brdf.diffuse = surface.color <ins>* oneMinusReflectivity</ins>;</pre>
+						
+						<figure>
+							<img src="brdf/reflectivity.png" width="420" height="100">
+							<figcaption>White spheres with metallic 0, 0.25, 0.5, 0.75, and 1.</figcaption>
+						</figure>
+						
+						<p>In reality some light also bounces off dielectric surfaces, which gives them their highlight. The reflectivity of nonmetals varies, but is about 0.04 on average. Let's define that as the minimum reflectivity and add a <code>OneMinusReflectivity</code> function that adjusts the range from 0&ndash;1 to 0&ndash;0.96. This range adjustments matches the Universal RP's approach.</p>
+						
+						<pre translate="no"><ins>#define MIN_REFLECTIVITY 0.04</ins>
+
+<ins>float OneMinusReflectivity (float metallic) {</ins>
+	<ins>float range = 1.0 - MIN_REFLECTIVITY;</ins>
+	<ins>return range - metallic * range;</ins>
+<ins>}</ins></pre>
+						
+						<p>Use that function in <code>GetBRDF</code> to enforce the minimum. The difference is hardly noticeable when only rendering the diffuse reflections, but will matter a lot when we add specular reflections. Without it nonmetals won't get specular highlights.</p>
+						
+						<pre translate="no">	float oneMinusReflectivity = <ins>OneMinusReflectivity(surface.metallic)</ins>;</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Specular Color</h3>
+						
+						<p>Light that gets reflected one way cannot also get reflected another way. This is known as energy conservation, which means that the amount of outgoing light cannot exceed the amount of incoming light. This suggests that the specular color should be equal to the surface color minus the diffuse color.</p>
+						
+						<pre translate="no">	brdf.diffuse = surface.color * oneMinusReflectivity;
+	<ins>brdf.specular = surface.color - brdf.diffuse;</ins></pre>
+						
+						<p>However, this ignores the fact that metals affect the color of specular reflections while nonmetals don't. The specular color of dielectric surfaces should be white, which we can achieve by using the metallic property to interpolate between the minimum reflectivity and the surface color instead.</p>
+						
+						<pre translate="no">	brdf.specular = <ins>lerp(MIN_REFLECTIVITY, surface.color, surface.metallic)</ins>;</pre>
+					</section>
+					
+					<section>
+						<h3>Roughness</h3>
+						
+						<p>Roughness is the opposite of smoothness, so we can simply take one minus smoothness. The <em translate="no">Core RP Library</em> has a function that does this, named <code>PerceptualSmoothnessToPerceptualRoughness</code>. We'll use this function, to make clear that the smoothness and thus also the roughness are defined as perceptual. We can convert to the actual roughness value via the <code>PerceptualRoughnessToRoughness</code> function, which squares the perceptual value. This matches the Disney lighting model. It's done this way because adjusting the perceptual version is more intuitive when editing materials.</p>
+						
+						<pre translate="no">	<ins>float perceptualRoughness =</ins>
+		<ins>PerceptualSmoothnessToPerceptualRoughness(surface.smoothness);</ins>
+	<ins>brdf.roughness = PerceptualRoughnessToRoughness(perceptualRoughness);</ins></pre>
+						
+						<p>These functions are defined in the <em translate="no">CommonMaterial</em> HLSL file of the <em translate="no">Core RP Libary</em>. Include it in our <em translate="no">Common</em> file after including the core's <em translate="no">Common</em>.</p>
+						
+						<pre translate="no">#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+<ins>#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/CommonMaterial.hlsl"</ins>
+#include "UnityInput.hlsl"</pre>
+						
+					</section>
+					
+					<section>
+						<h3>View Direction</h3>
+						
+						<p>To determine how well the camera is aligned with the perfect reflection direction we'll need to know the camera's position. Unity makes this data available via <code>float3 _WorldSpaceCameraPos</code>, so add it to <em translate="no">UnityInput</em>.</p>
+						
+						<pre translate="no"><ins>float3 _WorldSpaceCameraPos;</ins></pre>
+						
+						<p>To get the view direction&mdash;the direction from surface to camera&mdash;in <code>LitPassFragment</code> we need to add the world-space surface position to <code>Varyings</code>.</p>
+						
+						<pre translate="no">struct Varyings {
+	float4 positionCS : SV_POSITION;
+	<ins>float3 positionWS : VAR_POSITION;</ins>
+	&hellip;
+};
+
+Varyings LitPassVertex (Attributes input) {
+	&hellip;
+	<ins>output.</ins>positionWS = TransformObjectToWorld(input.positionOS);
+	output.positionCS = TransformWorldToHClip(<ins>output.</ins>positionWS);
+	&hellip;
+}</pre>
+						
+						<p>We'll consider the view direction to be part of the surface data, so add it to <code>Surface</code>.</p>
+						
+						<pre translate="no">struct Surface {
+	float3 normal;
+	<ins>float3 viewDirection;</ins>
+	float3 color;
+	float alpha;
+	float metallic;
+	float smoothness;
+};</pre>
+						
+						<p>Assign it in <code>LitPassFragment</code>. It's equal to the camera position minus the fragment position, normalized.</p>
+						
+						<pre translate="no">	surface.normal = normalize(input.normalWS);
+	<ins>surface.viewDirection = normalize(_WorldSpaceCameraPos - input.positionWS);</ins></pre>
+						
+					</section>
+					
+					<section>
+						<h3>Specular Strength</h3>
+						
+						<p>The strength of the specular reflection that we observe depends on how well our view direction matches the perfect reflection direction. We'll use the same formula that's used in the Universal RP, which is a variant of the Minimalist CookTorrance BRDF. The formula contains a few squares, so let's add a convenient <code>Square</code> function to <em translate="no">Common</em> first.</p>
+						
+						<pre translate="no"><ins>float Square (float v) {</ins>
+	<ins>return v * v;</ins>
+<ins>}</ins></pre>
+						
+						<p>Then add a <code>SpecularStrength</code> function to <em translate="no">BRDF</em> with a surface, BRDF data, and light as parameters. It should calculate `r^2/(d^2 max(0.1, (L*H)^2)n)`, where `r` is the roughness and all dot products should be saturated. Furthermore, `d=(N*H)^2(r^2-1)+1.0001`, `N` is the surface normal, `L` is the light direction, and `H=L+V` normalized, which is the halfway vector between the light and view directions. Use the <code>SafeNormalize</code> function to normalize that vector, to avoid a division by zero in case the vectors are opposed. Finally, `n=4r+2` and is a normalization term.</p>
+						
+						<pre translate="no"><ins>float SpecularStrength (Surface surface, BRDF brdf, Light light) {</ins>
+	<ins>float3 h = SafeNormalize(light.direction + surface.viewDirection);</ins>
+	<ins>float nh2 = Square(saturate(dot(surface.normal, h)));</ins>
+	<ins>float lh2 = Square(saturate(dot(light.direction, h)));</ins>
+	<ins>float r2 = Square(brdf.roughness);</ins>
+	<ins>float d2 = Square(nh2 * (r2 - 1.0) + 1.00001);</ins>
+	<ins>float normalization = brdf.roughness * 4.0 + 2.0;</ins>
+	<ins>return r2 / (d2 * max(0.1, lh2) * normalization);</ins>
+<ins>}</ins></pre>
+						
+						<aside>
+							<h3>How does that function work?</h3>
+							<div>
+								<p>BRDF theory is too complex to fully explain in short and isn't the focus of this tutorial. You can check the <em translate="no">Lighting</em> HLSL file of the Universal RP for some code documentation and references.</p>
+							</div>
+						</aside>
+						
+						<p>Next, add a <code>DirectBRDF</code> that returns the color obtained via direct lighting, given a surface, BRDF, and light. The result is the specular color modulated by the specular strength, plus the diffuse color.</p>
+						
+						<pre translate="no"><ins>float3 DirectBRDF (Surface surface, BRDF brdf, Light light) {</ins>
+	<ins>return SpecularStrength(surface, brdf, light) * brdf.specular + brdf.diffuse;</ins>
+<ins>}</ins></pre>
+						
+						<p><code>GetLighting</code> then has to multiply the incoming light by the result of that function.</p>
+						
+						<pre translate="no">float3 GetLighting (Surface surface, BRDF brdf, Light light) {
+	return IncomingLight(surface, light) * <ins>DirectBRDF(surface, brdf, light)</ins>;
+}</pre>
+						
+						<figure>
+							<img src="brdf/smoothness.png" width="320" height="320">
+							<figcaption>Smoothness top to bottom 0, 0.25, 0.5, 0.75, and 0.95.</figcaption>
+						</figure>
+						
+						<p>We now get specular reflections, which add highlights to our surfaces. For perfectly rough surfaces the highlight mimics diffuse reflection. Smoother surfaces get a more focused highlight. A perfectly smooth surface gets an infinitesimal highlight, which we cannot see. Some scattering is needed to make it visible.</p>
+						
+						<p>Due to energy conservation highlights can get very bright for smooth surfaces, because most of the light arriving at the surface fragment gets focused. Thus we end up seeing far more light than would be possible due to diffuse reflection where the highlight is visible. You can verify this by scaling down the final rendered color a lot.</p>
+						
+						<figure>
+							<img src="brdf/colors-001.png" width="320" height="320">
+							<figcaption>Final color divided by 100.</figcaption>
+						</figure>
+						
+						<p>You can also verify that metals affect the color of specular reflections while nonmetals don't, by using a base color other than white.</p>
+						
+						<figure>
+							<img src="brdf/blue.png" width="320" height="320">
+							<figcaption>Blue base color.</figcaption>
+						</figure>
+						
+						<p>We now have functional direct lighting that is believable, although currently the results are too dark&mdash;especially for metals&mdash;because we don't support environmental reflections yet. A uniform black environment would be more realistic than the default skybox at this point, but that makes our objects harder to see. Adding more lights works as well.</p>
+						
+						<figure>
+							<img src="brdf/four-lights.png" width="180" height="180">
+							<figcaption>Four lights.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Mesh Ball</h3>
+						
+						<p>Let's also add support for varying metallic and smoothness properties to <code class="csharp">MeshBall</code>. This requires adding two float arrays.</p>
+						
+						<pre class="csharp" translate="no">	static int
+		baseColorId = Shader.PropertyToID("_BaseColor")<ins>,</ins>
+		<ins>metallicId = Shader.PropertyToID("_Metallic"),</ins>
+		<ins>smoothnessId = Shader.PropertyToID("_Smoothness")</ins>;
+
+	&hellip;
+	<ins>float[]</ins>
+		<ins>metallic = new float[1023],</ins>
+		<ins>smoothness = new float[1023];</ins>
+
+	&hellip;
+
+	void Update () {
+		if (block == null) {
+			block = new MaterialPropertyBlock();
+			block.SetVectorArray(baseColorId, baseColors);
+			<ins>block.SetFloatArray(metallicId, metallic);</ins>
+			<ins>block.SetFloatArray(smoothnessId, smoothness);</ins>
+		}
+		Graphics.DrawMeshInstanced(mesh, 0, material, matrices, 1023, block);
+	}</pre>
+						
+						<p>Let's make 25% of the instances metallic and vary smoothness from 0.05 to 0.95 in <code class="csharp">Awake</code>.</p>
+						
+						<pre class="csharp" translate="no">			baseColors[i] =
+				new Vector4(
+					Random.value, Random.value, Random.value,
+					Random.Range(0.5f, 1f)
+				);
+			<ins>metallic[i] = Random.value &lt; 0.25f ? 1f : 0f;</ins>
+			<ins>smoothness[i] = Random.Range(0.05f, 0.95f);</ins></pre>
+						
+						<p>Then make the mesh ball use a lit material.</p>
+						
+						<figure>
+							<img src="brdf/mesh-ball.png" width="320" height="320">
+							<figcaption>Lit mesh ball.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Transparency</h2>
+					
+					<p>Let's again consider transparency. Objects still fade based on their alpha value, but now it's the reflected light that fades. This makes sense for diffuse reflections, as only part of the light gets reflected while the rest travels through the surface.</p>
+					
+					<figure>
+						<img src="transparency/fading.png" width="180" height="180">
+						<figcaption>Fading sphere.</figcaption>
+					</figure>
+					
+					<p> However, the specular reflections fade as well. In the case of a perfectly clear glass light either goes through or gets reflected. The specular reflections don't fade. We cannot represent this with our current approach.</p>
+					
+					<section>
+						<h3>Premultiplied Alpha</h3>
+						
+						<p>The solution is to only fade the diffuse light, while keeping the specular reflections at full strength. As the source blend mode applies to everything we cannot use it, so let's set it to one while still using one-minus-source-alpha for the destination blend mode.</p>
+						
+						<figure>
+							<img src="transparency/src-blend-one-inspector.png" width="320" height="38" alt="inspector"><br>
+							<img src="transparency/src-blend-one-scene.png" width="180" height="180" alt="scene">
+							<figcaption>Source blend mode set to one.</figcaption>
+						</figure>
+						
+						<p>This restores specular reflections, but the diffuse reflections no longer fade out. We fix that by factoring the surface alpha into the diffuse color. Thus we premultiply diffuse by alpha, instead of relying on GPU blending later. This approach is known as premultiplied alpha blending. Do it in <code>GetBRDF</code>.</p>
+						
+						<pre translate="no">	brdf.diffuse = surface.color * oneMinusReflectivity;
+	<ins>brdf.diffuse *= surface.alpha;</ins></pre>
+						
+						
+						<figure>
+							<img src="transparency/premultiplied-diffuse.png" width="180" height="180">
+							<figcaption>Premultiplied diffuse.</figcaption>
+						</figure>
+						
+					</section>
+					
+					<section>
+						<h3>Premultiplication Toggle</h3>
+						
+						<p>Premultiplying alpha with diffuse effectively turns objects into glass, while regular alpha blending makes objects effectively exist only partially. Let's support both, by adding a boolean parameter to <code>GetBRDF</code> to control whether we premultiply alpha, set to false by default.</p>
+						
+						<pre translate="no">BRDF GetBRDF (inout Surface surface<ins>, bool applyAlphaToDiffuse = false</ins>) {
+	&hellip;
+	<ins>if (applyAlphaToDiffuse) {</ins>
+		brdf.diffuse *= surface.alpha;
+	<ins>}</ins>
+
+	&hellip;
+}</pre>
+						
+						<p>We can use a <code>_PREMULTIPLY_ALPHA</code> keyword to decide which approach to use in <code>LitPassFragment</code>, similar to how we control alpha clipping.</p>
+						
+						<pre translate="no">	<ins>#if defined(_PREMULTIPLY_ALPHA)</ins>
+		<ins>BRDF brdf = GetBRDF(surface, true);</ins>
+	<ins>#else</ins>
+		BRDF brdf = GetBRDF(surface);
+	<ins>#endif</ins>
+	float3 color = GetLighting(surface, brdf);
+	return float4(color, surface.alpha);</pre>
+						
+						<p>Add a shader feature for the keyword to the <code>Pass</code> of <em translate="no">Lit</em>.</p>
+						
+						<pre translate="no">			#pragma shader_feature _CLIPPING
+			<ins>#pragma shader_feature _PREMULTIPLY_ALPHA</ins></pre>
+						
+						<p>And add a toggle property to the shader as well.</p>
+						
+						<pre translate="no">		<ins>[Toggle(_PREMULTIPLY_ALPHA)] _PremulAlpha ("Premultiply Alpha", Float) = 0</ins></pre>
+						
+						<figure>
+							<img src="transparency/premultiply-alpha-toggle.png" width="320" height="56">
+							<figcaption>Premultiply alpha toggle.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Shader GUI</h2>
+					
+					<p>We now support multiple rendering modes, each requiring specific settings. To make it easier to switch between modes let's add some buttons to our material inspector to apply preset configurations.</p>
+					
+					<section>
+						<h3>Custom Shader GUI</h3>
+						
+						<p>Add a <code>CustomEditor "CustomShaderGUI"</code> statement at the bottom of the main block of the <em translate="no">Lit</em> shader.</p>
+						
+						<pre translate="no">Shader "Custom RP/Lit" {
+	&hellip;
+
+	<ins>CustomEditor "CustomShaderGUI"</ins>
+}</pre>
+						
+						<p>That instructs the Unity editor to use an instance of the <code class="csharp">CustomShaderGUI</code> class to draw the inspector for materials that use the <em translate="no">Lit</em> shader. Create a script asset for that class and put it in a new <em translate="no">Custom RP / Editor</em> folder.</p>
+						
+						<p>We'll need to use the <code class="csharp">UnityEditor</code>, <code class="csharp">UnityEngine</code>, and <code class="csharp">UnityEngine.Rendering</code> namespaces. The class has to extend <code class="csharp">ShaderGUI</code> and override the public <code class="csharp">OnGUI</code> method, which has a <code class="csharp">MaterialEditor</code> and a <code class="csharp">MaterialProperty</code> array parameter. Have it invoke the base method, so we end up with the default inspector.</p>
+						
+						<pre class="csharp" translate="no"><ins>using UnityEditor;</ins>
+<ins>using UnityEngine;</ins>
+<ins>using UnityEngine.Rendering;</ins>
+
+<ins>public class CustomShaderGUI : ShaderGUI {</ins>
+
+	<ins>public override void OnGUI (</ins>
+		<ins>MaterialEditor materialEditor, MaterialProperty[] properties</ins>
+	<ins>) {</ins>
+		<ins>base.OnGUI(materialEditor, properties);</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Setting Properties and Keywords</h3>
+						
+						<p>To do our work we'll need access to three things, which we'll store in fields. First is the material editor, which is the underlying editor object responsible for showing and editing materials. Second is a reference to the materials being edited, which we can retrieve via the <code class="csharp">targets</code> property of the editor. It's defined as an <code class="csharp">Object</code> array because <code class="csharp">targets</code> is a property of the general-purpose <code class="csharp">Editor</code> class. Third is the array of properties that can be edited.</p>
+						
+						<pre class="csharp" translate="no">	<ins>MaterialEditor editor;</ins>
+	<ins>Object[] materials;</ins>
+	<ins>MaterialProperty[] properties;</ins>
+
+	public override void OnGUI (
+		MaterialEditor materialEditor, MaterialProperty[] properties
+	) {
+		base.OnGUI(materialEditor, properties);
+		<ins>editor = materialEditor;</ins>
+		<ins>materials = materialEditor.targets;</ins>
+		<ins>this.properties = properties;</ins>
+	}</pre>
+						
+						<aside>
+							<h3>Why are there multiple materials?</h3>
+							<div>
+								<p>Multiple materials that use the same shader can be edited at the same time, just like you can select and edit multiple game objects.</p>
+							</div>
+						</aside>
+						
+						<p>To set a property we first have to find it in the array, for which we can use the <code class="csharp">ShaderGUI.FindPropery</code> method, passing it a name and property array. We can then adjust its value, by assigning to its <code class="csharp">floatValue</code> property. Encapsulate this in a convenient <code class="csharp">SetProperty</code> method with a name and a value parameter.</p>
+						
+						<pre class="csharp" translate="no">	<ins>void SetProperty (string name, float value) {</ins>
+		<ins>FindProperty(name, properties).floatValue = value;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Settings a keyword is a bit more involved. We'll create a <code class="csharp">SetKeyword</code> method for this, with a name and a boolean parameter to indicate whether the keyword should be enabled or disabled. We have to invoke either <code class="csharp">EnableKeyword</code> or <code class="csharp">DisableKeyword</code> on all materials, passing them the keyword name.</p>
+						
+						<pre class="csharp" translate="no">	<ins>void SetKeyword (string keyword, bool enabled) {</ins>
+		<ins>if (enabled) {</ins>
+			<ins>foreach (Material m in materials) {</ins>
+				<ins>m.EnableKeyword(keyword);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>foreach (Material m in materials) {</ins>
+				<ins>m.DisableKeyword(keyword);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Let's also create a <code class="csharp">SetProperty</code> variant that toggles a property&ndash;keyword combination.</p>
+						
+						<pre class="csharp" translate="no">	<ins>void SetProperty (string name, string keyword, bool value) {</ins>
+		<ins>SetProperty(name, value ? 1f : 0f);</ins>
+		<ins>SetKeyword(keyword, value);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can define simple <code class="csharp">Clipping</code>, <code class="csharp">PremultiplyAlpha</code>, <code class="csharp">SrcBlend</code>, <code class="csharp">DstBlend</code>, and <code class="csharp">ZWrite</code> setter properties.</p>
+						
+						<pre class="csharp" translate="no">	<ins>bool Clipping {</ins>
+		<ins>set => SetProperty("_Clipping", "_CLIPPING", value);</ins>
+	<ins>}</ins>
+
+	<ins>bool PremultiplyAlpha {</ins>
+		<ins>set => SetProperty("_PremulAlpha", "_PREMULTIPLY_ALPHA", value);</ins>
+	<ins>}</ins>
+
+	<ins>BlendMode SrcBlend {</ins>
+		<ins>set => SetProperty("_SrcBlend", (float)value);</ins>
+	<ins>}</ins>
+
+	<ins>BlendMode DstBlend {</ins>
+		<ins>set => SetProperty("_DstBlend", (float)value);</ins>
+	<ins>}</ins>
+
+	<ins>bool ZWrite {</ins>
+		<ins>set => SetProperty("_ZWrite", value ? 1f : 0f);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Finally, the render queue is set by assigning to the <code class="csharp">RenderQueue€</code> property of all materials. We can use the <code class="csharp">RenderQueue</code> enum for this.</p>
+						
+						<pre class="csharp" translate="no">	<ins>RenderQueue RenderQueue€ {</ins>
+		<ins>set {</ins>
+			<ins>foreach (Material m in materials) {</ins>
+				<ins>m.renderQueue = (int)value;</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Preset Buttons</h3>
+						
+						<p>A button can be created via the <code class="csharp">GUILayout.Button</code> method, passing it a label, which will be a preset's name. If the method returns <code class="csharp">true</code> then it was pressed. Before applying the preset we should register an undo step with the editor, which can be done by invoking <code class="csharp">RegisterPropertyChangeUndo</code> on it with the name. As this code is the same for all presets, put it in a <code class="csharp">PresetButton</code> method that returns whether the preset should be applied.</p>
+						
+						<pre class="csharp" translate="no">	<ins>bool PresetButton (string name) {</ins>
+		<ins>if (GUILayout.Button(name)) {</ins>
+			<ins>editor.RegisterPropertyChangeUndo(name);</ins>
+			<ins>return true;</ins>
+		<ins>}</ins>
+		<ins>return false;</ins>
+	<ins>}</ins></pre>
+						
+						<p>We'll create a separate method per preset, beginning with the default <em translate="no">Opaque</em> mode. Have it set the properties appropriately when activated.</p>
+						
+						<pre class="csharp" translate="no">	<ins>void OpaquePreset () {</ins>
+		<ins>if (PresetButton("Opaque")) {</ins>
+			<ins>Clipping = false;</ins>
+			<ins>PremultiplyAlpha = false;</ins>
+			<ins>SrcBlend = BlendMode.One;</ins>
+			<ins>DstBlend = BlendMode.Zero;</ins>
+			<ins>ZWrite = true;</ins>
+			<ins>RenderQueue€ = RenderQueue.Geometry;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>The second preset is <em translate="no">Clip</em>, which is a copy of <em translate="no">Opaque</em> with clipping turned on and the queue set to <em translate="no">AlphaTest</em>.</p>
+						
+						<pre class="csharp" translate="no">	void <ins>ClipPreset</ins> () {
+		if (PresetButton("Clip")) {
+			Clipping = <ins>true</ins>;
+			PremultiplyAlpha = false;
+			SrcBlend = BlendMode.One;
+			DstBlend = BlendMode.Zero;
+			ZWrite = true;
+			RenderQueue€ = RenderQueue.<ins>AlphaTest</ins>;
+		}
+	}</pre>
+						
+						<p>The third preset is for standard transparency, which fades out objects so we'll name it <em translate="no">Fade</em>. It's another copy of <em translate="no">Opaque</em>, with adjusted blend modes and queue, plus no depth writing.</p>
+						
+						<pre class="csharp" translate="no">	void <ins>FadePreset</ins> () {
+		if (PresetButton("Fade")) {
+			Clipping = false;
+			PremultiplyAlpha = false;
+			SrcBlend = BlendMode.<ins>SrcAlpha</ins>;
+			DstBlend = BlendMode.<ins>OneMinusSrcAlpha</ins>;
+			ZWrite = <ins>false</ins>;
+			RenderQueue€ = RenderQueue.<ins>Transparent</ins>;
+		}
+	}</pre>
+						
+						<p>The fourth preset is a variant of <em translate="no">Fade</em> that applies premultiplied alpha blending. We'll name it <em translate="no">Transparent</em> as it's for semitransparent surfaces with correct lighting.</p>
+						
+						<pre class="csharp" translate="no">	void <ins>TransparentPreset</ins> () {
+		if (PresetButton("Transparent")) {
+			Clipping = false;
+			PremultiplyAlpha = <ins>true</ins>;
+			SrcBlend = BlendMode.<ins>One</ins>;
+			DstBlend = BlendMode.OneMinusSrcAlpha;
+			ZWrite = false;
+			RenderQueue€ = RenderQueue.Transparent;
+		}
+	}</pre>
+						
+						<p>Invoke the preset methods at the end of <code class="csharp">OnGUI</code> so they show up below the default inspector.</p>
+						
+						<pre class="csharp" translate="no">	public override void OnGUI (
+		MaterialEditor materialEditor, MaterialProperty[] properties
+	) {
+		&hellip;
+
+		<ins>OpaquePreset();</ins>
+		<ins>ClipPreset();</ins>
+		<ins>FadePreset();</ins>
+		<ins>TransparentPreset();</ins>
+	}</pre>
+						
+						<figure>
+							<img src="shader-gui/preset-buttons.png" width="320" height="110">
+							<figcaption>Preset buttons.</figcaption>
+						</figure>
+						
+						<p>The preset buttons won't be used often, so let's put them inside a foldout that is collapsed by default. This is done by invoking <code class="csharp">EditorGUILayout.Foldout</code> with the current foldout state, label, and <code class="csharp">true</code> to indicate that clicking it should toggle its state. It returns the new foldout state, which we should store in a field. Only draw the buttons when the foldout is open.</p>
+						
+						<pre class="csharp" translate="no">	<ins>bool showPresets;</ins>
+
+	&hellip;
+
+	public override void OnGUI (
+		MaterialEditor materialEditor, MaterialProperty[] properties
+	) {
+		&hellip;
+
+		<ins>EditorGUILayout.Space();</ins>
+		<ins>showPresets = EditorGUILayout.Foldout(showPresets, "Presets", true);</ins>
+		<ins>if (showPresets) {</ins>
+			OpaquePreset();
+			ClipPreset();
+			FadePreset();
+			TransparentPreset();
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<img src="shader-gui/foldout.png" width="320" height="132">
+							<figcaption>Preset foldout.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Presets for Unlit</h3>
+						
+						<p>We can also use the custom shader GUI for our <em translate="no">Unlit</em> shader.</p>
+						
+						<pre translate="no">Shader "Custom RP/Unlit" {
+	&hellip;
+
+	<ins>CustomEditor "CustomShaderGUI"</ins>
+}</pre>
+						
+						<p>However, activating a preset will result in an error, because we're trying to set a property that the shader doesn't have. We can guard against that by adjusting <code class="csharp">SetProperty</code>. Have it invoke <code class="csharp">FindProperty</code> with <code class="csharp">false</code> as an additional argument, indicating that it shouldn't log an error if the property isn't found. The result will then be <code class="csharp">null</code>, so only set the value if that's not the case. Also return whether the property exists.</p>
+						
+						<pre class="csharp" translate="no">	<ins>bool</ins> SetProperty (string name, float value) {
+		<ins>MaterialProperty property = FindProperty(name, properties, false);</ins>
+		<ins>if (property != null) {</ins>
+			<ins>property.floatValue = value;</ins>
+			<ins>return true;</ins>
+		<ins>}</ins>
+		<ins>return false;</ins>
+	}</pre>
+						
+						<p>Then adjust the keyword version of <code class="csharp">SetProperty</code> so it only sets the keyword if the relevant property exists.</p>
+						
+						<pre class="csharp" translate="no">	void SetProperty (string name, string keyword, bool value) {
+		<ins>if (</ins>SetProperty(name, value ? 1f : 0f)<ins>) {</ins>
+			<ins>SetKeyword(keyword, value);</ins>
+		<ins>}</ins>
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>No Transparency</h3>
+						
+						<p>Now the presets also work for materials that use the <em translate="no">Unlit</em> shader, although the <em translate="no">Transparent</em> mode doesn't make much sense in this case, as the relevant property doesn't exist. Let's hide this preset when it's not relevant.</p>
+						
+						<p>First, add a <code class="csharp">HasProperty</code> method that returns whether a property exists.</p>
+						
+						<pre class="csharp" translate="no">	<ins>bool HasProperty (string name) =></ins>
+		<ins>FindProperty(name, properties, false) != null;</ins></pre>
+						
+						<p>Second, create a convenient property to check whether <em translate="no">_PremultiplyAlpha</em> exists.</p>
+						
+						<pre class="csharp" translate="no">	<ins>bool HasPremultiplyAlpha => HasProperty("_PremulAlpha");</ins></pre>
+						
+						<p>Finally, make everything of the <em translate="no">Transparent</em> preset conditional on that property, by checking it first in <code class="csharp">TransparentPreset</code>.</p>
+						
+						<pre class="csharp" translate="no">		if (<ins>HasPremultiplyAlpha &amp;&amp;</ins> PresetButton("Transparent")) { &hellip; }</pre>
+						
+						<figure>
+							<img src="shader-gui/no-transparent-preset.png" width="320" height="94">
+							<figcaption>Unlit materials lack <em translate="no">Transparent</em> preset.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../directional-shadows/index.html">Directional Shadows</a>.</p>
+					</section>
+										
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/custom-srp-03-directional-lights/" class="repository">repository</a>
+					<a href="Directional-Lights.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/hex-map/3-3-0/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/hex-map/3-3-0/tutorial-image.jpg">
+		<meta property="og:title" content="Hex Map 3.3.0">
+		<meta property="og:description" content="Unity Hex Map 3.3.0 tutorial, hex cell data.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hex Map 3.3.0</title>
+		<meta name="description" content="Unity Hex Map 3.3.0 tutorial, hex cell data.">
+		<link href="../../tutorials/tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../apple-touch-icon.png">
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/hex-map/3-3-0/#article",
+				"headline": "Hex Map 3.3.0",
+				"alternativeHeadline": "Hex Cell Data",
+				"datePublished": "2024-04-09",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"image": "https://catlikecoding.com/unity/tutorials/hex-map/3-3-0/tutorial-image.jpg",
+				"dependencies": "Unity 2022.3.22f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/hex-map/", "name": "Hex Map" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				Bezier: 1,
+				Biome: 1,
+				ClimateData: 1,
+				EdgeVertices: 1,
+				HemisphereMode: 1,
+				HexCell: 1,
+				HexCellData: 1,
+				HexCellPriorityQueue: 1,
+				HexCellSearchData: 1,
+				HexCellShaderData: 1,
+				HexCoordinates: 1,
+				HexDirection: 1,
+				HexDirectionExtensions: 1,
+				HexEdgeType: 1,
+				HexFeatureCollection: 1,
+				HexFeatureManager: 1,
+				HexFlags: 1,
+				HexGameUI: 1,
+				HexGrid: 1,
+				HexGridChunk: 1,
+				HexGridData: 1,
+				HexHash: 1,
+				HexMapCamera: 1,
+				HexMapEditor: 1,
+				HexMapGenerator: 1,
+				HexMesh: 1,
+				HexMetrics: 1,
+				HexUnit: 1,
+				HexValues: 1,
+				ListPool: 1,
+				MapRegion: 1,
+				NewMapMenu: 1,
+				OptionalToggle: 1,
+				SaveLoadItem: 1,
+				SaveLoadMenu: 1
+			};
+			
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../products/utilities/frame-rate-counter/index.html"><img src="../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../index.html">Unity</a></li>
+					<li><a href="../index.html">Hex Map</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hex Map 3.3.0</h1>
+					<p>Hex Cell Data</p>
+				</header>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Generating and triangulating a map, without using cell objects.</figcaption>
+				</figure>
+				
+				<p>This tutorial is made with Unity 2022.3.22f1 and follows <a href="../3-2-0/index.html">Hex Map 3.2.0</a>.</p>
+				
+				<section>
+					<h2>Cell Data</h2>
+					
+					<p>We're on a quest to get rid of the <code>HexCell</code> class. This will allows us to at some point convert some of our code into Burst jobs. This time we remove the dependency on the class from code that generates and visualizes maps.</p>
+					
+					<section>
+						<h3>Hex Cell Data</h3>
+						
+						<p>We're going to bundle most of the cell data in a new struct type, named <code>HexCellData</code>. Give it public fields for <code>HexFlags</code>, <code>HexValues</code>, and <code>HexCoordinates</code>. This data is used together when generating and visualizing maps. Thus the size of this struct is equal to four 32-bit values, as the coordinates are stored as two integers, so sixteen bytes in total.</p>
+						
+						<p>To simplify conversion from <code>HexCell</code> to <code>HexCellData</code> we include some getter properties and methods from the class, all readonly, as listed below.</p>
+						
+						<pre translate="no">[System.Serializable]
+public struct HexCellData
+{
+	public HexFlags flags;
+
+	public HexValues values;
+
+	public HexCoordinates coordinates;
+
+	public readonly int Elevation => values.Elevation;
+
+	public readonly int WaterLevel => values.WaterLevel;
+
+	public readonly int TerrainTypeIndex => values.TerrainTypeIndex;
+
+	public readonly int UrbanLevel => values.UrbanLevel;
+
+	public readonly int FarmLevel => values.FarmLevel;
+
+	public readonly int PlantLevel => values.PlantLevel;
+
+	public readonly int SpecialIndex => values.SpecialIndex;
+	
+	public readonly bool Walled => flags.HasAny(HexFlags.Walled);
+
+	public readonly bool HasRoads => flags.HasAny(HexFlags.Roads);
+
+	public readonly bool IsExplored =>
+		flags.HasAll(HexFlags.Explored | HexFlags.Explorable);
+
+	public readonly bool IsSpecial => values.SpecialIndex > 0;
+
+	public readonly bool IsUnderwater => values.WaterLevel > values.Elevation;
+
+	public readonly bool HasIncomingRiver => flags.HasAny(HexFlags.RiverIn);
+
+	public readonly bool HasOutgoingRiver => flags.HasAny(HexFlags.RiverOut);
+
+	public readonly bool HasRiver => flags.HasAny(HexFlags.River);
+
+	public readonly bool HasRiverBeginOrEnd =>
+		HasIncomingRiver != HasOutgoingRiver;
+	
+	public readonly HexDirection IncomingRiver => flags.RiverInDirection();
+
+	public readonly HexDirection OutgoingRiver => flags.RiverOutDirection();
+	
+	public readonly float StreamBedY =>
+		(values.Elevation + HexMetrics.streamBedElevationOffset) *
+		HexMetrics.elevationStep;
+
+	public readonly float RiverSurfaceY =>
+		(values.Elevation + HexMetrics.waterElevationOffset) *
+		HexMetrics.elevationStep;
+
+	public readonly float WaterSurfaceY =>
+		(values.WaterLevel + HexMetrics.waterElevationOffset) *
+		HexMetrics.elevationStep;
+	
+	public readonly int ViewElevation =>
+		Elevation >= WaterLevel ? Elevation : WaterLevel;
+	
+	public readonly HexEdgeType GetEdgeType(HexCellData otherCell) =>
+		HexMetrics.GetEdgeType(values.Elevation, otherCell.values.Elevation);
+	
+	public readonly bool HasIncomingRiverThroughEdge(HexDirection direction) =>
+		flags.HasRiverIn(direction);
+	
+	public readonly bool HasRiverThroughEdge(HexDirection direction) =>
+		flags.HasRiverIn(direction) || flags.HasRiverOut(direction);
+
+	public readonly bool HasRoadThroughEdge(HexDirection direction) =>
+		flags.HasRoad(direction);
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Moving Data to Arrays</h3>
+						
+						<p>The data that we defined in <code>HexCellData</code> will no longer be stored in <code>HexCell</code>. We instead move this data to a publicly accessible <code>CellData</code> array in <code>HexGrid</code>. While we're at it, let's also introduce a publicly accessible <code>CellPositions</code> array as well, to separately store the cell positions, which are less frequently accessed.</p>
+						
+						<pre translate="no">	<ins>public HexCellData[] CellData</ins>
+	<ins>{ get; private set; }</ins>
+
+	<ins>public Vector3[] CellPositions</ins>
+	<ins>{ get; private set; }</ins>
+	
+	&hellip;
+
+	void CreateCells()
+	{
+		cells = new HexCell[CellCountZ * CellCountX];
+		<ins>CellData = new HexCellData[cells.Length];</ins>
+		<ins>CellPositions = new Vector3[cells.Length];</ins>
+		&hellip;
+	}
+	
+	&hellip;
+
+	void CreateCell(int x, int z, int i)
+	{
+		&hellip;
+
+		var cell = cells[i] = new HexCell();
+		cell.Grid = this;
+		<ins>CellPositions[i]</ins> = position;
+		<ins>CellData[i].coordinates</ins> = HexCoordinates.FromOffsetCoordinates(x, z);
+		&hellip;
+	}</pre>
+						
+						<p>Refactor the <code>flags</code> and <code>values</code> fields of <code>HexCell</code> into properties that act as proxies for the data stored in the grid's array.</p>
+						
+						<pre translate="no">	HexFlags <ins>Flags€</ins>
+	<ins>{</ins>
+		<ins>get => Grid.CellData[Index].flags;</ins>
+		<ins>set => Grid.CellData[Index].flags = value;</ins>
+	<ins>}</ins>
+
+	HexValues <ins>Values</ins>
+	<ins>{</ins>
+		<ins>get => Grid.CellData[Index].values;</ins>
+		<ins>set => Grid.CellData[Index].values = value;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Do the same for <code>Coordinates</code> and <code>Position</code>, making them readonly properties. The only place where the position is updated can directly set the position array's data.</p>
+						
+						<pre translate="no">	public HexCoordinates Coordinates <ins>=> Grid.CellData[Index].coordinates;</ins>
+	
+	&hellip;
+	
+	public Vector3 Position <ins>=> Grid.CellPositions[Index];</ins>
+	
+	&hellip;
+
+	void RefreshPosition()
+	{
+		&hellip;
+		<ins>Grid.CellPositions[Index]</ins> = position;
+
+		&hellip;
+	}</pre>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Switching from Class to Struct</h2>
+					
+					<p>We're not going to eliminate all usage of <code>HexCell</code> in this tutorial, we limit ourselves to the map generation and visualization code. This includes <code>HexCellShaderData</code>, <code>HexFeatureManager</code>, <code>HexGridChunk</code>, and <code>HexMapGenerator</code>, plus whatever supporting code needs to change.</p>
+					
+					<section>
+						<h3>Hex Cell Shader Data</h3>
+						
+						<p>We begin with <code>HexCellShaderData</code>. It has three methods that have a <code>HexCell</code> parameter. We'll change those parameters into cell indices and retrieve the required <code>HexCellData</code> in the methods. First is <code>RefreshTerrain</code>.</p>
+						
+						<pre translate="no">	public void RefreshTerrain(<ins>int cellIndex</ins>)
+	{
+		<ins>HexCellData cell = Grid.CellData[cellIndex];</ins>
+		Color32 data = cellTextureData[<ins>cellIndex</ins>];
+		data.b = cell.IsUnderwater ?
+			(byte)(cell.WaterSurfaceY * (255f / 30f)) : (byte)0;
+		data.a = (byte)cell.TerrainTypeIndex;
+		cellTextureData[<ins>cellIndex</ins>] = data;
+		enabled = true;
+	}</pre>
+						
+						<p>Followed by <code>RefreshVisibility</code>, which only needs to access the cell data in one place so we don't needs to store it in a variable.</p>
+						
+						<pre translate="no">	public void RefreshVisibility(<ins>int cellIndex</ins>)
+	{
+		<del>//int index = cell.Index;</del>
+		if (ImmediateMode)
+		{
+			cellTextureData[<ins>cellIndex</ins>].r = Grid.IsCellVisible(<ins>cellIndex</ins>) ?
+				(byte)255 : (byte)0;
+			cellTextureData[c<ins>ellIndex</ins>].g = <ins>Grid.CellData[cellIndex]</ins>.IsExplored ?
+				(byte)255 : (byte)0;
+		}
+		else if (!visibilityTransitions[<ins>cellIndex</ins>])
+		{
+			visibilityTransitions[<ins>cellIndex</ins>] = true;
+			transitioningCellIndices.Add(<ins>cellIndex</ins>);
+		}
+		enabled = true;
+	}</pre>
+						
+						<p>Third is <code>ViewElevationChanged</code>.</p>
+						
+						<pre translate="no">	public void ViewElevationChanged(<ins>int cellIndex</ins>)
+	{
+		<ins>HexCellData cell = Grid.CellData[cellIndex];</ins>
+		cellTextureData[<ins>cellIndex</ins>].b = cell.IsUnderwater ?
+			(byte)(cell.WaterSurfaceY * (255f / 30f)) : (byte)0;
+		needsVisibilityReset = true;
+		enabled = true;
+	}</pre>
+						
+						<p>We also have to change <code>UpdateCellData</code> so it retrieves <code>HexCellData</code>. After that change <code>HexCellShaderData</code> no longer relies on <code>HexCell</code>.</p>
+						
+						<pre translate="no">	bool UpdateCellData(int index, int delta)
+	{
+		<del>//HexCell cell = Grid.GetCell(index);</del>
+		Color32 data = cellTextureData[index];
+		bool stillUpdating = false;
+
+		if (<ins>Grid.CellData[index]</ins>.IsExplored &amp;&amp; data.g &lt; 255)
+		{
+			&hellip;
+		}
+
+		if (Grid.IsCellVisible(<ins>index</ins>))
+		{
+			&hellip;
+		}
+		&hellip;
+	}</pre>
+						
+						<p>Now we have to fix the invocation of these methods in <code>HexCell</code>, by replacing the <code>this</code> argument with <code>Index</code> everywhere they're used. We also have to fix the methods that increase, decrease, and reset visibility in <code>HexGrid</code>.</p>
+						
+						<pre translate="no">	public void IncreaseVisibility(HexCell fromCell, int range)
+	{
+		List&lt;HexCell> cells = GetVisibleCells(fromCell, range);
+		for (int i = 0; i &lt; cells.Count; i++)
+		{
+			<ins>int cellIndex = cells[i].Index;</ins>
+			if (++cellVisibility[<ins>cellIndex</ins>] == 1)
+			{
+				cells[i].MarkAsExplored();
+				cellShaderData.RefreshVisibility(<ins>cellIndex</ins>);
+			}
+		}
+		ListPool&lt;HexCell>.Add(cells);
+	}
+
+	public void DecreaseVisibility(HexCell fromCell, int range)
+	{
+		List&lt;HexCell> cells = GetVisibleCells(fromCell, range);
+		for (int i = 0; i &lt; cells.Count; i++)
+		{
+			<ins>int cellIndex = cells[i].Index;</ins>
+			if (--cellVisibility[<ins>cellIndex</ins>] == 0)
+			{
+				cellShaderData.RefreshVisibility(<ins>cellIndex</ins>);
+			}
+		}
+		ListPool&lt;HexCell>.Add(cells);
+	}
+
+	public void ResetVisibility()
+	{
+		for (int i = 0; i &lt; cells.Length; i++)
+		{
+			if (cellVisibility[i] > 0)
+			{
+				cellVisibility[i] = 0;
+				cellShaderData.RefreshVisibility(<ins>i</ins>);
+			}
+		}
+		&hellip;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Triangulating</h3>
+						
+						<p>We're going to make the code that triangulates the map rely on <code>HexCellData</code> instead of <code>HexCell</code>. First, we need to know a cell's column index in some cases when triangulating water. We don't store that index in the cell data and we don't have to, because we can derive it from the cell coordinates. Add a <code>ColumnIndex</code> property to <code>HexCoordinates</code> for that.</p>
+						
+						<pre translate="no">	<ins>public readonly int ColumnIndex => (x + z / 2) / HexMetrics.chunkSizeX;</ins></pre>
+						
+						<p>Second, in <code>HexFeatureManager</code> we can simply replace all <code>HexCell</code> parameter types with <code>HexCellData</code>, without having to change any other code in that class.</p>
+						
+						<p>Third, we're going to directly work with cell coordinates instead of cells, so we refactor <code>HexGrid.TryGetCell</code> to get a cell index instead. If no index is found it should be set to &minus;1.</p>
+						
+						<pre translate="no">	public bool <ins>TryGetCellIndex</ins>(HexCoordinates coordinates, out <ins>int cellIndex</ins>)
+	{
+		int z = coordinates.Z;
+		int x = coordinates.X + z / 2;
+		if (z &lt; 0 || z >= CellCountZ || x &lt; 0 || x >= CellCountX)
+		{
+			<ins>cellIndex = -1</ins>;
+			return false;
+		}
+		<ins>cellIndex = x + z * CellCountX</ins>;
+		return true;
+	}</pre>
+						
+						<p>Now we move on to <code>HexGridChunk</code>, which does the triangulation. We'll have to adjust a lot of methods and we'll work through them from top to bottom.</p>
+						
+						<p>The starting point is <code>Triangulate</code> with a <code>HexCell</code> parameter, which we replace with a cell index parameter. This requires us to retrieve the cell data, which replaces the old cell reference, and the cell position. We then pass the index and position as extra arguments to the <code>Triangulate</code> variant with a direction.</p>
+						
+						<pre translate="no">	public void Triangulate()
+	{
+		&hellip;
+		for (int i = 0; i &lt; cellIndices.Length; i++)
+		{
+			Triangulate(<ins>cellIndices[i]</ins>);
+		}
+		&hellip;
+	}
+
+	void Triangulate(<ins>int cellIndex</ins>)
+	{
+		<ins>HexCellData cell = Grid.CellData[cellIndex];</ins>
+		<ins>Vector3 cellPosition = Grid.CellPositions[cellIndex];</ins>
+		for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++)
+		{
+			Triangulate(d, cell<ins>, cellIndex, cellPosition</ins>);
+		}
+		if (!cell.IsUnderwater)
+		{
+			if (!cell.HasRiver &amp;&amp; !cell.HasRoads)
+			{
+				features.AddFeature(cell, <ins>cellPosition</ins>);
+			}
+			if (cell.IsSpecial)
+			{
+				features.AddSpecialFeature(cell, <ins>cellPosition</ins>);
+			}
+		}
+	}</pre>
+						
+						<p>Adjust the parameter list of the direction-based <code>Triangulate</code> method. We're going to also pass the cell index as an extra argument to all other triangulation methods that we invoke here. In case of <code>TriangulateConnection</code> we also pass along the Y coordinate of the center position.</p>
+						
+						<pre translate="no">	void Triangulate(
+		HexDirection direction,
+		<ins>HexCellData</ins> cell<ins>,</ins>
+		<ins>int cellIndex,</ins>
+		<ins>Vector3 center</ins>)
+	{
+		var e = new EdgeVertices(
+			center + HexMetrics.GetFirstSolidCorner(direction),
+			center + HexMetrics.GetSecondSolidCorner(direction));
+
+		if (cell.HasRiver)
+		{
+			if (cell.HasRiverThroughEdge(direction))
+			{
+				e.v3.y = cell.StreamBedY;
+				if (cell.HasRiverBeginOrEnd)
+				{
+					TriangulateWithRiverBeginOrEnd(cell, <ins>cellIndex,</ins> center, e);
+				}
+				else
+				{
+					TriangulateWithRiver(direction, cell, <ins>cellIndex,</ins> center, e);
+				}
+			}
+			else
+			{
+				TriangulateAdjacentToRiver(
+					direction, cell, <ins>cellIndex,</ins> center, e);
+			}
+		}
+		else
+		{
+			TriangulateWithoutRiver(direction, cell, <ins>cellIndex,</ins> center, e);
+			if (!cell.IsUnderwater &amp;&amp; !cell.HasRoadThroughEdge(direction))
+			{
+				features.AddFeature(
+					cell, (center + e.v1 + e.v5) * (1f / 3f));
+			}
+		}
+
+		if (direction &lt;= HexDirection.SE)
+		{
+			TriangulateConnection(direction, cell, <ins>cellIndex, center.y,</ins> e);
+		}
+
+		if (cell.IsUnderwater)
+		{
+			TriangulateWater(direction, cell, <ins>cellIndex,</ins> center);
+		}
+	}</pre>
+						
+						<p>Going deeper, we move to <code>TriangulateWater</code> first. Adjust its parameter list as needed, then have it fetch the neighbor coordinates and use those to check whether there is a neighbor that isn't underwater. If so, when triangulating the water shore, also pass along the cell index and the neighbor's column index. Otherwise, when triangulating open water, provide the cell coordinates, cell index, and neighbor index as extra arguments.</p>
+						
+						<pre translate="no">	void TriangulateWater(
+		HexDirection direction,
+		<ins>HexCellData</ins> cell,
+		<ins>int cellIndex,</ins>
+		Vector3 center)
+	{
+		center.y = cell.WaterSurfaceY;
+		<ins>HexCoordinates neighborCoordinates = cell.coordinates.Step(direction);</ins>
+		if (Grid.<ins>TryGetCellIndex</ins>(<ins>neighborCoordinates</ins>, out <ins>int neighborIndex</ins>) &amp;&amp;
+			!<ins>Grid.CellData[neighborIndex]</ins>.IsUnderwater)
+		{
+			TriangulateWaterShore(
+				direction, cell, <ins>cellIndex,</ins> neighborIndex,
+				<ins>neighborCoordinates.ColumnIndex,</ins> center);
+		}
+		else
+		{
+			TriangulateOpenWater(
+				<ins>cell.coordinates,</ins> direction, <ins>cellIndex</ins>, <ins>neighborIndex,</ins> center);
+		}
+	}</pre>
+						
+						<p>We adjust <code>TriangulateOpenWater</code> next. Again change its parameter list and use the new data. We now check for the neighbor's existence by comparing its index with &minus;1. Also, accessing next neighbor becomes a bit more verbose, having to explicitly get the coordinates for stepping in the direction for the next neighbor.</p>
+						
+						<pre translate="no">	void TriangulateOpenWater(
+		<ins>HexCoordinates coordinates,</ins>
+		HexDirection direction,
+		<ins>int cellIndex</ins>,
+		<ins>int neighborIndex</ins>,
+		Vector3 center)
+	{
+		&hellip;
+		indices.x = indices.y = indices.z = <ins>cellIndex</ins>;
+		water.AddTriangleCellData(indices, weights1);
+
+		if (direction &lt;= HexDirection.SE &amp;&amp; <ins>neighborIndex</ins> != <ins>-1</ins>)
+		{
+			&hellip;
+			indices.y = <ins>neighborIndex</ins>;
+			water.AddQuadCellData(indices, weights1, weights2);
+
+			if (direction &lt;= HexDirection.E)
+			{
+				if (!Grid.<ins>TryGetCellIndex</ins>(
+					<ins>coordinates.Step(direction.Next())</ins>,
+					out <ins>int nextNeighborIndex</ins>) ||
+					!<ins>Grid.CellData[nextNeighborIndex]</ins>.IsUnderwater)
+				{
+					return;
+				}
+				water.AddTriangle(
+					c2, e2, c2 + HexMetrics.GetWaterBridge(direction.Next()));
+				indices.z = <ins>nextNeighborIndex</ins>;
+				water.AddTriangleCellData(
+					indices, weights1, weights2, weights3);
+			}
+		}
+	}</pre>
+						
+						<p><code>TriangulateWaterShore</code> requires more changes, but they are of a similar nature. We access the same data in multiple places here, and as that data has to be extracted or calculated now let's store it in temporary variables.</p>
+						
+						<pre translate="no">	void TriangulateWaterShore(
+		HexDirection direction,
+		HexCellData cell,
+		<ins>int cellIndex,</ins>
+		int neighborIndex,
+		<ins>int neighborColumnIndex,</ins>
+		Vector3 center)
+	{
+		&hellip;
+		indices.x = indices.z = <ins>cellIndex</ins>;
+		indices.y = <ins>neighborIndex</ins>;
+		&hellip;
+
+		Vector3 center2 = <ins>Grid.CellPositions[neighborIndex]</ins>;
+		<ins>int cellColumnIndex = cell.coordinates.ColumnIndex;</ins>
+		if (<ins>neighborColumnIndex</ins> &lt; <ins>cellColumnIndex</ins> - 1)
+		{
+			center2.x += HexMetrics.wrapSize * HexMetrics.innerDiameter;
+		}
+		else if (<ins>neighborColumnIndex</ins> > <ins>cellColumnIndex</ins> + 1)
+		{
+			center2.x -= HexMetrics.wrapSize * HexMetrics.innerDiameter;
+		}
+		&hellip;
+
+		<ins>HexCoordinates nextNeighborCoordinates = cell.coordinates.Step(</ins>
+			<ins>direction.Next());</ins>
+		if (Grid.<ins>TryGetCellIndex</ins>(
+			<ins>nextNeighborCoordinates</ins>, out <ins>int nextNeighborIndex</ins>))
+		{
+			Vector3 center3 = <ins>Grid.CellPositions[nextNeighborIndex]</ins>;
+			<ins>bool nextNeighborIsUnderwater =</ins>
+				<ins>Grid.CellData[nextNeighborIndex].IsUnderwater;</ins>
+			<ins>int nextNeighborColumnIndex = nextNeighborCoordinates.ColumnIndex;</ins>
+			if (<ins>nextNeighborColumnIndex</ins> &lt; <ins>cellColumnIndex</ins> - 1)
+			{
+				center3.x += HexMetrics.wrapSize * HexMetrics.innerDiameter;
+			}
+			else if (<ins>nextNeighborColumnIndex</ins> > <ins>cellColumnIndex</ins> + 1)
+			{
+				center3.x -= HexMetrics.wrapSize * HexMetrics.innerDiameter;
+			}
+			Vector3 v3 = center3 + (<ins>nextNeighborIsUnderwater</ins> ?
+				HexMetrics.GetFirstWaterCorner(direction.Previous()) :
+				HexMetrics.GetFirstSolidCorner(direction.Previous()));
+			v3.y = center.y;
+			waterShore.AddTriangle(e1.v5, e2.v5, v3);
+			waterShore.AddTriangleUV(
+				new Vector2(0f, 0f),
+				new Vector2(0f, 1f),
+				new Vector2(0f, <ins>nextNeighborIsUnderwater</ins> ? 0f : 1f));
+			indices.z = <ins>nextNeighborIndex</ins>;
+			waterShore.AddTriangleCellData(
+				indices, weights1, weights2, weights3);
+		}
+	}</pre>
+						
+						<p><code>TriangulateWithoutRiver</code> requires minimal changes, replacing <code>HexCell</code> with <code>HexCellData</code> and adding a new cell index parameter. The <code>GetRoadInterpolators</code> method only needs its cell parameter type changed to <code>HexCellData</code>.</p>
+						
+						<pre translate="no">	void TriangulateWithoutRiver(
+		HexDirection direction,
+		<ins>HexCellData</ins> cell,
+		<ins>int cellIndex,</ins>
+		Vector3 center,
+		EdgeVertices e)
+	{
+		TriangulateEdgeFan(center, e, <ins>cellIndex</ins>);
+
+		if (cell.HasRoads)
+		{
+			Vector2 interpolators = GetRoadInterpolators(direction, cell);
+			TriangulateRoad(
+				center,
+				Vector3.Lerp(center, e.v1, interpolators.x),
+				Vector3.Lerp(center, e.v5, interpolators.y),
+				e, cell.HasRoadThroughEdge(direction), <ins>cellIndex</ins>);
+		}
+	}
+
+	Vector2 GetRoadInterpolators(HexDirection direction, <ins>HexCellData</ins> cell) { &hellip; }</pre>
+						
+						<p><code>TriangulateAdjacentToRiver</code> also only requires index-related changes, besides changing the cell parameter type to <code>HexCellData</code>.</p>
+						
+						<pre translate="no">	void TriangulateAdjacentToRiver(
+		HexDirection direction,
+		<ins>HexCellData</ins> cell,
+		<ins>int cellIndex,</ins>
+		Vector3 center,
+		EdgeVertices e)
+	{
+		if (cell.HasRoads)
+		{
+			TriangulateRoadAdjacentToRiver(
+				direction, cell, <ins>cellIndex,</ins> center, e);
+		}
+
+		&hellip;
+
+		TriangulateEdgeStrip(
+			m, weights1, <ins>cellIndex</ins>,
+			e, weights1, <ins>cellIndex</ins>);
+		TriangulateEdgeFan(center, m, <ins>cellIndex</ins>);
+
+		&hellip;
+	}</pre>
+						
+						<p>The same goes for <code>TriangulateRoadAdjacentToRiver</code>.</p>
+						
+						<pre translate="no">	void TriangulateRoadAdjacentToRiver(
+		HexDirection direction,
+		<ins>HexCellData</ins> cell,
+		<ins>int cellIndex,</ins>
+		Vector3 center,
+		EdgeVertices e)
+	{
+		&hellip;
+		TriangulateRoad(roadCenter, mL, mR, e, hasRoadThroughEdge, <ins>cellIndex</ins>);
+		if (previousHasRiver)
+		{
+			TriangulateRoadEdge(roadCenter, center, mL, <ins>cellIndex</ins>);
+		}
+		if (nextHasRiver)
+		{
+			TriangulateRoadEdge(roadCenter, mR, center, <ins>cellIndex</ins>);
+		}
+	}</pre>
+						
+						<p>And for <code>TriangulateWithRiverBeginOrEnd</code>.</p>
+						
+						<pre translate="no">	void TriangulateWithRiverBeginOrEnd(
+		<ins>HexCellData</ins> cell, <ins>int cellIndex,</ins> Vector3 center, EdgeVertices e)
+	{
+		&hellip;
+
+		TriangulateEdgeStrip(
+			m, weights1, <ins>cellIndex</ins>,
+			e, weights1, <ins>cellIndex</ins>);
+		TriangulateEdgeFan(center, m, <ins>cellIndex</ins>);
+
+		if (!cell.IsUnderwater)
+		{
+			bool reversed = cell.HasIncomingRiver;
+			Vector3 indices;
+			indices.x = indices.y = indices.z = <ins>cellIndex</ins>;
+			&hellip;
+		}
+	}</pre>
+						
+						<p>And <code>TriangulateWithRiver</code>.</p>
+						
+						<pre translate="no">	void TriangulateWithRiver(
+		HexDirection direction,
+		<ins>HexCellData</ins> cell,
+		<ins>int cellIndex,</ins>
+		Vector3 center,
+		EdgeVertices e)
+	{
+		&hellip;
+
+		TriangulateEdgeStrip(
+			m, weights1, <ins>cellIndex</ins>,
+			e, weights1, <ins>cellIndex</ins>);
+
+		&hellip;
+
+		Vector3 indices;
+		indices.x = indices.y = indices.z = <ins>cellIndex</ins>;
+		&hellip;
+	}</pre>
+						
+						<p><code>TriangulateConnection</code> is more complicated. It gains a parameter for the center Y coordinate. For each corner we have to pass both the appropriate cell index and data when invoking <code>TriangulateCorner</code>, and just the indices when invoking <code>TriangulateEdgeTerraces</code>.</p>
+						
+						<pre translate="no">	void TriangulateConnection(
+		HexDirection direction,
+		<ins>HexCellData</ins> cell,
+		<ins>int cellIndex,</ins>
+		<ins>float centerY,</ins>
+		EdgeVertices e1)
+	{
+		if (!Grid.<ins>TryGetCellIndex</ins>(
+			<ins>cell.coordinates.Step(direction)</ins>, out <ins>int neighborIndex</ins>))
+		{
+			return;
+		}
+		<ins>HexCellData neighbor = Grid.CellData[neighborIndex];</ins>
+		Vector3 bridge = HexMetrics.GetBridge(direction);
+		bridge.y = <ins>Grid.CellPositions[neighborIndex]</ins>.y - <ins>centerY</ins>;
+		&hellip;
+
+		if (hasRiver)
+		{
+			e2.v3.y = neighbor.StreamBedY;
+			Vector3 indices;
+			indices.x = indices.z = <ins>cellIndex</ins>;
+			indices.y = <ins>neighborIndex</ins>;
+
+			&hellip;
+		}
+
+		if (cell.GetEdgeType(neighbor) == HexEdgeType.Slope)
+		{
+			TriangulateEdgeTerraces(e1, <ins>cellIndex</ins>, e2, <ins>neighborIndex</ins>, hasRoad);
+		}
+		else
+		{
+			TriangulateEdgeStrip(
+				e1, weights1, <ins>cellIndex</ins>,
+				e2, weights2, <ins>neighborIndex</ins>, hasRoad);
+		}
+
+		features.AddWall(e1, cell, e2, neighbor, hasRiver, hasRoad);
+
+		if (direction &lt;= HexDirection.E &amp;&amp;
+			Grid.<ins>TryGetCellIndex</ins>(
+				<ins>cell.coordinates.Step(direction.Next())</ins>,
+				out <ins>int nextNeighborIndex</ins>))
+		{
+			<ins>HexCellData nextNeighbor = Grid.CellData[nextNeighborIndex];</ins>
+			Vector3 v5 = e1.v5 + HexMetrics.GetBridge(direction.Next());
+			v5.y = <ins>Grid.CellPositions[nextNeighborIndex]</ins>.y;
+
+			if (cell.Elevation &lt;= neighbor.Elevation)
+			{
+				if (cell.Elevation &lt;= nextNeighbor.Elevation)
+				{
+					TriangulateCorner(
+						e1.v5, <ins>cellIndex,</ins> cell,
+						e2.v5, <ins>neighborIndex,</ins> neighbor,
+						v5, <ins>nextNeighborIndex,</ins> nextNeighbor);
+				}
+				else
+				{
+					TriangulateCorner(
+						v5, <ins>nextNeighborIndex,</ins> nextNeighbor,
+						e1.v5, <ins>cellIndex,</ins> cell,
+						e2.v5, <ins>neighborIndex,</ins> neighbor);
+				}
+			}
+			else if (neighbor.Elevation &lt;= nextNeighbor.Elevation)
+			{
+				TriangulateCorner(
+					e2.v5, <ins>neighborIndex,</ins> neighbor,
+					v5, <ins>nextNeighborIndex,</ins> nextNeighbor,
+					e1.v5, <ins>cellIndex,</ins> cell);
+			}
+			else {
+				TriangulateCorner(
+					v5, <ins>nextNeighborIndex,</ins> nextNeighbor,
+					e1.v5, <ins>cellIndex,</ins> cell,
+					e2.v5, <ins>neighborIndex,</ins> neighbor);
+			}
+		}
+	}</pre>
+						
+						<p>Adjust the parameter list of <code>TriangulateCorner</code> to match. Pass the indices to <code>TriangulateCornerTerraces</code> instead of cells, and do that in addition to the cell data for the other triangulate method invocations.</p>
+						
+						<pre translate="no">	void TriangulateCorner(
+		Vector3 bottom, <ins>int bottomCellIndex, HexCellData bottomCell</ins>,
+		Vector3 left, <ins>int leftCellIndex, HexCellData leftCell</ins>,
+		Vector3 right, <ins>int rightCellIndex, HexCellData rightCell</ins>)
+	{
+		&hellip;
+
+		if (leftEdgeType == HexEdgeType.Slope)
+		{
+			if (rightEdgeType == HexEdgeType.Slope)
+			{
+				TriangulateCornerTerraces(
+					bottom, <ins>bottomCellIndex</ins>,
+					left, <ins>leftCellIndex</ins>,
+					right, <ins>rightCellIndex</ins>);
+			}
+			else if (rightEdgeType == HexEdgeType.Flat)
+			{
+				TriangulateCornerTerraces(
+					left, <ins>leftCellIndex</ins>,
+					right, <ins>rightCellIndex</ins>,
+					bottom, <ins>bottomCellIndex</ins>);
+			}
+			else
+			{
+				TriangulateCornerTerracesCliff(
+					bottom, <ins>bottomCellIndex,</ins> bottomCell,
+					left, <ins>leftCellIndex,</ins> leftCell,
+					right, <ins>rightCellIndex,</ins> rightCell);
+			}
+		}
+		else if (rightEdgeType == HexEdgeType.Slope)
+		{
+			if (leftEdgeType == HexEdgeType.Flat)
+			{
+				TriangulateCornerTerraces(
+					right, <ins>rightCellIndex</ins>,
+					bottom, <ins>bottomCellIndex</ins>,
+					left, <ins>leftCellIndex</ins>);
+			}
+			else
+			{
+				TriangulateCornerCliffTerraces(
+					bottom, <ins>bottomCellIndex,</ins> bottomCell,
+					left, <ins>leftCellIndex,</ins> leftCell,
+					right, <ins>rightCellIndex,</ins> rightCell);
+			}
+		}
+		else if (leftCell.GetEdgeType(rightCell) == HexEdgeType.Slope)
+		{
+			if (leftCell.Elevation &lt; rightCell.Elevation)
+			{
+				TriangulateCornerCliffTerraces(
+					right, <ins>rightCellIndex,</ins> rightCell,
+					bottom, <ins>bottomCellIndex,</ins> bottomCell,
+					left, <ins>leftCellIndex,</ins> leftCell);
+			}
+			else
+			{
+				TriangulateCornerTerracesCliff(
+					left, <ins>leftCellIndex,</ins> leftCell,
+					right, <ins>rightCellIndex,</ins> rightCell,
+					bottom, <ins>bottomCellIndex,</ins> bottomCell);
+			}
+		}
+		else
+		{
+			terrain.AddTriangle(bottom, left, right);
+			Vector3 indices;
+			indices.x = <ins>bottomCellIndex</ins>;
+			indices.y = <ins>leftCellIndex</ins>;
+			indices.z = <ins>rightCellIndex</ins>;
+			terrain.AddTriangleCellData(indices, weights1, weights2, weights3);
+		}
+
+		features.AddWall(
+			bottom, bottomCell, left, leftCell, right, rightCell);
+	}</pre>
+						
+						<p><code>TriangulateEdgeTerraces</code> now works directly with cell indices.</p>
+						
+						<pre translate="no">	void TriangulateEdgeTerraces(
+		EdgeVertices begin, <ins>int beginCellIndex</ins>,
+		EdgeVertices end, <ins>int endCellIndex</ins>,
+		bool hasRoad)
+	{
+		&hellip;
+		float i1 = <ins>beginCellIndex</ins>;
+		float i2 = <ins>endCellIndex</ins>;
+
+		&hellip;
+	}</pre>
+						
+						<p>So does <code>TriangulateCornerTerraces</code>.</p>
+						
+						<pre translate="no">	void TriangulateCornerTerraces(
+		Vector3 begin, <ins>int beginCellIndex</ins>,
+		Vector3 left, <ins>int leftCellIndex</ins>,
+		Vector3 right, <ins>int rightCellIndex</ins>)
+	{
+		&hellip;
+		indices.x = <ins>beginCellIndex</ins>;
+		indices.y = <ins>leftCellIndex</ins>;
+		indices.z = <ins>rightCellIndex</ins>;
+
+		&hellip;
+	}</pre>
+						
+						<p>The same goes for <code>TriangulateCornerTerracesCliff</code>, though it needs the cell data as well.</p>
+						
+						<pre translate="no">	void TriangulateCornerTerracesCliff(
+		Vector3 begin, <ins>int beginCellIndex, HexCellData</ins> beginCell,
+		Vector3 left, <ins>int leftCellIndex, HexCellData</ins> leftCell,
+		Vector3 right, <ins>int rightCellIndex, HexCellData</ins> rightCell)
+	{
+		&hellip;
+		indices.x = <ins>beginCellIndex</ins>;
+		indices.y = <ins>leftCellIndex</ins>;
+		indices.z = <ins>rightCellIndex</ins>;
+
+		&hellip;
+	}</pre>
+						
+						<p>Which is also the case for <code>TriangulateCornerCliffTerraces</code>.</p>
+						
+						<pre translate="no">	void TriangulateCornerCliffTerraces(
+		Vector3 begin, <ins>int beginCellIndex, HexCellData</ins> beginCell,
+		Vector3 left, <ins>int leftCellIndex, HexCellData</ins> leftCell,
+		Vector3 right, <ins>int rightCellIndex, HexCellData</ins> rightCell)
+	{
+		&hellip;
+		indices.x = <ins>beginCellIndex</ins>;
+		indices.y = <ins>leftCellIndex</ins>;
+		indices.z = <ins>rightCellIndex</ins>;
+
+		&hellip;
+	}</pre>
+						
+						<p>That covers all triangulation code. To completely remove all dependencies on <code>HexCell</code> from <code>HexGridChunk</code> let's also adjust <code>AddCell</code>. Replace its <code>HexCell</code> parameter with both a cell index and a <code>RectTransform</code> reference for the cell's UI. Then no longer set the cell's chunk here.</p>
+						
+						<pre translate="no">	public void AddCell(int index, <ins>int cellIndex, RectTransform cellUI</ins>)
+	{
+		cellIndices[index] = <ins>cellIndex</ins>;
+		<del>//cell.Chunk = this;</del>
+		<ins>cellUI</ins>.SetParent(gridCanvas.transform, false);
+	}</pre>
+						
+						<p>Adjust <code>HexGrid.AddCellToChunk</code> so the cell's chunk is set here and the correct arguments are passed to <code>AddCell</code>.</p>
+						
+						<pre translate="no">	void AddCellToChunk(int x, int z, HexCell cell)
+	{
+		&hellip;
+		<ins>cell.Chunk = chunk;</ins>
+		chunk.AddCell(
+			localX + localZ * HexMetrics.chunkSizeX, <ins>cell.Index, cell.UIRect</ins>);
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Hex Map Generator</h3>
+						
+						<p>The last class that we adapt is <code>HexMapGenerator</code>. We begin by refactoring <code>HexGrid.GetCell(int xOffset, int zOffset)</code> so it returns a cell index. This method is only used by the generator.</p>
+						
+						<pre translate="no">	public <ins>int</ins> <ins>GetCellIndex</ins>(int xOffset, int zOffset) =>
+		<ins>xOffset + zOffset * CellCountX</ins>;</pre>
+						
+						<p>Then we can refactor <code>HexMapGenerator.GetCell</code> the same way.</p>
+						
+						<pre translate="no">	int <ins>GetRandomCellIndex</ins> (MapRegion region) => grid.<ins>GetCellIndex</ins>(
+		Random.Range€(region.xMin, region.xMax),
+		Random.Range€(region.zMin, region.zMax));</pre>
+						
+						<p>Also, because from now on we're directly setting cell data and not going through <code>HexCell</code> the cell and its visualization will no longer automatically refresh itself. To work around that we introduce a public <code>HexCell.RefreshAll</code> method that performs a full refresh.</p>
+						
+						<pre translate="no">	<ins>public void RefreshAll()</ins>
+	<ins>{</ins>
+		<ins>RefreshPosition();</ins>
+		<ins>Grid.ShaderData.RefreshTerrain(Index);</ins>
+		<ins>Grid.ShaderData.RefreshVisibility(Index);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Change <code>HexMapGenerator.GenerateMap</code> so it modifies the cell data directly when setting the water level, and invokes <code>RefreshAll</code> on all cells after the map has been generated. This is the only place where it still relies on <code>HexCell</code>.</p>
+						
+						<pre translate="no">	public void GenerateMap(int x, int z, bool wrapping)
+	{
+		&hellip;
+		for (int i = 0; i &lt; cellCount; i++)
+		{
+			<ins>grid.CellData[i].values</ins> = <ins>grid.CellData[i].values.WithWaterLevel(</ins>
+				<ins>waterLevel)</ins>;
+		}
+		&hellip;
+		for (int i = 0; i &lt; cellCount; i++)
+		{
+			grid.SearchData[i].searchPhase = 0;
+			<ins>grid.GetCell(i).RefreshAll();</ins>
+		}
+
+		Random.state = originalRandomState;
+	}</pre>
+						
+						<p>Moving on to the generating code, we begin with <code>RaiseTerrain</code>. Change it so it works with cell indices, retrieves cell data, and directly adjusts the elevation in the cell data array.</p>
+						
+						<pre translate="no">	int RaiseTerrain(int chunkSize, int budget, MapRegion region)
+	{
+		searchFrontierPhase += 1;
+		<ins>int firstCellIndex</ins> = GetRandomCellIndex(region);
+		grid.SearchData[<ins>firstCellIndex</ins>] = new HexCellSearchData
+		{
+			searchPhase = searchFrontierPhase
+		};
+		searchFrontier.Enqueue(<ins>firstCellIndex</ins>);
+		HexCoordinates center = <ins>grid.CellData[firstCellIndex].coordinates</ins>;
+
+		&hellip;
+		while (size &lt; chunkSize &amp;&amp; searchFrontier.TryDequeue(out int index))
+		{
+			<ins>HexCellData</ins> current = <ins>grid.CellData[index]</ins>;
+			&hellip;
+			<ins>grid.CellData[index].values</ins> =
+				<ins>current.values.WithElevation(newElevation)</ins>;
+			&hellip;
+
+			for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++)
+			{
+				if (grid.<ins>TryGetCellIndex</ins>(
+					<ins>current.coordinates.Step(d)</ins>, out <ins>int neighborIndex</ins>) &amp;&amp;
+					grid.SearchData[neighborIndex].searchPhase &lt;
+						searchFrontierPhase)
+				{
+					grid.SearchData[<ins>neighborIndex</ins>] = new HexCellSearchData
+					{
+						searchPhase = searchFrontierPhase,
+						distance = <ins>grid.CellData[neighborIndex].coordinates</ins>.
+							DistanceTo(center),
+						heuristic = Random.value &lt; jitterProbability ? 1 : 0
+					};
+					searchFrontier.Enqueue(<ins>neighborIndex</ins>);
+				}
+			}
+		}
+		&hellip;
+	}</pre>
+						
+						<p><code>SinkTerrain</code> is nearly identical and should be changed in the same way.</p>
+						
+						<p>Next up is <code>ErodeLand</code>, which requires quite a few changes but they're similar to those for <code>RaiseTerrain</code>. Besides that we switch from working with a list of cells to a list of cell indices and the erosion target also becomes an index. We now pass a cell index and cell elevation to <code>GetErosionTarget</code> and <code>IsErodible</code>. Also, the code for incrementing and decrementing elevation has to become more verbose.</p>
+						
+						<pre translate="no">	void ErodeLand()
+	{
+		List&lt;<ins>int</ins>> <ins>erodibleIndices</ins> = ListPool&lt;<ins>int</ins>>.Get();
+		for (int i = 0; i &lt; cellCount; i++)
+		{
+			<del>//HexCell cell = grid.GetCell(i);</del>
+			if (IsErodible(<ins>i, grid.CellData[i].Elevation</ins>))
+			{
+				<ins>erodibleIndices</ins>.Add(<ins>i</ins>);
+			}
+		}
+
+		int targetErodibleCount =
+			(int)(<ins>erodibleIndices</ins>.Count * (100 - erosionPercentage) * 0.01f);
+		
+		while (<ins>erodibleIndices</ins>.Count > targetErodibleCount)
+		{
+			int index = Random.Range(0, <ins>erodibleIndices</ins>.Count);
+			<ins>int cellIndex</ins> = <ins>erodibleIndices</ins>[index];
+			<ins>HexCellData cell = grid.CellData[cellIndex];</ins>
+			<ins>int targetCellIndex</ins> = GetErosionTarget(<ins>cellIndex, cell.Elevation</ins>);
+			
+			<del>//cell.Elevation -= 1;</del>
+			<ins>grid.CellData[cellIndex].values = cell.values =</ins>
+				<ins>cell.values.WithElevation(cell.Elevation - 1);</ins>
+
+			<del>//targetCell.Elevation += 1;</del>
+			<ins>HexCellData targetCell = grid.CellData[targetCellIndex];</ins>
+			<ins>grid.CellData[targetCellIndex].values = targetCell.values =</ins>
+				<ins>targetCell.values.WithElevation(targetCell.Elevation + 1);</ins>
+
+			if (!IsErodible(<ins>cellIndex, cell.Elevation</ins>))
+			{
+				int lastIndex = <ins>erodibleIndices</ins>.Count - 1;
+				<ins>erodibleIndices</ins>[index] = <ins>erodibleIndices</ins>[lastIndex];
+				<ins>erodibleIndices</ins>.RemoveAt(lastIndex);
+			}
+
+			for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++)
+			{
+				if (grid.<ins>TryGetCellIndex</ins>(
+					<ins>cell.coordinates.Step(d)</ins>, out <ins>int neighborIndex</ins>) &amp;&amp;
+					<ins>grid.CellData[neighborIndex]</ins>.Elevation ==
+						cell.Elevation + 2 &amp;&amp;
+					!<ins>erodibleIndices</ins>.Contains(<ins>neighborIndex</ins>))
+				{
+					<ins>erodibleIndices</ins>.Add(<ins>neighborIndex</ins>);
+				}
+			}
+
+			if (IsErodible(<ins>targetCellIndex, targetCell.Elevation</ins>) &amp;&amp;
+				!<ins>erodibleIndices</ins>.Contains(<ins>targetCellIndex</ins>))
+			{
+				<ins>erodibleIndices</ins>.Add(<ins>targetCellIndex</ins>);
+			}
+
+			for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++)
+			{
+				if (grid.<ins>TryGetCellIndex</ins>(
+					<ins>targetCell.coordinates.Step(d)</ins>, out <ins>int neighborIndex</ins>) &amp;&amp;
+					<ins>neighborIndex</ins> != <ins>cellIndex</ins> &amp;&amp;
+					<ins>grid.CellData[neighborIndex]</ins>.Elevation ==
+						targetCell.Elevation + 1 &amp;&amp;
+					!IsErodible(
+						<ins>neighborIndex, grid.CellData[neighborIndex].Elevation</ins>))
+				{
+					<ins>erodibleIndices</ins>.Remove(<ins>neighborIndex</ins>);
+				}
+			}
+		}
+
+		ListPool&lt;<ins>int</ins>>.Add(<ins>erodibleIndices</ins>);
+	}</pre>
+						
+						<p>Change the parameter list of <code>IsErodible</code> to match, then use the cell index to retrieve the cell coordinates used for looping through its neighbors.</p>
+						
+						<pre translate="no">	bool IsErodible(<ins>int cellIndex, int cellElevation</ins>)
+	{
+		int erodibleElevation = <ins>cellElevation</ins> - 2;
+		<ins>HexCoordinates coordinates = grid.CellData[cellIndex].coordinates;</ins>
+		for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++)
+		{
+			if (grid.<ins>TryGetCellIndex</ins>(
+				<ins>coordinates.Step(d)</ins>, out <ins>int neighborIndex</ins>) &amp;&amp;
+				<ins>grid.CellData[neighborIndex]</ins>.Elevation &lt;= erodibleElevation)
+			{
+				return true;
+			}
+		}
+		return false;
+	}</pre>
+						
+						<p>Change <code>GetErosionTarget</code> likewise, now returning a cell index.</p>
+						
+						<pre translate="no">	int GetErosionTarget (<ins>int cellIndex, int cellElevation</ins>)
+	{
+		List&lt;<ins>int</ins>> candidates = ListPool&lt;<ins>int</ins>>.Get();
+		int erodibleElevation = <ins>cellElevation</ins> - 2;
+		<ins>HexCoordinates coordinates = grid.CellData[cellIndex].coordinates;</ins>
+		for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++)
+		{
+			if (grid.<ins>TryGetCellIndex</ins>(
+				<ins>coordinates.Step(d)</ins>, out <ins>int neighborIndex</ins>) &amp;&amp;
+				<ins>grid.CellData[neighborIndex]</ins>.Elevation &lt;= erodibleElevation
+			)
+			{
+				candidates.Add(neighborIndex);
+			}
+		}
+		int target = candidates[Random.Range€(0, candidates.Count)];
+		ListPool&lt;<ins>int</ins>>.Add(candidates);
+		return target;
+	}</pre>
+						
+						<p>Next up is <code>EvolveClimate</code>, which should also switch to using cell data and indices.</p>
+						
+						<pre translate="no">	void EvolveClimate(int cellIndex)
+	{
+		<ins>HexCellData</ins> cell = grid.<ins>CellData[cellIndex]</ins>;
+		&hellip;
+		for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++)
+		{
+			if (!grid.<ins>TryGetCellIndex</ins>(
+				<ins>cell.coordinates.Step(d)</ins>, out <ins>int neighborIndex</ins>))
+			{
+				continue;
+			}
+			ClimateData neighborClimate = nextClimate[<ins>neighborIndex</ins>];
+			&hellip;
+
+			int elevationDelta = <ins>grid.CellData[neighborIndex]</ins>.ViewElevation -
+				cell.ViewElevation;
+			&hellip;
+
+			nextClimate[<ins>neighborIndex</ins>] = neighborClimate;
+		}
+
+		&hellip;
+	}</pre>
+						
+						<p>Change <code>CreateRivers</code> to work with cell indices as well.</p>
+						
+						<pre translate="no">	void CreateRivers()
+	{
+		List&lt;<ins>int</ins>> riverOrigins = ListPool&lt;<ins>int</ins>>.Get();
+		for (int i = 0; i &lt; cellCount; i++)
+		{
+			<ins>HexCellData</ins> cell = grid.<ins>CellData[i]</ins>;
+			&hellip;
+			if (weight > 0.75f)
+			{
+				riverOrigins.Add(<ins>i</ins>);
+				riverOrigins.Add(<ins>i</ins>);
+			}
+			if (weight > 0.5f)
+			{
+				riverOrigins.Add(<ins>i</ins>);
+			}
+			if (weight > 0.25f)
+			{
+				riverOrigins.Add(<ins>i</ins>);
+			}
+		}
+
+		int riverBudget = Mathf.RoundToInt(landCells * riverPercentage * 0.01f);
+		while (riverBudget > 0 &amp;&amp; riverOrigins.Count > 0)
+		{
+			int index = Random.Range€(0, riverOrigins.Count);
+			int lastIndex = riverOrigins.Count - 1;
+			<ins>int originIndex</ins> = riverOrigins[index];
+			<ins>HexCellData origin = grid.CellData[originIndex];</ins>
+			riverOrigins[index] = riverOrigins[lastIndex];
+			riverOrigins.RemoveAt(lastIndex);
+
+			if (!origin.HasRiver)
+			{
+				bool isValidOrigin = true;
+				for (HexDirection d = HexDirection.NE;
+					d &lt;= HexDirection.NW; d++)
+				{
+					if (grid.<ins>TryGetCellIndex</ins>(
+						<ins>origin.coordinates.Step(d)</ins>, out <ins>int neighborIndex</ins>) &amp;&amp;
+						(<ins>grid.CellData[neighborIndex]</ins>.HasRiver ||
+							<ins>grid.CellData[neighborIndex]</ins>.IsUnderwater))
+					{
+						isValidOrigin = false;
+						break;
+					}
+				}
+				if (isValidOrigin)
+				{
+					riverBudget -= CreateRiver(<ins>originIndex</ins>);
+				}
+			}
+		}
+
+		&hellip;
+
+		ListPool&lt;<ins>int</ins>>.Add(riverOrigins);
+	}</pre>
+						
+						<p>And adjust <code>CreateRiver</code> to match. Instead of invoking <code>SetOutgoingRiver</code> on a cell we now have to explicitly set the flags of both cells correctly. The verification work done by <code>SetOutgoingRiver</code> is not needed here, because we only create a river connection if there are no obstructions.</p>
+						
+						<pre translate="no">	int CreateRiver(<ins>int originIndex</ins>)
+	{
+		int length = 1;
+		<ins>int cellIndex = originIndex;</ins>
+		<ins>HexCellData</ins> cell = <ins>grid.CellData[cellIndex]</ins>;
+		HexDirection direction = HexDirection.NE;
+		while (!cell.IsUnderwater)
+		{
+			int minNeighborElevation = int.MaxValue;
+			flowDirections.Clear();
+			for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++)
+			{
+				if (!grid.<ins>TryGetCellIndex</ins>(
+					<ins>cell.coordinates.Step(d)</ins>, out <ins>int neighborIndex</ins>))
+				{
+					continue;
+				}
+				<ins>HexCellData neighbor = grid.CellData[neighborIndex];</ins>
+
+				&hellip;
+
+				if (<ins>neighborIndex</ins> == <ins>originIndex</ins> || neighbor.HasIncomingRiver)
+				{
+					continue;
+				}
+
+				&hellip;
+
+				if (neighbor.HasOutgoingRiver)
+				{
+					<del>//cell.SetOutgoingRiver(d);</del>
+					<ins>grid.CellData[cellIndex].flags = cell.flags.WithRiverOut(d);</ins>
+					<ins>grid.CellData[neighborIndex].flags =</ins>
+						<ins>neighbor.flags.WithRiverIn(d.Opposite());</ins>
+					return length;
+				}
+
+				&hellip;
+			}
+
+			if (flowDirections.Count == 0)
+			{
+				&hellip;
+
+				if (minNeighborElevation >= cell.Elevation)
+				{
+					<del>//cell.WaterLevel = minNeighborElevation;</del>
+					<ins>cell.values = cell.values.WithWaterLevel(</ins>
+						<ins>minNeighborElevation);</ins>
+					if (minNeighborElevation == cell.Elevation)
+					{
+						<del>//cell.Elevation = minNeighborElevation - 1;</del>
+						<ins>cell.values = cell.values.WithElevation(</ins>
+							<ins>minNeighborElevation - 1);</ins>
+					}
+					<ins>grid.CellData[cellIndex].values = cell.values;</ins>
+				}
+				break;
+			}
+
+			direction = flowDirections[Random.Range(0, flowDirections.Count)];
+			<del>//cell.SetOutgoingRiver(direction);</del>
+			<ins>cell.flags = cell.flags.WithRiverOut(direction);</ins>
+			<ins>grid.TryGetCellIndex(</ins>
+				<ins>cell.coordinates.Step(direction), out int outIndex);</ins>
+			<ins>grid.CellData[outIndex].flags =</ins>
+				<ins>grid.CellData[outIndex].flags.WithRiverIn(direction.Opposite());</ins>
+
+			length += 1;
+
+			if (minNeighborElevation >= cell.Elevation &amp;&amp;
+				Random.value &lt; extraLakeProbability)
+			{
+				<del>//cell.WaterLevel = cell.Elevation;</del>
+				<del>//cell.Elevation -= 1;</del>
+				<ins>cell.values = cell.values.WithWaterLevel(cell.Elevation);</ins>
+				<ins>cell.values = cell.values.WithElevation(cell.Elevation - 1);</ins>
+			}
+			<ins>grid.CellData[cellIndex] = cell;</ins>
+			<ins>cellIndex = outIndex;</ins>
+			cell = <ins>grid.CellData[cellIndex]</ins>;
+		}
+		return length;
+	}</pre>
+						
+						<p>The last generation step to convert is <code>SetTerrainType</code>. Make it work with cell data and also pass the cell index to <code>DetermineTemperature</code>.</p>
+						
+						<pre translate="no">	void SetTerrainType()
+	{
+		&hellip;
+		
+		for (int i = 0; i &lt; cellCount; i++)
+		{
+			<ins>HexCellData</ins> cell = grid.<ins>CellData[i]</ins>;
+			float temperature = DetermineTemperature(<ins>i,</ins> cell);
+			float moisture = climate[i].moisture;
+			if (!cell.IsUnderwater)
+			{
+				&hellip;
+
+				<del>//cell.TerrainTypeIndex = cellBiome.terrain;</del>
+				<del>//cell.PlantLevel = cellBiome.plant;</del>
+				<ins>grid.CellData[i].values = cell.values.</ins>
+					<ins>WithTerrainTypeIndex(cellBiome.terrain).</ins>
+					<ins>WithPlantLevel(cellBiome.plant);</ins>
+			}
+			else
+			{
+				int terrain;
+				if (cell.Elevation == waterLevel - 1)
+				{
+					int cliffs = 0, slopes = 0;
+					for (HexDirection d = HexDirection.NE;
+						d &lt;= HexDirection.NW; d++)
+					{
+						if (!grid.<ins>TryGetCellIndex</ins>(
+							<ins>cell.coordinates.Step(d)</ins>, out <ins>int neighborIndex</ins>))
+						{
+							continue;
+						}
+						int delta = <ins>grid.CellData[neighborIndex]</ins>.Elevation -
+							cell.WaterLevel;
+						&hellip;
+					}
+
+					&hellip;
+				}
+				&hellip;
+				<del>//cell.TerrainTypeIndex = terrain;</del>
+				<ins>grid.CellData[i].values =</ins>
+					<ins>cell.values.WithTerrainTypeIndex(terrain);</ins>
+			}
+		}
+	}</pre>
+						
+						<p><code>DetermineTemperature</code> needs the cell index to get its position.</p>
+						
+						<pre translate="no">	float DetermineTemperature(<ins>int cellIndex, HexCellData</ins> cell)
+	{
+		&hellip;
+
+		float jitter = HexMetrics.SampleNoise(
+			<ins>grid.CellPositions[cellIndex]</ins> * 0.1f)[temperatureJitterChannel];
+
+		&hellip;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Hex Cell Cleanup</h3>
+						
+						<p>We have now removed the reliance on <code>HexCell</code> as much as possible from the code that generates and visualizes maps. The only place that the cell objects are still accessed is when refreshing them after generating a map.</p>
+						
+						<p>At this point there are multiple members of <code>HexCell</code> that are no longer accessed, so let's remove them. They are <code>HasRiverBeginOrEnd</code>, <code>HasRoads</code>, <code>StreamBedY</code>, <code>RiverSurfaceY</code>, <code>WaterSurfaceY</code>, and <code>HasIncomingRiverThroughEdge</code>.</p>
+						
+						<p>The next tutorial is <a href="../3-4-0/index.html">Hex Map 3.4.0</a>.</p>
+					</section>
+					
+					<a href="../../tutorials/license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecoding-projects/hex-map-project/src/d0211871c63d80fea55e57748be158f5ba4b41af/?at=release%2F3.3.0" class="repository">repository</a>
+					<a href="Hex-Map-3-3-0.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../tutorials/index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../tutorials/become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../tutorials/donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials/tutorials.js"></script>
+	</body>
+</html>

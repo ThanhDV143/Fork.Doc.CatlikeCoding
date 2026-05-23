@@ -1,0 +1,1558 @@
+<!DOCTYPE html>
+<html>
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/swirly-pipe/">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/swirly-pipe/tutorial-image.jpg">
+		<meta property="og:image:width" content="750">
+		<meta property="og:image:height" content="374">
+		<meta property="og:description" content="A Unity C# scripting tutorial in which you will create an endless racing game prototype.">
+		<meta name="description" content="A Unity C# scripting tutorial in which you will create an andless racing game prototype.">
+		<meta property="og:title" content="Swirly Pipe, a Unity C# Tutorial">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Swirly Pipe, a Unity C# Tutorial</title>
+		<link href="../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../site.webmanifest.html">
+
+
+		<script>
+			var customTypes = {
+				MainMenu: 1,
+				Pipe: 1,
+				PipeItem: 1,
+				PipeItemGenerator: 1,
+				PipeSystem: 1,
+				Player: 1,
+				RandomPlacer: 1,
+				SpiralPlacer: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../products/utilities/frame-rate-counter/index.html"><img src="../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<p><a href="../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></p>
+			<p class="category"><a href="../index.html">Unity C# Tutorials</a></p>
+		</header>
+		
+		<main>
+			<article itemscope itemtype="http://schema.org/TechArticle">
+				<header>
+					<h1 itemprop="name headline">Swirly Pipe</h1>
+					<p>Prototyping an Endless Racer</p>
+					<ul>
+						<li>Come up with a simple concept.</li>
+						<li>Create a torus.</li>
+						<li>Stitch endless random pipes together.</li>
+						<li>Move the world around the player.</li>
+						<li>Place obstacles inside pipes.</li>
+						<li>Add a game menu and HUD.</li>
+						<li>Deal with multiple target platforms.</li>
+					</ul>
+				</header>
+
+				<p itemprop="about description">In this tutorial we will create a simple endless racing game prototype. You can try out a <a href="webgl/index.html">WebGL</a> build in your browser.</p>
+
+				<p itemprop="dependencies">I expect you know your way around the Unity editor and are familiar with the basics of Unity scripting. If you've gone through the <a href="../maze/index.html">Maze</a> tutorial then you're good to go. See <a href="../procedural-grid.1.html">Procedural Grid</a> for the basics of meshes.</p>
+				
+				<p>This tutorial has been made with Unity 5.0.1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="375" height="187" itemprop="image">
+					<figcaption>Race to infinity through dark pipes.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>From Concept to Prototype</h2>
+					
+					<p>How do you create a game? You come up with a concept. Then you design it. Then you build it. Then you release it. Right?</p>
+				
+				<p>Well, not really. How do you know whether your concept is any good? You build a prototype to find out.</p>
+				
+				<p>The idea of a prototype is to go from concept to something playable as quickly as possible. Get it into people's hands and see whether you're on to something. If the feedback is promising, it's worthwhile to build it out a bit and gather more feedback. Then you can start thinking about actual design and maybe creating the real game. If instead the prototype falls flat, you just saved yourself from a lot of wasted effort and can start with a new concept.</p>
+				
+				<p>A prototype is not a polished application. A barely functional ugly mess is quite sufficient. It should run well enough so that the core experience is functional, and that's it. Any time spent optimizing and structuring code is wasted if your concept ends up being a dud. Don't make a deliberate mess though. If anything, be consistent so that anyone &ndash; including yourself &ndash; who might end up making the real game can make sense of the prototype.</p>
+					
+					<p>For this tutorial, we keep the concept simple. And endless racing game. In 3D. Through pipes, with obstacles and stuff. And because straight pipes are boring, it must be endlessly curving pipes.</p>
+					
+					<p>How the pipes are shaped defines the feel of the game. They shouldn't be too straight, because that's dull. They also shouldn't curve too quickly, as that makes it unplayable. What technique could we use to create pipes to our liking?</p>
+					
+					<p>Bézier splines seem obvious. They give us a lot of control, so we could make any curve we want. However, they're not easy to control. It's not obvious how we could constrain random placement of control points such that we end up with acceptable shapes. And there is also no simple direct way to determine the length of a curve segment.</p>
+					
+					<figure>
+						<img src="01-bezier.png" width="360" height="230">
+						<figcaption>Constructing a Bézier spline.</figcaption>
+					</figure>
+					
+					<p>Instead, we can construct our pipe system with biarcs. A biarc is composed of two circular arcs. You create one by concatenating two partial circles. They are easily controlled by limiting the radius and arc length of the circles, and computing the length of each segment is simple.</p>
+					
+					<figure>
+						<img src="01-biarc.png" width="420" height="300">
+						<figcaption>Constructing a biarc.</figcaption>
+					</figure>
+					
+					<p>That answers the most important technical question. Now it's time to start building the prototype. We'll figure everything else out as we go.</p>
+				</section>
+				
+				<section>
+					<h2>Building a Pipe</h2>
+					
+					<p>The pipe is the most important element of our game, so let's start with that. A single pipe segment is simply a partial circle. Or as we're working in 3D, a partial torus.</p>
+					
+					<p>A torus is defined by two radiuses. In our pipe's cases these are the radius of the pipe, and the radius of the curve it's following. Let's put these in a component.</p>
+					
+					<figure>
+						<img src="02-circles.png" width="240" height="240">
+						<figcaption>A torus is a circle swept along another circle.</figcaption>
+					</figure>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class Pipe : MonoBehaviour {</ins>
+
+	<ins>public float curveRadius, pipeRadius;</ins>
+<ins>}</ins></pre>
+					
+					<p>We'll use a mesh to create the pipe's surface, so we need to decide how to segment the pipe into quads. The segment count along the curve is independent of the segment count along the pipe's surface.</p>
+					
+					<pre translate="no">	<ins>public int curveSegmentCount, pipeSegmentCount;</ins></pre>
+					
+					<p>Now we can create a new game object and turn it into a pipe. Let's set the pipe radius to one and the curve radius to four. I'll divide the pipe surface into ten segments and use twenty segments for the curve.</p>
+					
+					<figure>
+						<img src="02-pipe.png" width="320" height="228">
+						<figcaption>A pipe ready for testing.</figcaption>
+					</figure>
+					
+					<p>To place vertices we need to be able to find points on the surface of our torus. A torus can be described with a 3D sinusoid function.</p>
+					
+					<p>
+						<b>x = (<i>R</i> + <i>r</i> cos <i>v</i>) cos <i>u</i></b><br>
+						<b>y = (<i>R</i> + <i>r</i> cos <i>v</i>) sin <i>u</i></b><br>
+						<b>z = <i>r</i> cos <i>v</i></b>
+					</p>
+					
+					<p>In the above function <b><i>r</i></b> is the radius of the pipe. <b><i>R</i></b> is the radius of the curve. The <b><i>u</i></b> parameter defines the angle along the curve, in radians, so in the 0&ndash;2&pi; range. The <b><i>v</i></b> parameter defines the angle along the pipe. We can create a matching method for it.</p>
+					
+					<pre translate="no">	<ins>private Vector3 GetPointOnTorus (float u, float v) {</ins>
+		<ins>Vector3 p;</ins>
+		<ins>float r = (curveRadius + pipeRadius * Mathf.Cos(v));</ins>
+		<ins>p.x = r * Mathf.Sin(u);</ins>
+		<ins>p.y = r * Mathf.Cos(u);</ins>
+		<ins>p.z = pipeRadius * Mathf.Sin(v);</ins>
+		<ins>return p;</ins>
+	<ins>}</ins></pre>
+					
+					<p>To test whether we did it right, let's draw some gizmos in the scene view. First just a single ring around the start of the pipe.</p>
+					
+					<pre translate="no">	<ins>private void OnDrawGizmos () {</ins>
+		<ins>float vStep = (2f * Mathf.PI) / pipeSegmentCount;</ins>
+		
+		<ins>for (int v = 0; v &lt; pipeSegmentCount; v++) {</ins>
+			<ins>Vector3 point = GetPointOnTorus(0f, v * vStep);</ins>
+			<ins>Gizmos.DrawSphere(point, 0.1f);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<figure>
+						<img src="02-ring.png" width="130" height="170">
+						<figcaption>The first ring.</figcaption>
+					</figure>
+					
+					<p>It works! Now show the whole torus, with colors.</p>
+					
+					<pre translate="no">		<ins>float uStep = (2f * Mathf.PI) / curveSegmentCount;</ins>
+		float vStep = (2f * Mathf.PI) / pipeSegmentCount;
+
+		<ins>for (int u = 0; u &lt; curveSegmentCount; u++) {</ins>
+			for (int v = 0; v &lt; pipeSegmentCount; v++) {
+				Vector3 point = GetPointOnTorus(<ins>u * uStep</ins>, v * vStep);
+				<ins>Gizmos.color = new Color(</ins>
+					<ins>1f,</ins>
+					<ins>(float)v / pipeSegmentCount,</ins>
+					<ins>(float)u / curveSegmentCount);</ins>
+				Gizmos.DrawSphere(point, 0.1f);
+			}
+		<ins>}</ins></pre>
+					
+					<figure>
+						<img src="02-torus.png" width="270" height="280">
+						<figcaption>An entire torus.</figcaption>
+					</figure>
+					
+					<p>We can see that the torus wraps around the Z axis, clockwise when looking along Z. It starts at the top, and the pipe is constructed in counter-clockwise direction when looking forward.</p>
+					
+					
+					<p>Now to construct the mesh! We need to add mesh filter and renderer components to the pipe for that. Also set the renderer's material to Unity's default material, so we can see the mesh properly.</p>
+					
+					<figure>
+						<img src="02-mesh-components.png" width="320" height="332">
+						<figcaption>Mesh components.</figcaption>
+					</figure>
+					
+					<p>We create the mesh when the object awakens. Then its vertices and triangles need to be set, for which I added separate methods.</p>
+					
+					<pre translate="no">	<ins>private Mesh mesh;</ins>
+	<ins>private Vector3[] vertices;</ins>
+	<ins>private int[] triangles;</ins>
+
+	<ins>private void Awake () {</ins>
+		<ins>GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();</ins>
+		<ins>mesh.name = "Pipe";</ins>
+		<ins>SetVertices();</ins>
+		<ins>SetTriangles();</ins>
+	<ins>}</ins>
+	
+	<ins>private void SetVertices () {}</ins>
+
+	<ins>private void SetTriangles () {}</ins></pre>
+					
+					<p>How do we triangulate the torus? We could have each quad share vertices with its neighbors, or give each quad its own four vertices. Because the latter is most flexible, let's go with that.</p>
+					
+					<pre translate="no">	private void SetVertices () {
+		<ins>vertices = new Vector3[pipeSegmentCount * curveSegmentCount * 4];</ins>
+		<ins>mesh.vertices = vertices;</ins>
+	}</pre>
+					
+					<p>Let's start with the first ring of quads only. They require a ring of vertices at the 1<sup>st</sup> and 2<sup>nd</sup> step along <i>u</i>.</p>
+					
+					<pre translate="no">		vertices = new Vector3[pipeSegmentCount * curveSegmentCount * 4];
+		<ins>float uStep = (2f * Mathf.PI) / curveSegmentCount;</ins>
+		<ins>CreateFirstQuadRing(uStep);</ins>
+		mesh.vertices = vertices;</pre>
+
+					<p>The first step is to get two vertices &ndash; A and B &ndash; along <i>u</i>. Then we do one step along <i>v</i> and grab the next pair. We keep doing this until we've come full circle. Each step we assign the previous and new points to the current quad's vertices.</p>
+
+					<pre translate="no">	<ins>private void CreateFirstQuadRing (float u) {</ins>
+		<ins>float vStep = (2f * Mathf.PI) / pipeSegmentCount;</ins>
+
+		<ins>Vector3 vertexA = GetPointOnTorus(0f, 0f);</ins>
+		<ins>Vector3 vertexB = GetPointOnTorus(u, 0f);</ins>
+		<ins>for (int v = 1; v &lt;= pipeSegmentCount; v++) {</ins>
+			<ins>vertexA = GetPointOnTorus(0f, v * vStep);</ins>
+			<ins>vertexB = GetPointOnTorus(u, v * vStep);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<p>We have to assign these vertices to the quads as we work our way through the segments.</p>
+					
+					<pre translate="no">		Vector3 vertexA = GetPointOnTorus(0f, 0f);
+		Vector3 vertexB = GetPointOnTorus(u, 0f);
+		for (int v = 1<ins>, i = 0</ins>; v &lt;= pipeSegmentCount; v++<ins>, i += 4</ins>) {
+			<ins>vertices[i] = vertexA;</ins>
+			<ins>vertices[i + 1] =</ins> vertexA = GetPointOnTorus(0f, v * vStep);
+			<ins>vertices[i + 2] = vertexB;</ins>
+			<ins>vertices[i + 3] =</ins> vertexB = GetPointOnTorus(u, v * vStep);
+		}</pre>
+					
+					<p>With our first ring set, let's initialize the triangles. Each quad has two triangles, so six vertex indices.</p>
+					
+					<pre translate="no">	private void SetTriangles () {
+		<ins>triangles = new int[pipeSegmentCount * curveSegmentCount * 6];</ins>
+		<ins>mesh.triangles = triangles;</ins>
+	}</pre>
+					
+					<p>Although we'll be looking at the inside of the pipes when playing the game, for now it's handy for us to look at the pipes from the outside. So let's order the vertices so that the triangles show up on the outside of the pipe.</p>
+					
+					<pre translate="no">		triangles = new int[pipeSegmentCount * curveSegmentCount * 6];
+		<ins>for (int t = 0, i = 0; t &lt; triangles.Length; t += 6, i += 4) {</ins>
+			<ins>triangles[t] = i;</ins>
+			<ins>triangles[t + 1] = triangles[t + 4] = i + 1;</ins>
+			<ins>triangles[t + 2] = triangles[t + 3] = i + 2;</ins>
+			<ins>triangles[t + 5] = i + 3;</ins>
+		<ins>}</ins>
+		mesh.triangles = triangles;</pre>
+
+					<figure>
+						<img src="02-first-ring.png" width="270" height="280">
+						<figcaption>First ring of quads.</figcaption>
+					</figure>
+					
+					<p>Our first ring shows up correctly. All other vertices are still stuck at the origin, so we don't see the other quads yet. Let's change that.</p>
+					
+					<pre translate="no">	private void SetVertices () {
+		vertices = new Vector3[pipeSegmentCount * curveSegmentCount * 4];
+		float uStep = (2f * Mathf.PI) / curveSegmentCount;
+		CreateFirstQuadRing(uStep);
+		<ins>int iDelta = pipeSegmentCount * 4;</ins>
+		<ins>for (int u = 2, i = iDelta; u &lt;= curveSegmentCount; u++, i += iDelta) {</ins>
+			<ins>CreateQuadRing(u * uStep, i);</ins>
+		<ins>}</ins>
+		mesh.vertices = vertices;
+	}</pre>
+					<p>The <code>CreateQuadRing</code> method works the same as <code>CreateFirstQuadRing</code>, except that it only needs to add a single vertex each step. It can copy the first two vertices per quad from those of the previous ring.</p>
+					
+					<pre translate="no">	<ins>private void CreateQuadRing (float u, int i) {</ins>
+		<ins>float vStep = (2f * Mathf.PI) / pipeSegmentCount;</ins>
+		<ins>int ringOffset = pipeSegmentCount * 4;</ins>
+		
+		<ins>Vector3 vertex = GetPointOnTorus(u, 0f);</ins>
+		<ins>for (int v = 1; v &lt;= pipeSegmentCount; v++, i += 4) {</ins>
+			<ins>vertices[i] = vertices[i - ringOffset + 2];</ins>
+			<ins>vertices[i + 1] = vertices[i - ringOffset + 3];</ins>
+			<ins>vertices[i + 2] = vertex;</ins>
+			<ins>vertices[i + 3] = vertex = GetPointOnTorus(u, v * vStep);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<figure>
+						<img src="02-torus-mesh.png" width="270" height="280">
+						<figcaption>Complete torus mesh.</figcaption>
+					</figure>
+					
+					<p>We now see the entire torus, but it looks flat. That's because the mesh doesn't have any normals. Let Unity compute the normals so we can have a better look. The torus will appear faceted because we made the quads independent.</p>
+					
+					<pre translate="no">	private void Awake () {
+		GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();
+		mesh.name = "Pipe";
+		SetVertices();
+		SetTriangles();
+		<ins>mesh.RecalculateNormals();</ins>
+	}</pre>
+					
+					<figure>
+						<img src="02-mesh-normals.png" width="270" height="280">
+						<figcaption>Now with proper shading.</figcaption>
+					</figure>
+					
+					<a href="sp-02-building-a-pipe.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Building a Pipe System</h2>
+					
+					<p>Right now we're creating an entire torus, but each individual pipe should only cover a fraction of a torus. We can do this by setting the distance between rings to a fixed value. Then then amount of curve segments determines the length of the pipe's arc.</p>
+					
+					<pre translate="no">	<ins>public float ringDistance;</ins>
+
+	private void SetVertices () {
+		vertices = new Vector3[pipeSegmentCount * curveSegmentCount * 4];
+
+		float uStep = <ins>ringDistance / curveRadius</ins>;
+		CreateFirstQuadRing(uStep);
+		int iDelta = pipeSegmentCount * 4;
+		for (int u = 2, i = iDelta; u &lt;= curveSegmentCount; u++, i += iDelta) {
+			CreateQuadRing(u * uStep, i);
+		}
+		mesh.vertices = vertices;
+	}</pre>
+					
+					<p>Just set the ring distance to one unit. Also get rid of <code>OnDrawGizmos</code>, because we no longer need it.</p>
+					
+					<figure>
+						<img src="03-partial-torus.png" width="160" height="220">
+						<figcaption>Only part of a torus.</figcaption>
+					</figure>
+					
+					<p>We need something that stitches multiple pipes together. So we create a new pipe system component and object. It needs a pipe prefab, of which it will create a fixed number of instances as children of itself.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class PipeSystem : MonoBehaviour {</ins>
+
+	<ins>public Pipe pipePrefab;</ins>
+
+	<ins>public int pipeCount;</ins>
+
+	<ins>private Pipe[] pipes;</ins>
+
+	<ins>private void Awake () {</ins>
+		<ins>pipes = new Pipe[pipeCount];</ins>
+		<ins>for (int i = 0; i &lt; pipes.Length; i++) {</ins>
+			<ins>Pipe pipe = pipes[i] = Instantiate&lt;Pipe>(pipePrefab);</ins>
+			<ins>pipe.transform.SetParent(transform, false);</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+					
+					<p>Turn our pipe object into prefab and assign that to the system. I set it to create four pipes for now.</p>
+					
+					<figure>
+						<img src="03-pipe-system.png" width="320" height="192">
+						<figcaption>A pipe system.</figcaption>
+					</figure>
+					
+					<p>The pipes need to somehow be aligned with each other. The first one leads the pack, the others should each be aligned with the previous one.</p>
+					
+					<pre translate="no">		pipes = new Pipe[pipeCount];
+		for (int i = 0; i &lt; pipes.Length; i++) {
+			Pipe pipe = pipes[i] = Instantiate&lt;Pipe>(pipePrefab);
+			pipe.transform.SetParent(transform, false);
+			<ins>if (i > 0) {</ins>
+				<ins>pipe.AlignWith(pipes[i - 1]);</ins>
+			<ins>}</ins>
+		}</pre>
+					
+					<p>Now we need to figure out how <code>Pipe</code> can align itself another instance. For that we need the angle of the curve of the previous pipe.</p>
+					
+					<pre translate="no">	<ins>private float curveAngle;</ins>
+	
+	private void SetVertices () {
+		vertices = new Vector3[pipeSegmentCount * curveSegmentCount * 4];
+
+		float uStep = ringDistance / curveRadius;
+		<ins>curveAngle = uStep * curveSegmentCount * (360f / (2f * Mathf.PI));</ins>
+		CreateFirstQuadRing(uStep);
+		int iDelta = pipeSegmentCount * 4;
+		for (int u = 2, i = iDelta; u &lt;= curveSegmentCount; u++, i += iDelta) {
+			CreateQuadRing(u * uStep, i);
+		}
+		mesh.vertices = vertices;
+	}</pre>
+					
+					<p>Then we can rotate by that angle in the opposite direction.</p>
+					
+					<pre translate="no">	<ins>public void AlignWith (Pipe pipe) {</ins>
+		<ins>transform.localRotation = Quaternion.Euler(0f, 0f, -pipe.curveAngle);</ins>
+	<ins>}</ins></pre>
+					
+					<figure>
+						<img src="03-rotation.png" width="270" height="280">
+						<figcaption>Rotating pipes.</figcaption>
+					</figure>
+					
+					<p>This works, but only for one step. Now all but the first pipe end up overlapping. The rotation somehow needs to be cumulative. A quick way to do this is by temporarily turning the pipe into its predecessor's child. Setting the rotation is always correct from that frame of reference. Then we turn it back into a child of the whole system, while keeping its current world position.</p>
+					
+					<pre translate="no">		<ins>transform.SetParent(pipe.transform, false);</ins>
+		transform.localRotation = Quaternion.Euler(0f, 0f, -pipe.curveAngle);
+		<ins>transform.SetParent(pipe.transform.parent);</ins></pre>
+					
+					<figure>
+						<img src="03-cumulative-rotation.png" width="270" height="280">
+						<figcaption>Cumulative rotation.</figcaption>
+					</figure>
+					
+					<p>The pipes now complete the whole circle and end up overlapping again quickly. We want pipes to have a random relative rotation, so they can go anywhere. We can do this with some careful positioning.</p>
+					
+					<p>First we want to make sure that the pipe is at its parent's origin. Then we align with the parent, as before. Next, we move up so our origin sits at the end point of our parent's pipe. Here we can perform our random relative rotation. After that we move down &ndash; from our own points of view &ndash; to align the pipe end and start.</p>
+					
+					<pre translate="no">	public void AlignWith (Pipe pipe) {
+		<ins>float relativeRotation = Random.Range(0f, 360f);</ins>
+		
+		transform.SetParent(pipe.transform, false);
+		<ins>transform.localPosition = Vector3.zero;</ins>
+		transform.localRotation = Quaternion.Euler(0f, 0f, -pipe.curveAngle);
+		<ins>transform.Translate(0f, pipe.curveRadius, 0f);</ins>
+		<ins>transform.Rotate(relativeRotation, 0f, 0f);</ins>
+		<ins>transform.Translate(0f, -curveRadius, 0f);</ins>
+		transform.SetParent(pipe.transform.parent);
+	}</pre>
+					
+					<figure>
+						<img src="03-relative-rotation.png" width="170" height="320">
+						<figcaption>Relative rotations.</figcaption>
+					</figure>
+					
+					<p>The pipes now rotate freely while still being aligned with each other. However, the meshes don't perfectly fit together. We have to restrict the relative rotation to fit the pipe segments.</p>
+					
+					<pre translate="no">		float relativeRotation =
+			<ins>Random.Range(0, curveSegmentCount) * 360f / pipeSegmentCount</ins>;</pre>
+					
+					<figure>
+						<img src="03-aligned-rotation.png" width="170" height="210">
+						<figcaption>Aligned rotations.</figcaption>
+					</figure>
+					
+					<p>Finally, to allow a huge variety of pipe systems, randomize the curve radius and segment count to each fall within some range.</p>
+					
+					<pre translate="no">	public float pipeRadius;
+	public int pipeSegmentCount;
+
+	<ins>public float minCurveRadius, maxCurveRadius;</ins>
+	<ins>public int minCurveSegmentCount, maxCurveSegmentCount;</ins>
+
+	<ins>private float curveRadius;</ins>
+	<ins>private int curveSegmentCount;</ins>
+	
+	private void Awake () {
+		GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();
+		mesh.name = "Pipe";
+		
+		<ins>curveRadius = Random.Range(minCurveRadius, maxCurveRadius);</ins>
+		<ins>curveSegmentCount =</ins>
+			<ins>Random.Range(minCurveSegmentCount, maxCurveSegmentCount + 1);</ins>
+		
+		SetVertices();
+		SetTriangles();
+		mesh.RecalculateNormals();
+	}</pre>
+					
+					<p>What these ranges should be depends on what you're going for. Long and smooth? Short and curvy? You also want to find a configuration that doesn't intersect itself too quickly. I kept the pipe radius at one, let the curve radius fall between four and twenty, and and pipe segment count between four and ten.</p>
+					
+					<figure>
+						<img src="03-prefab-settings.png" width="320" height="166">
+						<figcaption>Parameterizing the randomness.</figcaption>
+					</figure>
+					
+					<a href="sp-03-building-a-pipe-system.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Moving Through the Pipes</h2>
+					
+					<p>Our game needs a player, which deserves its own component and object. The player moves through system, one pipe at a time, with some velocity.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class Player : MonoBehaviour {</ins>
+
+	<ins>public PipeSystem pipeSystem;</ins>
+
+	<ins>public float velocity;</ins>
+
+	<ins>private Pipe currentPipe;</ins>
+<ins>}</ins></pre>
+					
+					<figure>
+						<img src="04-player.png" width="320" height="192">
+						<figcaption>Player object.</figcaption>
+					</figure>
+					
+					<p>Actually, let's keep the player at the origin and move the pipe system instead. You won't be able to tell the difference, and we won't need to worry about going too far away from the origin. Regardless, we need to start at the first pipe of the system.</p>
+					
+					<pre translate="no">	<ins>private void Start () {</ins>
+		<ins>currentPipe = pipeSystem.SetupFirstPipe();</ins>
+	<ins>}</ins></pre>
+					
+					<p>Now <code>PipeSystem</code> has to provide the first pipe, which is easy. To make sure that the pipe starts at the origin, the whole system has to move down by an amount equal to that pipe's curve radius.</p>
+					
+					<pre translate="no">	<ins>public Pipe SetupFirstPipe () {</ins>
+		<ins>transform.localPosition = new Vector3(0f, -pipes[0].CurveRadius);</ins>
+		<ins>return pipes[0];</ins>
+	<ins>}</ins></pre>
+					
+					<p>The curve radius of <code>Pipe</code> is currently private. Let's keep it that way to signal that it shouldn't be changed. Instead, we can add a property to <code>Pipe</code> so others can access it.</p>
+					
+					<pre translate="no">	<ins>public float CurveRadius {</ins>
+		<ins>get {</ins>
+			<ins>return curveRadius;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<figure>
+						<img src="04-first-pipe.png" width="200" height="180">
+						<figcaption>First pipe starts at the origin.</figcaption>
+					</figure>
+					
+					<p>Back to <code>Player</code>, the distance that it has traveled increases with time. We like to keep track of this, as it's the typical way to score a player's performance.</p>
+					
+					<pre translate="no">	<ins>private float distanceTraveled;</ins>
+
+	<ins>private void Update () {</ins>
+		<ins>float delta = velocity * Time.deltaTime;</ins>
+		<ins>distanceTraveled += delta;</ins>
+	<ins>}</ins></pre>
+					
+					<p>But we don't move in a straight line. We have to convert the delta into a rotation. Then we can use that to update the system's orientation.</p>
+					
+					<pre translate="no">	<ins>private float deltaToRotation;</ins>
+	<ins>private float systemRotation;</ins>
+
+	private void Start () {
+		currentPipe = pipeSystem.SetupFirstPipe();
+		<ins>deltaToRotation = 360f / (2f * Mathf.PI * currentPipe.CurveRadius);</ins>
+	}
+
+	private void Update () {
+		float delta = velocity * Time.deltaTime;
+		distanceTraveled += delta;
+		<ins>systemRotation += delta * deltaToRotation;</ins>
+		<ins>pipeSystem.transform.localRotation =</ins>
+			<ins>Quaternion.Euler(0f, 0f, systemRotation);</ins>
+	}</pre>
+					
+					<p>The system now rotates. The next step is to detect the end of current pipe. We need the curve angle for that, so <code>Pipe</code> gets another property.</p>
+					
+					<pre translate="no">	<ins>public float CurveAngle {</ins>
+		<ins>get {</ins>
+			<ins>return curveAngle;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<p>Once <code>Player</code> moves past that angle, we have to convert any extra rotation back into a distance, then jump to next pipe with the remaining delta.</p>
+					
+					<pre translate="no">	private void Update () {
+		float delta = velocity * Time.deltaTime;
+		distanceTraveled += delta;
+		systemRotation += delta * deltaToRotation;
+
+		<ins>if (systemRotation >= currentPipe.CurveAngle) {</ins>
+			<ins>delta = (systemRotation - currentPipe.CurveAngle) / deltaToRotation;</ins>
+			<ins>currentPipe = pipeSystem.SetupNextPipe();</ins>
+			<ins>deltaToRotation = 360f / (2f * Mathf.PI * currentPipe.CurveRadius);</ins>
+			<ins>systemRotation = delta * deltaToRotation;</ins>
+		<ins>}</ins>
+
+		pipeSystem.transform.localRotation =
+			Quaternion.Euler(0f, 0f, systemRotation);
+	}</pre>
+					
+					<p>Setting up the next pipe means that <code>PipeSystem</code> has to shift the pipes in its array, align the next pipe with the origin, and reset its position.</p>
+					
+					<pre translate="no">	<ins>public Pipe SetupNextPipe () {</ins>
+		<ins>ShiftPipes();</ins>
+		<ins>AlignNextPipeWithOrigin();</ins>
+		<ins>transform.localPosition = new Vector3(0f, -pipes[0].CurveRadius);</ins>
+		<ins>return pipes[0];</ins>
+	<ins>}</ins></pre>
+					
+					<p>Shifting pipes forward is easy. The current first pipe becomes the new last pipe.</p>
+					
+					<pre translate="no">	<ins>private void ShiftPipes () {</ins>
+		<ins>Pipe temp = pipes[0];</ins>
+		<ins>for (int i = 1; i &lt; pipes.Length; i++) {</ins>
+			<ins>pipes[i - 1] = pipes[i];</ins>
+		<ins>}</ins>
+		<ins>pipes[pipes.Length - 1] = temp;</ins>
+	<ins>}</ins></pre>
+					
+					<p>Aligning the new first pipe can be done by simply resetting its position and rotation. To make sure that all other pipes move along with it, just temporarily make them children of that pipe.</p>
+					
+					<pre translate="no">	<ins>private void AlignNextPipeWithOrigin () {</ins>
+		<ins>Transform transformToAlign = pipes[0].transform;</ins>
+		<ins>for (int i = 1; i &lt; pipes.Length; i++) {</ins>
+			<ins>pipes[i].transform.SetParent(transformToAlign);</ins>
+		<ins>}</ins>
+		
+		<ins>transformToAlign.localPosition = Vector3.zero;</ins>
+		<ins>transformToAlign.localRotation = Quaternion.identity;</ins>
+		
+		<ins>for (int i = 1; i &lt; pipes.Length; i++) {</ins>
+			<ins>pipes[i].transform.SetParent(transform);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<p>When playing, the game now loops through all pipes continuously. But each pipe segment snaps to the default orientation. We need to compensate for this with a world rotation. Create a world object at origin and make the pipe system a child of it.</p>
+					
+					<figure>
+						<img src="04-hierarchy.png" width="110" height="90">
+						<figcaption>Adding the world.</figcaption>
+					</figure>
+					
+					<p>To perform the compensation, <code>Player</code> needs a reference to the world, which it can obtain via the pipe system.</p>
+					
+					<pre translate="no">	<ins>private Transform world;</ins>
+
+	private void Start () {
+		<ins>world = pipeSystem.transform.parent;</ins>
+		currentPipe = pipeSystem.SetupFirstPipe();
+		deltaToRotation = 360f / (2f * Mathf.PI * currentPipe.CurveRadius);
+	}</pre>
+					
+					<p>Now we need the pipe's relative rotation. So let <code>Pipe</code> remember it and expose it via a property.</p>
+					
+					<pre translate="no">	<ins>private float relativeRotation;</ins>
+	
+	<ins>public float RelativeRotation {</ins>
+		<ins>get {</ins>
+			<ins>return relativeRotation;</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+	
+	public void AlignWith (Pipe pipe) {
+		<ins>relativeRotation</ins> =
+			Random.Range(0, curveSegmentCount) * 360f / pipeSegmentCount;
+		&hellip;
+	}</pre>
+					
+					<p>The <code>Player</code> has to keep track of the world rotation and update it when going into a new pipe. As it needs to do this in both <code>Start</code> and <code>Update</code>, it makes sense to put that code into its own method.</p>
+					
+					<pre translate="no">	<ins>private float worldRotation;</ins>
+
+	private void Start () {
+		world = pipeSystem.transform.parent;
+		currentPipe = pipeSystem.SetupFirstPipe();
+		<ins>SetupCurrentPipe();</ins>
+	}
+
+	private void Update () {
+		&hellip;
+		if (systemRotation >= currentPipe.CurveAngle) {
+			delta = (systemRotation - currentPipe.CurveAngle) / deltaToRotation;
+			currentPipe = pipeSystem.SetupNextPipe();
+			<ins>SetupCurrentPipe();</ins>
+			systemRotation = delta * deltaToRotation;
+		}
+		&hellip;
+	}
+
+	<ins>private void SetupCurrentPipe () {</ins>
+		deltaToRotation = 360f / (2f * Mathf.PI * currentPipe.CurveRadius);
+		<ins>worldRotation += currentPipe.RelativeRotation;</ins>
+		<ins>if (worldRotation &lt; 0f) {</ins>
+			<ins>worldRotation += 360f;</ins>
+		<ins>}</ins>
+		<ins>else if (worldRotation >= 360f) {</ins>
+			<ins>worldRotation -= 360f;</ins>
+		<ins>}</ins>
+		<ins>world.localRotation = Quaternion.Euler(worldRotation, 0f, 0f);</ins>
+	<ins>}</ins></pre>
+					
+					<p>With this in place, we move through the pipes properly! But we're still looping back to the first pipe once we reach the end. Of course we don't want that to happen, we want to keep going forward. How many pipes are needed to achieve that?</p>
+					
+					<figure>
+						<img src="04-many-pipes.png" width="470" height="300">
+						<figcaption>1000 pipes all at once.</figcaption>
+					</figure>
+					
+					<p>Theoretically, the player could go forward forever and pass through an infinite amount of pipes. But we don't need to show all of them at once. We only need those pipes that are visible to the player, which aren't that many, as they keep curving out of view.</p>
+					
+					<p>This means that we can take the pipe that we just passed and use it to generate a new one at the end, which is hopefully not yet visible. To allow for this, change <code>Pipe</code> so it fills its mesh in a public <code>Generate</code> method.</p>
+					
+					<pre translate="no">	private void Awake () {
+		GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();
+		mesh.name = "Pipe";
+	}
+
+	<ins>public void Generate () {</ins>
+		curveRadius = Random.Range(minCurveRadius, maxCurveRadius);
+		curveSegmentCount =
+			Random.Range(minCurveSegmentCount, maxCurveSegmentCount + 1);
+		<ins>mesh.Clear();</ins>
+		SetVertices();
+		SetTriangles();
+		mesh.RecalculateNormals();
+	<ins>}</ins></pre>
+					
+					<p>After this change <code>PipeSystem</code> needs to explicitly generate the pipes when it awakens.</p>
+					
+					<pre translate="no">	private void Awake () {
+		pipes = new Pipe[pipeCount];
+		for (int i = 0; i &lt; pipes.Length; i++) {
+			Pipe pipe = pipes[i] = Instantiate&lt;Pipe>(pipePrefab);
+			pipe.transform.SetParent(transform, false);
+			<ins>pipe.Generate();</ins>
+			if (i > 0) {
+				pipe.AlignWith(pipes[i - 1]);
+			}
+		}
+	}</pre>
+					
+					<p>And can do so as well when going for the next pipe.</p>
+					
+					<pre translate="no">	public Pipe SetupNextPipe () {
+		ShiftPipes();
+		AlignNextPipeWithOrigin();
+		<ins>pipes[pipes.Length - 1].Generate();</ins>
+		<ins>pipes[pipes.Length - 1].AlignWith(pipes[pipes.Length - 2]);</ins>
+		transform.localPosition = new Vector3(0f, -pipes[0].CurveRadius);
+		return pipes[0];
+	}</pre>
+					
+					<p>It works! The pipes keep going forever. But let it run for a while and you'll probably see things go wrong.</p>
+					
+					<figure>
+						<img src="04-unstable.png" width="420" height="90">
+						<figcaption>Unstable pipes.</figcaption>
+					</figure>
+					
+					<p>As it turns out, all this changing of parents slowly degrades the quality of transforms. This is not a problem for positions and rotations, as we constantly set these ourselves. However, we never touch the transform's scale, which causes it to shrink dramatically after a while. Fortunately, this can be prevented by having <code>Pipe</code> reset its scale after each alignment.</p>
+					
+					<pre translate="no">	public void AlignWith (Pipe pipe) {
+		&hellip;
+		<ins>transform.localScale = Vector3.one;</ins>
+	}</pre>
+					
+					<a href="sp-04-moving-through-the-pipes.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Racing Through Pipes</h2>
+					
+					<p>We're now moving through the center of the pipes. To turn it into a proper racing game, we should move along the surface of the pipes instead, so we can steer and avoid stuff. And we need something to visualize the player.</p>
+					
+					<p>The player object itself can actually stay put at the origin. We can provide the illusion of movement by adding an avatar with a slight vertical offset and rotating it around the X axis. To complete the experience of racing along the pipes, place the camera slightly behind and above the avatar and make it a child of it.</p>
+					
+					<p>What should the avatar look like? A ship? A running person or robot? Something abstract? The shape of the avatar is up to you. I used two simple particle systems, one for its shape and one to create a trail.</p>
+					
+					<figure>
+						<img src="05-avatar-hierarchy.png" width="130" height="134">
+						<figcaption>Avatar hierarchy.</figcaption>
+					</figure>
+					
+					<p>The rotater is a direct child of the player and will be used to control the avatar. The avatar itself is a container object which I placed at (0, -0.75, 0). I set the camera's local position to (-0.75, 0.25, 0) and its rotation to (10, 90, 0).</p>
+					
+					<p>I configured the particle systems so they suggest a shape that roughly matching a sphere with a radius of 0.1 unit. The trail has a rotation of (0, 270, 0) so it ejects particles backwards. I set it to simulate in world space so the trail of particles will swirl behind the avatar as it steers.</p>
+					
+					<figure>
+						<img alt="shape" src="05-shape.png" width="320" height="622">
+						<img alt="trail" src="05-trail.png" width="320" height="622">
+						<img alt="game view" src="05-avatar-shape.png" width="180" height="220">
+						<figcaption>A glowing avatar.</figcaption>
+					</figure>
+					
+					<p>Now that we are looking at the inside of the pipes, the way we order the triangles of <code>Pipe</code> needs to be inverted.</p>
+					
+					<pre translate="no">	private void SetTriangles () {
+		triangles = new int[pipeSegmentCount * curveSegmentCount * 6];
+		for (int t = 0, i = 0; t &lt; triangles.Length; t += 6, i += 4) {
+			triangles[t] = i;
+			triangles[t + 1] = triangles[t + 4] = <ins>i + 2</ins>;
+			triangles[t + 2] = triangles[t + 3] = <ins>i + 1</ins>;
+			triangles[t + 5] = i + 3;
+		}
+		mesh.triangles = triangles;
+	}</pre>
+					
+					<p>Also remove the  directional light, as it doesn't make sense inside a pipe network. You'll still see a directional color gradient because of Unity's default skybox. Let's keep that for now as it's useful to see our orientation.</p>
+					
+					<figure>
+						<img src="05-inverted-pipes.png" width="350" height="350">
+						<figcaption>Inverted pipes, without a sun.</figcaption>
+					</figure>
+					
+					<p>When moving through the system, you'll constantly see gaps in the pipes appear at the edge of our field of view. This happens because we immediately removes pipes that we passed through, even though the camera still sees part of them. We need to keep one pipe behind us to prevent this from happening. We can do this by having <code>PipeSystem</code> return the second pipe, instead of the first one.</p>
+					
+					<pre translate="no">	public Pipe SetupFirstPipe () {
+		transform.localPosition = new Vector3(0f, -<ins>pipes[1]</ins>.CurveRadius);
+		return <ins>pipes[1]</ins>;
+	}
+
+	public Pipe SetupNextPipe () {
+		ShiftPipes();
+		AlignNextPipeWithOrigin();
+		pipes[pipes.Length - 1].Generate();
+		pipes[pipes.Length - 1].AlignWith(pipes[pipes.Length - 2]);
+		transform.localPosition = new Vector3(0f, -<ins>pipes[1]</ins>.CurveRadius);
+		return <ins>pipes[1]</ins>;
+	}</pre>
+					
+					<p>Alignment of the next pipe to the origin should now be based on second pipe as well.</p>
+					
+					<pre translate="no">	private void AlignNextPipeWithOrigin () {
+		Transform transformToAlign = <ins>pipes[1]</ins>.transform;
+		for (int <ins>i = 0</ins>; i &lt; pipes.Length; i++) {
+			<ins>if (i != 1) {</ins>
+				pipes[i].transform.SetParent(transformToAlign);
+			<ins>}</ins>
+		}
+		
+		transformToAlign.localPosition = Vector3.zero;
+		transformToAlign.localRotation = Quaternion.identity;
+		
+		for (int <ins>i = 0</ins>; i &lt; pipes.Length; i++) {
+			<ins>if (i != 1) {</ins>
+				pipes[i].transform.SetParent(transform);
+			<ins>}</ins>
+		}
+	}</pre>
+					
+					<p>And as soon as we start we should move to the second pipe.</p>
+					
+					<pre translate="no">	private void Awake () {
+		&hellip;
+		<ins>AlignNextPipeWithOrigin();</ins>
+	}</pre>
+					
+					<p>Now that the gaps are fixed, let's move on to the steering of the avatar. For that <code>Player</code> needs a rotation speed, needs to keep track of the current rotation, and needs a reference to the rotater, which is its only child.</p>
+					
+					<pre translate="no">	<ins>public float rotationVelocity</ins>;
+	
+	private float worldRotation<ins>, avatarRotation</ins>;
+
+	private Transform world<ins>, rotater</ins>;
+	
+	private void Start () {
+		world = pipeSystem.transform.parent;
+		<ins>rotater = transform.GetChild(0);</ins>
+		currentPipe = pipeSystem.SetupFirstPipe();
+		SetupCurrentPipe();
+	}</pre>
+					
+					<p>The rotation velocity is in degrees per second. It should be quite fast. I set it to 180, which means that it would take two seconds to go all the way around a pipe.</p>
+					
+					<figure>
+						<img src="05-rotation-velocity.png" width="320" height="94">
+						<figcaption>Configuring rotation.</figcaption>
+					</figure>
+					
+					<p>We need player input to actually rotate, and can use Unity's default horizontal input configuration for that. You can find it under <i>Edit / Project Settings / Input</i>. I increased the <i>Gravity</i> and <i>Sensitivity</i> settings to 10 so it responds quickly to input.</p>
+					
+					<figure>
+						<img src="05-input-manager.png" width="320" height="374">
+						<figcaption>Configuring the horizontal axis.</figcaption>
+					</figure>
+					
+					<p>Updating the avatar's position is done by grabbing the axis input, factoring in velocity and time, and updating the rotation.</p>
+					
+					<pre translate="no">	private void Update () {
+		&hellip;
+		UpdateAvatarRotation();
+	}
+	
+	<ins>private void UpdateAvatarRotation () {</ins>
+		<ins>avatarRotation +=</ins>
+			<ins>rotationVelocity * Time.deltaTime * Input.GetAxis("Horizontal");</ins>
+		<ins>if (avatarRotation &lt; 0f) {</ins>
+			<ins>avatarRotation += 360f;</ins>
+		<ins>}</ins>
+		<ins>else if (avatarRotation >= 360f) {</ins>
+			<ins>avatarRotation -= 360f;</ins>
+		<ins>}</ins>
+		<ins>rotater.localRotation = Quaternion.Euler(avatarRotation, 0f, 0f);</ins>
+	<ins>}</ins></pre>
+					
+					<figure>
+						<img src="05-rotating.png" width="300" height="170">
+						<figcaption>Testing maneuverability.</figcaption>
+					</figure>
+					
+					<p>Now that we can steer, let's finalize the appearance of the pipe surface. I want it to look minimalist while still showing the shape of the pipes and enhancing the sense of movement. A simple pattern of white dots on a black background will do. For that we need a new material that uses the <i>Unlit / Texture</i> shader. A texture with a single dot will suffice, as it will be repeated for each quad.</p>
+					
+					<figure>
+						<img alt="texture" src="05-pipe-texture.png" width="128" height="128">
+						<img alt="material" src="05-pipe-material.png" width="320" height="180">
+						<figcaption>Pipe surface texture and material.</figcaption>
+					</figure>
+					
+					<p>After changing the material of the pipe prefab, everything will become solid black. This is because <code>Pipe</code> doesn't set the UV coordinates of its mesh yet. Each quad needs to cover the 0&ndash;1 UV range in both dimensions.</p>
+					
+					<pre translate="no">	<ins>private Vector2[] uv;</ins>
+	
+	public void Generate () {
+		&hellip;
+		mesh.Clear();
+		SetVertices();
+		<ins>SetUV();</ins>
+		SetTriangles();
+		mesh.RecalculateNormals();
+	}
+	
+	<ins>private void SetUV () {</ins>
+		<ins>uv = new Vector2[vertices.Length];</ins>
+		<ins>for (int i = 0; i &lt; vertices.Length; i+= 4) {</ins>
+			<ins>uv[i] = Vector2.zero;</ins>
+			<ins>uv[i + 1] = Vector2.right;</ins>
+			<ins>uv[i + 2] = Vector2.up;</ins>
+			<ins>uv[i + 3] = Vector2.one;</ins>
+		<ins>}</ins>
+		<ins>mesh.uv = uv;</ins>
+	<ins>}</ins></pre>
+					
+					<p>To create smoother pipes and increase the number of dots, I increased the prefab's segment count to 16, and set its ring distance to 0.77. That makes the dots elongated instead of perfectly circular, which enhances the sense of speed.</p>
+					
+					<figure>
+						<img src="05-pipe-surface.png" width="300" height="170">
+						<figcaption>The new pipe surface, and an obvious hole.</figcaption>
+					</figure>
+					
+					<p>When racing through the pipes for a while, you'll sometimes see an obvious hole appear at end. When using six pipes for the entire system this happens rarely, but when it does it's really jarring. We could increase the pipe count, but unless we set it really high the hole might still appear. A far cheaper solution is to set camera to clear to solid black.</p>
+					
+					<figure>
+						<img src="05-camera.png" width="320" height="76">
+						<figcaption>Camera with a black background.</figcaption>
+					</figure>
+					
+					<p>The hole still appears, but it's now pretty hard to notice, especially if the player is also trying to avoiding obstacles. To conceal the hole even better, we can use black fog to fade out the distant pipes. This also adds a sense of depth to the scene, even though we're not using any lights. I used the exponential squared for mode with a density of 0.1 so it appears quickly.</p>
+					
+					<figure>
+						<img alt="lighting" src="05-lighting.png" width="320" height="220">
+						<img alt="fog" src="05-fog.png" width="300" height="300">
+						<figcaption>Black fog adds a sense of depth.</figcaption>
+					</figure>
+					
+					<a href="sp-05-racing-through-pipes.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Placing Obstacles</h2>
+					
+					<p>It's time to put stuff inside our pipes. We could include all kinds of items, though we'll limit ourselves to simple motionless obstacles for this tutorial.</p>
+					
+					<p>Items can be placed placed along a pipe's curve, with a rotator like the avatar to control where on the surface they appear. So positioning an item requires a pipe, a curve rotation, and a ring rotation. Let's add a component script for that. It should be attached to the root object of an item, which has a rotater child, which in turn has the item's 3D model as a child.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class PipeItem : MonoBehaviour {</ins>
+
+	<ins>private Transform rotater;</ins>
+
+	<ins>private void Awake () {</ins>
+		<ins>rotater = transform.GetChild(0);</ins>
+	<ins>}</ins>
+
+	<ins>public void Position (Pipe pipe, float curveRotation, float ringRotation) {</ins>
+		<ins>transform.SetParent(pipe.transform, false);</ins>
+		<ins>transform.localRotation = Quaternion.Euler(0f, 0f, -curveRotation);</ins>
+		<ins>rotater.localPosition = new Vector3(0f, pipe.CurveRadius);</ins>
+		<ins>rotater.localRotation = Quaternion.Euler(ringRotation, 0f, 0f);</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+					
+					<p>We can use a simple cube as the 3D model. To make it a little bit interesting, rotate it 45 degrees along its local Y axis, so we'll be looking at one of its corner edges instead of a flat side. I gave them a solid white material that is a little bit transparent, so the player can see what's behind the obstacles. I'd like to use a light to give some depth to the shapes, so I used the <i>Legacy Shaders / Transparent / Diffuse</i> shader.</p>
+					
+					<p>First create a small obstacle, using a cube with scale (0.3, 0.2, 0.3). The item's local position should be set to (0, -0.9, 0) so it sits on top of the pipe surface. Then also create a large obstacle, with a scale of (0.2, 2.0, 0.2) and without a local offset, so at (0, 0, 0). This gives us a long beam that connects opposite sides of the pipe surface. Then turn both of them into prefabs.</p>
+					
+					<figure>
+						<img src="06-obstacle-hierarchy.png" width="100" height="100">
+						<img src="06-obstacle-material.png" width="320" height="136">
+						<figcaption>Obstacle hierarchies and material.</figcaption>
+					</figure>
+					
+					<p>How do we add instances of these obstacles to our pipes? There are many ways in which we could do so. Let's say we have some abstract pipe item generator component that does the job, given a pipe.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public abstract class PipeItemGenerator : MonoBehaviour {</ins>
+
+	<ins>public abstract void GenerateItems (Pipe pipe);</ins>
+<ins>}</ins></pre>
+					
+					<p>This abstraction is useful, but we also need at least one specific approach. For example, let's create a random placer. It generates one item per ring segment of the pipe, aligning it with a random quad on each ring. Which item it generates is random as well.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class RandomPlacer : PipeItemGenerator {</ins>
+
+	<ins>public PipeItem[] itemPrefabs;</ins>
+
+	<ins>public override void GenerateItems (Pipe pipe) {</ins>
+		<ins>float angleStep = pipe.CurveAngle / pipe.CurveSegmentCount;</ins>
+		<ins>for (int i = 0; i &lt; pipe.CurveSegmentCount; i++) {</ins>
+			<ins>PipeItem item = Instantiate&lt;PipeItem>(</ins>
+				<ins>itemPrefabs[Random.Range(0, itemPrefabs.Length)]);</ins>
+			<ins>float pipeRotation =</ins>
+				<ins>(Random.Range(0, pipe.pipeSegmentCount) + 0.5f) *</ins>
+				<ins>360f / pipe.pipeSegmentCount;</ins>
+			<ins>item.Position(pipe, i * angleStep, pipeRotation);</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+					
+					<p>This requires that <code>Pipe</code> exposes its curve segment count.</p>
+					
+					<pre translate="no">	<ins>public int CurveSegmentCount {</ins>
+		<ins>get {</ins>
+			<ins>return curveSegmentCount;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<p>Now we can use this component to create generator prefabs. Let's make one that always places small obstacles, one that always places large obstacles, and one that mixes them with equal probability.</p>
+					
+					<figure>
+						<img alt="random small" src="06-random-small.png" width="320" height="154">
+						<img alt="random large" src="06-random-large.png" width="320" height="154">
+						<img alt="random both" src="06-random-both.png" width="320" height="172">
+						<figcaption>Random placers for either small, large, or both obstacle types.</figcaption>
+					</figure>
+					
+					<p>We can also create an item placer component that puts the items in a spiral, either clockwise or counterclockwise. It's just a little bit different from random placement. I marked the differences below.</p>
+					
+					<pre translate="no">using UnityEngine;
+
+public class <ins>SpiralPlacer</ins> : PipeItemGenerator {
+
+	public PipeItem[] itemPrefabs;
+
+	public override void GenerateItems (Pipe pipe) {
+		<ins>float start = (Random.Range(0, pipe.pipeSegmentCount) + 0.5f);</ins>
+		<ins>float direction = Random.value &lt; 0.5f ? 1f : -1f;</ins>
+
+		float angleStep = pipe.CurveAngle / pipe.CurveSegmentCount;
+		for (int i = 0; i &lt; pipe.CurveSegmentCount; i++) {
+			PipeItem item = Instantiate&lt;PipeItem>(
+				itemPrefabs[Random.Range(0, itemPrefabs.Length)]);
+			float pipeRotation =
+				(<ins>start + i * direction</ins>) * 360f / pipe.pipeSegmentCount;
+			item.Position(pipe, i * angleStep, pipeRotation);
+		}
+	}
+}</pre>
+					
+					<p>I created three prefabs for spiral placers as well, with the same odds for picking small and large obstacles.</p>
+					
+					<p>To use these generators, let's simply give <code>Pipe</code> an array of these generators and have it pick one at random to use for each pipe.</p>
+					
+					<pre translate="no">	<ins>public PipeItemGenerator[] generators;</ins>
+	
+	public void Generate () {
+		&hellip;
+		<ins>generators[Random.Range(0, generators.Length)].GenerateItems(this);</ins>
+	}
+	</pre>
+					
+					<p>I tweaked the odds of which generator is picked by including them more than once in the array of the pipe prefab. I prefer not too many large obstacles and take it easy on the spirals.</p>
+					
+					<figure>
+						<img src="06-pipe-with-generators.png" width="300" height="364">
+						<figcaption>An arbitrary selection of generators.</figcaption>
+					</figure>
+					
+					<p>Obstacles are now showing up inside the pipes! But they're quite hard to see. To improve visibility, adjust the environment lighting settings, which you can find via <i>Window / Lighting</i>. Set the ambient source to uniform gray (99, 99, 99) and make sure it's at full intensity.</p>
+					
+					<figure>
+						<img src="06-ambient.png" width="320" height="216">
+						<figcaption>Flat gray ambient color.</figcaption>
+					</figure>
+					
+					<p>This improves visibility a lot, but gives a very flat result. Let's turn out avatar into a light source by adding short-range point light to it. A range of three units is enough. This makes nearby objects look a lot more interesting.</p>
+					
+					<figure>
+						<img alt="hierarchy" src="06-light-hierarchy.png" width="130" height="116">
+						<img alt="light" src="06-light.png" width="320" height="214">
+						<figcaption>Adding a light.</figcaption>
+					</figure>
+					
+					<figure>
+						<img src="06-lit-obstacles.png" width="300" height="300">
+						<figcaption>Shedding light on obstacles.</figcaption>
+					</figure>
+					
+					<p>While we're adding items now, we're not yet taking them away. This results in an accumulation of junk in our pipe system. The quick way to fix this is by simply destroying all of a pipe's children before generating new items.</p>
+					
+					<pre translate="no">	public void Generate () {
+		&hellip;
+
+		<ins>for (int i = 0; i &lt; transform.childCount; i++) {</ins>
+			<ins>Destroy(transform.GetChild(i).gameObject);</ins>
+		<ins>}</ins>
+		generators[Random.Range(0, generators.Length)].GenerateItems(this);
+	}</pre>
+					
+					<p>Now we have a pipe system neatly filled with random obstacles. But the avatar doesn't recognize that they exist and moves straight through them. Of course it should hit obstacles and go out with a bang! To do so, we have to put more functionality into our avatar game object.</p>
+					
+					<p>Add a sphere collider to the avatar object and set its radius to 0.1. Then give it a rigidbody so the physics system will check for collisions. Mark it as kinematic so the physics system won't try to move it. Then add a new <code>Avatar</code> component with references to the shape and trail particles systems, plus a new burst particle system. We'll need a reference to the player too, which it can find at the root of its hierarchy.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class Avatar : MonoBehaviour {</ins>
+
+	<ins>public ParticleSystem shape, trail, burst;</ins>
+
+	<ins>private Player player;</ins>
+	
+	<ins>private void Awake () {</ins>
+		<ins>player = transform.root.GetComponent&lt;Player>();</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+					
+					<figure>
+						<img alt="hierarchy" src="06-avatar-hierarchy.png" width="130" height="130">
+						<img alt="components" src="06-avatar-components.png" width="320" height="393">
+						<figcaption>Avatar configuration.</figcaption>
+					</figure>
+					
+					<p>The burst particle system is for producing a death explosion. It won't emit on its own.</p>
+					
+					<figure>
+						<img src="06-burst.png" width="320" height="626">
+						<figcaption>Burst when hit.</figcaption>
+					</figure>
+					
+					<p>We can detect when the avatar hits an obstacle by turning the colliders of the cubes into triggers and adding an <code>OnTriggerEnter</code> method to <code>Avatar</code>, in which we tell the player to die.</p>
+					
+					<p>However, instead of dying immediately we can also start a death countdown, during which we perform a death animation and travel a bit further, and only then tell the player that it died.</p>
+					
+					<p>So when entering a trigger we start a countdown, stop the emission of shape a trail particles, and emit a burst. We can use the lifetime of the burst particles to set the duration of the countdown.</p>
+					
+					<pre translate="no">	<ins>public float deathCountdown = -1f;</ins>
+
+	<ins>private void OnTriggerEnter (Collider collider) {</ins>
+		<ins>if (deathCountdown &lt; 0f) {</ins>
+			<ins>shape.enableEmission = false;</ins>
+			<ins>trail.enableEmission = false;</ins>
+			<ins>burst.Emit(burst.maxParticles);</ins>
+			<ins>deathCountdown = burst.startLifetime;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<p>Each update, the avatar has to check whether a death countdown is active, and if so progress it. Once time has run out, restore the settings of the particle systems and tell the player that it should die.</p>
+
+	<pre translate="no">	<ins>private void Update () {</ins>
+		<ins>if (deathCountdown >= 0f) {</ins>
+			<ins>deathCountdown -= Time.deltaTime;</ins>
+			<ins>if (deathCountdown &lt;= 0f) {</ins>
+				<ins>deathCountdown = -1f;</ins>
+				<ins>shape.enableEmission = true;</ins>
+				<ins>trail.enableEmission = true;</ins>
+				<ins>player.Die();</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<p>For now, let <code>Player</code> simply deactivate itself on death. That will cause the camera to shut off as well, making it clear that the game is over.</p>
+					
+					<pre translate="no">	<ins>public void Die () {</ins>
+		<ins>gameObject.SetActive(false);</ins>
+	<ins>}</ins></pre>
+					
+					<figure>
+						<img src="06-dying.png" width="300" height="300">
+						<figcaption>A dying avatar.</figcaption>
+					</figure>
+					
+					<p>Obstacles are now lethal, which is good. Unfortunately the game suddenly became a bit too deadly, as the player can start right on top of an obstacle and immediately die. To prevent this unfair death, we have to make sure that the first few pipes of the system don't have any obstacles. We can do so by making it optional whether <code>Pipe</code> generates any.</p>
+					
+					<pre translate="no">	public void Generate (<ins>bool withItems = true</ins>) {
+		&hellip;
+		<ins>if (withItems) {</ins>
+			generators[Random.Range(0, generators.Length)].GenerateItems(this);
+		<ins>}</ins>
+	}</pre>
+					
+					<p>We can then configure <code>PipeSystem</code> to start with some empty pipes. I stuck with the first two pipes, which are the one just behind the player and the one just in front.</p>
+					
+					<pre translate="no">	<ins>public int emptyPipeCount;</ins>
+
+	private void Awake () {
+		pipes = new Pipe[pipeCount];
+		for (int i = 0; i &lt; pipes.Length; i++) {
+			Pipe pipe = pipes[i] = Instantiate&lt;Pipe>(pipePrefab);
+			pipe.transform.SetParent(transform, false);
+			pipe.Generate(<ins>i > emptyPipeCount</ins>);
+			if (i > 0) {
+				pipe.AlignWith(pipes[i - 1]);
+			}
+		}
+		AlignNextPipeWithOrigin();
+	}</pre>
+					
+					<figure>
+						<img src="06-empty-pipe-count.png" width="320" height="94">
+						<figcaption>First, some empty pipes.</figcaption>
+					</figure>
+					
+					<a href="sp-06-placing-obstacles.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h3>Creating the User Interface</h3>
+					
+					<p>Right now our game immediately starts playing. Let's no longer do that and show a main menu first. Create a new UI panel via <i>GameObject / UI / Panel</i>. This add a canvas with the panel to the scene, as well as an event system object to handle user input. Rename the canvas to <i>Main Menu</i> and set it to be pixel perfect. Then remove the panel's source image and set its color to black.</p>
+					
+					<figure>
+						<img alt="hierarchy" src="07-menu-hierarchy.png" width="90" height="90"><br>
+						<img alt="main menu" src="07-main-menu-config.png" width="320" height="174">
+						<img alt="panel" src="07-panel-config.png" width="320" height="154">
+						<figcaption>Main menu configuration.</figcaption>
+					</figure>
+					
+					<p>The UI is visible in the scene view, but it's displayed at a much larger scale than the 3D content. Switch the scene to the 2D view mode to get a better look at it.</p>
+					
+					<figure>
+						<img src="07-panel-scene.png" width="280" height="180">
+						<figcaption>Showing the menu.</figcaption>
+					</figure>
+					
+					<p>Next, add a button to the main menu. It doesn't need to be a child of the panel, but it must be below it in the hierarchy so it's drawn later. I set its font size to 40 and set its text contents to ">" so it looks like a crude play button.</p>
+					
+					<figure>
+						<img alt="hierarchy" src="07-button-hierarchy.png" width="90" height="70">
+						<img alt="text config" src="07-text-config.png" width="320" height="394">
+						<figcaption>Button configuration.</figcaption>
+					</figure>
+					
+					<p>Postion the button in the center of the panel and give it a reasonable size. I made it 160 by 50.</p>
+					
+					<figure>
+						<img src="07-menu-with-button.png" width="270" height="150">
+						<figcaption>Main menu with button.</figcaption>
+					</figure>
+					
+					<p>We need a main menu component with a method to start the game. It needs to tell the player to start playing, and then deactivate itself so the menu disappears.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class MainMenu : MonoBehaviour {</ins>
+
+	<ins>public Player player;</ins>
+
+	<ins>public void StartGame () {</ins>
+		<ins>player.StartGame();</ins>
+		<ins>gameObject.SetActive(false);</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+					
+					<p>Now modify <code>Player</code> so it prepares itself and grabs the first pipe in its own <code>StartGame</code> method, instead of in <code>Start</code>. Grabbing the world and the rotater can move to <code>Awake</code>, where it should deactivate itself as well so it doesn't immediate begin racing. You can then add the <code>MainMenu</code> component to the UI and assign the player.</p>
+					
+					<pre translate="no">	<ins>public void StartGame () {</ins>
+		<ins>distanceTraveled = 0f;</ins>
+		<ins>avatarRotation = 0f;</ins>
+		<ins>systemRotation = 0f;</ins>
+		<ins>worldRotation = 0f;</ins>
+		currentPipe = pipeSystem.SetupFirstPipe();
+		SetupCurrentPipe();
+		<ins>gameObject.SetActive(true);</ins>
+	<ins>}</ins>
+
+	private void <ins>Awake</ins> () {
+		world = pipeSystem.transform.parent;
+		rotater = transform.GetChild(0);
+		<ins>gameObject.SetActive(false);</ins>
+	}</pre>
+					
+					<figure>
+						<img src="07-menu-component.png" width="320" height="174">
+						<figcaption>Connecting menu to player.</figcaption>
+					</figure>
+					
+					<p>We now have to configure the button so it invokes the menu's method. Do this by adding an entry to its <i>On Click ()</i> area, select the menu object, then select <code>MainMenu.StartGame</code> from the available options. Note that the method needs to be public for it to show up.</p>
+					
+					<figure>
+						<img src="07-on-click.png" width="320" height="425">
+						<figcaption>Hooking up the button.</figcaption>
+					</figure>
+					
+					<p>The game now starts when pressing the play button, of course only when actually in play mode. To return to the menu after the player has died, <code>Player</code> needs a reference to the main menu as well, so it can invoke an <code>EndGame</code> method on it. As it makes sense to show the final score to the player, pass the traveled distance to it as well.</p>
+					
+					<pre translate="no">	<ins>public MainMenu mainMenu;</ins>
+
+	public void Die () {
+		<ins>mainMenu.EndGame(distanceTraveled);</ins>
+		gameObject.SetActive(false);
+	}</pre>
+					
+					<p><code>MainMenu</code> needs a score label to show the final score, which we do via a <code>UnityEngine.UI.Text</code> component. As players like big scores, let's multiply the distance by ten before showing it. Also convert it to an integer before turning it into a string, so we get rid of the fractional part. Of course the menu has to reactive itself as well.</p>
+					
+					<pre translate="no">using UnityEngine;
+<ins>using UnityEngine.UI;</ins>
+
+public class MainMenu : MonoBehaviour {
+
+	public Player player;
+
+	<ins>public Text scoreLabel;</ins>
+
+	public void StartGame () {
+		player.StartGame();
+		gameObject.SetActive(false);
+	}
+
+	<ins>public void EndGame (float distanceTraveled) {</ins>
+		<ins>scoreLabel.text = ((int)(distanceTraveled * 10f)).ToString();</ins>
+		<ins>gameObject.SetActive(true);</ins>
+	<ins>}</ins>
+}</pre>
+					
+					<p>Add a text object to the menu, make sure it's white so it shows up on the black background, and assign it to the menu component.</p>
+					
+					<figure>
+						<img src="07-score-hierarchy.png" width="94" height="80"><br>
+						<img src="07-menu-score-config.png" width="320" height="76">
+						<img src="07-player-menu-config.png" width="320" height="112">
+						<figcaption>Adding a score label and connecting everything.</figcaption>
+					</figure>
+					
+					<figure>
+						<img src="07-score.png" width="180" height="150">
+						<figcaption>Score!</figcaption>
+					</figure>
+					
+					<p>Once back at the main menu, the game has to restart properly when the button is pressed again. We have to modify <code>PipeSystem</code> a bit to support this. Leave the instantiation of the pipe objects in <code>Awake</code>, but move the invocation of their <code>Generate</code> methods and their alignment to <code>SetupFirstPipe</code>.</p>
+					
+					<pre translate="no">	private void Awake () {
+		pipes = new Pipe[pipeCount];
+		for (int i = 0; i &lt; pipes.Length; i++) {
+			Pipe pipe = pipes[i] = Instantiate&lt;Pipe>(pipePrefab);
+			pipe.transform.SetParent(transform, false);
+		}
+	}
+
+	public Pipe SetupFirstPipe () {
+		<ins>for (int i = 0; i &lt; pipes.Length; i++) {</ins>
+			<ins>Pipe pipe = pipes[i];</ins>
+			pipe.Generate(i > emptyPipeCount);
+			if (i > 0) {
+				pipe.AlignWith(pipes[i - 1]);
+			}
+		<ins>}</ins>
+		<ins>AlignNextPipeWithOrigin();</ins>
+		transform.localPosition = new Vector3(0f, -pipes[1].CurveRadius);
+		return pipes[1];
+	}</pre>
+					<p>Now that out game properly restarts, let's add multiple difficulty settings. We can do this by changing from a fixed velocity to a choice of acceleration. This means that the player will go faster and faster, until the inevitable crash against an obstacle. The difficulty is set by the amount of acceleration, which we configure in an array. Also, we want to have a start velocity, otherwise beginning of the game would be too slow. Adjust <code>Player</code> to provide this new functionality.</p>
+					
+					<pre translate="no">	<ins>public float startVelocity;</ins>
+	
+	<ins>public float[] accelerations;</ins>
+
+	<ins>private float acceleration, velocity;</ins>
+
+	public void StartGame (<ins>int accelerationMode</ins>) {
+		&hellip;
+		<ins>acceleration = accelerations[accelerationMode];</ins>
+		<ins>velocity = startVelocity;</ins>
+		&hellip;
+	}
+	
+	private void Update () {
+		<ins>velocity += acceleration * Time.deltaTime;</ins>
+		&hellip;
+	}</pre>
+					
+					<p>This means that <code>MainMenu</code> needs to pass along mode, which it got from somewhere. Let's leave that up to the button.</p>
+					
+					<pre translate="no">	public void StartGame (<ins>int mode</ins>) {
+		player.StartGame(<ins>mode</ins>);
+		gameObject.SetActive(false);
+	}</pre>
+					
+					<p>I set the start velocity to three and chose three accelerations, 0.025, 0.05, and 0.1. While that might not look like much, an acceleration of 0.1 already results in quite short games.</p>
+					
+					<figure>
+						<img src="07-acceleration.png" width="320" height="202">
+						<figcaption>Three different acceleration modes.</figcaption>
+					</figure>
+					
+					<p>The play button no longer works. That's because we removed the old <code>StartGame</code> method that had no parameters, so the button can no longer find it. We have to select the new method instead. This time it will allow us to enter an argument value for the method's integer parameter, which defaults to zero.</p>
+					
+					<figure>
+						<img src="07-button-argument.png" width="320" height="94">
+						<figcaption>Button with an integer argument.</figcaption>
+					</figure>
+					
+					<p>Create two duplicates of the button and set their method arguments to one and two. Adjust the button labels as well to indicate the different choices. Arrange them in a neat column.</p>
+					
+					<figure>
+						<img src="07-three-buttons.png" width="180" height="170">
+						<figcaption>Three play choices.</figcaption>
+					</figure>
+					
+					<p>Now that the menu is working, let's add in in-game head-up display (HUD) so the player can see how fast they're moving and how far they've traveled. Create a new canvas for that purpose. Add two text labels at its top right and bottom right corner and set their anchors appropriately. That way they'll stick to the corners, no matter the actual size of the display.</p>
+					
+					<figure>
+						<img alt="hierarchy" src="07-hud-hierarchy.png" width="110" height="120">
+						<img alt="scene" src="07-hud-scene.png" width="200" height="330">
+						<figcaption>Adding a HUD.</figcaption>
+					</figure>
+					
+					<p>Decrease the sorting order of the HUD so it falls behind main menu, hidden by default.</p>
+					
+					<figure>
+						<img src="07-sorting-order.png" width="320" height="76">
+						<figcaption>HUD sorting order.</figcaption>
+					</figure>
+					
+					<p>Create a HUD component to make setting the labels convenient. To stay consistent with the main menu, apply the same conversion to both the distance and velocity.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+<ins>using UnityEngine.UI;</ins>
+
+<ins>public class HUD : MonoBehaviour {</ins>
+
+	<ins>public Text distanceLabel, velocityLabel;</ins>
+
+	<ins>public void SetValues (float distanceTraveled, float velocity) {</ins>
+		<ins>distanceLabel.text = ((int)(distanceTraveled * 10f)).ToString();</ins>
+		<ins>velocityLabel.text = ((int)(velocity * 10f)).ToString();</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+					
+					<p>Then give <code>Player</code> a reference to the HUD so it can keep the values up to date.</p>
+					
+					<pre translate="no">	<ins>public HUD hud;</ins>
+	
+	public void StartGame (int accelerationMode) {
+		&hellip;
+		<ins>hud.SetValues(distanceTraveled, velocity);</ins>
+	}
+	
+	private void Update () {
+		&hellip;
+		<ins>hud.SetValues(distanceTraveled, velocity);</ins>
+	}</pre>
+					
+					<figure>
+						<img alt="hud" src="07-hud-config.png" width="320" height="76">
+						<img alt="player" src="07-player-hud-config.png" width="320" height="148">
+						<figcaption>HUD and player configuration.</figcaption>
+					</figure>
+					
+					<figure>
+						<img src="07-hud-in-game.png" width="325" height="175">
+						<figcaption>Now you know, how fast and far you go.</figcaption>
+					</figure>
+					
+					<a href="sp-07-creating-the-ui.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Supporting Multiple Platforms</h2>
+					
+					<p>By now our prototype is in good enough shape to get it into people's hands. So make a desktop build and try it out!</p>
+					
+					<p>One annoyance that you'll encounter is the mouse cursor. It should really be hidden when game is playing. Fortunately, this is easily accomplished by <code>MainMenu</code>.</p>
+					
+					<pre translate="no">	public void StartGame (int mode) {
+		&hellip;
+		<ins>Cursor.visible = false;</ins>
+	}
+
+	public void EndGame (float distanceTraveled) {
+		&hellip;
+		<ins>Cursor.visible = true;</ins>
+	}</pre>
+					
+					<p>A desktop build is nice, but you can reach a much larger audience by going online. So make a web player build! It should work fine, except that there might be something wrong with the resolution when going fullscreen. It turns out that the settings of the standalone default resolution influences the fullscreen resolution of the web player. This is weird, but there is a solution. Disable the standalone's native resolution, put in some huge values, then enable native resolution again. This will ensure the highest possible resolution is used.</p>
+					
+					<figure>
+						<img src="08-resolution.png" width="298" height="180">
+						<figcaption>Fullscreen resolution fix for web player.</figcaption>
+					</figure>
+					
+					<p>WebGL builds work too, but keep in mind it's still a preview feature. Complilation takes a long time and the build size is quite large, even the compressed version.</p>
+					
+					<p>Maybe the best way to get people to try your prototype is to physically put it into their hands. Our game is quite playable on mobiles, so and Android or iOS build is a great idea. This means that we should support touch input.</p>
+					
+					<p>Unity's event system already provides touch support for the UI. We can provide steering support by simply detecting whether either the left or the right side of the screen is touched. This works no matter the orientation of the device. As input processing is now more complex, let's put it in a separate <code>Player</code> method.</p>
+					
+					<pre translate="no">	private void Update () {
+		&hellip;
+		<ins>UpdateAvatarRotation();</ins>
+
+		hud.SetValues(distanceTraveled, velocity);
+	}
+					
+	private void UpdateAvatarRotation () {
+		<ins>float rotationInput = 0f;</ins>
+		<ins>if (Application.isMobilePlatform) {</ins>
+			<ins>if (Input.touchCount == 1) {</ins>
+				<ins>if (Input.GetTouch(0).position.x &lt; Screen.width * 0.5f) {</ins>
+					<ins>rotationInput = -1f;</ins>
+				<ins>}</ins>
+				<ins>else {</ins>
+					<ins>rotationInput = 1f;</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>rotationInput =</ins> Input.GetAxis("Horizontal")<ins>;</ins>
+		<ins>}</ins>
+		avatarRotation += rotationVelocity * Time.deltaTime * <ins>rotationInput</ins>;
+		&hellip;
+	}</pre>
+					
+					<p>Finally, the frame rate is not that good. This is because Unity uses a default limit of 30 frames per second on mobiles. We can remove this limitation by setting the target frame rate to a much higher value. This can be done anywhere, but should be done early, for example when <code>MainMenu</code> awakens.</p>
+					
+					<pre translate="no">	<ins>private void Awake () {</ins>
+		<ins>Application.targetFrameRate = 1000;</ins>
+	<ins>}</ins></pre>
+					
+					<p>Now go out and playtest!</p>
+					
+					<a href="sp-08-supporting-multiple-platforms.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Swirly-Pipe.pdf" download rel="nofollow">PDF</a>
+				</section>
+
+			</article>
+		</main>
+		
+		<footer>
+			<p>Enjoying the <a href="../index.html">tutorials</a>? Are they useful?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../tutorials.js"></script>
+	</body>
+</html>

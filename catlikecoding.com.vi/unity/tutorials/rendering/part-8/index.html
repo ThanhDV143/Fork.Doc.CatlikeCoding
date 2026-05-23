@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/rendering/part-8/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/rendering/part-8/tutorial-image.jpg">
+		<meta property="og:title" content="Rendering 8">
+		<meta property="og:description" content="A Unity Rendering tutorial about capturing and projecting reflections. Part 8 of 20.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Rendering 8</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/rendering/part-8/#article",
+				"headline": "Rendering 8",
+				"alternativeHeadline": "Reflections",
+				"datePublished": "2016-09-30",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Rendering tutorial about capturing and projecting reflections. Part 8 of 20.",
+				"image": "https://catlikecoding.com/unity/tutorials/rendering/part-8/tutorial-image.jpg",
+				"dependencies": "Unity 5.4.0f3",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/rendering/", "name": "Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				TangentSpaceVisualizer: 1
+			};
+			
+			var hasAnimations = true;
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Rendering 8</h1>
+					<p>Reflections</p>
+					<ul>
+						<li>Sample the environment.</li>
+						<li>Use reflection probes.</li>
+						<li>Create rough and smooth mirrors.</li>
+						<li>Perform box projection cube map sampling.</li>
+						<li>Blend between reflection probes.</li>
+					</ul>
+				</header>
+
+				<p>This is the eight part of a tutorial series about rendering. We added support for shadows in the <a href="../part-7.1.html">previous part</a>. This part introduces indirect reflections.</p>
+				
+				<p>This tutorial was made with Unity 5.4.0f3.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Sometimes your work reflects on itself.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Environment Mapping</h2>
+					
+					<p>Currently, our shader colors a fragment by combining the ambient, diffuse, and specular reflections on a surface. This produces seemingly realistic images, at least as long as the surfaces are dull. Shiny surfaces don't look quite right, though.</p>
+					
+					<p>Shiny surfaces act like mirrors, especially when metallic. A perfect mirror reflects all light. This means that there is no diffuse reflection at all. It's nothing but specular reflections. So let's turn our material into a mirror, by settings <em translate="no">Metallic</em> to 1 and <em translate="no">Smoothness</em> to 0.95. Make it solid white as well.</p>
+					
+					<figure>
+						<img src="environment-mapping/shiny.png" width="180" height="180">
+						<figcaption>A shiny white metal sphere.</figcaption>
+					</figure>
+					
+					<p>The result is an almost entirely black surface, even though its color is white. We only see a small highlight, where the light source is directly reflected towards us. All other light gets reflected in different directions. If you were to increase the smoothness to 1, then the highlight would disappear as well.</p>
+					
+					<p>This does not look like a true mirror at all. Mirrors aren't black, they reflect things! In this case, it should reflect the skybox, showing a blue sky with a gray ground.</p>
+					
+					<section>
+						<h3>Indirect Specular Lighting</h3>
+						
+						<p>Our sphere turned out black, because we're only including direct light. To reflect the environment, we have to include the indirect light as well. Specifically, the indirect light for specular reflections. In the <code class="shader">CreateIndirectLight</code> function, we configured Unity's <code class="shader">UnityIndirect</code> structure. So far, we've set its specular component to zero. That's why the sphere turned out black!</p>
+
+						<p>Set the scene's ambient intensity to zero so we can focus on the reflections. Turn our material into a dull nonmetal again, with a smoothness of 0.5. Then change the indirect specular color to something obvious, like red.</p>
+
+						<pre translate="no" class="shader">UnityIndirect CreateIndirectLight (Interpolators i) {
+	UnityIndirect indirectLight;
+	indirectLight.diffuse = 0;
+	indirectLight.specular = 0;
+
+	#if defined(VERTEXLIGHT_ON)
+		indirectLight.diffuse = i.vertexLightColor;
+	#endif
+
+	#if defined(FORWARD_BASE_PASS)
+		indirectLight.diffuse += max(0, ShadeSH9(float4(i.normal, 1)));
+		<ins>indirectLight.specular = float3(1, 0, 0);</ins>
+	#endif
+
+	return indirectLight;
+}</pre>
+						
+
+						<figure>
+							<img alt="black" src="environment-mapping/black.png" width="180" height="180">
+							<img alt="red" src="environment-mapping/red.png" width="180" height="180">
+							<figcaption>Black and red indirect specular color, smoothness 0.5.</figcaption>
+						</figure>
+						
+						<p>The sphere has picked up a red tint. In this case, red is an indication of reflectivity. So our sphere reflects some environmental light towards us from its center. And apparently, it reflects more at its edge. That's because every surface becomes more reflective as the view angle becomes more shallow. At glancing angles, most light is reflected, and everything becomes a mirror. This is known as Fresnel reflection. The version of <code class="shader">UNITY_BRDF_PBS</code> that we're using computes it for us.</p>
+
+						<p>The smoother a surface, the stronger the Fresnel reflections. When using a high smoothness, the red ring becomes very obvious.</p>
+
+						<figure>
+							<img alt="0.15" src="environment-mapping/smoothness-15.png" width="180" height="180">
+							<img alt="0.95" src="environment-mapping/smoothness-95.png" width="180" height="180">
+							<figcaption>Smoothness 0.15 and 0.95.</figcaption>
+						</figure>
+						
+						<p>Because the reflection comes from indirect light, it is independent of the direct light source. As a result, the reflection is independent of the shadows of that light source as well. So the Fresnel reflection becomes very obvious in the otherwise shadowed edge of the sphere.</p>
+						
+						<p>In the case of metals, the indirect reflections dominate everywhere. Instead of a black sphere, we now get a red one.</p>
+
+						<figure>
+							<img alt="0.15" src="environment-mapping/metallic-smoothness-15.png" width="180" height="180">
+							<img alt="0.50" src="environment-mapping/metallic-smoothness-50.png" width="180" height="180">
+							<img alt="0.95" src="environment-mapping/metallic-smoothness-95.png" width="180" height="180">
+							<figcaption>Metallic with smoothness 0.15, 0.50, and 0.95.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Sampling the Environment</h3>
+						
+						<p>To reflect the actual environment, we have to sample the skybox cube map. It is defined as <code class="shader">unity_SpecCube0</code> in <em translate="no">UnityShaderVariables</em>. The type of this variable depends on the target platform, which is determined in <em translate="no">HSLSupport</em>.</p>
+						
+						<p>A cube map is sampled with a 3D vector, which specifies a sample direction. We can use the <code class="shader">UNITY_SAMPLE_TEXCUBE</code> macro for that, which takes care of the type differences for us. Let's begin by just using the normal vector as the sample direction.</p>
+						
+						<pre translate="no" class="shader">	#if defined(FORWARD_BASE_PASS)
+		indirectLight.diffuse += max(0, ShadeSH9(float4(i.normal, 1)));
+		<ins>float3 envSample = UNITY_SAMPLE_TEXCUBE(unity_SpecCube0, i.normal);</ins>
+		indirectLight.specular = <ins>envSample</ins>;
+	#endif</pre>
+						
+						<figure>
+							<img src="environment-mapping/environment-sample.png" width="180" height="180">
+							<figcaption>Environment sampling.</figcaption>
+						</figure>
+						
+						<p>The skybox shows up, but it is far too bright. That's because the cube map contains high dynamic range colors, which allows it to contain brightness values larger than one. We have to convert the samples from HDR format to RGB.</p>
+						
+						<p><em translate="no">UnityCG</em> contains the <code class="shader">DecodeHDR</code> function, which we can use. The HDR data is stored in four channels, using the RGBM format. So we have to sample a <code class="shader">float4</code> value, then convert.</p>
+						
+						<pre translate="no" class="shader">		indirectLight.diffuse += max(0, ShadeSH9(float4(i.normal, 1)));
+		<ins>float4</ins> envSample = UNITY_SAMPLE_TEXCUBE(unity_SpecCube0, i.normal);
+		indirectLight.specular = <ins>DecodeHDR(</ins>envSample<ins>, unity_SpecCube0_HDR)</ins>;</pre>
+						
+						<figure>
+							<img src="environment-mapping/decode-hdr.png" width="180" height="180">
+							<figcaption>HDR decoded.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What does <code>DecodeHDR</code> look like?</h3>
+							<div>
+								<p>RGBM contains three RGB channels, plus an M channel which contains a magnitude factor. The final RGB values are computing by multiplying them with `xM^y`. Here `x` is a scalar and `y` is an exponent, stored in the first two component of the decode instructions.</p>
+								<pre translate="no" class="shader">// Decodes HDR textures
+// handles dLDR, RGBM formats
+inline half3 DecodeHDR (half4 data, half4 decodeInstructions) {
+	// If Linear mode is not supported we can skip exponent part
+	#if defined(UNITY_NO_LINEAR_COLORSPACE)
+		return (decodeInstructions.x * data.a) * data.rgb;
+	#else
+		return (decodeInstructions.x * pow(data.a, decodeInstructions.y)) *
+			data.rgb;
+	#endif
+}</pre>
+								
+								<p>The conversion of the M channel is required because when stored in a texture, it is limited an 8-bit value in the 0&ndash;1 range. So the `x` instruction scales it up, and the `y` instruction makes it nonlinear, like gamma space.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Tracing Reflections</h3>
+						
+						<p>We get the correct colors, but we're not seeing an actual reflection yet. Because we're using the sphere's normals to sample the environment, the projection doesn't depend on the view direction. So it's like a sphere with the environment painted on it.</p>
+						
+						<p>To produce an actual reflection, we have to take the direction from the camera to the surface, and reflect it using the surface normal. We can use the <code class="shader">reflect</code> function for this, like we did in <a href="../part-4.1.html">part 4, The First Light</a>. In this case, we need the view direction, so add it as a parameter to <code class="shader">CreateIndirectLight</code>.</p>
+						
+						<pre translate="no" class="shader">UnityIndirect CreateIndirectLight (Interpolators i<ins>, float3 viewDir</ins>) {
+	&hellip;
+	
+	#if defined(FORWARD_BASE_PASS)
+		indirectLight.diffuse += max(0, ShadeSH9(float4(i.normal, 1)));
+		<ins>float3 reflectionDir = reflect(-viewDir, i.normal);</ins>
+		float4 envSample = UNITY_SAMPLE_TEXCUBE(unity_SpecCube0, <ins>reflectionDir</ins>);
+		indirectLight.specular = DecodeHDR(envSample, unity_SpecCube0_HDR);
+	#endif
+
+	return indirectLight;
+}
+
+&hellip;
+
+float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+	&hellip;
+
+	return UNITY_BRDF_PBS(
+		albedo, specularTint,
+		oneMinusReflectivity, _Smoothness,
+		i.normal, viewDir,
+		CreateLight(i), CreateIndirectLight(i<ins>, viewDir</ins>)
+	);
+}</pre>
+						
+						<figure>
+							<img alt="normal" src="environment-mapping/normal.png" width="180" height="180">
+							<img alt="reflection" src="environment-mapping/relfection.png" width="180" height="180">
+							<figcaption>Using normals vs. reflection directions.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Using a Reflection Probe</h3>
+						
+						<p>Reflecting the skybox is nice, but it's even nicer to reflect actual scene geometry. So let's create a simple building. I used a rotated quad as a floor and placed a few cube pillars on top of it, and some cube beams on top of those. The sphere hovers in the center of the building.</p>
+						
+						<figure>
+							<img src="environment-mapping/building.png" width="320" height="210">
+							<figcaption>Something to reflect.</figcaption>
+						</figure>
+						
+						<p>To see the reflection of the building, we have to capture it first. This is done with a reflection probe, which you can add via <em translate="no">GameObject / Light / Reflection Probe</em>. Create one and put it in the same position as our sphere.</p>
+						
+						<figure>
+							<img alt="gizmo" src="environment-mapping/reflection-probe-gizmo.png" width="200" height="200">
+							<img alt="inspector" src="environment-mapping/reflection-probe-inspector.png" width="320" height="520">
+							<figcaption>A default reflection Probe.</figcaption>
+						</figure>
+						
+						<p>The scene view indicates the presence of the reflection probe with a round gizmo. Its appearance depends on the configuration of the scene view. As the gizmo obstructs the view of our sphere, let's turn it off. You can do this by opening the <em translate="no">Gizmo</em> dropdown menu in the scene view toolbar, scrolling down to <em translate="no">ReflectionProbe</em>, and clicking on its icon.</p>
+						
+						<figure>
+							<img alt="on" src="environment-mapping/gizmo-on.png" width="240" height="74">
+							<img alt="off" src="environment-mapping/gizmo-off.png" width="240" height="74">
+							<figcaption>Turning off the reflection probe gizmo.</figcaption>
+						</figure>
+						
+						<p>The reflection probe captures the environment by rendering a cube map. This means that it renders the scene six times, once per face of the cube. By default, its <em translate="no">Type</em> is set to <em translate="no">Baked</em>. In this mode, the cube map is generated by the editor and included in builds. These maps only include static geometry. So our building has to be static before it gets rendered into the cube map.</p>
+						
+						<p>Alternatively, we could change the reflection probe's type to <em translate="no">Realtime</em>. Such probes are rendered at run time, and you can choose when an how often. There is also a custom mode, to give you total control.</p>
+						
+						<p>While real-time probes are most flexible, they are also the most expensive, when updated frequently. Also, real-time probes are not updated in edit mode, while baked probes are updated when they or static geometry is edited. So let's stick to baked probes and make our building static. </p>
+						
+						<p>Objects don't actually need to be completely static. You can mark them static for the purposes of various subsystems. In this case, the relevant setting is <em translate="no">Reflection Probe Static</em>. When enabled, the objects are rendered to the baked probes. You can move them at run time, but their reflections remain frozen.</p>
+						
+						<figure>
+							<img src="environment-mapping/static.png" width="190" height="178">
+							<figcaption>Reflection Probe Static.</figcaption>
+						</figure>
+						
+						<p>After the building has been marked as static, the reflection probe will be updated. It will appear black for a moment, and then the reflections will appear. The reflective sphere isn't part of the reflections itself, so keep it dynamic.</p>
+						
+						<figure>
+							<img src="environment-mapping/reflected-geometry.png" width="200" height="200">
+							<figcaption>Reflected geometry.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="environment-mapping/environment-mapping.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Imperfect Reflections</h2>
+					
+					<p>Only perfectly smooth surfaces produce perfectly sharp reflections. The rougher a surface becomes, the more diffuse its reflections get. Dull mirrors produce blurry reflections. How can we blur the reflections?</p>
+					
+					<p>Textures can have mipmaps, which are down-sampled versions of the original image. When viewed at full size, higher mipmaps thus produce blurrier images. These would be blocky images, but Unity uses a different algorithm to generate the mipmaps of environment maps. These convolved maps represent a nice progression from sharp to blurry.</p>
+					
+					<figure>
+						<img alt="0" src="imperfect-reflections/lod-0.png" width="180" height="180">
+						<img alt="1" src="imperfect-reflections/lod-1.png" width="180" height="180">
+						<img alt="2" src="imperfect-reflections/lod-2.png" width="180" height="180">
+						<img alt="3" src="imperfect-reflections/lod-3.png" width="180" height="180">
+						<img alt="4" src="imperfect-reflections/lod-4.png" width="180" height="180">
+						<img alt="5" src="imperfect-reflections/lod-5.png" width="180" height="180">
+						<figcaption>Mipmap levels from 0 to 5.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Rough Mirrors</h3>
+						
+						<p>We can use the <code class="shader">UNITY_SAMPLE_TEXCUBE_LOD</code> macro to sample a cube map at a specific mipmap level. The environment cube maps use trilinear filtering, so we can blend between adjacent levels. This allows us base the mipmap selection on the material's smoothness. The rougher a material is, the higher a mipmap level we should use.</p>
+						
+						<p>As roughness goes from 0 to 1, we have to scale it by the mipmap range that we're using. Unity uses the <code class="shader">UNITY_SPECCUBE_LOD_STEPS</code> macro to determine this range, so let's use it too.</p>
+						
+						<pre translate="no" class="shader">		<ins>float roughness = 1 - _Smoothness;</ins>
+		float4 envSample = UNITY_SAMPLE_TEXCUBE_LOD(
+			unity_SpecCube0, <ins>reflectionDir, roughness * UNITY_SPECCUBE_LOD_STEPS</ins>
+		);</pre>
+						
+						<aside>
+							<h3>Where is <code class="shader">UNITY_SPECCUBE_LOD_STEPS</code> defined?</h3>
+							<div>
+								<p><em translate="no">UnityShaderVariables</em> defines it as 6, unless it was defined somewhere else previously. So you could define it yourself in your own shader, before including other files. Unity's shaders don't define it anywhere else, so they always use 6. The actual size of the environment map is not taken into consideration.</p>
+							</div>
+						</aside>
+						
+						<figure>
+							<img src="imperfect-reflections/roughness.png" width="180" height="180">
+							<figcaption>Smoothness 0.5.</figcaption>
+						</figure>
+						
+						<p>Actually, the relation between roughness and mipmap level is not linear. Unity uses the conversion formula `1.7r - 0.7r^2`, where `r` is the original roughness.</p>
+						
+						<figure>
+							<img src="imperfect-reflections/roughness-mapping.png" width="200" height="200">
+							<figcaption>`1.7r - 0.7r^2` vs. linear.</figcaption>
+						</figure>
+						
+						<pre translate="no" class="shader">		float roughness = 1 - _Smoothness;
+		<ins>roughness *= 1.7 - 0.7 * roughness;</ins>
+		float4 envSample = UNITY_SAMPLE_TEXCUBE_LOD(
+			unity_SpecCube0, reflectionDir, roughness * UNITY_SPECCUBE_LOD_STEPS
+		);
+</pre>
+						
+						<figure>
+							<img alt="0.50" src="imperfect-reflections/smoothness-50.png" width="180" height="180">
+							<img alt="0.75" src="imperfect-reflections/smoothness-75.png" width="180" height="180">
+							<img alt="0.95" src="imperfect-reflections/smoothness-95.png" width="180" height="180">
+							<figcaption>Smoothness 0.5, 0.75, and 0.95.</figcaption>
+						</figure>
+						
+						<p>The <em translate="no">UnityStandardBRDF</em> include file contains the <code class="shader">Unity_GlossyEnvironment</code> function. It contains all the code to convert the roughness, sample the cube map, and convert from HDR. So let's use that function in place of our own code.</p>
+						
+						<p>To pass the cube map as an argument, we have to use the <code class="shader">UNITY_PASS_TEXCUBE</code> macrp. This takes care of the type differences. Also, the roughness and reflection direction have to be packed in a <code class="shader">Unity_GlossyEnvironmentData</code> structure.</p>
+						
+						<pre translate="no" class="shader">		indirectLight.diffuse += max(0, ShadeSH9(float4(i.normal, 1)));
+		float3 reflectionDir = reflect(-viewDir, i.normal);
+<del>//		float roughness = 1 - _Smoothness;</del>
+<del>//		roughness *= 1.7 - 0.7 * roughness;</del>
+<del>//		float4 envSample = UNITY_SAMPLE_TEXCUBE_LOD(</del>
+<del>//			unity_SpecCube0, reflectionDir, roughness * UNITY_SPECCUBE_LOD_STEPS</del>
+<del>//		);</del>
+<del>//		indirectLight.specular = DecodeHDR(envSample, unity_SpecCube0_HDR);</del>
+		<ins>Unity_GlossyEnvironmentData envData;</ins>
+		<ins>envData.roughness = 1 - _Smoothness;</ins>
+		<ins>envData.reflUVW = reflectionDir;</ins>
+		<ins>indirectLight.specular = Unity_GlossyEnvironment(</ins>
+			<ins>UNITY_PASS_TEXCUBE(unity_SpecCube0), unity_SpecCube0_HDR, envData</ins>
+		<ins>);</ins></pre>
+						
+						<aside>
+							<h3>Does <code>Unity_GlossyEnvironment</code> do anything different?</h3>
+							<div>
+								<p>It performs the same operations that we do, but it has some variations based on target platform and some other settings. Also, it contains some comments and disabled code that touches on the details of how the mipmaps are created.</p>
+								
+
+								<pre translate="no" class="shader">half3 Unity_GlossyEnvironment (
+	UNITY_ARGS_TEXCUBE(tex), half4 hdr, Unity_GlossyEnvironmentData glossIn
+) {
+#if UNITY_GLOSS_MATCHES_MARMOSET_TOOLBAG2 &amp;&amp; (SHADER_TARGET >= 30)
+	// TODO: remove pow, store cubemap mips differently
+	half roughness = pow(glossIn.roughness, 3.0 / 4.0);
+#else
+	// MM: switched to this
+	half roughness = glossIn.roughness;
+#endif
+	// spec power to the square root of real roughness
+	//roughness = sqrt(sqrt(2/(64.0+2)));
+
+#if 0
+	// m is the real roughness parameter
+	float m = roughness*roughness;
+	// smallest such that 1.0+FLT_EPSILON != 1.0
+	// (+1e-4h is NOT good here. is visibly very wrong)
+	const float fEps = 1.192092896e-07F;
+	// remap to spec power. See eq. 21 in -->
+	// https://dl.dropboxusercontent.com/u/55891920/papers/mm_brdf.pdf
+	float n =  (2.0 / max(fEps, m * m)) - 2.0;
+	// remap from n_dot_h formulatino to n_dot_r.
+	// See section "Pre-convolved Cube Maps vs Path Tracers" --> https://
+	// s3.amazonaws.com/docs.knaldtech.com/knald/1.0.0/lys_power_drops.html
+	n /= 4;
+	// remap back to square root of real roughness
+	roughness = pow( 2 / (n + 2), 0.25);
+#else
+	// MM: came up with a surprisingly close approximation
+	// to what the #if 0'ed out code above does.
+	roughness = roughness * (1.7 - 0.7 * roughness);
+#endif
+
+#if UNITY_OPTIMIZE_TEXCUBELOD
+	half4 rgbm = UNITY_SAMPLE_TEXCUBE_LOD(tex, glossIn.reflUVW, 4);
+	if(roughness > 0.5)
+		rgbm = lerp(rgbm, UNITY_SAMPLE_TEXCUBE_LOD(tex, glossIn.reflUVW, 8),
+			2 * roughness - 1);
+	else
+		rgbm = lerp(UNITY_SAMPLE_TEXCUBE(tex, glossIn.reflUVW), rgbm,
+			2 * roughness);
+#else
+	half mip = roughness * UNITY_SPECCUBE_LOD_STEPS;
+	half4 rgbm = UNITY_SAMPLE_TEXCUBE_LOD(tex, glossIn.reflUVW, mip);
+#endif
+
+	return DecodeHDR_NoLinearSupportInSM2 (rgbm, hdr);
+}</pre>
+								
+								<p>The optimization part at the end is for PVR GPUs, to avoid dependent texture reads. To make it work, it requires the reflection vector to be passed as an interpolator.</p>
+								
+								<p>The <code class="shader">DecodeHDR_NoLinearSupportInSM2</code> function just forwards to <code class="shader">DecodeHDR</code>, but has an optimization for Shader Model 2.0 targets.</p>
+								
+								<pre translate="no" class="shader">// Decodes HDR textures
+// handles dLDR, RGBM formats
+// Modified version of DecodeHDR from UnityCG.cginc
+inline half3 DecodeHDR_NoLinearSupportInSM2 (
+	half4 data, half4 decodeInstructions
+) {
+	// If Linear mode is not supported we can skip exponent part
+
+	// In Standard shader SM2.0 and SM3.0 paths are always using different
+	// shader variations
+	// SM2.0: hardware does not support Linear, we can skip exponent part
+	#if defined(UNITY_NO_LINEAR_COLORSPACE) &amp;&amp; (SHADER_TARGET &lt; 30)
+		return (data.a * decodeInstructions.x) * data.rgb;
+	#else
+		return DecodeHDR(data, decodeInstructions);
+	#endif
+}</pre>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Bumpy Mirrors</h3>
+						
+						<p>Besides using smoothness to represent rougher mirrors, you can of course also use normal maps to add larger deformations. As we're using the perturbed normal to determine the reflection direction, this just works.</p>
+						
+						<figure>
+							<img alt="0.50" src="imperfect-reflections/bumped-50.png" width="180" height="180">
+							<img alt="0.75" src="imperfect-reflections/bumped-75.png" width="180" height="180">
+							<img alt="0.95" src="imperfect-reflections/bumped-95.png" width="180" height="180">
+							<figcaption>Bumped mirrors with smoothness 0.5, 0.75, and 0.95.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Metals vs. Nonmetals</h3>
+						
+						<p>Both metallic and nonmetallic surfaces can produce clear reflections, they just look different. Specular reflections can appear just fine on shiny dielectric materials, but they don't dominate their appearance. There still is plenty of diffuse reflection visible.</p>
+						
+						<figure>
+							<img alt="0.50" src="imperfect-reflections/nonmetal-smoothness-50.png" width="180" height="180">
+							<img alt="0.75" src="imperfect-reflections/nonmetal-smoothness-75.png" width="180" height="180">
+							<img alt="0.95" src="imperfect-reflections/nonmetal-smoothness-95.png" width="180" height="180">
+							<figcaption>Nonmetallic with smoothness 0.5, 0.75, and 0.95.</figcaption>
+						</figure>
+						
+						<p>Recall that a metal colorizes its specular reflections, while a nonmetal doesn't. This is true for the specular highlight, and also for the specular environmental reflections.</p>
+						
+						<figure>
+							<img alt="metal" src="imperfect-reflections/red-metal.png" width="180" height="180">
+							<img alt="nonmetal" src="imperfect-reflections/red-nonmetal.png" width="180" height="180">
+							<figcaption>Red metal and nonmetal.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Mirrors and Shadows</h3>
+						
+						<p>As we saw earlier, indirect reflections are independent of the direct illumination of a surface. This is most obvious for otherwise shadowed areas. In the case of nonmetals, this simply results in visually brighter surfaces. You can still see the shadows cast by the direct light.</p>
+						
+						<figure>
+							<img alt="0.50" src="imperfect-reflections/shadowed-nonmetal-50.png" width="180" height="180">
+							<img alt="0.75" src="imperfect-reflections/shadowed-nonmetal-75.png" width="180" height="180">
+							<img alt="1.00" src="imperfect-reflections/shadowed-nonmetal-100.png" width="180" height="180">
+							<figcaption>Nonmetallic with smoothness 0.5, 0.75, and 1.</figcaption>
+						</figure>
+						
+						<p>The same rules apply for metals, but the indirect reflections dominate. Hence, the direct light and shadows disappear as shininess increases. There are no shadows on a perfect mirror.</p>
+						
+						<figure>
+							<img alt="0.50" src="imperfect-reflections/shadowed-metal-50.png" width="180" height="180">
+							<img alt="0.75" src="imperfect-reflections/shadowed-metal-75.png" width="180" height="180">
+							<img alt="1.00" src="imperfect-reflections/shadowed-metal-100.png" width="180" height="180">
+							<figcaption>Metallic with smoothness 0.5, 0.75, and 1.</figcaption>
+						</figure>
+						
+						<p>While this is physically correct, real life is rarely perfect. For example, you could see direct light and shadows on the dirt and dust that sticks to an otherwise perfect mirror. And there are many materials that are a mix of metallic and dielectric components. You can simulate this by setting the <em translate="no">Metallic</em> slider somewhere in between 0 and 1.</p>
+						
+						<figure>
+							<img src="imperfect-reflections/dusty-mirror.png" width="180" height="180">
+							<figcaption>Metallic 0.75, a dirty mirror.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="imperfect-reflections/imperfect-reflections.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Box Projection</h2>
+					
+					<p>We currently have one reflective sphere and one reflection probe. Both hover at the center of our building. Let's add some more spheres, placing them near the edges of the inner square area. But let's stick to just a single probe, at the center.</p>
+					
+					<figure>
+						<img src="box-projection/same-reflections.png" width="420" height="210">
+						<figcaption>All reflections are the same.</figcaption>
+					</figure>
+					
+					<p>There's something wrong with the reflections. They all look the same. The view angle is slightly different, but all spheres reflect the environment as if they're positioned at the center of the building. They're not, but the reflection probe is!</p>
+					
+					<p>If we want more realistic reflections, then we have to create one probe per sphere, placing them in the appropriate positions. That way, each sphere gets an environment map from its own point of view.</p>
+					
+					<figure>
+						<img src="box-projection/different-reflections.png" width="420" height="210">
+						<figcaption>One probe per sphere, different reflections.</figcaption>
+					</figure>
+					
+					<p>While this is better, it is still not perfectly realistic. To achieve that, we'd have to use one reflection probe per fragment that we render. That would require many probes positioned on the surfaces of the spheres. Fortunately, the approximation is not too bad for spheres. But what about a flat mirror?</p>
+					
+					<p>First, remove all but the central reflection probe. Then create a quad and position it so that it covers the inside of the building and touches the midpoints of the pillars. Turn it into a mirror and observe the reflections.</p>
+					
+					<figure>
+						<img src="box-projection/floor-mirror-wrong.png" width="420" height="210">
+						<figcaption>Incorrect floor reflections.</figcaption>
+					</figure>
+					
+					<p>The reflections don't match at all! The orientation appears correct, but the scale and position is wrong. Had we used one probe per fragment, the reflections would be fine. But we only have one probe. This approximation is sufficient for things that are effectively infinitely far away, like the skybox. But it is not appropriate for reflections of nearby things.</p>
+					
+					<p>When a piece of the environment is infinitely far away, we don't care about the view position when determining its reflection. But when most of the environment is nearby, we do care. Suppose we have a reflection probe in the middle of an empty cubic room. Its environment map contains the walls, floor, and ceiling of this room. If the cube map and the room are aligned, then each face of the cube map corresponds exactly with one of the walls, the floor, or the ceiling.</p>
+					
+					<p>Nex, suppose that we have a surface position and a reflection direction anywhere in this room. The vector will end up intersecting the edge of the cube somewhere. We can calculate this intersection point with a little math. Then we can construct a vector from the center of the room to this point. Using this vector, we can sample the cube map and end up with correct reflection.</p>
+					
+					<figure>
+						<img src="box-projection/projecting.png" width="210" height="180">
+						<figcaption>Projecting to find the sample direction.</figcaption>
+					</figure>
+					
+					<p>The room doesn't have to be a cube for this to work. Any rectangular shape will do, like the inside of our building. However, the room and the cube map have to be aligned.</p>
+					
+					<section>
+						<h3>Reflection Probe Box</h3>
+						
+						<p>Reflection probes have a size and a probe origin, which define a cubic area in world space, relative to its position. It is always axis-aligned, which means that it ignores all rotations. It ignores scaling too.</p>
+						
+						<p>This area is used for two purposes. First, Unity uses these areas to decide which probe is used when rendering an object. Second, this area is used for box projections, which is what we are going to do.</p>
+						
+						<p>You can show the box in the scene view when you have the probe selected. At the top of the reflection probe's inspector is a <em translate="no">Probe Scene Editing Mode</em> toggle. The left button turns on the box projection bounds gizmos.</p>
+						
+						<figure>
+							<img alt="scene" src="box-projection/bounds-scene.png" width="320" height="290">
+							<img alt="inspector" src="box-projection/bounds-inspector.png" width="320" height="74">
+							<figcaption>Box projection bounds.</figcaption>
+						</figure>
+						
+						<p>You can use the yellow dots at the center of the bounds faces to adjust them. You can also adjust them by editing <em translate="no">Size</em> and <em translate="no">Probe Origin</em> vectors in the inspector. By adjusting the origin, you can move the box relative to the sample point. You can also adjust it in the scene with other edit mode, but it's finicky and doesn't currently work well with undo.</p>
+						
+						<p>Adjust the box so it covers the inside of the building, touching the pillars and reaching all the way to the highest point. I made it a tiny bit larger than that, to prevent flickering due to Z-fighting of the gizmos in the scene view.</p>
+						
+						<figure>
+							<img alt="scene" src="box-projection/adjusted-bounds-scene.png" width="320" height="240">
+							<img alt="inspector" src="box-projection/adjusted-bounds-inspector.png" width="320" height="106">
+							<figcaption>Adjusted bounds.</figcaption>
+						</figure>
+						
+						<p>While we're at it, enable <em translate="no">Box Projection</em>, because that's what we want to do.</p>
+					</section>
+					
+					<section>
+						<h3>Adjusting the Sample Direction</h3>
+						
+						<p>To compute the box projection, we require the initial reflection direction, the position we're sampling from, the cube map position, and the box bounds. Add a function for that to our shader, somewhere above <code class="shader">CreateIndirectLight</code>.</p>
+						
+						<pre translate="no" class="shader"><ins>float3 BoxProjection (</ins>
+	<ins>float3 direction, float3 position,</ins>
+	<ins>float3 cubemapPosition, float3 boxMin, float3 boxMax</ins>
+<ins>) {</ins>
+	<ins>return direction;</ins>
+<ins>}</ins></pre>
+						
+						<p>First, adjust the bounds so they're relative to the surface position.</p>
+						
+						<pre translate="no" class="shader">	<ins>boxMin -= position;</ins>
+	<ins>boxMax -= position;</ins>
+	return direction;</pre>
+						
+						<p>Next, we have to scale the direction vector so it goes from the position to the desired intersection point. Let's consider the X dimension first. If the direction's X component is positive, then it points towards the maximum bounds. Otherwise, it points towards the minimum bounds. Dividing the appropriate bounds by the X component of the direction gives us the scalar that we need. This also works when the direction is negative, because the minimum bounds are negative as well, producing a positive result after the division.</p>
+						
+						<pre translate="no" class="shader">	boxMin -= position;
+	boxMax -= position;
+	<ins>float x = (direction.x > 0 ? boxMax.x : boxMin.x) / direction.x;</ins></pre>
+						
+						<p>The same is true for the Y and Z dimensions.</p>
+						
+						<pre translate="no" class="shader">	float x = (direction.x > 0 ? boxMax.x : boxMin.x) / direction.x;
+	<ins>float y = (direction.y > 0 ? boxMax.y : boxMin.y) / direction.y;</ins>
+	<ins>float z = (direction.z > 0 ? boxMax.z : boxMin.z) / direction.z;</ins></pre>
+						
+						<p>We now have three scalars, but which is the correct one? That depends on which scalar is smallest. That indicates which bounds face is closest.</p>
+						
+						<figure>
+							<img src="box-projection/smallest-factor.png" width="240" height="150">
+							<figcaption>Choosing the smallest factor.</figcaption>
+						</figure>
+						
+						<pre translate="no" class="shader">	float z = (direction.z > 0 ? boxMax.z : boxMin.z) / direction.z;
+	<ins>float scalar = min(min(x, y), z);</ins></pre>
+						
+						<aside>
+							<h3>What happens when one of the divisions is by zero?</h3>
+							<div>
+								<p>It is possible that one or two of the direction vector's components is zero. This produces invalid results, which won't make it past the selection of the minimum value.</p>
+							</div>
+						</aside>
+						
+						<p>Now we can find the intersection point by adding the scaled direction to the position. And by subtracting the position of the cube map from that, we get the new projected sample direction.</p>
+						
+						<figure>
+							<img src="box-projection/adjusted-projection-direction.png" width="240" height="150">
+							<figcaption>Finding the new projection direction.</figcaption>
+						</figure>
+						
+						<pre translate="no" class="shader">	float scalar = min(min(x, y), z);
+	return direction <ins>* scalar + (position - cubemapPosition)</ins>;</pre>
+						
+						<aside>
+							<h3>Doesn't the new direction have to be normalized?</h3>
+							<div>
+								<p>Sampling a cubemap can be done with any nonzero vector. Hardware cubemap sampling basically does the same thing that we just did. It figures out which face the vector points to, then performs a division to find the intersection point with the cubemap face. It uses the appropriate coordinates of this point to sample the face's texture.</p>
+							</div>
+						</aside>
+						
+						<p>We can simplify this code a bit by combining the three candidate factors in a single <code class="shader">float3</code> expression, postponing the subtraction and division until after the appropriate bounds are selected.</p>
+						
+						<pre translate="no" class="shader">float3 BoxProjection (
+	float3 direction, float3 position,
+	float3 cubemapPosition, float3 boxMin, float3 boxMax
+) {
+	<ins>float3 factors = ((direction > 0 ? boxMax : boxMin) - position) / direction;</ins>
+	<ins>float scalar = min(min(factors.x, factors.y), factors.z);</ins>
+	return direction * scalar + (position - cubemapPosition);
+}</pre>
+						
+						<p>Now use our new function in <code class="shader">CreateIndirectLight</code> to modify the environment sample vector.</p>
+						
+						<pre translate="no" class="shader">		envData.reflUVW = <ins>BoxProjection(</ins>
+			reflectionDir<ins>, i.worldPos,</ins>
+			<ins>unity_SpecCube0_ProbePosition,</ins>
+			<ins>unity_SpecCube0_BoxMin, unity_SpecCube0_BoxMax</ins>
+		<ins>)</ins>;</pre>
+						
+						<figure>
+							<img src="box-projection/floor-mirror-projected.png" width="420" height="210">
+							<figcaption>Projected reflections.</figcaption>
+						</figure>
+						
+						<p>The adjusted reflections look a lot better for our flat mirror. But it is important that the reflective surface doesn't extend beyond the probe bounds. Scale the mirror down so it matches the bounds exactly, touching the pillars.</p>
+						
+						<figure>
+							<img src="box-projection/floor-mirror-tweaked.png" width="420" height="210">
+							<figcaption>Tweaked floor mirror.</figcaption>
+						</figure>
+						
+						<p>The reflections of the pillars now perfectly match the real ones. At least, exactly at the edge of the mirror and probe bounds. Everything that's closer of further away is misaligned, because the projection is wrong for those points. This is the best we can do with a single reflection probe.</p>
+						
+						<p>Another thing that is obviously wrong, is that we see part of the floor reflected by the floor mirror. This happens because the environment map is rendered from a point of view above the floor mirror. This can be fixed by lowering the probe origin to only slightly above the mirror, while keeping the bounds as they are.</p>
+						
+						<figure>
+							<img src="box-projection/floor-with-lowered-probe.png" width="420" height="210">
+							<figcaption>Lowered probe center.</figcaption>
+						</figure>
+						
+						<p>While such a low sample points is better for the floor mirror, it's not so good for the floating spheres. So let's move it back up again and have a look at the spheres.</p>
+						
+						<figure>
+							<img alt="one projected" src="box-projection/spheres-projected.png" width="420" height="210">
+							<img alt="nine unprojected" src="box-projection/different-reflections.png" width="420" height="210">
+							<figcaption>One projected probe vs. nine unprojected probes.</figcaption>
+						</figure>
+						
+						<p>It turns out that a single box-projected probe produces reflections quite similar to those of nine separate probes! So box projection is a very handy trick, though it's not perfect.</p>
+					</section>
+					
+					<section>
+						<h3>Optional Projection</h3>
+						
+						<p>Whether box projection is used varies per probe, which is controlled by their <em translate="no">Box Projection</em> toggle. Unity stores this information in a fourth component of the cube map position. If that component is larger than zero, then the probe should use box projection. Let's use an if-statement to take care of this.</p>
+						
+						<pre translate="no" class="shader">float3 BoxProjection (
+	float3 direction, float3 position,
+	<ins>float4</ins> cubemapPosition, float3 boxMin, float3 boxMax
+) {
+	<ins>if (cubemapPosition.w > 0) {</ins>
+		float3 factors =
+			((direction > 0 ? boxMax : boxMin) - position) / direction;
+		float scalar = min(min(factors.x, factors.y), factors.z);
+		<ins>direction =</ins> direction * scalar + (position - cubemapPosition);
+	<ins>}</ins>
+	return <ins>direction</ins>;
+}</pre>
+						
+						<p>Even though we use an if-statement, that doesn't mean that the compiled code also contains one. For example, OpenGL Core ends up with a conditional assignment, which is not a branch.</p>
+						
+						<pre translate="no" class="shader">    u_xlatb22 = 0.0&lt;unity_SpecCube0_ProbePosition.w;
+    u_xlat0.xyz = (bool(u_xlatb22)) ? u_xlat2.xyz : u_xlat0.xyz;</pre>
+						
+						<p>The same goes for Direct3D 11.</p>
+						
+						<pre translate="no" class="shader"> 147: lt r1.w, l(0.000000), cb4[2].w
+ 148: movc r0.xyz, r1.wwww, r2.xyzx, r0.xyzx</pre>
+						
+						<p>We can request and actual branch by inserting the <code class="shader">UNITY_BRANCH</code> macro before our own branch. While branches should be avoided in shaders, it is not so bad in this case. That's because the condition is uniform. All fragments of an object use the same probe settings, so end up taking the same branch.</p>
+						
+						<pre translate="no" class="shader">	<ins>UNITY_BRANCH</ins>
+	if (cubemapPosition.w > 0) {
+		&hellip;
+	}</pre>
+						
+						<p>The OpenGL Core now contains an obvious branch.</p>
+						
+						<pre translate="no" class="shader">    u_xlatb29 = 0.0&lt;unity_SpecCube0_ProbePosition.w;
+    if(u_xlatb29){
+        u_xlatb7.xyz = lessThan(vec4(0.0, 0.0, 0.0, 0.0), u_xlat6.xyzx).xyz;
+        u_xlat7.x = (u_xlatb7.x) ? unity_SpecCube0_BoxMax.x : unity_SpecCube0_&hellip;
+        u_xlat7.y = (u_xlatb7.y) ? unity_SpecCube0_BoxMax.y : unity_SpecCube0_&hellip;
+        u_xlat7.z = (u_xlatb7.z) ? unity_SpecCube0_BoxMax.z : unity_SpecCube0_&hellip;
+        u_xlat7.xyz = u_xlat7.xyz + (-vs_TEXCOORD4.xyz);
+        u_xlat7.xyz = u_xlat7.xyz / u_xlat6.xyz;
+        u_xlat29 = min(u_xlat7.y, u_xlat7.x);
+        u_xlat29 = min(u_xlat7.z, u_xlat29);
+        u_xlat7.xyz = vs_TEXCOORD4.xyz + (-unity_SpecCube0_ProbePosition.xyz);
+        u_xlat6.xyz = u_xlat6.xyz * vec3(u_xlat29) + u_xlat7.xyz;
+    //ENDIF
+    }</pre>
+						
+						<p>And so does Direct3D 11.</p>
+						
+						<pre translate="no" class="shader">  68: lt r5.w, l(0.000000), cb4[2].w
+  69: if_nz r5.w
+  70:   lt r7.xyz, l(0.000000, 0.000000, 0.000000, 0.000000), r6.xyzx
+  71:   movc r7.xyz, r7.xyzx, cb4[0].xyzx, cb4[1].xyzx
+  72:   add r7.xyz, r7.xyzx, -v4.xyzx
+  73:   div r7.xyz, r7.xyzx, r6.xyzx
+  74:   min r5.w, r7.y, r7.x
+  75:   min r5.w, r7.z, r5.w
+  76:   add r7.xyz, v4.xyzx, -cb4[2].xyzx
+  77:   mad r6.xyz, r6.xyzx, r5.wwww, r7.xyzx
+  78: endif </pre>
+						
+						<aside>
+							<h3>Isn't there a Unity function for box projection?</h3>
+							<div>
+								<p>There is. <em translate="no">UnityStandardUtils</em> contains the <code class="shader">BoxProjectedCubemapDirection</code> function. It does the same thing that we do, including the branch. But it also normalizes the reflection direction parameter, which isn't necessary. That's why we don't use it.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="box-projection/box-projection.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Blending Reflection Probes</h2>
+					
+					<p>We have nice reflections going on inside our building, but what about outside? Once you move one of the spheres outside of the probe's bounds, it will switch to the skybox.</p>
+					
+					<figure>
+						<img src="blending-reflection-probes/inside-and-outside.png" width="420" height="220">
+						<figcaption>Spheres inside and outside of the probe box.</figcaption>
+					</figure>
+					
+					<p>The switch between probe and skybox is abrupt. We could increase the probe's box so it also covers space outside of the building. Then we can move a sphere in and out of the building, and its reflection will change gradually. However, the probe's point of view lies inside the building. Using it outside of the building produces very weird reflections.</p>
+					
+					<figure>
+						<img src="blending-reflection-probes/large-box.png" width="420" height="220">
+						<figcaption>One large box.</figcaption>
+					</figure>
+					
+					<p>To get decent reflection both inside and outside of the building, we have to use multiple reflection probes.</p>
+					
+					<figure>
+						<img src="blending-reflection-probes/second-probe.png" width="220" height="220">
+						<figcaption>Second reflection probe.</figcaption>
+					</figure>
+					
+					<p>These reflections make sense, but there's still a sudden and clear transition between two different probe areas.</p>
+					
+					<section>
+						<h3>Interpolating Probes</h3>
+						
+						<p>Unity supplies shaders with data of two reflection probes, so we can blend between them. The second probe is <code class="shader">unity_SpecCube1</code>. We can sample both environment maps and interpolate depending on which is more dominant. Unity calculates this for us, and stored the interpolator in the fourth coordinate of <code class="shader">unity_SpecCube0_BoxMin</code>. It's set to 1 when only the first probe is used, and to lower value if there's a blend.</p>
+						
+						<pre translate="no" class="shader">		envData.reflUVW = BoxProjection(
+			reflectionDir, i.worldPos,
+			unity_SpecCube0_ProbePosition,
+			unity_SpecCube0_BoxMin, unity_SpecCube0_BoxMax
+		);
+		<ins>float3 probe0</ins> = Unity_GlossyEnvironment(
+			UNITY_PASS_TEXCUBE(unity_SpecCube0), unity_SpecCube0_HDR, envData
+		);
+		<ins>envData.reflUVW = BoxProjection(</ins>
+			<ins>reflectionDir, i.worldPos,</ins>
+			<ins>unity_SpecCube1_ProbePosition,</ins>
+			<ins>unity_SpecCube1_BoxMin, unity_SpecCube1_BoxMax</ins>
+		<ins>);</ins>
+		<ins>float3 probe1 = Unity_GlossyEnvironment(</ins>
+			<ins>UNITY_PASS_TEXCUBE(unity_SpecCube1), unity_SpecCube1_HDR, envData</ins>
+		<ins>);</ins>
+		<ins>indirectLight.specular = lerp(probe1, probe0, unity_SpecCube0_BoxMin.w);</ins></pre>
+						
+						<p>The above code will most likely produce a compile error. Apparently, the <code class="shader">samplerunity_SpecCube1</code> variable does not exist. That's because accessing textures requires both a texture resource and a sampler, and the second probe doesn't have any. Instead, it relies on the sampler of the first probe.</p>
+						
+						<p>Use the <code class="shader">UNITY_PASS_TEXCUBE_SAMPLER</code> macro to combine the second probe's texture with the only sampler that we have. that gets rid of the error.</p>
+						
+						<pre translate="no" class="shader">		float3 probe1 = Unity_GlossyEnvironment(
+			<ins>UNITY_PASS_TEXCUBE_SAMPLER</ins>(unity_SpecCube1<ins>, unity_SpecCube0</ins>),
+			unity_SpecCube0_HDR, envData
+		);</pre>
+						
+						<figure>
+							<img alt="without" src="blending-reflection-probes/without-overlap.png" width="420" height="220">
+							<figcaption>Still no blending.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Overlapping Probe Boxes</h3>
+						
+						<p>To make blending work, the bounds of multiple probes have to overlap. So adjust the box of the second so it extends into the building. The spheres in the overlap region should get blended reflections. The inspector of the mesh renderer components also shows which probes are being used, along with their weights.</p>
+						
+						<figure>
+							<img alt="without" src="blending-reflection-probes/overlap-inspector.png" width="320" height="74">
+							<img alt="with" src="blending-reflection-probes/with-overlap.png" width="420" height="220">
+							<figcaption>Overlapping probe boxes enable blending.</figcaption>
+						</figure>
+						
+						<p>If the transition isn't smooth enough for your liking, you can add a third probe in between the other two. This probe's box overlaps the other two. So when moving outside, you first blend between the inner and middle probe, and the between the middle and outer probe.</p>
+						
+						<figure>
+							<img alt="three probes" src="blending-reflection-probes/three-probes.png" width="420" height="220"><br>
+							<video width="266" height="160" controls loop muted>
+								<source src="blending-reflection-probes/three-probes.mp4" type="video/mp4">
+							</video>
+							<figcaption>Three probes.</figcaption>
+						</figure>
+						
+						<p>It is also possible to blend between a probe and the skybox. You have to change an object's <em translate="no">Reflection Probes</em> mode from  <em translate="no">Blend Probes</em> to <em translate="no">Blend Probes and Skybox</em>. The blend will happen when an object's bounding box ends up partially outside of the bounds of a probe.</p>
+						
+						<figure>
+							<img alt="without" src="blending-reflection-probes/blending-skybox-inspector.png" width="320" height="58">
+							<img alt="with" src="blending-reflection-probes/blending-skybox.png" width="420" height="220">
+							<figcaption>Blending one probe and the skybox.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What about the other <em translate="no">Reflection Probes</em> modes?</h3>
+							<div>
+								<p><em translate="no">Off</em> means that the object doesn't use probes at all. It always uses the skybox.</p>
+								
+								<p><em translate="no">Simple</em> disables blending. It always uses either the most important probe, or the skybox.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Optimizations</h3>
+						
+						<p>Sampling two probes is a lot of work. We should only do so when there's something to blend. So add a branch based on the interpolator. Unity also does this in the standard shaders. Once again, it's a universal branch.</p>
+						
+						<pre translate="no" class="shader">		<ins>float interpolator = unity_SpecCube0_BoxMin.w;</ins>
+		<ins>UNITY_BRANCH</ins>
+		<ins>if (interpolator &lt; 0.99999) {</ins>
+			float3 probe1 = Unity_GlossyEnvironment(
+				UNITY_PASS_TEXCUBE_SAMPLER(unity_SpecCube1, unity_SpecCube0),
+				unity_SpecCube0_HDR, envData
+			);
+			indirectLight.specular = lerp(probe1, probe0, <ins>interpolator</ins>);
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>indirectLight.specular = probe0;</ins>
+		<ins>}</ins></pre>
+						
+						<p>Unity's shaders also disable blending when the target platform is deemed incapable of handing it. This is controlled by <code class="shader">UNITY_SPECCUBE_BLENDING</code>, which is defined as 1 when blending is possible, and 0 otherwise. We can use a preprocessor conditional block to only include the code when desired.</p>
+						
+						<pre translate="no" class="shader">		<ins>#if UNITY_SPECCUBE_BLENDING</ins>
+			float interpolator = unity_SpecCube0_BoxMin.w;
+			UNITY_BRANCH
+			if (interpolator &lt; 0.99999) {
+				float3 probe1 = Unity_GlossyEnvironment(
+					UNITY_PASS_TEXCUBE_SAMPLER(unity_SpecCube1, unity_SpecCube0),
+					unity_SpecCube0_HDR, envData
+				);
+				indirectLight.specular = lerp(probe1, probe0, interpolator);
+			}
+			else {
+				indirectLight.specular = probe0;
+			}
+		<ins>#else</ins>
+			indirectLight.specular = probe0;
+		<ins>#endif</ins></pre>
+						
+						<aside>
+							<h3>Shouldn't we use <code>#if defined(UNITY_SPECCUBE_BLENDING)</code>?</h3>
+							<div>
+								<p>No, because <code class="shader">UNITY_SPECCUBE_BLENDING</code> is always defined. In this case, the actual definition matters. A 1 represents true, while a 0 represents false.</p>
+							</div>
+						</aside>
+						
+						<p>A similar optimization exists for box projection, based on the definition of <code class="shader">UNITY_SPECCUBE_BOX_PROJECTION</code>.</p>
+						
+						<pre translate="no" class="shader">float3 BoxProjection (
+	float3 direction, float3 position,
+	float4 cubemapPosition, float3 boxMin, float3 boxMax
+) {
+	<ins>#if UNITY_SPECCUBE_BOX_PROJECTION</ins>
+		UNITY_BRANCH
+		if (cubemapPosition.w > 0) {
+			float3 factors =
+				((direction > 0 ? boxMax : boxMin) - position) / direction;
+			float scalar = min(min(factors.x, factors.y), factors.z);
+			direction = direction * scalar + (position - cubemapPosition);
+		}
+	<ins>#endif</ins>
+	return direction;
+}</pre>
+						
+						<aside>
+							<h3>Where are these two values defined?</h3>
+							<div>
+								<p>They are defined by the editor, based on the target platform. Besides that, <em translate="no">UnityStandardConfig</em> sets them to 0 when targeting shader models below 3.0.</p>
+								
+								<pre translate="no" class="shader">// "platform caps" defines that were moved to editor,
+// so they are set automatically when compiling shader
+// UNITY_SPECCUBE_BOX_PROJECTION
+// UNITY_SPECCUBE_BLENDING
+
+// still add safe net for low shader models,
+// otherwise we might end up with shaders failing to compile
+#if SHADER_TARGET &lt; 30
+	#undef UNITY_SPECCUBE_BOX_PROJECTION
+	#define UNITY_SPECCUBE_BOX_PROJECTION 0
+	#undef UNITY_SPECCUBE_BLENDING
+	#define UNITY_SPECCUBE_BLENDING 0
+#endif</pre>
+							</div>
+						</aside>
+						
+					</section>
+					
+					<a href="blending-reflection-probes/blending-reflection-probes.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Bouncing Reflections</h2>
+					
+					<p>When you have two mirrors facing each other, you end up with a seemingly endless cascade of nested reflections. Can we get the same in Unity?</p>
+					
+					<figure>
+						<img src="bouncing-reflections/no-bounces.png" width="420" height="210">
+						<figcaption>No bouncing reflections.</figcaption>
+					</figure>
+					
+					<p>Our mirrors are not included in the reflections themselves, because they're not static. So let's make the floor mirror static. The spheres should remain dynamic, because otherwise the probe couldn't look through them anymore, producing weird reflections.</p>
+					
+					<figure>
+						<img src="bouncing-reflections/static-black.png" width="420" height="210">
+						<figcaption>Static floor mirror, black reflection.</figcaption>
+					</figure>
+					
+					<p>The mirror now shows up in our single reflection probe, but it appears solid black. That's because when rendering the probe, it's environment map doesn't exist yet. It is trying to reflect itself, and fails!</p>
+					
+					<p>By default, Unity doesn't include reflections in environment maps. But this can be changed via the lighting settings. The <em translate="no">Environment Settings</em> section contains the <em translate="no">Reflection Bounces</em> slider, which is set to 1 by default. Let's set it to 2 instead.</p>
+					
+					<figure>
+						<img src="bouncing-reflections/2-bounces-inspector.png" width="290" height="94" alt="inspector">
+						<img src="bouncing-reflections/2-bounces.png" width="420" height="210" alt="scene">
+						<figcaption>Two bounces.</figcaption>
+					</figure>
+					
+					<p>When set to two bounces, Unity begins by rendering each reflection probe as normal. Then it renders them a second time, using the now available reflection data. As a result, the initial reflections from the floor mirror now get included in the environment map.</p>
+					
+					<p>Unity supports up to five bounces. That requires a lot of rendering, so you definitely don't want to use this at run time! To see it in action, duplicate the floor mirror and turn it into a ceiling mirror.</p>
+					
+					<figure>
+						<img src="bouncing-reflections/floor-and-ceiling-mirrors.png" width="420" height="280">
+						<figcaption>Mirrored floor and ceiling, with five bounces.</figcaption>
+					</figure>
+					
+					<p>So it is possible to get nested reflections in Unity, but they're limited. Also, the projection is wrong, because the probe's bounds don't extend into the virtual space beyond the mirrors.</p>
+					
+					<aside>
+						<h3>With all these limitations, are reflections useful?</h3>
+						<div>
+							<p>We're focusing on them in this tutorial, so we see the naked reflections with all their flaws. Perfect mirrors aren't practical, but subtle reflections can work just fine. Knowing their limits, you can figure out when and where to use them effectively.</p>
+							
+							<p>Reflection probes are the default and most convenient way to add reflections to your scene, but it's not the only way. If you need strong flat mirrors, a different approach is to render the scene from point of view of the virtual observer, and use that as a texture for the mirror. Yet another approach is to mirror the scene geometry. You can get very good results this way, but these approaches have many limitations and aren't as universal as reflection probes. Then there are screen-space reflections. We'll cover those once we add support for deferred rendering.</p>
+						</div>
+					</aside>
+					
+					<p>The next tutorial is <a href="../part-9.1.html">Complex Materials</a>.</p>
+					
+					<a href="bouncing-reflections/bouncing-reflections.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Rendering-8.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

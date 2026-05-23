@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/advanced-rendering/bloom/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/advanced-rendering/bloom/tutorial-image.jpg">
+		<meta property="og:title" content="Bloom">
+		<meta property="og:description" content="A Unity Advanced Rendering tutorial about creating a bloom effect.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Bloom</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/advanced-rendering/bloom/#article",
+				"headline": "Bloom",
+				"alternativeHeadline": "Blurring Light",
+				"datePublished": "2018-01-31",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Advanced Rendering tutorial about creating a bloom effect.",
+				"image": "https://catlikecoding.com/unity/tutorials/advanced-rendering/bloom/tutorial-image.jpg",
+				"dependencies": "Unity 2017.3.0p3",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/advanced-rendering/", "name": "Advanced Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				BloomEffect: 1,
+				DeferredFogEffect: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Advanced Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Bloom</h1>
+					<p>Blurring Light</p>
+					<ul>
+						<li>Render to a temporary texture.</li>
+						<li>Blur via downsampling and upsampling.</li>
+						<li>Perform progressive sampling.</li>
+						<li>Apply a box filter.</li>
+						<li>Add bloom to an image.</li>
+					</ul>
+				</header>
+				
+				<p>This tutorial covers how to add support for a bloom effect to a camera. It assumes you're familiar with the material covered in the <a href="../../rendering/part-1.1.html">Rendering</a> series.
+				
+				<p>This tutorial is made with Unity 2017.3.0p3.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A little bloom makes bright things glow.</figcaption>
+				</figure>
+				
+				<p><em>See <a href="../../custom-srp/post-processing/index.html">Custom SRP / Post Processing</a> for a more recent bloom tutorial.</em></p>
+				
+				<section>
+					<h2>Setting the Scene</h2>
+					
+					<p>The amount of light that a display can produce is limited. It can go from black to full brightness, which in shaders correspond to RGB values 0 and 1. This is known as the low dynamic range &ndash; LDR &ndash; for light. How bright a fully white pixel is varies per display and can be adjusted by the used, but it's never going to be blinding.</p>
+					
+					<p>Real life isn't limited to LDR light. There isn't a maximum brightness. The more photons arrive at the same time, the brighter something appears, until it becomes painful to look at or even blinding. Directly looking at the sun will damage your eyes.</p>
+					
+					<p>To represent very bright colors, we can go beyond LDR into the high dynamic range &ndash; HDR. This simply means that we don't enforce a maximum of 1. Shaders have no trouble working with HDR colors, as long as the input and output formats can store values greater than 1. However, displays cannot go beyond their maximum brightness, so the final color is still clamped to LDR.</p>
+					
+					<p>To make HDR colors visible, they have to be mapped to LDR, which is known as tonemapping. This boils down to nonlinearly darkening the image, so it becomes possible to distinguish between originally HDR colors. This is somewhat analogous to how our eyes adapt to deal with bright scenes, although tonemapping is constant. There's also the auto-exposure technique, which adjust the image brightness dynamically. Both can be used together. But our eyes aren't always able to do adapt sufficiently. Some scenes are simply too bright, which makes it harder for us to see. How could we show this effect, while limited to LDR displays?</p>
+					
+					<p>Bloom is an effect which messes up an image by making a pixels' color bleed into adjacent pixels. It's like blurring an image, but based on brightness. This way, we could communicate overbright colors via blurring. It's somewhat similar to how light can diffuse inside our eyes, which can become noticeable in case of high brightness, but it's mostly a nonrealistic effect.</p>
+					
+					<p>Many people dislike bloom because it messes up otherwise crisp images and makes things appear to glow unrealistically. This isn't an inherent fault of bloom, it's simply how it happens to be used a lot. If you're aiming for realism, use bloom in moderation, when it makes sense. Bloom can also be used artistically for nonrealistic effects. Examples are dream sequences, to indicate wooziness, or for creative scene transitions.</p>
+					
+					<section>
+						<h3>Bloom Scene</h3>
+						
+						<p>We're going to create our own bloom effect via a camera post-effect component, similar to how we created the deferred fog effect in <a href="../../rendering/part-14.1.html">Rendering 14, Fog</a>. While you can start with a new project or continue from that tutorial, I used the previous advanced rendering tutorial, <a href="index.html">Surface Displacement</a>, as the basis for this project.</p>
+						
+						<a href="../surface-displacement/culling-triangles/culling-triangles.unitypackage.html" download rel="nofollow">Surface Displacement unitypackage</a>
+						
+						<p>Create a new scene with default lighting. Put a bunch of bright objects inside it, on a dark background. I used a black plane with a bunch of solid white, yellow, green, and red cubes and spheres of varying sizes. Make sure that the camera is HDR enabled. Also set the project to use linear color space, so we can best see the effect.</p>
+						
+						<figure>
+							<img src="setting-the-scene/scene.png" width="350" height="230">
+							<figcaption>Bright objects on a black surface.</figcaption>
+						</figure>
+						
+						<p>Normally, you'd apply tonemapping to a scene with linear and HDR rendering. You could do auto-exposure first, then apply bloom, and then perform the final tonemapping. But in this tutorial we'll focus on bloom exclusively and won't apply any other effects. This means that all colors that end up beyond LDR will be clamped in the final image.</p>
+					</section>
+					
+					<section>
+						<h3>Bloom Effect</h3>
+						
+						<p>Create a new <code>BloomEffect</code> component. Just like <code>DeferredFogEffect</code>, have it execute in edit mode and give it an <code>OnRenderImage</code> method. Initially it does nothing extra, so just blit from the source to the destination render texture.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+<ins>using System;</ins>
+
+<ins>[ExecuteInEditMode]</ins>
+<ins>public class BloomEffect : MonoBehaviour {</ins>
+
+	<ins>void OnRenderImage (RenderTexture source, RenderTexture destination) {</ins>
+		<ins>Graphics.Blit(source, destination);</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Let's also apply this effect to the scene view, so it's easier to see the effect from a varying point of view. This is done by adding the <code>ImageEffectAllowedInSceneView</code> attribute to the class.</p>
+						
+						<pre translate="no">[ExecuteInEditMode<ins>, ImageEffectAllowedInSceneView</ins>]
+public class BloomEffect : MonoBehaviour {
+	&hellip;
+}</pre>
+						
+						<p>Add this component as the only effect to the camera object. This completes our test scene.</p>
+						
+						<figure>
+							<img src="setting-the-scene/camera.png" width="320" height="177">
+							<figcaption>Camera with bloom effect component.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="setting-the-scene/setting-the-scene.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Blurring</h2>
+					
+					<p>The bloom effect is created by taking the original image, blurring it somehow, then combining the result with the original image. So to create bloom, we must first be able to blur an image.</p>
+					
+					<section>
+						<h3>Rendering to Another Texture</h3>
+						
+						<p>Applying an effect is done via rendering from one render texture to another. If we could perform all the work in a single pass, then we could simple blit from the source to the destination, using an appropriate shader. But blurring is a lot of work, so let's introduce an intermediate step. We first blit from the source to a temporary texture, then from that texture to the final destination.</p>
+						
+						<p>Getting hold of a temporary render texture is best done via invoking <code>RenderTexture.GetTemporary</code>. This method takes care of managing temporary textures for us, creating, caching, and destroying them as Unity sees fit. At minimum, we have to specify the texture's dimensions. We'll start with the same size as the source texture.</p>
+						
+						<pre translate="no">	void OnRenderImage (RenderTexture source, RenderTexture destination) {
+		<ins>RenderTexture r = RenderTexture.GetTemporary(</ins>
+			<ins>source.width, source.height</ins>
+		<ins>);</ins>
+		
+		Graphics.Blit(source, destination);
+	}</pre>
+						
+						<p>As we're going to blur the image, we're not going to do anything with the depth buffer. To indicate that, use 0 as the third parameter.</p>
+						
+						<pre translate="no">		RenderTexture r = RenderTexture.GetTemporary(
+			source.width, source.height<ins>, 0</ins>
+		);</pre>
+						
+						<p>Because we're using HDR, we have to use an appropriate texture format. As the camera should have HDR enabled, the source texture's format will be correct, so we can use that. It's most likely ARGBHalf, but maybe another format is used.</p>
+						
+						<pre translate="no">		RenderTexture r = RenderTexture.GetTemporary(
+			source.width, source.height, 0<ins>, source.format</ins>
+		);</pre>
+						
+						<p>Instead of blitting from source to destination directly, now first blit from the source to the temporary texture, then from that to the destination.</p>
+						
+						<pre translate="no"><del>//		Graphics.Blit(source, destination);</del>
+		<ins>Graphics.Blit(source, r);</ins>
+		<ins>Graphics.Blit(r, destination);</ins></pre>
+						
+						<p>After that, we no longer need the temporary texture. To make it available for reuse, release it by invoking <code>RenderTexture.ReleaseTemporary</code>.</p>
+						
+						<pre translate="no">		Graphics.Blit(source, r);
+		Graphics.Blit(r, destination);
+		<ins>RenderTexture.ReleaseTemporary(r);</ins></pre>
+						
+						<p>Although the result still looks the same, we're now moving it through a temporary texture.</p>
+					</section>
+					
+					<section>
+						<h3>Downsampling</h3>
+						
+						<p>Blurring an image is done by averaging pixels. For each pixel, we have to decide on a bunch of nearby pixels to combine. Which pixels are included defines the filter kernel used for the effect. A little blurring can be done by averaging only a few pixels, which means a small kernel. A lot of blurring would require a large kernel, combining many pixels.</p>
+						
+						<p>The more pixels there are in the kernel, the more times we have to sample the input texture. As this is per pixel, a large kernel can require a huge amount of sampling work. So let's keep it as simple as possible.</p>
+						
+						<p>The simplest and quickest way to average pixels is to take advantage of the bilinear filtering built into the GPU. If we halve the resolution of the temporary texture, then we end up with one pixel for each group of four source pixels. The lower-resolution pixel will be sampled exactly in between the original four, so we end up with their average. We don't even have to use a custom shader for that.</p>
+						
+						<figure>
+							<img src="blurring/bilinear-downsampling.png" width="310" height="125">
+							<figcaption>Bilinear downsampling.</figcaption>
+						</figure>
+						
+						<pre translate="no">		<ins>int width = source.width / 2;</ins>
+		<ins>int height = source.height / 2;</ins>
+		<ins>RenderTextureFormat format = source.format;</ins>
+
+		RenderTexture r =
+			RenderTexture.GetTemporary(<ins>width</ins>, <ins>height</ins>, 0, <ins>format</ins>);</pre>
+						
+						<p>Using a half-size intermediate texture means that we're downsampling the source texture to half resolution. After that step, we go from the temporary to the destination texture, thus upsampling again to the original resolution.</p>
+						
+						<figure>
+							<img src="blurring/bilinear-upsampling.png" width="310" height="125">
+							<figcaption>Bilinear upsampling, showing interpolation for one pixel.</figcaption>
+						</figure>
+						
+						<p>This is a two-step blurring process where each pixel gets mixed up with the 4&times;4 pixel block surrounding it, in four possible configurations.</p>
+						
+						<figure>
+							<img src="blurring/bilinear-weights.png" width="175" height="175">
+							<figcaption>Relaltive weights for indicated pixel, total 64.</figcaption>
+						</figure>
+						
+						<p>The result is an image that's blockier and a little blurrier that the original.</p>
+						
+						<figure>
+							<img src="blurring/half-size.png" width="350" height="230">
+							<figcaption>Using a half-size intermediate texture.</figcaption>
+						</figure>
+						
+						<p>We could increase the effect by decreasing the size of the intermediate step further.</p>
+						
+						<figure>
+							<img alt="4" src="blurring/downsample-4.png" width="350" height="230">
+							<img alt="8" src="blurring/downsample-8.png" width="350" height="230">
+							<img alt="16" src="blurring/downsample-16.png" width="350" height="230">
+							<img alt="32" src="blurring/downsample-32.png" width="350" height="230">
+							<figcaption>Dividing dimensions by 4, 8, 16, and 32.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Progressive Downsampling</h3>
+						
+						<p>Unfortunately, directly downsampling to a low resolution leads to poor result. We mostly end up discarding pixels, keeping only the averages of isolated groups of four pixels.</p>
+						
+						<figure>
+							<img src="blurring/double-downsample.png" width="310" height="125">
+							<figcaption>Direcly going to quarter size eliminates 12 out of 16 pixels.</figcaption>
+						</figure>
+						
+						<p>A better approach is to downsample multiple times, halving the resolution each step until the desired level is reached. That way all pixels end up contributing to the end result.</p>
+						
+						<figure>
+							<img src="blurring/progressive-downsample.png" width="499" height="125">
+							<figcaption>Downsampling to half resolution twice keeps information of all pixels.</figcaption>
+						</figure>
+						
+						<p>To control how many times we do this, add a public <code>iterations</code> field. Make it a slider with a range of 1&ndash;16. That would allow us to downsample a 65536<sup>2</sup> texture all the way down to a single pixel, which should be enough.</p>
+						
+						<pre translate="no">	<ins>[Range(1, 16)]</ins>
+	<ins>public int iterations = 1;</ins></pre>
+						
+						<figure>
+							<img src="blurring/iterations.png" width="320" height="56">
+							<figcaption>Iterations slider.</figcaption>
+						</figure>
+						
+						<p>To make this work, first refactor-rename <code>r</code> to <code>currentDestination</code>. After the first blit, add an explicit <code>currentSource</code> variable and assign <code>currentDestination</code> to it, then use that for the final blit and release it.</p>
+						
+						<pre translate="no">		RenderTexture <ins>currentDestination</ins> =
+			RenderTexture.GetTemporary(width, height, 0, format);
+			
+		Graphics.Blit(source, <ins>currentDestination</ins>);
+		<ins>RenderTexture currentSource = currentDestination;</ins>
+		Graphics.Blit(<ins>currentSource</ins>, destination);
+		RenderTexture.ReleaseTemporary(<ins>currentSource</ins>);</pre>
+						
+						<p>Now we can put a loop in between the declaration of the current source and the final blit. As it comes after the first downsample, its iterator should start at 1. Each step, begin by halving the texture size again. Then grab a new temporary texture and blit the current source to it. Then release the current source and make the current destination the new source.</p>
+						
+						<pre translate="no">		RenderTexture currentSource = currentDestination;
+
+		<ins>for (int i = 1; i &lt; iterations; i++) {</ins>
+			<ins>width /= 2;</ins>
+			<ins>height /= 2;</ins>
+			<ins>currentDestination =</ins>
+				<ins>RenderTexture.GetTemporary(width, height, 0, format);</ins>
+			<ins>Graphics.Blit(currentSource, currentDestination);</ins>
+			<ins>RenderTexture.ReleaseTemporary(currentSource);</ins>
+			<ins>currentSource = currentDestination;</ins>
+		<ins>}</ins>
+
+		Graphics.Blit(currentSource, destination);</pre>
+						
+						<p>This works unless we end up with too many iterations, reducing the size to zero. To prevent that, break out of the loop before that happens. The height of a typical display is usually smaller than its width, so you can base this on the height only. Because a single-pixel line doesn't really add much, I already abort when the texture height drops below 2.</p>
+						
+						<pre translate="no">			width /= 2;
+			height /= 2;
+			<ins>if (height &lt; 2) {</ins>
+				<ins>break;</ins>
+			<ins>}</ins></pre>
+						
+						<aside>
+							<h3>What about mobiles in portrait mode and other exceptions?</h3>
+							<div>
+								<p>It's good that you thought of that! If you want to support all aspect ratios, simply check both the width and the height.</p>
+							</div>
+						</aside>
+						
+						<figure>
+							<img alt="2" src="blurring/progressive-down-2.png" width="350" height="230">
+							<img alt="3" src="blurring/progressive-down-3.png" width="350" height="230">
+							<img alt="4" src="blurring/progressive-down-4.png" width="350" height="230">
+							<img alt="5" src="blurring/progressive-down-5.png" width="350" height="230">
+							<figcaption>Progressive downsampling 2 to 5 iterations.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Progressive Upsampling</h3>
+						
+						<p>While progressive downsampling is an improvement, the result still gets too blocky too fast. Let's see whether it helps if we progressively upsample as well.</p>
+						
+						<p>Iterating in both directions means that we end up rendering to every size twice, except for the smallest. Instead of releasing and then claiming the same textures twice per render, let's keep track of them in an array. We can simply use an array field fixed at size 16 for that, which should be more than enough.</p>
+						
+						<pre translate="no">	<ins>RenderTexture[] textures = new RenderTexture[16];</ins></pre>
+						
+						<p>Each time we grab a temporary texture, also add it to the array.</p>
+						
+						<pre translate="no">		RenderTexture currentDestination = <ins>textures[0] =</ins>
+			RenderTexture.GetTemporary(width, height, 0, format);
+		&hellip;
+
+		for (int i = 1; i &lt; iterations; i++) {
+			&hellip;
+			currentDestination = <ins>textures[i] =</ins>
+				RenderTexture.GetTemporary(width, height, 0, format);
+			&hellip;
+		}</pre>
+						
+						<p>Then add a second loop after the initial one. This one starts one step from the lowest level. We can hoist the iterator out of the first loop, subtract 2 from it, and use that as the starting point of the other loop. The second loop goes backwards, decreasing the iterator all the way to 0. This is where we should release the old source texture, instead of in the first loop. Also, let's clean up the array here as well.</p>
+						
+						<pre translate="no">		<ins>int i = 1;</ins>
+		for (<ins>;</ins> i &lt; iterations; i++) {
+			&hellip;
+			Graphics.Blit(currentSource, currentDestination);
+<del>//			RenderTexture.ReleaseTemporary(currentSource);</del>
+			currentSource = currentDestination;
+
+		}
+
+		<ins>for (i -= 2; i >= 0; i--) {</ins>
+			<ins>currentDestination = textures[i];</ins>
+			<ins>textures[i] = null;</ins>
+			<ins>Graphics.Blit(currentSource, currentDestination);</ins>
+			<ins>RenderTexture.ReleaseTemporary(currentSource);</ins>
+			<ins>currentSource = currentDestination;</ins>
+		<ins>}</ins></pre>
+						
+						<figure>
+							<img alt="with" src="blurring/progressive-up-5.png" width="350" height="230">
+							<img alt="without" src="blurring/progressive-down-5.png" width="350" height="230">
+							<figcaption>5 iterations, with and without progressive upsampling.</figcaption>
+						</figure>
+						
+						<p>The results are a lot better, but still not good enough.</p>
+					</section>
+					
+					<section>
+						<h3>Custom Shading</h3>
+						
+						<p>To improve our blurring, we have to switch to a more advanced filter kernel than simple bilinear filtering. This requires us to use a custom shader, so create a new <em translate="no">Bloom</em> shader. Just like the <em translate="no">DeferredFog</em> shader, begin with a simple shader that has a <em translate="no">_MainTex</em> property, has no culling, and doesn't use the depth buffer. Give it a single pass with a vertex and fragment program.</p>
+						
+						<pre translate="no" class="shader"><ins>Shader "Custom/Bloom" {</ins>
+	<ins>Properties {</ins>
+		<ins>_MainTex ("Texture", 2D) = "white" {}</ins>
+	<ins>}</ins>
+
+	<ins>SubShader {</ins>
+		<ins>Cull Off</ins>
+		<ins>ZTest Always</ins>
+		<ins>ZWrite Off</ins>
+
+		<ins>Pass {</ins>
+			<ins>CGPROGRAM</ins>
+				<ins>#pragma vertex VertexProgram</ins>
+				<ins>#pragma fragment FragmentProgram</ins>
+			<ins>ENDCG</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>The vertex program is even simpler than the one for the fog effect. It only has to transform the vertex position to clip space and pass through the texture coordinates of the full-screen quad. Because we'll end up with multiple passes, everything except the fragment program can be shared and defined in a <code class="shader">CGINCLUDE</code> block.</p>
+						
+						<pre translate="no" class="shader">	Properties {
+		_MainTex ("Texture", 2D) = "white" {}
+	}
+
+	<ins>CGINCLUDE</ins>
+		<ins>#include "UnityCG.cginc"</ins>
+
+		<ins>sampler2D _MainTex;</ins>
+
+		<ins>struct VertexData {</ins>
+			<ins>float4 vertex : POSITION;</ins>
+			<ins>float2 uv : TEXCOORD0;</ins>
+		<ins>};</ins>
+
+		<ins>struct Interpolators {</ins>
+			<ins>float4 pos : SV_POSITION;</ins>
+			<ins>float2 uv : TEXCOORD0;</ins>
+		<ins>};</ins>
+
+		<ins>Interpolators VertexProgram (VertexData v) {</ins>
+			<ins>Interpolators i;</ins>
+			<ins>i.pos = UnityObjectToClipPos(v.vertex);</ins>
+			<ins>i.uv = v.uv;</ins>
+			<ins>return i;</ins>
+		<ins>}</ins>
+	<ins>ENDCG</ins>
+
+	SubShader {
+		&hellip;
+	}</pre>
+						
+						<p>We'll define the <code class="shader">FragmentProgram</code> function in the pass itself. Initially, simply sample the source texture and use that as the result, making it red to verify that we're using our custom shader. Typically HDR colors are stored in half-precision format, so let's be explicit and use <code class="shader">half</code> instead of <code class="shader">float</code>, even though this makes no difference for non-mobile platforms.</p>
+						
+						<pre translate="no" class="shader">		Pass {
+			CGPROGRAM
+				#pragma vertex VertexProgram
+				#pragma fragment FragmentProgram
+
+				<ins>half4 FragmentProgram (Interpolators i) : SV_Target {</ins>
+					<ins>return tex2D(_MainTex, i.uv) * half4(1, 0, 0, 0);</ins>
+				<ins>}</ins>
+			ENDCG
+		}</pre>
+						
+						<p>Add a public field to our effect to hold a reference to this shader, and hook it up in the inspector.</p>
+						
+						<pre translate="no">	<ins>public Shader bloomShader;</ins></pre>
+						
+						<figure>
+							<img src="blurring/shader.png" width="320" height="74">
+							<figcaption>Bloom effect with shader.</figcaption>
+						</figure>
+						
+						<p>Add a field to hold the material that will use this shader, which doesn't need to be serialized. Before rendering, check whether we have this material and if not create it. We don't need to see it in the hierarchy and neither do we need to save it, so set its <code>hideFlags</code> accordingly.</p>
+						
+						<pre translate="no">	<ins>[NonSerialized]</ins>
+	<ins>Material bloom;</ins>
+	
+	void OnRenderImage (RenderTexture source, RenderTexture destination) {
+		<ins>if (bloom == null) {</ins>
+			<ins>bloom = new Material(bloomShader);</ins>
+			<ins>bloom.hideFlags = HideFlags.HideAndDontSave;</ins>
+		<ins>}</ins>
+		
+		&hellip;
+	}</pre>
+						
+						<p>Each time we blit, it should be done with this material instead of the default.</p>
+						
+						<pre translate="no">	void OnRenderImage (RenderTexture source, RenderTexture destination) {
+		&hellip;
+		Graphics.Blit(source, currentDestination<ins>, bloom</ins>);
+		&hellip;
+			Graphics.Blit(currentSource, currentDestination<ins>, bloom</ins>);
+		&hellip;
+			Graphics.Blit(currentSource, currentDestination<ins>, bloom</ins>);
+		&hellip;
+		Graphics.Blit(currentSource, destination<ins>, bloom</ins>);
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="blurring/red.png" width="350" height="230">
+							<figcaption>Using our custom shader.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Box Sampling</h3>
+						
+						<p>We're going to adjust our shader so it uses a different sampling method that bilinear filtering. Because sampling depends on the pixel size, add the magic <code class="shader">float4 _MainTex_TexelSize</code> variable to the <code class="shader">CGINCLUDE</code> block. Keep in mind that this corresponds to the texel size of the source texture, not the destination.</p>
+						
+						<pre translate="no" class="shader">		sampler2D _MainTex;
+		<ins>float4 _MainTex_TexelSize;</ins></pre>
+						
+						<p>As we're always sampling the main texture and only care about the RGB channels, let's create a convenient minimal <code class="shader">Sample</code> function.</p>
+						
+						<pre translate="no" class="shader">		<ins>half3 Sample (float2 uv) {</ins>
+			<ins>return tex2D(_MainTex, uv).rgb;</ins>
+		<ins>}</ins></pre>
+						
+						<p>Instead of relying on a bilinear filter only, we'll use a simple box filter kernel instead. It takes four samples instead of one, diagonally positioned so we get the averages of four adjacent 2&times;2 pixels blocks. Sum these samples and divide by four, so we end up with the average of a 4&times;4 pixel block, doubling our kernel size.</p>
+						
+						<figure>
+							<img src="blurring/box-downsampling.png" width="310" height="125">
+							<figcaption>Downsampling with a 4&times;4 box, showing the sample points.</figcaption>
+						</figure>
+						
+						<pre translate="no" class="shader">		<ins>half3 SampleBox (float2 uv) {</ins>
+			<ins>float4 o = _MainTex_TexelSize.xyxy * float2(-1, 1).xxyy;</ins>
+			<ins>half3 s =</ins>
+				<ins>Sample(uv + o.xy) + Sample(uv + o.zy) +</ins>
+				<ins>Sample(uv + o.xw) + Sample(uv + o.zw);</ins>
+			<ins>return s * 0.25f;</ins>
+		<ins>}</ins></pre>
+						
+						<p>Use this sampling function in our fragment program.</p>
+						
+						<pre translate="no" class="shader">				half4 FragmentProgram (Interpolators i) : SV_Target {
+<del>//					return tex2D(_MainTex, i.uv) * half4(1, 0, 0, 0);</del>
+					<ins>return half4(SampleBox(i.uv), 1);</ins>
+				}</pre>
+						
+						<figure>
+							<img src="blurring/box-sampling.png" width="350" height="230">
+							<figcaption>5 iterations, with 4&times;4 box sampling.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Different Passes</h3>
+						
+						<p>The result is much smoother and has much higher quality, but it is also much blurrier. This is mostly due to upsampling with the new 4&times;4 box filter. As we're using the source's texel size to position the sample points, we end up covering a large area, with an unfocused regular weight distribution.</p>
+						
+						<figure>
+							<img alt="sampling" src="blurring/box-upsampling-1.png" width="175" height="175"> <img alt="weights" src="blurring/box-upsampling-1-weights.png" width="175" height="175">
+							<figcaption>Upsampling with a 4&times;4 box.</figcaption>
+						</figure>
+						
+						<p>We can tune our box filter by adjust the UV delta that we use to select the sample points. To make this possible, turn the delta into a parameter, instead of always using 1.</p>
+						
+						<pre translate="no" class="shader">		half3 SampleBox (float2 uv<ins>, float delta</ins>) {
+			float4 o = _MainTex_TexelSize.xyxy * float2(-<ins>delta</ins>, <ins>delta</ins>).xxyy;
+			half3 s =
+				Sample(uv + o.xy) + Sample(uv + o.zy) +
+				Sample(uv + o.xw) + Sample(uv + o.zw);
+			return s * 0.25f;
+		}</pre>
+						
+						<p>Duplicate our shader pass so we end up with two. The first one &ndash; pass 0 &ndash; will be for downsampling, so it should use the original delta of 1. The second pass will be for upsampling, for which we'll use a delta of 0.5.</p>
+						
+						<pre translate="no" class="shader">		Pass { <ins>// 0</ins>
+			CGPROGRAM
+				#pragma vertex VertexProgram
+				#pragma fragment FragmentProgram
+
+				half4 FragmentProgram (Interpolators i) : SV_Target {
+					return half4(SampleBox(i.uv, <ins>1</ins>), 1);
+				}
+			ENDCG
+		}
+
+		<ins>Pass { // 1</ins>
+			<ins>CGPROGRAM</ins>
+				<ins>#pragma vertex VertexProgram</ins>
+				<ins>#pragma fragment FragmentProgram</ins>
+
+				<ins>half4 FragmentProgram (Interpolators i) : SV_Target {</ins>
+					<ins>return half4(SampleBox(i.uv, 0.5), 1);</ins>
+				<ins>}</ins>
+			<ins>ENDCG</ins>
+		<ins>}</ins></pre>
+						
+						<p>With an UV delta of 0.5 we end up covering a 3&times;3 box with overlapping samples. So some pixels contribute to the result more than once, increasing their weight. The middle pixel is involved in all samples, the diagonal pixels are used only once, while the other pixels occur twice. The result is a more focused upsampling kernel.</p>
+						
+						<figure>
+							<img alt="sampling" src="blurring/box-upsampling-05.png" width="140" height="140"> <img alt="weights" src="blurring/box-upsampling-05-weights.png" width="140" height="140">
+							<figcaption>Focused upsampling.</figcaption>
+						</figure>
+						
+						<p>Next, we have to indicate which pass should be used when blitting. To make this easy, add constants to <code>BloomEffect</code> so we can use names rather than indices.</p>
+						
+						<pre translate="no">	<ins>const int BoxDownPass = 0;</ins>
+	<ins>const int BoxUpPass = 1;</ins></pre>
+						
+						<p>The first two blits are down passes and the other two are up passes.</p>
+						
+						<pre translate="no">	void OnRenderImage (RenderTexture source, RenderTexture destination) {
+		&hellip;
+		Graphics.Blit(source, currentDestination, bloom<ins>, BoxDownPass</ins>);
+		&hellip;
+			Graphics.Blit(currentSource, currentDestination, bloom<ins>, BoxDownPass</ins>);
+		&hellip;
+			Graphics.Blit(currentSource, currentDestination, bloom<ins>, BoxUpPass</ins>);
+		&hellip;
+		Graphics.Blit(currentSource, destination, bloom<ins>, BoxUpPass</ins>);
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<video width="324" height="200" controls loop muted>
+								<source src="blurring/different-passes.mp4" type="video/mp4">
+							</video>
+							<figcaption>Blurring with different passes.</figcaption>
+						</figure>
+						
+						<p>At this point we have a fairly simple yet decent blurring process. There are many different kernels that we could use instead of these simple filter kernels, each having its own advantages &ndash; like better temporal stability &ndash; and costs. However, for this tutorial we'll stick with these.</p>
+					</section>
+					
+					<a href="blurring/blurring.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Creating Bloom</h2>
+					
+					<p>Blurring the original image is the first step of creating a bloom effect. The second step is to combine the blurred image with the original, brightening it. However, we won't just use the final blurred result, as that would produce a rather uniform smudging. Instead, lower amounts of blurring should contribute more to the result that higher amounts of blurring. We can do this by accumulating the intermediate results, adding to the old data as we upsample.</p>
+					
+					<figure>
+						<img src="creating-bloom/additive-blurring.png" width="360" height="190">
+						<figcaption>Additive blurring.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Additive Blending</h3>
+						
+						<p>Adding to what we already have at some intermediate level can be done by using additive blending, instead of replacing the texture's contents. All we have to do is set the blend mode of the upsampling pass to <code class="shader">One One</code>.</p>
+						
+						<pre translate="no" class="shader">		Pass { // 1
+			<ins>Blend One One</ins>
+
+			CGPROGRAM
+				#pragma vertex VertexProgram
+				#pragma fragment FragmentProgram
+
+				half4 FragmentProgram (Interpolators i) : SV_Target {
+					return half4(SampleBox(i.uv, 0.5), 1);
+				}
+			ENDCG
+		}</pre>
+						
+						<p>This simple approach works fine for all intermediate passes, but will go wrong when we render to the final destination, because we haven't rendered to it yet. We likely end up accumulating light each frame, blowing out the image, or something else, depending on how the textures are reused by Unity. To solve this we have to create a separate pass for the last upsample, where we combine the original source texture with the last intermediate texture. So we need a shader variable for the source.</p>
+						
+						<pre translate="no" class="shader">		sampler2D _MainTex<ins>, _SourceTex</ins>;</pre>
+						
+						<p>Add a third pass that is a duplicate of the second pass, except that it uses the default blend mode and adds the box sample to a sample of the source texture.</p>
+						
+						<pre translate="no" class="shader">		<ins>Pass { // 2</ins>
+			<ins>CGPROGRAM</ins>
+				<ins>#pragma vertex VertexProgram</ins>
+				<ins>#pragma fragment FragmentProgram</ins>
+
+				<ins>half4 FragmentProgram (Interpolators i) : SV_Target {</ins>
+					<ins>half4 c = tex2D(_SourceTex, i.uv);</ins>
+					<ins>c.rgb += SampleBox(i.uv, 0.5);</ins>
+					<ins>return c;</ins>
+				<ins>}</ins>
+			<ins>ENDCG</ins>
+		<ins>}</ins></pre>
+						
+						<p>Define a constant for this pass, which applies the bloom to the original image.</p>
+						
+						<pre translate="no">	const int BoxDownPass = 0;
+	const int BoxUpPass = 1;
+	<ins>const int ApplyBloomPass = 2;</ins></pre>
+						
+						<p>The last blit has to use this pass, with the correct source texture.</p>
+						
+						<pre translate="no"><del>//		Graphics.Blit(currentSource, destination, bloom, BoxUpPass);</del>
+		<ins>bloom.SetTexture("_SourceTex", source);</ins>
+		<ins>Graphics.Blit(currentSource, destination, bloom, ApplyBloomPass);</ins>
+		RenderTexture.ReleaseTemporary(currentSource);</pre>
+						
+						<figure>
+							<video width="324" height="200" controls loop muted>
+								<source src="creating-bloom/bloom.mp4" type="video/mp4">
+							</video>
+							<figcaption>Bloom.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Bloom Threshold</h3>
+						
+						<p>Right now we're still blurring the entire image. It's just most obvious for bright pixels. But one of the uses of bloom is to apply it only to very bright pixels. To make this possible, we have to introduce a brightness threshold. Add a public field for this, with a slider range from 0 to some very bright value, like 10. Let's use a default threshold of 1, excluding LDR pixels.</p>
+						
+						<pre translate="no">	<ins>[Range(0, 10)]</ins>
+	<ins>public float threshold = 1;</ins></pre>
+						
+						<figure>
+							<img src="creating-bloom/threshold.png" width="320" height="92">
+							<figcaption>Threshold slider.</figcaption>
+						</figure>
+						
+						<p>The threshold determines which pixels contribute to the bloom effect. If they're not bright enough, they shouldn't be included during the downsampling and upsampling process. Simply converting them to black will do this, which has to be done by the shader. So set the material's <em translate="no">_Threshold</em> variable before we blit.</p>
+						
+						<pre translate="no">		if (bloom == null) {
+			&hellip;
+		}
+
+		<ins>bloom.SetFloat("_Threshold", threshold);</ins></pre>
+						
+						<p>Add this variable to the <code class="shader">CGINCLUDE</code> block of the shader as well, again using the <code class="shader">half</code> type.</p>
+						
+						<pre translate="no" class="shader">		<ins>half _Threshold;</ins></pre>
+						
+						<p>We'll use the threshold to filter out pixels that we do not wish to include. As we do this at the start of the blurring process, it's known as a prefilter step. Create a function for this, which takes a color and outputs the filtered one.</p>
+						
+						<pre translate="no" class="shader">		<ins>half3 Prefilter (half3 c) {</ins>
+			<ins>return c;</ins>
+		<ins>}</ins></pre>
+						
+						<p>We'll use the color's maximum component to determine its brightness, so `b = C_r vv C_g vv C_b`, where the `vv` symbol is an operator that I use to denote the max function.</p>
+						
+						<p>We can determine the contribution factor of the color by subtracting the threshold from its brightness, then dividing that by its brightness, `c = (b - t) / b`, where `t` is the threshold. The result is always 1 when `t = 0`, which leaves the color unchanged. As `t` increases, the brightness curve will bend downward so it drops to zero where `b = t`. Because of the curve's shape, it's known as a knee. As we don't want negative factors, we have to make sure that `b - t` doesn't drop below zero, leading to `c = (0 vv (b - t)) / b`.</p>
+						
+						<figure>
+							<img src="creating-bloom/threshold-graph.png" width="200" height="100">
+							<figcaption>Knee curves with thresholds 0.25, 0.5, 0.75, and 1.</figcaption>
+						</figure>
+							
+						<p>To avoid divisions by zero in the shader, make sure that the divisor has a small value at minimum, like 0.00001. Then use the result to modulate the color.</p>
+						
+						<pre translate="no" class="shader">		half3 Prefilter (half3 c) {
+			<ins>half brightness = max(c.r, max(c.g, c.b));</ins>
+			<ins>half contribution = max(0, brightness - _Threshold);</ins>
+			<ins>contribution /= max(brightness, 0.00001);</ins>
+			return c <ins>* contribution</ins>;
+		}</pre>
+						
+						<p>The filter is applied in the first pass only. So duplicate the first pass, putting it at the top as pass 0. Apply the filter to the result of the box sample.</p>
+						
+						<pre translate="no" class="shader">		<ins>Pass { // 0</ins>
+			<ins>CGPROGRAM</ins>
+				<ins>#pragma vertex VertexProgram</ins>
+				<ins>#pragma fragment FragmentProgram</ins>
+
+				<ins>half4 FragmentProgram (Interpolators i) : SV_Target {</ins>
+					<ins>return half4(Prefilter(SampleBox(i.uv, 1)), 1);</ins>
+				<ins>}</ins>
+			<ins>ENDCG</ins>
+		<ins>}</ins></pre>
+						
+						<p>Add a constant for this new pass, and increase the indices of all later passes by one.</p>
+						
+						<pre translate="no">	<ins>const int BoxDownPrefilterPass = 0;</ins>
+	const int BoxDownPass = <ins>1</ins>;
+	const int BoxUpPass = <ins>2</ins>;
+	const int ApplyBloomPass = <ins>3</ins>;</pre>
+						
+						<p>Use the new pass for the first blit.</p>
+						
+						<pre translate="no">		RenderTexture currentDestination = textures[0] =
+			RenderTexture.GetTemporary(width, height, 0, format);
+		Graphics.Blit(source, currentDestination, bloom, <ins>BoxDownPrefilterPass</ins>);
+		RenderTexture currentSource = currentDestination;</pre>
+						
+						<p>At this point, with the threshold set to 1, you'll likely see no or almost no bloom, assuming the light and materials used have no HDR values. To make bloom appear, you could increase the light contribution of some of the materials. For example, I made the yellow material emissive, which together with the reflected light pushes the yellow pixels into HDR.</p>
+						
+						<figure>
+							<img src="creating-bloom/yellow-hdr.png" width="350" height="230">
+							<figcaption>Emissive yellow.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Isolating Bloom</h3>
+						
+						<p>To better see what parts of the image contribute to bloom, it would be handy if we could see the blur effect in isolation. So let's add a debug option to our effect, controlled via a public boolean field.</p>
+						
+						<pre translate="no">	<ins>public bool debug;</ins></pre>
+						
+						<figure>
+							<img src="creating-bloom/debug.png" width="320" height="110">
+							<figcaption>Debug toggle.</figcaption>
+						</figure>
+						
+						<p>We'll create a separate pass for debug purposes, so add a constant for it at the bottom.</p>
+						
+						<pre translate="no">	const int BoxDownPrefilterPass = 0;
+	const int BoxDownPass = 1;
+	const int BoxUpPass = 2;
+	const int ApplyBloomPass = 3;
+	<ins>const int DebugBloomPass = 4;</ins></pre>
+						
+						<p>When in debug mode, blit the last intermediate result directly to the final destination &ndash; using the debug pass &ndash; instead of adding it to the source.</p>
+						
+						<pre translate="no">		<ins>if (debug) {</ins>
+			<ins>Graphics.Blit(currentSource, destination, bloom, DebugBloomPass);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			bloom.SetTexture("_SourceTex", currentSource);
+			Graphics.Blit(source, destination, bloom, ApplyBloomPass);
+		<ins>}</ins>
+		RenderTexture.ReleaseTemporary(currentSource);</pre>
+						
+						<p>The new debug pass simply performs the last upsample and combines that with nothing.</p>
+						
+						<pre translate="no" class="shader">		<ins>Pass { // 4</ins>
+			<ins>CGPROGRAM</ins>
+				<ins>#pragma vertex VertexProgram</ins>
+				<ins>#pragma fragment FragmentProgram</ins>
+
+				<ins>half4 FragmentProgram (Interpolators i) : SV_Target {</ins>
+					<ins>return half4(SampleBox(i.uv, 0.5), 1);</ins>
+				<ins>}</ins>
+			<ins>ENDCG</ins>
+		<ins>}</ins></pre>
+						
+						<figure>
+							<img src="creating-bloom/bloom-only.png" width="350" height="230">
+							<figcaption>Bloom effect only.</figcaption>
+						</figure>
+						
+						<p>While in debug mode, we can clearly see that the yellow pixels end up generating bloom. Besides that, also some of the white pixels are included, but only when they end up reflecting a significant amount of the directional light.</p>
+						
+						<aside>
+							<h3>Why do some white surfaces end up in HDR?</h3>
+							<div>
+								<p>The default Unity scene is very bright. Besides the directional light, there's also environmental lighting and reflections which contribute to the final pixel color. All these together can result in brightness values greater than 1.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Soft Threshold</h3>
+						
+						<p>The knee curve that we use to modulate colors cuts through zero at an angle, leading to an abrupt cutoff point. This is why it's also known as a hard knee. This means that we can end up with sharp transitions between areas that generate bloom and those that do not. This can be seen in the large white sphere in the screenshot above. There's a clearly-defined portion of that sphere which gets included. This is somewhat obfuscated by the blurring, but it's still a harsh transition.</p>
+						
+						<p>It's possible to make this transition smoother, blending from zero to full contribution. We'll control this with a slider. At 0, we get the harsh transition that we currently have. At 1, we get a soft threshold that smoothly fades the bloom in all the way from brightness 0 until it matches the hard knee. We'll use 0.5 as the default.</p>
+						
+						<pre translate="no">	<ins>[Range(0, 1)]</ins>
+	<ins>public float softThreshold = 0.5f;</ins></pre>
+						
+						<figure>
+							<img src="creating-bloom/soft-threshold.png" width="320" height="128">
+							<figcaption>Soft threshold slider.</figcaption>
+						</figure>
+						
+						<p>This fading is also done by the shader, so pass the soft-threshold factor on to the material.</p>
+						
+						<pre translate="no">		bloom.SetFloat("_Threshold", threshold);
+		<ins>bloom.SetFloat("_SoftThreshold", softThreshold);</ins></pre>
+						
+						<p>And add a variable for it to the shader.</p>
+						
+						<pre translate="no" class="shader">		half _Threshold<ins>, _SoftThreshold</ins>;</pre>
+						
+						<p>By softening our hard knee curve we turn it into a soft knee. We do this by taking the maximum of `b - t` and a separate softening curve, instead of 0. So we get `c = (s vv (b - t)) / b`.</p>
+						
+						<p>The soft curve is defined as `s = (b - t + k)^2/(4k)`, where `k = t t_s` and `t_s` is the soft threshold.</p>
+						
+						<figure>
+							<img src="creating-bloom/soft-knees.png" width="200" height="100">
+							<figcaption>Soft curves divided by `b` with threshold 1, and soft 0, 0.25, 0.5, and 0.75.</figcaption>
+						</figure>
+						
+						<p>We have to cut off this curve where it touches 0 and where it meets the hard knee, which is done by using `s = (0 vv (b - t + k) ^^ 2k)^2/(4k)`, where `^^` represents the minimum function. Adjust the prefilter function to perform this calculation, again preventing divisions by zero.</p>
+						
+						<pre translate="no" class="shader">		half3 Prefilter (half3 c) {
+			half brightness = max(c.r, max(c.g, c.b));
+			<ins>half knee = _Threshold * _SoftThreshold;</ins>
+			<ins>half soft = brightness - _Threshold + knee;</ins>
+			<ins>soft = clamp(soft, 0, 2 * knee);</ins>
+			<ins>soft = soft * soft / (4 * knee + 0.00001);</ins>
+			half contribution = max(<ins>soft</ins>, brightness - _Threshold);
+			contribution /= max(brightness, 0.00001);
+			return c * contribution;
+		}</pre>
+						
+						<figure>
+							<video width="324" height="200" controls loop muted>
+								<source src="creating-bloom/soft-threshold.mp4" type="video/mp4">
+							</video>
+							<figcaption>Soft threshold.</figcaption>
+						</figure>
+						
+						<p>Note that some parts of the soft knee function can be isolated so they only depend on the configuration values, which are constant per pass. We can precompute these parts and pass them to the shader in a vector, reducing the amount of work it has to do. We can combine these with the threshold in a single filter vector.</p>
+						
+						<pre translate="no"><del>//		bloom.SetFloat("_Threshold", threshold);</del>
+<del>//		bloom.SetFloat("_SoftThreshold", softThreshold);</del>
+		<ins>float knee = threshold * softThreshold;</ins>
+		<ins>Vector4 filter;</ins>
+		<ins>filter.x = threshold;</ins>
+		<ins>filter.y = filter.x - knee;</ins>
+		<ins>filter.z = 2f * knee;</ins>
+		<ins>filter.w = 0.25f / (knee + 0.00001f);</ins>
+		<ins>bloom.SetVector("_Filter", filter);</ins></pre>
+						
+						<p>Adjust the shader accordingly.</p>
+						
+						<pre translate="no" class="shader">
+<del>//		half _Threshold, _SoftTheshold;</del>
+		<ins>half4 _Filter;</ins>
+		
+		&hellip;
+		
+		half3 Prefilter (half3 c) {
+			half brightness = max(c.r, max(c.g, c.b));
+<del>//			half knee = _Threshold * _SoftThreshold;</del>
+			half soft = brightness - <ins>_Filter.y</ins>;
+			soft = clamp(soft, 0, <ins>_Filter.z</ins>);
+			soft = soft * soft <ins>* _Filter.w</ins>;
+			half contribution = max(soft, brightness - <ins>_Filter.x</ins>);
+			contribution /= max(brightness, 0.00001);
+			return c * contribution;
+		}</pre>
+					</section>
+					
+					<section>
+						<h3>Bloom Intensity</h3>
+						
+						<p>To wrap up, let's make it possible to modulate the intensity of the bloom effect. This makes it possible to fade it in, and also to create ridiculously-strong effects. Add a slider for this, with a range like 0&ndash;10. The default should be 1.</p>
+						
+						<pre translate="no">	<ins>[Range(0, 10)]</ins>
+	<ins>public float intensity = 1;</ins></pre>
+						
+						<figure>
+							<img src="creating-bloom/intensity.png" width="320" height="146">
+							<figcaption>Intensity slider.</figcaption>
+						</figure>
+						
+						<p>Pass this intensity value on to the shader, as a material property. As it is common to set a bloom's intensity with a factor in gamma space, convert it from gamma to linear space.</p>
+						
+						<pre translate="no">		bloom.SetVector("_Filter", filter);
+		<ins>bloom.SetFloat("_Intensity", Mathf.GammaToLinearSpace(intensity));</ins></pre>
+						
+						<p>Add the appropriate variable to the shader.</p>
+						
+						<pre translate="no" class="shader">		<ins>half _Intensity;</ins></pre>
+						
+						<p>Factor the intensity into the final box sample in the last two passes.</p>
+						
+						<pre translate="no" class="shader">		Pass { // 3
+			CGPROGRAM
+				#pragma vertex VertexProgram
+				#pragma fragment FragmentProgram
+
+				half4 FragmentProgram (Interpolators i) : SV_Target {
+					half4 c = tex2D(_SourceTex, i.uv);
+					c.rgb += <ins>_Intensity *</ins> SampleBox(i.uv, 0.5);
+					return c;
+				}
+			ENDCG
+		}
+
+		Pass { // 4
+			CGPROGRAM
+				#pragma vertex VertexProgram
+				#pragma fragment FragmentProgram
+
+				half4 FragmentProgram (Interpolators i) : SV_Target {
+					return half4(<ins>_Intensity *</ins> SampleBox(i.uv, 0.5), 1);
+				}
+			ENDCG
+		}</pre>
+						
+						<figure>
+							<video width="324" height="200" controls loop muted>
+								<source src="creating-bloom/intensity.mp4" type="video/mp4">
+							</video>
+							<figcaption>Bloom intensity.</figcaption>
+						</figure>
+						
+						<p>You now have a basic bloom effect. It is quite similar to the bloom effect of Unity's post processing stack, version 2. It's possible to extend it further, by adding a tint, making the sampling delta configurable, using different filters, and so on. Or you could move on to <a href="../depth-of-field/index.html">Depth of Field</a>.</p>
+					</section>
+					
+					<a href="creating-bloom/creating-bloom.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Bloom.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

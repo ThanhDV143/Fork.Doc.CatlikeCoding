@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/custom-srp/baked-light/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/custom-srp/baked-light/tutorial-image.jpg">
+		<meta property="og:title" content="Baked Light">
+		<meta property="og:description" content="A Unity Custom SRP tutorial about baking static lighting into light maps and probes.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Baked Light</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/custom-srp/baked-light/#article",
+				"headline": "Baked Light",
+				"alternativeHeadline": "Light Maps and Probes",
+				"datePublished": "2020-01-31",
+				"dateModified": "2023-08-03",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Custom SRP tutorial about baking static lighting into light maps and probes.",
+				"image": "https://catlikecoding.com/unity/tutorials/custom-srp/baked-light/tutorial-image.jpg",
+				"dependencies": "Unity 2022.3.5f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/custom-srp/", "name": "Custom SRP" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				CameraRenderer: 1,
+				CascadeBlendMode: 1,
+				CustomRenderPipeline: 1,
+				CustomRenderPipelineAsset: 1,
+				CustomShaderGUI: 1,
+				Directional: 1,
+				DirectionalShadowData: 1,
+				FilterMode: 1,
+				Lighting: 1,
+				MeshBall: 1,
+				PerObjectMaterialProperties: 1,
+				ShadowedDirLight: 1,
+				ShadowData: 1,
+				Shadows: 1,
+				ShadowMode: 1,
+				ShadowSettings: 1,
+				TextureSize: 1
+			};
+			
+			var defaultCodeClass = "shader";
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../../scriptable-render-pipeline/reflections/index.html">Custom SRP</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Baked Light</h1>
+					<p>Light Maps and Probes</p>
+					<ul>
+						<li>Bake static global illumination.</li>
+						<li>Sample light maps, probes, and LPPVs.</li>
+						<li>Create a meta pass.</li>
+						<li>Support emissive surfaces.</li>
+					</ul>
+				</header>
+				
+				<p>This is the fifth part of a tutorial series about creating a <a href="../../scriptable-render-pipeline/reflections/index.html">custom scriptable render pipeline</a>. It makes it possible to bake static lighting into maps and probes.</p>
+				
+				<p>This tutorial is made with Unity 2019.2.18f1 and upgraded to 2022.3.5f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Scene illuminated by a single mixed-mode light, plus a little emission.</figcaption>
+				</figure>
+								
+				<section>
+					<h2>Baking Static Light</h2>
+					
+					<p>Up to this point we've calculated all lighting while rendering, but this isn't the only option. Lighting can also be calculated ahead of time and stored in light maps and probes. There are two main reasons why this is done: to reduce the amount of realtime calculations and to add indirect lighting that cannot be calculated at runtime. The latter is part of what's collectively known as global illumination: light that's not coming from light sources directly, but indirectly via reflection, from the environment, or from emissive surfaces.</p>
+					
+					<p>The downside of baked lighting is that it is static so cannot change at runtime. It also needs to be stored, which increases both build size and memory usage.</p>
+					
+					<aside>
+						<h3>What about realtime global illumination?</h3>
+						<div>
+							<p>Unity uses the Enlighten system for realtime global illumination, but this has been deprecated so we won't use it. Besides that reflection probes can be rendered at runtime to create specular environment reflections, but we won't cover them in this tutorial.</p>
+						</div>
+					</aside>
+					
+					<section>
+						<h3>Scene Lighting Settings</h3>
+						
+						<p>Global Illumination is configured per scene, via the <em translate="no">Scene</em> tab of the <em translate="no">Lighting</em> window. Baked lighting is enabled via the <em translate="no">Baked Global Illumination</em> toggle under <em translate="no">Mixed Lighting</em>. There's also a <em translate="no">Lighting Mode</em> option, which we'll set the <em translate="no">Baked Indirect</em>, which means that we bake all static indirect lighting.</p>
+						
+						<p>If your project was created in Unity 2019.2 or earlier then you'll also see an option to enable realtime lighting, which should be disabled. If your project was created in Unity 2019.3 or later then that option won't be shown.</p>
+						
+						<figure>
+							<img src="baking-light/baked-indirect.png" width="390" height="153">
+							<figcaption>Baked indirect lighting only.</figcaption>
+						</figure>
+						
+						<p>Further down is a <em translate="no">Lightmapping Settings</em> section that can be used to control the lightmapping process, which is done by the Unity editor. I'll use the default settings except that <em translate="no">LightMap Resolution</em> is reduced to 20, <em translate="no">Compress Lightmaps</em> is disabled, and <em translate="no">Directional Mode</em> is set to <em translate="no">Non-Directional</em>. I also use the <em translate="no">Progressive GPU</em> lightmapper.
+						
+						<figure>
+							<img src="baking-light/lightmapping-settings.png" width="390" height="530">
+							<figcaption>Lightmapping settings.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What does the <em translate="no">Directional</em> mode do?</h3>
+							<div>
+								<p>It also bakes directionality data, which makes it possible to have normal maps affect incoming baked light. As we don't support normal mapping at this point there's no reason to enable it.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Static Objects</h3>
+						
+						<p>To demonstrate baked lighting I created a scene with a green plane as the ground, a few boxes and spheres, and a structure in the center that only has one open side so its interior is fully shadowed.</p>
+						
+						<figure>
+							<img src="baking-light/scene-with-ceiling.png" width="440" height="220">
+							<figcaption>Scene with dark interior.</figcaption>
+						</figure>
+						
+						<figure>
+							<img src="baking-light/scene-without-ceiling.png" width="440" height="220">
+							<figcaption>Same scene without ceiling.</figcaption>
+						</figure>
+						
+						<p>The scene has a single directional light with its <em translate="no">Mode</em> set to <em translate="no">Mixed</em>. This tells Unity that it should bake the indirect lighting for this light. Besides that the light still works like a regular realtime light.</p>
+						
+						<figure>
+							<img src="baking-light/mixed-mode-light.png" width="320" height="128">
+							<figcaption>Mixed-mode light.</figcaption>
+						</figure>
+						
+						<p>I also include the ground plane and all cubes&mdash;including those that form the structure&mdash;in the baking process. They'll be the objects from which the light bounces off, thus becoming indirect. This is done by enabling the <em translate="no">Contribute Global Illumination</em> toggle of their <code class="csharp">MeshRenderer</code> components. Enabling this also automatically switches their <em translate="no">Receive Global Illumination</em> mode to <em translate="no">Lightmaps</em>, which means that the indirect light that reaches their surfaces get baked into the light map. You can also enable this mode by enabling <em translate="no">Contribute GI</em> from the object's <em translate="no">Static</em> dropdown list, or by making it fully static.</p>
+						
+						<p>
+						
+						<figure>
+							<img src="baking-light/contribute-gi.png" width="320" height="286">
+							<figcaption>Contribute global illumination enabled.</figcaption>
+						</figure>
+						
+						<p>Once enabled, the scene's lighting will be baked again, assuming that <em translate="no">Auto Generate</em> is enabled in the <em translate="no">Lighting</em> window, otherwise you'll have to press the <em translate="no">Generate Lighting</em> button. Lightmapping settings also shows up in the <em translate="no">MeshRenderer</em> components, including a view of the light map that contains the object.</p>
+						
+						<figure>
+							<img src="baking-light/baked-indirect-map.png" width="350" height="178">
+							<figcaption>Map of baked received indirect light.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Shouldn't there be a lot of green indirect light?</h3>
+							<div>
+								<p>Yes. We'll get to that later.</p>
+							</div>
+						</aside>
+						
+						<p>The spheres don't show up in the light map because they don't contribute to global illumination and are thus considered dynamic. They'll have to depend on light probes, which we'll cover later. Static objects could also be excluded from the map by switching their <em translate="no">Receive Global Illumination</em> mode back to <em translate="no">Light Probes</em>. They'll still affect the baked results, but won't take up space in the light map.</p>
+					</section>
+					
+					<section>
+						<h3>Fully-Baked Light</h3>
+						
+						<p>The baked lighting is mostly blue because it is dominated by the sky box, which represents indirect illumination from the environment's sky. Brighter areas around the building at the center are caused by indirect lighting from the light source bouncing off the ground and walls.</p>
+						
+						<p>We can also bake all lighting into the map, both direct and indirect. That's done by setting the light's <em translate="no">Mode</em> to <em translate="no">Baked</em>. It then no longer provides realtime lighting.</p>
+						
+						<figure>
+							<img src="baking-light/baked-mode-inspector.png" width="320" height="19" alt="inspector">
+							<img src="baking-light/baked-mode-scene.png" width="440" height="220" alt="scene">
+							<figcaption>No realtime lighting.</figcaption>
+						</figure>
+						
+						<p>Effectively, the direct light of a baked light is also treated as indirect light and thus ends up in the map, making it a lot brighter.</p>
+						
+						<figure>
+							<img src="baking-light/fully-baked-map.png" width="350" height="178">
+							<figcaption>Map of fully baked light.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Sampling Baked Light</h2>
+					
+					<p>Everything currently gets rendered solid black, because there is no realtime light and our shader doesn't know about global illumination yet. We have to sample the light map to make this work.</p>
+					
+					<section>
+						<h3>Global Illumination</h3>
+						
+						<p>Create a new <em translate="no">ShaderLibrary/GI.hlsl</em> file to contain all code related to global illumination. In it, define a <code>GI</code> struct and a <code>GetGI</code> function to retrieve it, given some light map UV coordinates. Indirect light comes from all directions and thus can be used for diffuse lighting only, not specular. So give the <code>GI</code> struct a diffuse color field. Initially fill it with the light map UV, for debugging purposes.</p>
+						
+						<pre translate="no"><ins>#ifndef CUSTOM_GI_INCLUDED</ins>
+<ins>#define CUSTOM_GI_INCLUDED</ins>
+
+<ins>struct GI {</ins>
+	<ins>float3 diffuse;</ins>
+<ins>};</ins>
+
+<ins>GI GetGI (float2 lightMapUV) {</ins>
+	<ins>GI gi;</ins>
+	<ins>gi.diffuse = float3(lightMapUV, 0.0);</ins>
+	<ins>return gi;</ins>
+<ins>}</ins>
+
+<ins>#endif</ins></pre>
+						
+						<aside>
+							<h3>What about specular global illumination?</h3>
+							<div>
+								<p>Specular environment reflections are usually provided via reflection probes, which we'll cover in a future tutorial. Screen-space reflections are another option.</p>
+							</div>
+						</aside>
+						
+						<p>Add a <code>GI</code> parameter to <code>GetLighting</code> and use it initialize the color value, before accumulating realtime lighting. We don't multiply it with the surface's diffuse reflectivity at this point so we can see the unmodified received light.</p>
+						
+						<pre translate="no">float3 GetLighting (Surface surfaceWS, BRDF brdf<ins>, GI gi</ins>) {
+	ShadowData shadowData = GetShadowData(surfaceWS);
+	float3 color = <ins>gi.diffuse</ins>;
+	&hellip;
+	return color;
+}</pre>
+						
+						<p>Include <em translate="no">GI</em> before <em translate="no">Lighting</em> in <em translate="no">LitPass</em>.</p>
+						
+						<pre translate="no"><ins>#include "../ShaderLibrary/GI.hlsl"</ins>
+#include "../ShaderLibrary/Lighting.hlsl"</pre>
+						
+						<p>The get the global illumination data in <code>LitPassFragment</code>, initially with zero UV coordinates, and pass it to <code>GetLighting</code>.</p>
+						
+						<pre translate="no">	<ins>GI gi = GetGI(0.0);</ins>
+	float3 color = GetLighting(surface, brdf<ins>, gi</ins>);</pre>
+					</section>
+					
+					<section>
+						<h3>Light Map Coordinates</h3>
+						
+						<p>To get the light map UV coordinates Unity has to send them to the shader. We have to instruct the pipeline to do this for each object that is lightmapped. This is done by setting the per-object data property of the drawing settings to <code class="csharp">PerObjectData.Lightmaps</code> in <code class="chsarp">CameraRenderer.DrawVisibleGeometry</code>.</p>
+						
+						<pre class="csharp">		var drawingSettings = new DrawingSettings(
+			unlitShaderTagId, sortingSettings
+		) {
+			enableDynamicBatching = useDynamicBatching,
+			enableInstancing = useGPUInstancing<ins>,</ins>
+			<ins>perObjectData = PerObjectData.Lightmaps</ins>
+		};</pre>
+						
+						<p>Unity will now render lightmapped objects with a shader variant that has the <em translate="no">LIGHTMAP_ON</em> keyword. Add a multi-compile directive for that to the <em translate="no">CustomLit</em> pass of our <em translate="no">Lit</em> shader.</p>
+						
+						<pre translate="no">			<ins>#pragma multi_compile _ LIGHTMAP_ON</ins>
+			#pragma multi_compile_instancing</pre>
+						
+						<p>The UV coordinates for the light map are part of the <code>Attributes</code> vertex data. We have to transfer them to <code>Varyings</code> so we can use them in <code>LitPassFragment</code>. But we should only do this when needed. We can use an approach similar to transferring the instancing identifier and rely on <code>GI_ATTRIBUTE_DATA</code>, <code>GI_VARYINGS_DATA</code>, and <code>TRANSFER_GI_DATA</code> macros.</p>
+						
+						<pre translate="no">struct Attributes {
+	&hellip;
+	<ins>GI_ATTRIBUTE_DATA</ins>
+	UNITY_VERTEX_INPUT_INSTANCE_ID
+};
+
+struct Varyings {
+	&hellip;
+	<ins>GI_VARYINGS_DATA</ins>
+	UNITY_VERTEX_INPUT_INSTANCE_ID
+};
+
+Varyings LitPassVertex (Attributes input) {
+	Varyings output;
+	UNITY_SETUP_INSTANCE_ID(input);
+	UNITY_TRANSFER_INSTANCE_ID(input, output);
+	<ins>TRANSFER_GI_DATA(input, output);</ins>
+	&hellip;
+}</pre>
+						
+						<p>Plus another <code>GI_FRAGMENT_DATA</code> macro to retrieve the necessary arguments for <code>GetGI</code>.</p>
+						
+						<pre translate="no">	GI gi = GetGI(<ins>GI_FRAGMENT_DATA(input)</ins>);</pre>
+						
+						<p>We have to define these macros ourselves, in <em translate="no">GI</em>. Initially define them as nothing, except <code>GI_FRAGMENT_DATA</code> which will simply be zero. A macro's parameter list works like a function's, except that there are no types and no space is allowed between the macro name and parameter list, otherwise the list is interpreted as the thing the macro defines.</p>
+						
+						<pre translate="no"><ins>#define GI_ATTRIBUTE_DATA</ins>
+<ins>#define GI_VARYINGS_DATA</ins>
+<ins>#define TRANSFER_GI_DATA(input, output)</ins>
+<ins>#define GI_FRAGMENT_DATA(input) 0.0</ins>
+</pre>
+						
+						<p>When <em translate="no">LIGHTMAP_ON</em> is defined the macros should instead define code that adds another UV set to the structs, copies it, and retrieves it. The light map UV are provided via the second texture coordinates channel so we need to use the <code>TEXCOORD1</code> semantic in <code>Attributes</code>.</p>
+						
+						<pre translate="no"><ins>#if defined(LIGHTMAP_ON)</ins>
+	<ins>#define GI_ATTRIBUTE_DATA float2 lightMapUV : TEXCOORD1;</ins>
+	<ins>#define GI_VARYINGS_DATA float2 lightMapUV : VAR_LIGHT_MAP_UV;</ins>
+	<ins>#define TRANSFER_GI_DATA(input, output) output.lightMapUV = input.lightMapUV;</ins>
+	<ins>#define GI_FRAGMENT_DATA(input) input.lightMapUV</ins>
+<ins>#else</ins>
+	#define GI_ATTRIBUTE_DATA
+	#define GI_VARYINGS_DATA
+	#define TRANSFER_GI_DATA(input, output)
+	#define GI_FRAGMENT_DATA(input) 0.0
+<ins>#endif</ins></pre>
+						
+						<figure>
+							<img src="sampling-baked-light/light-map-uv.png" width="440" height="220">
+							<figcaption>Light map coordinates.</figcaption>
+						</figure>
+						
+						<p>All static baked objects now show their UV, while all dynamic objects remain black.</p>
+					</section>
+					
+					<section>
+						<h3>Transformed Light Map Coordinates</h3>
+						
+						<p>The light map coordinates are usually either automatically generated per mesh by Unity or part of the imported mesh data. They define a texture unwrap that flattens the mesh so it maps to texture coordinates. The unwrap is scaled and positioned per object in the light map so each instance gets its own space. This works just like the scale and translation applied to the base UV. We have to apply this to the light map UV as well.</p>
+						
+						<p>The light map UV transformation is passed to the GPU as part of the <code>UnityPerDraw</code> buffer, so add it there. It's known as <code>unity_LightmapST</code>. Even though it's deprecated, also add <code>unityDynamicLightmapST</code> after it, otherwise SRP batcher compatibility can break.</p>
+						
+						<pre translate="no">CBUFFER_START(UnityPerDraw)
+	float4x4 unity_ObjectToWorld;
+	float4x4 unity_WorldToObject;
+	float4 unity_LODFade;
+	real4 unity_WorldTransformParams;
+
+	<ins>float4 unity_LightmapST;</ins>
+	<ins>float4 unity_DynamicLightmapST;</ins>
+CBUFFER_END</pre>
+						
+						<aside>
+							<h3>Does lightmapping work with GPU instancing?</h3>
+							<div>
+								<p>Yes. All <code>UnityPerDraw</code> data gets instanced when needed.</p>
+							</div>
+						</aside>
+						
+						<p>Then adjust the <code>TRANSFER_GI_DATA</code> macro so it applies the transformation. Macro definitions can be split into multiple lines, if the end of each but the last line is marked with a backslash.</p>
+						
+						<pre translate="no">	#define TRANSFER_GI_DATA(input, output) <ins>\</ins>
+		output.lightMapUV = input.lightMapUV <ins>* \</ins>
+		<ins>unity_LightmapST.xy + unity_LightmapST.zw</ins>;</pre>
+						
+						<figure>
+							<img src="sampling-baked-light/transformed-light-map-uv.png" width="440" height="220">
+							<figcaption>Transformed light map coordinates.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Sampling the Light Map</h3>
+						
+						<p>Sampling the light map is the responsibility of <em translate="no">GI</em>. The light map texture is known as <code>unity_Lightmap</code> with accompanying sampler state. Also include <em translate="no">EntityLighting.hlsl</em> from the <em translate="no">Core RP Library</em>, as we'll use it to retrieve the light data.</p>
+						
+						<pre translate="no"><ins>#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/EntityLighting.hlsl"</ins>
+
+<ins>TEXTURE2D(unity_Lightmap);</ins>
+<ins>SAMPLER(samplerunity_Lightmap);</ins></pre>
+						
+						<p>Create a <code>SampleLightMap</code> function that invokes <code>SampleSingleLightmap</code> when there is a light map and otherwise returns zero. Use it in <code>GetGI</code> to set the diffuse light.</p>
+						
+						<pre translate="no"><ins>float3 SampleLightMap (float2 lightMapUV) {</ins>
+	<ins>#if defined(LIGHTMAP_ON)</ins>
+		<ins>return SampleSingleLightmap(lightMapUV);</ins>
+	<ins>#else</ins>
+		<ins>return 0.0;</ins>
+	<ins>#endif</ins>
+<ins>}</ins>
+
+GI GetGI (float2 lightMapUV) {
+	GI gi;
+	gi.diffuse = <ins>SampleLightMap(lightMapUV)</ins>;
+	return gi;
+}</pre>
+						
+						<p>The <code>SampleSingleLightmap</code> function requires a few more arguments. First, we have to pass it the texture and sampler state as the first two arguments, for which we can use the <code>TEXTURE2D_ARGS</code> macro.</p>
+						
+						<pre translate="no">		return SampleSingleLightmap(
+			<ins>TEXTURE2D_ARGS(unity_Lightmap, samplerunity_Lightmap),</ins> lightMapUV
+		);</pre>
+						
+						<p>After that comes the scale and translation to apply. Because we already did that earlier we'll use an identity transformation here.</p>
+						
+						<pre translate="no">		return SampleSingleLightmap(
+			TEXTURE2D_ARGS(unity_Lightmap, samplerunity_Lightmap), lightMapUV<ins>,</ins>
+			<ins>float4(1.0, 1.0, 0.0, 0.0)</ins>
+		);</pre>
+						
+						<p>Then comes a boolean to indicate whether the light map is compressed, which is the case when <code>UNITY_LIGHTMAP_FULL_HDR</code> is not defined. And the last argument is a <code>float4</code> containing decode instructions. Use <code>LIGHTMAP_HDR_MULTIPLIER</code> for its first component and <code>LIGHTMAP_HDR_EXPONENT</code> for its second. Its other components aren't used.</p>
+						
+						<pre translate="no">		return SampleSingleLightmap(
+			TEXTURE2D_ARGS(unity_Lightmap, samplerunity_Lightmap), lightMapUV,
+			float4(1.0, 1.0, 0.0, 0.0)<ins>,</ins>
+			<ins>#if defined(UNITY_LIGHTMAP_FULL_HDR)</ins>
+				<ins>false,</ins>
+			<ins>#else</ins>
+				<ins>true,</ins>
+			<ins>#endif</ins>
+			<ins>float4(LIGHTMAP_HDR_MULTIPLIER, LIGHTMAP_HDR_EXPONENT, 0.0, 0.0)</ins>
+		);</pre>
+												
+						<figure>
+							<img src="sampling-baked-light/sampled-baked-light.png" width="440" height="220">
+							<figcaption>Sampled baked light.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Disabling Environment Lighting</h3>
+						
+						<p>The baked light is quite bright because it also includes indirect lighting from the sky. We can disable that by reducing its <em translate="no">Intensity Multiplier</em> to zero. That allows us to focus on the single directional light.
+						
+						<figure>
+							<img src="sampling-baked-light/environment-intensity-inspector.png" width="390" height="94" alt="inspector">
+							<img src="sampling-baked-light/environment-intensity-scene.png" width="440" height="220" alt="scene">
+							<figcaption>Environment intensity set to zero.</figcaption>
+						</figure>
+						
+						<p>Note that the inside of the structure is now indirectly lit, mostly via the ground.</p>
+						
+						<aside>
+							<h3>Can we also bake other light types?</h3>
+							<div>
+								<p>Yes, although we currently concern ourselves only with directional lights. The other light types will bake, but need some extra work before they do so correctly.</p>
+							</div>
+						</aside>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Light Probes</h2>
+					
+					<p>Dynamic objects do not affect baked global illumination, but they can be affected by it, via light probes. A light probe is a point in the scene that has baked all incoming light, by approximating it with a third-order polynomial, specifically L2 spherical harmonics. Light probes are placed around the scene and Unity interpolates between them per object to arrive at a final lighting approximation for their position.</p>
+					
+					<section>
+						<h3>Light Probe Group</h3>
+						
+						<p>Light probes are added to a scene by creating a light probe group, via <em translate="no">GameObject / Light / Light Probe Group</em>. That creates a game object with a <code class="csharp">LightProbeGroup</code> component that contains six probes in a cube shape by default. You can move, duplicate, and delete individual probes as if they were game objects, when <em translate="no">Edit Light Probes</em> is enabled.</p>
+						
+						<figure>
+							<img src="light-probes/light-probes-editing-inspector.png" width="320" height="173" alt="inspector"><br>
+							<img src="light-probes/light-probes-editing-scene.png" width="320" height="200" alt="scene">
+							<figcaption>Editing light probe group inside structure.</figcaption>
+						</figure>
+						
+						<p>There can be multiple probe groups in a scene. Unity combines all their probes and then creates a tetrahedral volume mesh connecting them all. Each dynamic object ends up inside one tetrahedron. The four probes at its vertices are interpolated to arrive at the final lighting applied to the object. If an object ends up outside the area covered by the probes the nearest triangle is used instead, so lighting might appear weird.</p>
+						
+						<p>By default, when a dynamic object is selected gizmos are used to display the probes that affect the object, along with the interpolated result at its position. You can change this by adjusting <em translate="no">Light Probe Visualization</em> under the <em translate="no">Debug Settings</em> of the <em translate="no">Lighting</em> window.</p> 
+						
+						<figure>
+							<img src="light-probes/light-probes-selected-inspector.png" width="390" height="90" alt="inspector">
+							<img src="light-probes/light-probes-selected-scene.png" width="440" height="220" alt="scene">
+							<figcaption>Light probes used by selected objects.</figcaption>
+						</figure>
+						
+						<p>Where you place light probes depends on the scene. First, they're only needed where dynamic objects will go. Second, put them where there's a change in lighting. Each probe is an end point of interpolation, so put them around lighting transitions. Third, don't put them inside baked geometry, as they end up black. Finally, interpolation goes through objects, so if lighting is different on opposite sides of a wall put probes close to both sides of the wall. That way no object ends up interpolating between both sides. Beyond that you have to experiment.</p>
+						
+						<figure>
+							<img src="light-probes/light-probes-all.png" width="440" height="220">
+							<figcaption>Showing all light probes.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Sampling Probes</h3>
+						
+						<p>The interpolated light probe data has to be passed to the GPU per object. We have to tell Unity to do this, this time via <code class="csharp">PerObjectData.LightProbe</code> instead of <code class="csharp">PerObjectData.Lightmaps</code>. We need to enable both feature flags, so combine them with the boolean OR operator.</p>
+						
+						<pre class="csharp">			perObjectData = PerObjectData.Lightmaps <ins>| PerObjectData.LightProbe</ins></pre>
+						
+						<p>The required <code>UnityPerDraw</code> data consists of seven <code>float4</code> vectors, representing the components of the polynomial for red, green, and blue light. They're named <code>unity_SH*</code>, with <code>*</code> being either <code>A</code>, <code>B</code>, or <code>C</code>. The first two have three version with <code>r€</code>, <code>g€</code>, and <code>b€</code> suffixes.</p>
+						
+						<pre translate="no">CBUFFER_START(UnityPerDraw)
+	&hellip;
+
+	<ins>float4 unity_SHAr;</ins>
+	<ins>float4 unity_SHAg;</ins>
+	<ins>float4 unity_SHAb;</ins>
+	<ins>float4 unity_SHBr;</ins>
+	<ins>float4 unity_SHBg;</ins>
+	<ins>float4 unity_SHBb;</ins>
+	<ins>float4 unity_SHC;</ins>
+CBUFFER_END</pre>
+						
+						<p>We sample the light probe in <em translate="no">GI</em>, via a new <code>SampleLightProbe</code> function. We need a direction to do this, so give it a world-space surface parameter.</p>
+						
+						<p>If light maps are in use for this object then return zero. Otherwise return the maximum of zero and <code>SampleSH9</code>. That function requires the probe data and normal vector as arguments. The probe data has to be provided as an array of coefficients.</p>
+						
+						<pre translate="no"><ins>float3 SampleLightProbe (Surface surfaceWS) {</ins>
+	<ins>#if defined(LIGHTMAP_ON)</ins>
+		<ins>return 0.0;</ins>
+	<ins>#else</ins>
+		<ins>float4 coefficients[7];</ins>
+		<ins>coefficients[0] = unity_SHAr;</ins>
+		<ins>coefficients[1] = unity_SHAg;</ins>
+		<ins>coefficients[2] = unity_SHAb;</ins>
+		<ins>coefficients[3] = unity_SHBr;</ins>
+		<ins>coefficients[4] = unity_SHBg;</ins>
+		<ins>coefficients[5] = unity_SHBb;</ins>
+		<ins>coefficients[6] = unity_SHC;</ins>
+		<ins>return max(0.0, SampleSH9(coefficients, surfaceWS.normal));</ins>
+	<ins>#endif</ins>
+<ins>}</ins></pre>
+						
+						<p>Add a surface parameter to <code>GetGI</code> and make it add the light probe sample to the diffuse light.</p>
+						
+						<pre translate="no">GI GetGI (float2 lightMapUV<ins>, Surface surfaceWS</ins>) {
+	GI gi;
+	gi.diffuse = SampleLightMap(lightMapUV)<ins> + SampleLightProbe(surfaceWS)</ins>;
+	return gi;
+}</pre>
+						
+						<p>Finally, pass the surface to it in <code>LitPassFragment</code>.</p>
+						
+						<pre translate="no">	GI gi = GetGI(GI_FRAGMENT_DATA(input)<ins>, surface</ins>);</pre>
+						
+						<figure>
+							<img src="light-probes/sampling-probes.png" width="440" height="220">
+							<figcaption>Sampling light probes.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Light Probe Proxy Volumes</h3>
+						
+						<p>Light probes work for fairly small dynamic objects, but because the lighting is based on a single point it doesn't work well for larger objects. As an example, I added two stretched cubes to the scene. Because their positions lie inside dark regions the cubes are uniformly dark, even though that obviously doesn't match the lighting.</p>
+						
+						<figure>
+							<img src="light-probes/large-objects-single-probe.png" width="440" height="220">
+							<figcaption>Large objects sampling from one position.</figcaption>
+						</figure>
+						
+						<p>We can work around this limitation by using a light probe proxy volume, LPPV for short. It's easiest to simply add a <code class="csharp">LightProbeProxyVolume</code> component to each cube and then set their <em translate="no">Light Probes</em> mode to <em translate="no">Use Proxy Volume</em>.</p> 
+						
+						<p>The volumes can be configured in multiple ways. In this case I used a custom resolution mode to place sub-probes along the edges of the cubes, so they're visible.</p>
+						
+						<figure>
+							<img src="light-probes/lppv-inspector.png" width="320" height="372" alt="inspector">
+							<img src="light-probes/lppv-scene.png" width="440" height="220" alt="scene">
+							<figcaption>Using LPPVs.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why don't I see the probes in the scene view?</h3>
+							<div>
+								<p>They might not show up when the <em translate="no">Refresh Mode</em> of the LPPV is set to <em translate="no">Automatic</em>. In that case you can temporarily set it to <em translate="no">Every Frame</em>.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Sampling LPPVs</h3>
+						
+						<p>LPPVs also require data to be sent to the GPU per object. In this case we have to enable <code class="csharp">PerObjectData.LightProbeProxyVolume€</code>.</p>
+						
+						<pre class="csharp">			perObjectData =
+				PerObjectData.Lightmaps | PerObjectData.LightProbe <ins>|</ins>
+				<ins>PerObjectData.LightProbeProxyVolume€</ins></pre>
+						
+						<p>Four additional values have to be added to <code>UnityPerDraw</code>: <code>unity_ProbeVolumeParams</code>, <code>unity_ProbeVolumeWorldToObject</code>, <code>unity_ProbeVolumeSizeInv</code>, and <code>unity_ProbeVolumeMin</code>. The second is a matrix while the others are 4D vectors.</p>
+						
+						<pre translate="no">CBUFFER_START(UnityPerDraw)
+	&hellip;
+
+	<ins>float4 unity_ProbeVolumeParams;</ins>
+	<ins>float4x4 unity_ProbeVolumeWorldToObject;</ins>
+	<ins>float4 unity_ProbeVolumeSizeInv;</ins>
+	<ins>float4 unity_ProbeVolumeMin;</ins>
+CBUFFER_END</pre>
+						
+						<p>The volume data is stored in a 3D float texture, known as <code>unity_ProbeVolumeSH</code>. Add it to <em translate="no">GI</em> via the <code>TEXTURE3D_FLOAT</code> macro, along with its sampler state.</p>
+						
+						<pre translate="no"><ins>TEXTURE3D_FLOAT(unity_ProbeVolumeSH);</ins>
+<ins>SAMPLER(samplerunity_ProbeVolumeSH);</ins></pre>
+						
+						<p>Whether an LPPV or interpolated light probe is used is communicated via the first component of <code>unity_ProbeVolumeParams</code>. If it's set then we have to sample the volume, via the <code>SampleProbeVolumeSH4</code> function. We have to pass it the texture and sampler, followed by the world position and normal. After that comes the matrix, the Y and Z components of <code>unity_ProbeVolumeParams</code> separately, followed by the XYZ portion of the min and size-inv data.</p>
+						
+						<pre translate="no">		<ins>if (unity_ProbeVolumeParams.x) {</ins>
+			<ins>return SampleProbeVolumeSH4(</ins>
+				<ins>TEXTURE3D_ARGS(unity_ProbeVolumeSH, samplerunity_ProbeVolumeSH),</ins>
+				<ins>surfaceWS.position, surfaceWS.normal,</ins>
+				<ins>unity_ProbeVolumeWorldToObject,</ins>
+				<ins>unity_ProbeVolumeParams.y, unity_ProbeVolumeParams.z,</ins>
+				<ins>unity_ProbeVolumeMin.xyz, unity_ProbeVolumeSizeInv.xyz</ins>
+			<ins>);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			float4 coefficients[7];
+			coefficients[0] = unity_SHAr;
+			coefficients[1] = unity_SHAg;
+			coefficients[2] = unity_SHAb;
+			coefficients[3] = unity_SHBr;
+			coefficients[4] = unity_SHBg;
+			coefficients[5] = unity_SHBb;
+			coefficients[6] = unity_SHC;
+			return max(0.0, SampleSH9(coefficients, surfaceWS.normal));
+		<ins>}</ins></pre>
+						
+						<figure>
+							<img src="light-probes/sampling-lppvs.png" width="440" height="220">
+							<figcaption>Sampling LPPVs.</figcaption>
+						</figure>
+						
+						<p>Sampling an LPPV requires a transformation to the volume's space, along with some other calculations, the volume texture sample, and the application of the spherical harmonics. Only L1 spherical harmonics are applied in this case, so the results are less precise, but can vary across the surface of a single object.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Meta Pass</h2>
+					
+					<p>Because indirect diffuse light bounces off surfaces it should be affected by the diffuse reflectivity of those surfaces. This currently doesn't happen. Unity treats our surfaces as uniformly white. Unity uses a special meta pass to determine the reflected light while baking. As we haven't defined such a pass Unity uses the default one, which ends up white.</p>
+					
+					<section>
+						<h3>Unified Input</h3>
+						
+						<p>Adding another pass means that we have to define the shader properties again. Let's extract the base texture and <code>UnityPerMaterial</code> buffer from <em translate="no">LitPass</em> and put it in a new <em translate="no">Shaders/LitInput.hlsl</em> file. We'll also hide the instancing code by introducing <code>TransformBaseUV</code>, <code>GetBase</code>, <code>GetCutoff</code>, <code>GetMetallic</code>, and <code>GetSmoothness</code> functions. Give them all a base UV parameter, even if it is unused. Whether a value is retrieved from a map or not is hidden that way as well.</p>
+						
+						<pre translate="no"><ins>#ifndef CUSTOM_LIT_INPUT_INCLUDED</ins>
+<ins>#define CUSTOM_LIT_INPUT_INCLUDED</ins>
+
+<ins>TEXTURE2D(_BaseMap);</ins>
+<ins>SAMPLER(sampler_BaseMap);</ins>
+
+<ins>UNITY_INSTANCING_BUFFER_START(UnityPerMaterial)</ins>
+	<ins>UNITY_DEFINE_INSTANCED_PROP(float4, _BaseMap_ST)</ins>
+	<ins>UNITY_DEFINE_INSTANCED_PROP(float4, _BaseColor)</ins>
+	<ins>UNITY_DEFINE_INSTANCED_PROP(float, _Cutoff)</ins>
+	<ins>UNITY_DEFINE_INSTANCED_PROP(float, _Metallic)</ins>
+	<ins>UNITY_DEFINE_INSTANCED_PROP(float, _Smoothness)</ins>
+<ins>UNITY_INSTANCING_BUFFER_END(UnityPerMaterial)</ins>
+
+<ins>float2 TransformBaseUV (float2 baseUV) {</ins>
+	<ins>float4 baseST = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseMap_ST);</ins>
+	<ins>return baseUV * baseST.xy + baseST.zw;</ins>
+<ins>}</ins>
+
+<ins>float4 GetBase (float2 baseUV) {</ins>
+	<ins>float4 map = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, baseUV);</ins>
+	<ins>float4 color = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseColor);</ins>
+	<ins>return map * color;</ins>
+<ins>}</ins>
+
+<ins>float GetCutoff (float2 baseUV) {</ins>
+	<ins>return UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Cutoff);</ins>
+<ins>}</ins>
+
+<ins>float GetMetallic (float2 baseUV) {</ins>
+	<ins>return UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Metallic);</ins>
+<ins>}</ins>
+
+<ins>float GetSmoothness (float2 baseUV) {</ins>
+	<ins>return UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Smoothness);</ins>
+<ins>}</ins>
+
+<ins>#endif</ins></pre>
+						
+						<p>To include this file in all passes of <em translate="no">Lit</em> add a <code>HLSLINCLUDE</code> block at the top of its <code>SubShader</code> block, before the passes. Include <em translate="no">Common</em> in there, followed by <em translate="no">LitInput</em>. This code will get inserted at the start of al passes.</p>
+						
+						<pre translate="no">	SubShader {
+		<ins>HLSLINCLUDE</ins>
+		<ins>#include "../ShaderLibrary/Common.hlsl"</ins>
+		<ins>#include "LitInput.hlsl"</ins>
+		<ins>ENDHLSL</ins>
+		
+		&hellip;
+	}</pre>
+						
+						<p>Remove the now duplicate include statement and declarations from <em translate="no">LitPass</em>.</p>
+						
+						<pre translate="no"><del>//#include "../ShaderLibrary/Common.hlsl"</del>
+&hellip;
+
+<del>//TEXTURE2D(_BaseMap);</del>
+<del>//SAMPLER(sampler_BaseMap);</del>
+
+<del>//UNITY_INSTANCING_BUFFER_START(UnityPerMaterial)</del>
+	<del>//&hellip;</del>
+<del>//UNITY_INSTANCING_BUFFER_END(UnityPerMaterial)</del></pre>
+						
+						<p>Use <code>TransformBaseUV</code> in <code>LitPassVertex</code>.</p>
+						
+						<pre translate="no">	<del>//float4 baseST = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseMap_ST);</del>
+	output.baseUV = <ins>TransformBaseUV(input.baseUV)</ins>;</pre>
+						
+						<p>And the relevant functions to retrieve shader properties in <code>LitPassFragment</code>.</p>
+						
+						<pre translate="no">	<del>//float4 baseMap = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.baseUV);</del>
+	<del>//float4 baseColor = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseColor);</del>
+	float4 base = <ins>GetBase(input.baseUV)</ins>;
+	#if defined(_CLIPPING)
+		clip(base.a - <ins>GetCutoff(input.baseUV)</ins>);
+	#endif
+	
+	&hellip;
+	surface.metallic = <ins>GetMetallic(input.baseUV)</ins>;
+	surface.smoothness = <ins>GetSmoothness(input.baseUV)</ins>;</pre>
+						
+						<p>Give <em translate="no">ShadowCasterPass</em> the same treatment.</p>
+					</section>
+					
+					<section>
+						<h3>Unlit</h3>
+						
+						<p>Let's also do this for the <em translate="no">Unlit</em> shader. Duplicate <em translate="no">LitInput.hlsl</em> and rename it to <em translate="no">UnlitInput.hlsl</em>. Then remove <code>_Metallic</code> and <code>_Smoothness</code> from its <code>UnityPerMaterial</code> version. Keep the <code>GetMetallic</code> and <code>GetSmoothness</code> function and make them return <code>0.0</code>, representing a very dull diffuse surface. After that, give the shader an <code>HLSLINCLUDE</code> block as well.</p>
+						
+						<pre translate="no">		<ins>HLSLINCLUDE</ins>
+		<ins>#include "../ShaderLibrary/Common.hlsl"</ins>
+		<ins>#include "UnlitInput.hlsl"</ins>
+		<ins>ENDHLSL</ins></pre>
+						
+						<p>Convert <em translate="no">UnlitPass</em> just like we did for <em translate="no">LitPass</em>. Note that <em translate="no">ShadowCasterPass</em> works fine for both shaders, even though it ends up with different input definitions.</p>
+					</section>
+					
+					<section>
+						<h3>Meta Light Mode</h3>
+						
+						<p>Add a new pass to both the <em translate="no">Lit</em> and <em translate="no">Unlit</em> shaders, with <em translate="no">LightMode</em> set to <em translate="no">Meta</em>. This pass requires culling to always be off, which can be configured by adding the <code>Cull Off</code> option. It will use <code>MetaPassVertex</code> and <code>MetaPassFragment</code> functions, defined in a new <em translate="no">MetaPass.hlsl</em> file. It needs no multi-compile directives.</p>
+						
+						<pre translate="no">		<ins>Pass {</ins>
+			<ins>Tags {</ins>
+				<ins>"LightMode" = "Meta"</ins>
+			<ins>}</ins>
+
+			<ins>Cull Off</ins>
+
+			<ins>HLSLPROGRAM</ins>
+			<ins>#pragma target 3.5</ins>
+			<ins>#pragma vertex MetaPassVertex</ins>
+			<ins>#pragma fragment MetaPassFragment</ins>
+			<ins>#include "MetaPass.hlsl"</ins>
+			<ins>ENDHLSL</ins>
+		<ins>}</ins></pre>
+						
+						<p>We'll need to know the surface's diffuse reflectivity, so we have to get its BRDF data in <code>MetaPassFragment</code>. Thus we have to include <em translate="no">BRDF</em>, plus <em translate="no">Surface</em>, <em translate="no">Shadows</em> and <em translate="no">Light</em> as it depends on them. We only need to know the object-space position and base UV, initially setting the clip-space position to zero. The surface can be initialized to zero via <code>ZERO_INITIALIZE(Surface, surface)</code>, after which we only have to set its color, metallic, and smoothness values. That's enough to get the BRDF data, but we'll begin by returning zero.</p>
+						
+						<pre translate="no"><ins>#ifndef CUSTOM_META_PASS_INCLUDED</ins>
+<ins>#define CUSTOM_META_PASS_INCLUDED</ins>
+
+<ins>#include "../ShaderLibrary/Surface.hlsl"</ins>
+<ins>#include "../ShaderLibrary/Shadows.hlsl"</ins>
+<ins>#include "../ShaderLibrary/Light.hlsl"</ins>
+<ins>#include "../ShaderLibrary/BRDF.hlsl"</ins>
+
+<ins>struct Attributes {</ins>
+	<ins>float3 positionOS : POSITION;</ins>
+	<ins>float2 baseUV : TEXCOORD0;</ins>
+<ins>};</ins>
+
+<ins>struct Varyings {</ins>
+	<ins>float4 positionCS : SV_POSITION;</ins>
+	<ins>float2 baseUV : VAR_BASE_UV;</ins>
+<ins>};</ins>
+
+<ins>Varyings MetaPassVertex (Attributes input) {</ins>
+	<ins>Varyings output;</ins>
+	<ins>output.positionCS = 0.0;</ins>
+	<ins>output.baseUV = TransformBaseUV(input.baseUV);</ins>
+	<ins>return output;</ins>
+<ins>}</ins>
+
+<ins>float4 MetaPassFragment (Varyings input) : SV_TARGET {</ins>
+	<ins>float4 base = GetBase(input.baseUV);</ins>
+	<ins>Surface surface;</ins>
+	<ins>ZERO_INITIALIZE(Surface, surface);</ins>
+	<ins>surface.color = base.rgb;</ins>
+	<ins>surface.metallic = GetMetallic(input.baseUV);</ins>
+	<ins>surface.smoothness = GetSmoothness(input.baseUV);</ins>
+	<ins>BRDF brdf = GetBRDF(surface);</ins>
+	<ins>float4 meta = 0.0;</ins>
+	<ins>return meta;</ins>
+<ins>}</ins>
+
+#endif</pre>
+						
+						<p>Once Unity has baked the scene again with our own meta pass all indirect lighting will have disappeared, because black surfaces reflect nothing.</p>
+						
+						<figure>
+							<img src="meta-pass/no-indirect-light.png" width="440" height="220">
+							<figcaption>No more indirect light.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Light Map Coordinates</h3>
+						
+						<p>Just like when sampling the light map we need to use the light map UV coordinates. The difference is that this time we go in the opposite direction, using them for the XY object-space position. After that we have to feed it to <code>TransformWorldToHClip</code>, even though in this case that function performs a different kind of transformation than its name suggests.</p>
+						
+						<pre translate="no">struct Attributes {
+	float3 positionOS : POSITION;
+	float2 baseUV : TEXCOORD0;
+	<ins>float2 lightMapUV : TEXCOORD1;</ins>
+};
+
+&hellip;
+
+Varyings MetaPassVertex (Attributes input) {
+	Varyings output;
+	<ins>input.positionOS.xy =</ins>
+		<ins>input.lightMapUV * unity_LightmapST.xy + unity_LightmapST.zw;</ins>
+	output.positionCS = <ins>TransformWorldToHClip(input.positionOS)</ins>;
+	output.baseUV = TransformBaseUV(input.baseUV);
+	return output;
+}</pre>
+						
+						<p>We still need the object-space vertex attribute as input because shaders expect it to exist. In fact, it seems that OpenGL doesn't work unless it explicitly uses the Z coordinate. We'll use the same dummy assignment that Unity's own meta pass uses, which is <code>input.positionOS.z > 0.0 ? FLT_MIN : 0.0</code>.</p>
+						
+						<pre translate="no">	input.positionOS.xy =
+		input.lightMapUV * unity_LightmapST.xy + unity_LightmapST.zw;
+	<ins>input.positionOS.z = input.positionOS.z > 0.0 ? FLT_MIN : 0.0;</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Diffuse Reflectivity</h3>
+						
+						<p>The meta pass can be used to generate different data. What is requested is communicated via a <code>bool4 unity_MetaFragmentControl</code> flags vector.</p>
+						
+						<pre translate="no"><ins>bool4 unity_MetaFragmentControl;</ins></pre>
+						
+						<p>If the X flag is set then diffuse reflectivity is requested, so make it the RGB result. The A component should be set to one.</p>
+						
+						<pre translate="no">	float4 meta = 0.0;
+	<ins>if (unity_MetaFragmentControl.x) {</ins>
+		<ins>meta = float4(brdf.diffuse, 1.0);</ins>
+	<ins>}</ins>
+	return meta;</pre>
+						
+						<p>This is enough to color the reflected light, but Unity's meta pass also boosts the results a bit, by adding half the specular reflectivity scaled by roughness.The idea behind this is that highly specular but rough materials also pass along some indirect light.</p> 
+						
+						<pre translate="no">		meta = float4(brdf.diffuse, 1.0);
+		<ins>meta.rgb += brdf.specular * brdf.roughness * 0.5;</ins></pre>
+						
+						<p>After that, the result is modified by raising it to a power provided via <code>unity_OneOverOutputBoost</code> with the <code>PositivePow</code> method, and then limited it to <code>unity_MaxOutputValue</code>.</p>
+						
+						<pre translate="no">		meta.rgb += brdf.specular * brdf.roughness * 0.5;
+		<ins>meta.rgb = min(</ins>
+			<ins>PositivePow(meta.rgb, unity_OneOverOutputBoost), unity_MaxOutputValue</ins>
+		<ins>);</ins></pre>
+						
+						<p>These values are provided as floats.</p>
+						
+						<pre translate="no"><ins>float unity_OneOverOutputBoost;</ins>
+<ins>float unity_MaxOutputValue;</ins></pre>
+						
+						<figure>
+							<img src="meta-pass/colored-indirect-light.png" width="440" height="220">
+							<figcaption>Colored indirect light, mostly green from the ground.</figcaption>
+						</figure>
+						
+						<p>Now that we get correctly color indirect lighting, also apply the receiving surface's diffuse reflectivity to it in <code>GetLighting</code>.</p>
+						
+						<pre translate="no">	float3 color = gi.diffuse <ins>* brdf.diffuse</ins>;</pre>
+						
+						<figure>
+							<img src="meta-pass/proper-lighting.png" width="440" height="220">
+							<figcaption>Properly colored baked lighting.</figcaption>
+						</figure>
+						
+						<p>And let's also turn the environment lighting on again by settings its intensity back to one.</p>
+						
+						<figure>
+							<img src="meta-pass/environment-lighting.png" width="440" height="220">
+							<figcaption>With environment lighting.</figcaption>
+						</figure>
+						
+						<p>Finally, set the light's mode back to <em translate="no">Mixed</em>. That makes it a realtime light again, with all indirect diffuse lighting baked.</p>
+						
+						<figure>
+							<img src="meta-pass/mixed-lighting.png" width="440" height="220">
+							<figcaption>Mixed lighting.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Emissive Surfaces</h2>
+					
+					<p>Some surfaces emit light of their own, thus being visible even when there is no other illumination. This can be accomplished by simply adding some color at the end of <code>LitPassFragment</code>. This isn't a true light source, so it doesn't affect other surfaces. However, the effect can contribute to baked lighting.</p>
+					
+					<section>
+						<h3>Emitted Light</h3>
+						
+						<p>Add two new properties to the <em translate="no">Lit</em> shader: an emission map and color, just like the base map and color. However, we'll use the same coordinate transformation for both, so we don't need to show separate controls for the emission map. They can be hidden by giving it the <code>NoScaleOffset</code> attribute. To support very bright emission add the <code>HDR</code> attribute to the color. That makes it possible to configure colors with a brightness greater than one via the inspector, showing an HRD color popup instead of the regular one.</p>
+						
+						<p>As an example I made an opaque emissive material that uses the <em translate="no">Default-Particle</em> texture, which contains a circular gradient, thus producing a bright dot.</p>
+						
+						<pre translate="no">		<ins>[NoScaleOffset] _EmissionMap("Emission", 2D) = "white" {}</ins>
+		<ins>[HDR] _EmissionColor("Emission", Color) = (0.0, 0.0, 0.0, 0.0)</ins></pre>
+						
+						<figure>
+							<img src="emissive-surfaces/emissive-material.png" width="320" height="145">
+							<figcaption>Material with emission set to white dots.</figcaption>
+						</figure>
+						
+						<p>Add the map to <em translate="no">LitInput</em> and the emission color to <code>UnityPerMaterial</code>. Then add a <code>GetEmission</code> function that works just like <code>GetBase</code>, except it uses the other texture and color.</p>
+						
+						<pre translate="no">TEXTURE2D(_BaseMap);
+<ins>TEXTURE2D(_EmissionMap);</ins>
+SAMPLER(sampler_BaseMap);
+
+UNITY_INSTANCING_BUFFER_START(UnityPerMaterial)
+	UNITY_DEFINE_INSTANCED_PROP(float4, _BaseMap_ST)
+	UNITY_DEFINE_INSTANCED_PROP(float4, _BaseColor)
+	<ins>UNITY_DEFINE_INSTANCED_PROP(float4, _EmissionColor)</ins>
+	&hellip;
+UNITY_INSTANCING_BUFFER_END(UnityPerMaterial)
+
+&hellip;
+
+<ins>float3 GetEmission (float2 baseUV) {</ins>
+	<ins>float4 map = SAMPLE_TEXTURE2D(_EmissionMap, sampler_BaseMap, baseUV);</ins>
+	<ins>float4 color = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _EmissionColor);</ins>
+	<ins>return map.rgb * color.rgb;</ins>
+<ins>}</ins></pre>
+						
+						<p>Add the emission to the final color at the end of <code>LitPassFragment</code>.</p>
+						
+						<pre translate="no">	float3 color = GetLighting(surface, brdf, gi);
+	<ins>color += GetEmission(input.baseUV);</ins>
+	return float4(color, surface.alpha);</pre>
+						
+						<p>Also add a <code>GetEmission</code> function to <em translate="no">UnlitInput</em>. In this case we simply make it a proxy for <code>GetBase</code>. Thus if you bake an unlit object it ends up emitting its full color.</p>
+						
+						<pre translate="no"><ins>float3 GetEmission (float2 baseUV) {</ins>
+	<ins>return GetBase(baseUV).rgb;</ins>
+<ins>}</ins></pre>
+						
+						<p>To make it possible to have unlit materials emit very bright light we can add the <code>HDR</code> attribute to the base color property of <em translate="no">Unlit</em>.</p>
+						
+						<pre translate="no">		<ins>[HDR]</ins> _BaseColor("Color", Color) = (1.0, 1.0, 1.0, 1.0)</pre>
+						
+						<p>Finally, let's add the emission color to <code class="csharp">PerObjectMaterialProperties</code>. In this case we can allow HDR input by giving the configuration field the <code class="csharp">ColorUsage</code> attribute. We have to pass it two booleans. The first indicates whether the alpha channel has to be shown, which we don't need. The second indicates whether HDR values are allowed.</p>
+						
+						<pre translate="no">	static int
+		baseColorId = Shader.PropertyToID("_BaseColor"),
+		cutoffId = Shader.PropertyToID("_Cutoff"),
+		metallicId = Shader.PropertyToID("_Metallic"),
+		smoothnessId = Shader.PropertyToID("_Smoothness")<ins>,</ins>
+		<ins>emissionColorId = Shader.PropertyToID("_EmissionColor")</ins>;
+
+	&hellip;
+
+	<ins>[SerializeField, ColorUsage(false, true)]</ins>
+	<ins>Color emissionColor = Color.black;</ins>
+
+	&hellip;
+
+	void OnValidate () {
+		&hellip;
+		<ins>block.SetColor(emissionColorId, emissionColor);</ins>
+		GetComponent&lt;Renderer>().SetPropertyBlock(block);
+	}</pre>
+						
+						<figure>
+							<img src="emissive-surfaces/per-object-emission.png" width="320" height="40">
+							<figcaption>Per-object emission set to HDR yellow.</figcaption>
+						</figure>
+						
+						<p>I added a few small emissive cubes to the scene. I made them contribute to global illumination and doubled their <em translate="no">Scale in Lightmap</em> to avoid warnings about overlapping UV coordinates. That happens when vertices end up too close together in the light map so they have to share the same texel.</p>
+						
+						<figure>
+							<img src="emissive-surfaces/emissive-objects.png" width="440" height="220">
+							<figcaption>Emissive cubes; no environment lighting.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Baked Emission</h3>
+						
+						<p>Emissive light is baked via a separate pass. When the Y flag of <code>unity_MetaFragmentControl</code> is set then <code>MetaPassFragment</code> is supposed to return the emitted light, once again with the A component set to one.</p>
+						
+						<pre translate="no">	if (unity_MetaFragmentControl.x) {
+		&hellip;
+	}
+	<ins>else if (unity_MetaFragmentControl.y) {</ins>
+		<ins>meta = float4(GetEmission(input.baseUV), 1.0);</ins>
+	<ins>}</ins></pre>
+						
+						<p>But this doesn't automatically happen. We have to enable baking of emission per material. We can show the configuration option for this by invoking <code class="csharp">LightmapEmissionProperty</code> on the editor in <code class="csharp">PerObjectMaterialProperties.OnGUI</code>.</p>
+						
+						<pre class="csharp">	public override void OnGUI (
+		MaterialEditor materialEditor, MaterialProperty[] properties
+	) {
+		EditorGUI.BeginChangeCheck();
+		base.OnGUI(materialEditor, properties);
+		editor = materialEditor;
+		materials = materialEditor.targets;
+		this.properties = properties;
+
+		<ins>BakedEmission();</ins>
+
+		&hellip;
+	}
+
+	<ins>void BakedEmission () {</ins>
+		<ins>editor.LightmapEmissionProperty();</ins>
+	<ins>}</ins></pre>
+						
+						<p>This makes a <em translate="no">Global Illumination</em> dropdown menu show up, which is initially set to <em translate="no">None</em>. Despite its name it only affects baked emission. Changing it to <em translate="no">Baked</em> tells the lightmapper to run a separate pass for the emitted light. There's also a <em translate="no">Realtime</em> option but it is deprecated.</p>
+						
+						<figure>
+							<img src="emissive-surfaces/emission-set-to-baked.png" width="320" height="64">
+							<figcaption>Emission set to baked.</figcaption>
+						</figure>
+						
+						<p>This still doesn't work, because Unity aggressively tries to to avoid the separate emission pass while baking. If the material's emission is set to zero then it is ignored. However, this doesn't take per-object material properties into account. We can override this behavior by disabling the default <code class="csharp">MaterialGlobalIlluminationFlags.EmissiveIsBlack</code> flag of the <code class="csharp">globalIlluminationFlags</code> property of all selected materials when the emission mode is changed. This means that you should only enabled the <em translate="no">Baked</em> option when needed.</p>
+						
+						<pre class="csharp">	void BakedEmission () {
+		<ins>EditorGUI.BeginChangeCheck();</ins>
+		editor.LightmapEmissionProperty();
+		<ins>if (EditorGUI.EndChangeCheck()) {</ins>
+			<ins>foreach (Material m in editor.targets) {</ins>
+				<ins>m.globalIlluminationFlags &=</ins>
+					<ins>~MaterialGlobalIlluminationFlags.EmissiveIsBlack;</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<img src="emissive-surfaces/baked-emission-with-light.png" width="440" height="220" alt="with">
+							<img src="emissive-surfaces/baked-emission-without-light.png" width="440" height="220" alt="without">
+							<figcaption>Baked emission, with and without directional light.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Baked Transparency</h2>
+					
+					<p>It is also possible to bake transparent objects, but it require a little extra effort.</p>
+					
+					<figure>
+						<img src="baked-transparency/semitransparent-ceiling.png" width="440" height="220">
+						<figcaption>Semitransparent ceiling treated as opaque.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Hard-Coded Properties</h3>
+						
+						<p>Unfortunately Unity's lightmapper has a hard-coded approach for transparency. It looks at the material's queue to determine whether it's opaque, clipped, or transparent. It then determines transparency by multiplying the alpha components of a <em translate="no">_MainTex</em> and <em translate="no">_Color</em> property, using the <em translate="no">_Cutoff</em> property for alpha clipping. Our shaders have the third but lack first two. The only way to currently make this work is by adding the expected properties to our shaders, giving them the <code>HideInInspector</code> attribute so they don't show up in the inspector. Unity's SRP shaders have to deal with the same problem.</p>
+						
+						<pre translate="no">		<ins>[HideInInspector] _MainTex("Texture for Lightmap", 2D) = "white" {}</ins>
+		<ins>[HideInInspector] _Color("Color for Lightmap", Color) = (0.5, 0.5, 0.5, 1.0)</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Copying Properties</h3>
+						
+						<p>We have to make sure that the <em translate="no">_MainTex</em> property points to the same texture as <em translate="no">_BaseMap</em> and uses the same UV transformation. Both color properties must also be identical. We can do this in a new <code class="csharp">CopyLightMappingProperties</code> method that we invoke at the end of <code>CustomShaderGUI.OnGUI</code> if a change has been made. If the relevant properties exist copy their values.</p>
+						
+						<pre class="csharp">	public override void OnGUI (
+		MaterialEditor materialEditor, MaterialProperty[] properties
+	) {
+		&hellip;
+
+		if (EditorGUI.EndChangeCheck()) {
+			SetShadowCasterPass();
+			<ins>CopyLightMappingProperties();</ins>
+		}
+	}
+
+	<ins>void CopyLightMappingProperties () {</ins>
+		<ins>MaterialProperty mainTex = FindProperty("_MainTex", properties, false);</ins>
+		<ins>MaterialProperty baseMap = FindProperty("_BaseMap", properties, false);</ins>
+		<ins>if (mainTex != null && baseMap != null) {</ins>
+			<ins>mainTex.textureValue = baseMap.textureValue;</ins>
+			<ins>mainTex.textureScaleAndOffset = baseMap.textureScaleAndOffset;</ins>
+		<ins>}</ins>
+		<ins>MaterialProperty color = FindProperty("_Color", properties, false);</ins>
+		<ins>MaterialProperty baseColor =</ins>
+			<ins>FindProperty("_BaseColor", properties, false);</ins>
+		<ins>if (color != null && baseColor != null) {</ins>
+			<ins>color.colorValue = baseColor.colorValue;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="baked-transparency/transparent-baked.png" width="440" height="220">
+							<figcaption>Transparency correctly baked.</figcaption>
+						</figure>
+						
+						<p>This also works for clipped materials. Although possible, it is not needed to clip fragments in <code>MetaPassFragment</code> as transparency is handled separately.</p>
+						
+						<figure>
+							<img src="baked-transparency/cutout-baked.png" width="440" height="220">
+							<figcaption>Baked clipping.</figcaption>
+						</figure>
+						
+						<p>Unfortunately this means that baked transparency can only depend on a single texture, color, and cutoff property. Also, the lightmapper only considers the properties of the material. Per-instance properties are ignored.
+					</section>
+					
+				</section>
+				
+				<section>
+					<h2>Mesh Ball</h2>
+					
+					<p>We wrap up by adding support for global illumination to the instances generated by <code class="csharp">MeshBall</code>. As its instances are spawned in play mode they cannot be baked, but with a little effort they can receive baked lighting via light probes.</p>
+					
+					<figure>
+						<img src="mesh-ball/unlit.png" width="210" height="180">
+						<figcaption>Mesh ball with fully-baked lighting.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Light Probes</h3>
+						
+						<p>We indicate that light probes should be used by invoking a variant <code class="csharp">DrawMeshInstanced</code> method that requires five more arguments. First is the shadow casting mode, which we want to be on. After that comes whether the instances should cast shadows, which we want. Next is the layer, for which we just use the default zero. Then we have to provide a camera to which the instances should be visible. Passing <code class="csharp">null</code> means they should be rendered for all cameras. Finally we can set the light probe mode. We have to use <code class="csharp">LightProbeUsage.CustomProvided</code> because there isn't a single position that can be used to blend probes.</p>
+						
+						<pre class="csharp">using UnityEngine;
+<ins>using UnityEngine.Rendering;</ins>
+
+public class MeshBall : MonoBehaviour {
+	
+	&hellip;
+	
+	void Update () {
+		if (block == null) {
+			block = new MaterialPropertyBlock();
+			block.SetVectorArray(baseColorId, baseColors);
+			block.SetFloatArray(metallicId, metallic);
+			block.SetFloatArray(smoothnessId, smoothness);
+		}
+		Graphics.DrawMeshInstanced(
+			mesh, 0, material, matrices, 1023, block<ins>,</ins>
+			<ins>ShadowCastingMode.On, true, 0, null, LightProbeUsage.CustomProvided</ins>
+		);
+	}</pre>
+						
+						<p>We have to manually generate the interpolated light probes for all instances and add them to the material property block. This means that we need to access the instance positions when configuring the block. We can retrieve them by grabbing the last column of their transformation matrix and store them in a temporary array.</p>
+						
+						<pre class="csharp">		if (block == null) {
+			block = new MaterialPropertyBlock();
+			block.SetVectorArray(baseColorId, baseColors);
+			block.SetFloatArray(metallicId, metallic);
+			block.SetFloatArray(smoothnessId, smoothness);
+
+			<ins>var positions = new Vector3[1023];</ins>
+			<ins>for (int i = 0; i &lt; matrices.Length; i++) {</ins>
+				<ins>positions[i] = matrices[i].GetColumn(3);</ins>
+			<ins>}</ins>
+		}</pre>
+						
+						<p>The light probes must be provided via a <code class="csharp">SphericalHarmonicsL2</code> array. It's filled by invoking <code class="csharp">LightProbes.CalculateInterpolatedLightAndOcclusionProbes</code> with the position and light probe arrays as arguments. There's also a third parameter for occlusion, for which we'll use <code class="csharp">null</code>.</p>
+						
+						<pre class="csharp">			for (int i = 0; i &lt; matrices.Length; i++) {
+				positions[i] = matrices[i].GetColumn(3);
+			}
+			<ins>var lightProbes = new SphericalHarmonicsL2[1023];</ins>
+			<ins>LightProbes.CalculateInterpolatedLightAndOcclusionProbes(</ins>
+				<ins>positions, lightProbes, null</ins>
+			<ins>);</ins></pre>
+						
+						<aside>
+							<h3>Can't we use lists here?</h3>
+							<div>
+								<p>Yes, there is a <code class="csharp">CalculateInterpolatedLightAndOcclusionProbes</code> variant for that. But we only need the data once so lists don't benefit us in this case.</p>
+							</div>
+						</aside>
+						
+						<p>After that we can copy the light probes to the block by via <code class="csharp">CopySHCoefficientArraysFrom</code>.</p>
+						
+						<pre class="csharp">			LightProbes.CalculateInterpolatedLightAndOcclusionProbes(
+				positions, lightProbes, null
+			);
+			<ins>block.CopySHCoefficientArraysFrom(lightProbes);</ins></pre>
+						
+						<figure>
+							<img src="mesh-ball/light-probes.png" width="210" height="180">
+							<figcaption>Using light probes.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>LPPV</h3>
+						
+						<p>An alternative approach is to use an LPPV. This makes sense as the instances all exist in a tight space. This saves us from having to calculate and store interpolated light probes. Also, it makes it possible to animate the instance positions without having to provide new light probe data every frame, as long as they remain within the volume.</p>
+						
+						<p>Add a <code class="csharp">LightProbeProxyVolume</code> configuration field. If it's in use then don't add light probe data to the block. Then pass <code class="csharp">LightProbeUsage.UseProxyVolume</code> to <code class="csharp">DrawMeshInstanced</code> instead of <code class="csharp">LightProbeUsage.CustomProvided</code>. We can always provide the volume as an additional argument, even when it is <code class="csharp">null</code> and isn't used.</p>
+						
+						<pre class="csharp">	<ins>[SerializeField]</ins>
+	<ins>LightProbeProxyVolume lightProbeVolume = null;</ins>
+	
+	&hellip;
+
+	void Update () {
+		if (block == null) {
+			&hellip;
+
+			<ins>if (!lightProbeVolume) {</ins>
+				var positions = new Vector3[1023];
+				&hellip;
+				block.CopySHCoefficientArraysFrom(lightProbes);
+			<ins>}</ins>
+		}
+		Graphics.DrawMeshInstanced(
+			mesh, 0, material, matrices, 1023, block,
+			ShadowCastingMode.On, true, 0, null,
+			<ins>lightProbeVolume ?</ins>
+				<ins>LightProbeUsage.UseProxyVolume :</ins> LightProbeUsage.CustomProvided<ins>,</ins>
+			<ins>lightProbeVolume</ins>
+		);
+	}</pre>
+						
+						<p>You can add an LPPV component to the mesh ball or put it somewhere else. The custom bounding mode can be used to define the world-space region that the volume occupies.</p>
+						
+						<figure>
+							<img src="mesh-ball/lppv-inspector.png" width="320" height="413" alt="inspector"><br>
+							<img src="mesh-ball/lppv-scene.png" width="250" height="240" alt="scene">
+							<figcaption>Using an LPPV.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../shadow-masks/index.html">Shadow Masks</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/custom-srp-05-baked-light/" class="repository">repository</a>
+					<a href="Baked-Light.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

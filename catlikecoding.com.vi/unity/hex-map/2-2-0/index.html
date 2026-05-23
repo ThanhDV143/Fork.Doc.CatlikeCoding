@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/hex-map/2-2-0/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/hex-map/2-2-0/tutorial-image.jpg">
+		<meta property="og:title" content="Hex Map 2.2.0">
+		<meta property="og:description" content="Unity Hex Map 2.2.0 tutorial, Cell Visuals Upgrade.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hex Map 2.2.0</title>
+		<link href="../../tutorials/tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../site.webmanifest.html">
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/hex-map/2-2-0/#article",
+				"headline": "Hex Map 2.2.0",
+				"alternativeHeadline": "Cell Visuals Upgrade",
+				"datePublished": "2023-03-10",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "Unity Hex Map 2.2.0 tutorial, Cell Visual Upgrade.",
+				"image": "https://catlikecoding.com/unity/tutorials/hex-map/2-2-0/tutorial-image.jpg",
+				"dependencies": "Unity 2021.3.20f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/hex-map/", "name": "Hex Map" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				Bezier: 1,
+				Biome: 1,
+				ClimateData: 1,
+				EdgeVertices: 1,
+				HemisphereMode: 1,
+				HexCell: 1,
+				HexCellPriorityQueue: 1,
+				HexCellShaderData: 1,
+				HexEdgeType: 1,
+				HexCoordinates: 1,
+				HexCoordinatesDrawer: 1,
+				HexDirection: 1,
+				HexDirectionExtensions: 1,
+				HexFeatureCollection: 1,
+				HexFeatureManager: 1,
+				HexGameUI: 1,
+				HexGrid: 1,
+				HexGridChunk: 1,
+				HexGridData: 1,
+				HexHash: 1,
+				HexMapCamera: 1,
+				HexMapEditor: 1,
+				HexMapGenerator: 1,
+				HexMesh: 1,
+				HexMetrics: 1,
+				HexUnit: 1,
+				ListPool: 1,
+				MapRegion: 1,
+				NewMapMenu: 1,
+				OptionalToggle: 1,
+				SaveLoadItem: 1,
+				SaveLoadMenu: 1,
+				TextureArrayWizard: 1
+			};
+			
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../products/utilities/frame-rate-counter/index.html"><img src="../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../index.html">Unity</a></li>
+					<li><a href="../index.html">Hex Map</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hex Map 2.2.0</h1>
+					<p>Cell Visuals Upgrade</p>
+					<ul>
+						<li>Colorize cell based on submergence.</li>
+						<li>Analytically derive cells data in shaders.</li>
+						<li>Highlight cells while editing.</li>
+					</ul>
+				</header>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Showing off improved visuals.</figcaption>
+				</figure>
+				
+				<p>This tutorial is made with Unity 2021.3.20.f1 and follows <a href="../2-1-0/index.html">Hex Map 2.1.0</a>.</p>
+				
+				<section>
+					<h2>Shader Data</h2>
+					
+					<p>The visibility changes of cells are animated, so the fog-of-war effect adjusts smoothly. We stored whether a cell is transitioning in the B channel of the vertex data that we send to the shader. This data isn't needed in the shader, but because it was unused we stored it there. But now we're going to use that channel for something else, so we need to change our approach.</p>
+					
+					<section>
+						<h3>Visibility Transitions</h3>
+						
+						<p>Add a boolean array to <code>HexCellShaderData</code> to track the visibility transitions and initialize it in the <code>Initialize</code> method.</p>
+						
+						<pre>	<ins>bool[] visibilityTransitions;</ins>
+
+	&hellip;
+	
+	public void Initialize (int x, int z) {
+		&hellip;
+
+		if (cellTextureData == null || cellTextureData.Length != x * z) {
+			cellTextureData = new Color32[x * z];
+			<ins>visibilityTransitions = new bool[x * z];</ins>
+		}
+		else {
+			for (int i = 0; i &lt; cellTextureData.Length; i++) {
+				cellTextureData[i] = new Color32(0, 0, 0, 0);
+				<ins>visibilityTransitions[i] = false;</ins>
+			}
+		}
+
+		transitioningCells.Clear();
+		enabled = true;
+	}</pre>
+						
+						<p>Make <code>RefreshVisiblity</code> use that array instead of checking and setting the B channel to 255. Make <code>UpdateCell</code> use the array as well.</p>
+						
+						<pre>	public void RefreshVisibility (HexCell cell) {
+		&hellip;
+		<del>//else if (cellTextureData[index].b != 255) {</del>
+		<del>//	cellTextureData[index].b = 255;</del>
+		<ins>else if (!visibilityTransitions[index]) {</ins>
+			<ins>visibilityTransitions[index] = true;</ins>
+			transitioningCells.Add(cell);
+		}
+		enabled = true;
+	}
+
+	&hellip;
+
+	bool UpdateCellData (HexCell cell, int delta) {
+		&hellip;
+
+		if (!stillUpdating) {
+			<del>//data.b = 0;</del>
+			<ins>visibilityTransitions[index] = false;</ins>
+		}
+		cellTextureData[index] = data;
+		return stillUpdating;
+	}</pre>
+						
+						<p>There is also a <code>SetMapData</code> method, which is currently unused but was and can be used to send debug data to the shader. It was limited 254 because of the transition indication, but can now use the full by range.</p>
+						
+						<pre>			data &lt; 0f ? (byte)0 : (data &lt; 1f ? (byte)(data * <ins>255f</ins>) : (byte)<ins>255</ins>);</pre>
+					</section>
+					
+					<section>
+						<h3>Water Surface</h3>
+						
+						<p>Now that we have the B channel available we'll use it to send the water height of cells to the shader. Make <code>RefreshTerrain</code> set it. If the cell is underwater then grab its <code>WaterSurfaceY</code> and store it in the B channel so it can support a water level up to 30 units high. If the cell is not underwater then set it to zero.</p>
+						
+						<p>Supports water surfaces up to 30 units high.</p>
+						
+						<pre>	public void RefreshTerrain (HexCell cell) {
+		<del>//cellTextureData[cell.Index] = (byte)cell.TerrainTypeIndex;</del>
+		<ins>Color32 data = cellTextureData[cell.Index];</ins>
+		<ins>data.b = cell.IsUnderwater ? (byte)(cell.WaterSurfaceY * (255f / 30f)) : (byte)0;</ins>
+		<ins>data.a = (byte)cell.TerrainTypeIndex;</ins>
+		<ins>cellTextureData[cell.Index] = data;</ins>
+		enabled = true;
+	}</pre>
+						
+						<p>We also need to update this data when the view elevation of a cells is changed, so give <code>ViewElevationChanged</code> a cell parameter and also set the water level there.</p>
+						
+						<pre>	public void ViewElevationChanged (<ins>HexCell cell</ins>) {
+		<ins>cellTextureData[cell.Index].b = cell.IsUnderwater ?</ins>
+			<ins>(byte)(cell.WaterSurfaceY * (255f / 30f)) : (byte)0;</ins>
+		needsVisibilityReset = true;
+		enabled = true;
+	}</pre>
+						
+						<p>Adjust the <code>Elevation</code> and <code>WaterLevel</code> properties of <code>HexCell</code> so they provide the new argument. Also, simply always invoke <code>ViewElevationChanged</code> instead of checking whether there was a change to make sure that the water level is always set correctly.</p>
+						
+						<pre>	public int Elevation {
+		get => elevation;
+		set {
+			&hellip;
+			<del>//if (ViewElevation != originalViewElevation) {</del>
+			<del>//	ShaderData.ViewElevationChanged();</del>
+			<del>//}</del>
+			<ins>ShaderData.ViewElevationChanged(this);</ins>
+			&hellip;
+		}
+	}
+
+	public int WaterLevel {
+		get => waterLevel;
+		set {
+			&hellip;
+			<del>//if (ViewElevation != originalViewElevation) {</del>
+			<del>//	ShaderData.ViewElevationChanged();</del>
+			<del>//}</del>
+			<ins>ShaderData.ViewElevationChanged(this);</ins>
+			&hellip;
+		}
+	}</pre>
+						
+						<p>We should now also delay invoking <code>RefreshTerrain</code> until all required cell data has been retrieved in <code>Load</code>, so let's move it to the end of the method.</p>
+						
+						<pre>	public void Load (BinaryReader reader, int header) {
+		terrainTypeIndex = reader.ReadByte();
+		<del>//ShaderData.RefreshTerrain(this);</del>
+		&hellip;
+
+		IsExplored = header >= 3 ? reader.ReadBoolean() : false;
+		<ins>ShaderData.RefreshTerrain(this);</ins>
+		ShaderData.RefreshVisibility(this);
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Submergence Visualized</h3>
+						
+						<p>We can now used the cell's water surface level to colorize it based on its submergence, to add more visual depth to underwater areas. We need to make some changes to the <em>Terrain</em> HLSL code to do this. First, we have to pass the water data to the fragment program via a custom interpolator. We use the existing <code>Terrain</code> output of <code>GetVertexCellData_float</code> for this, changing it to a 4D vector, filling its W component with the highest water level of the retrieved cells, scaled up to cover the 30-unit range.</p>
+						
+						<pre class="shader">void GetVertexCellData_float (
+	&hellip;
+	out <ins>float4</ins> Terrain,
+	&hellip;
+) {
+	&hellip;
+	Terrain.z = cell2.w;
+	<ins>Terrain.w = max(max(cell0.b, cell1.b), cell2.b) * 30.0;</ins>
+
+	&hellip;
+}</pre>
+						
+						<p>Create a <code>ColorizeSubmergence</code> function that applies a blue color filter to a base color. It also needs to know the surface and water Y coordinates for that. Apply the filter (0.25, 0.25, 0.75) to the color and fade it in based on submergence depth, over a 15-unit range.</p>
+						
+						<pre class="shader"><ins>float3 ColorizeSubmergence (float3 baseColor, float surfaceY, float waterY) {</ins>
+	<ins>float submergence = waterY - max(surfaceY, 0);</ins>
+	<ins>float3 colorFilter = float3(0.25, 0.25, 0.75);</ins>
+	<ins>float filterRange = 1.0 / 15.0;</ins>
+	<ins>return baseColor * lerp(1.0, colorFilter, saturate(submergence * filterRange));</ins>
+<ins>}</ins></pre>
+						
+						<p>Use that function to adjust the base color after retrieving the cell color, based on the new terrain data.</p>
+						
+						<pre class="shader">void GetFragmentData_float (
+	&hellip;
+	<ins>float4</ins> Terrain,
+	&hellip;
+) {
+	float4 c = &hellip;;
+
+	<ins>BaseColor = ColorizeSubmergence(c.rgb, WorldPosition.y, Terrain.w);</ins>
+
+	&hellip;
+	
+	<del>//BaseColor = c.rgb * grid.rgb;</del>
+	<ins>BaseColor *= grid.rgb;</ins>
+	Exploration = Visibility.w;
+}</pre>
+						
+						<p>Change <code>GetTerrainColor</code> so it can keep working with the terrain as a 4D vector. I also renamed its <code>Color€</code> parameter to <code>Weights</code> to make its use clearer.</p>
+						
+						<pre class="shader">float4 GetTerrainColor (
+	&hellip;
+	<ins>float4</ins> Terrain,
+	float3 <ins>Weights</ins>,
+	&hellip;
+) {
+	&hellip;
+	return c * (<ins>Weights</ins>[index] * Visibility[index]);
+}</pre>
+						
+						<p>To make this work adjust the <em>Terrain</em> shader graph to use a 4D vector for the custom <em>Terrain</em> interpolator.</p>
+						
+						
+						<figure>
+							<img src="shader-data/submergence-uncolorized.jpg" width="314" height="200" alt="uncolorized">
+							<img src="shader-data/submergence-colorized.jpg" width="314" height="200" alt="colorized">
+							<figcaption>Without and with colorization based on submergence.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Analytical Grid</h2>
+					
+					<p>Up to this point we have used a texture to project the hex grid on the map. A downside of this approach is that it doesn't look good when the texture gets stretched vertically, when the gridlines are projected on cliffs or terraces. So we are going to replace our texture-based grid with an analytical grid that the shader generates based on the world position of the fragment.</p>
+					
+					<section>
+						<h3>Hex Space</h3>
+						
+						<p>We begin by introducing the concept of hex space. This is the same as the world space XZ plane, but scaled such that the distance between cell centers of east-west neighbors is one unit. We can convert from world to hex space via a division by twice the outer hex radius scaled by the outer-to-inner radius factor. Add a function for this conversion named <code>WorldToHexSpace</code> to <em>HexMetrics.hlsl</em>.</p>
+						
+						<pre class="shader"><ins>float2 WoldToHexSpace (float2 p) {</ins>
+	<ins>return p * (1.0 / (2.0 * OUTER_RADIUS * OUTER_TO_INNER));</ins>
+<ins>}</ins></pre>
+						
+						<p>Include the metrics at the top of <em>HexCellData.hlsl</em>.</p>
+						
+						<pre class="shader"><ins>#include "HexMetrics.hlsl"</ins></pre>
+						
+						<p>To prevent duplicate inclusion remove the explicit metrics inclusion from <em>Terrain.hlsl</em> and <em>Water.hlsl</em>.</p>
+						
+						<pre class="shader"><del>//#include "HexMetrics.hlsl"</del></pre>
+						
+						<p>Then move the inclusion of water until after the hex cell data in <em>CustomFunctions.hlsl</em>.</p>
+						
+						<pre class="shader"><del>//#include "Water.hlsl"</del>
+#include "HexCellData.hlsl"
+<ins>#include "Water.hlsl"</ins></pre>
+						
+					</section>
+					
+					<section>
+						<h3>Hex Grid Data</h3>
+						
+						<p>To make working with hex grid data convenient add a <code>HexGridData</code> struct type to <em>HexCellData.hlsl</em>. Give it a cell center, cell offset coordinates&mdash;which will be approximate but good enough for sampling the cell data&mdash;cell UV coordinates for potential future use, the hex distance from cell edge to center, and a distance smoothing value used for smoothing lines.</p>
+						
+						<pre class="shader">float4 GetCellData (float2 cellDataCoordinates, bool editMode) { &hellip; }
+
+<ins>struct HexGridData {</ins>
+	<ins>// Cell center in hex space.</ins>
+	<ins>float2 cellCenter;</ins>
+
+	<ins>// Approximate cell offset coordinates. Good enough for point-filtered sampling.</ins>
+	<ins>float2 cellOffsetCoordinates;</ins>
+
+	<ins>// For potential future use. U covers entire cell, V wraps a bit.</ins>
+	<ins>float2 cellUV;</ins>
+
+	<ins>// Hexagonal distance to cell center, 0 at center, 1 at edges.</ins>
+	<ins>float distanceToCenter;</ins>
+
+	<ins>// Smoothstep smoothing for cell center distance transitions.</ins>
+	<ins>// Based on screen-space derivatives.</ins>
+	<ins>float distanceSmoothing;</ins>
+<ins>};</ins></pre>
+						
+						<p>To create anti-aliased lines based on this data we introduce three smoothstep functions, which we add as members to <code>HexGridData</code>. The first is <code>Smoothstep01</code>. It has a threshold parameter that it uses to step from 0 to 1 based on the hex distance to center, smoothed by the distance smoothing range in both directions. The second is <code>Smoothstep10</code> which does the same but in the other direction. The third is <code>SmoothstepRange</code> which steps from 0 to 1 and back to 0 given an inner and outer threshold.</p>
+						
+						<pre class="shader">struct HexGridData {
+	&hellip;
+
+	<ins>// Smoothstep from 0 to 1 at cell center distance threshold.</ins>
+	<ins>float Smoothstep01 (float threshold) {</ins>
+		<ins>return smoothstep(</ins>
+			<ins>threshold - distanceSmoothing,</ins>
+			<ins>threshold + distanceSmoothing,</ins>
+			<ins>distanceToCenter</ins>
+		<ins>);</ins>
+	<ins>}</ins>
+
+	<ins>// Smoothstep from 1 to 0 at cell center distance threshold.</ins>
+	<ins>float Smoothstep10 (float threshold) {</ins>
+		<ins>return smoothstep(</ins>
+			<ins>threshold + distanceSmoothing,</ins>
+			<ins>threshold - distanceSmoothing,</ins>
+			<ins>distanceToCenter</ins>
+		<ins>);</ins>
+	<ins>}</ins>
+
+	<ins>// Smoothstep from 0 to 1 inside cell center distance range.</ins>
+	<ins>float SmoothstepRange (float innerThreshold, float outerThreshold) {</ins>
+		<ins>return Smoothstep01(innerThreshold) * Smoothstep10(outerThreshold);</ins>
+	<ins>}</ins>
+};</pre>
+					</section>
+					
+					<section>
+						<h3>From Position to Cell</h3>
+						
+						<p>To find the grid data we need to know the hexagonal distance from its center to its closest edge. Create an <code>HexagonalCenterToEdgeDistance</code> function for this that converts a position in hex space to this distance, assuming that the cell's center is at the origin. As hexagons are symmetrical in both dimension we can reduce the problem space to only the positive quadrant by taking the absolute of the given position. Then we find the distance to its angled edge by taking the dot product of the position and the normalized hex angled edge vector. This vector points in the NE direction and is (1, &radic;3) to reach the neighbor two steps away.</p>
+						
+						<figure>
+							<img src="analytical-grid/hex-angled-edge-vector.png" width="200" height="275">
+							<figcaption>Hex angled edge vector triangle.</figcaption>
+						</figure>
+						
+						<p>To also take the vertical edge into account take the maximum of the result and the X coordinate. As this is in hex space the maximum distance from center to edge is &frac12;, so we double it to get the desired 0&ndash;1 range.</p>
+						
+						<pre class="shader"><ins>#define HEX_ANGLED_EDGE_VECTOR float2(1, sqrt(3))</ins>
+
+<ins>// Calculate hexagonal center-edge distance for point relative to center in hex space.</ins>
+<ins>// 0 at cell center and 1 at edges.</ins>
+<ins>float HexagonalCenterToEdgeDistance (float2 p) {</ins>
+	<ins>// Reduce problem to one quadrant.</ins>
+	<ins>p = abs(p);</ins>
+	<ins>// Calculate distance to angled edge.</ins>
+	<ins>float d = dot(p, normalize(HEX_ANGLED_EDGE_VECTOR));</ins>
+	<ins>// Incorporate distance to vertical edge.</ins>
+	<ins>d = max(d, p.x);</ins>
+	<ins>// Double to increase range from center to edge to 0-1.</ins>
+	<ins>return 2 * d;</ins>
+<ins>}</ins></pre>
+						
+						<p>To find the nearest cell center to a point in hex space we add a <code>HexModulo</code> function. It does this by subtracting the hex angled edge vector scaled by the floor of the position divided by the same vector.</p>
+						
+						<pre class="shader"><ins>// Calculate hex-based modulo to find position vector.</ins>
+<ins>float2 HexModulo (float2 p) {</ins>
+	<ins>return p - HEX_ANGLED_EDGE_VECTOR * floor(p / HEX_ANGLED_EDGE_VECTOR);</ins>
+<ins>}</ins></pre>
+						
+						<p>To get the final hex grid data introduce a <code>GetHexGridData</code> function with a world XZ position parameter, which it converts to hex space. Then there are two candidates for the closest cell position. The first is found by taking the hex modulo of the position. The second is found the same way, except that it is offset by one cell diagonally by subtracting half the hex angled edge vector before taking the modulo. Then the same offset is subtracted from both to align them with our grid. These are vectors from the cell centers to the hex position. Whichever is smallest is the one we need.</p>
+						
+						<pre class="shader"><ins>// Get hex grid data analytically derived from world-space XZ position.</ins>
+<ins>HexGridData GetHexGridData (float2 worldPositionXZ) {</ins>
+	<ins>float2 p = WoldToHexSpace(worldPositionXZ);</ins>
+	
+	<ins>// Vectors from nearest two cell centers to position.</ins>
+	<ins>float2 gridOffset = HEX_ANGLED_EDGE_VECTOR * 0.5;</ins>
+	<ins>float2 a€ = HexModulo(p) - gridOffset;</ins>
+	<ins>float2 b€ = HexModulo(p - gridOffset) - gridOffset;</ins>
+	<ins>bool aIsNearest = dot(a€, a€) &lt; dot(b€, b€);</ins>
+
+	<ins>float2 vectorFromCenterToPosition = aIsNearest ? a€ : b€;</ins>
+
+	<ins>HexGridData d;</ins>
+	<ins>return d;</ins>
+<ins>}</ins></pre>
+						
+						<p>Now we can fill the grid data. The cell center is found by subtracting the vector that we found from the hex position.</p>
+						
+						<p>The cell offset X coordinate is the cell center X, offset by &minus;&frac12; if the first cell candidate ended up being closest, so it matches the zigzag offset of the rows. The cell offset Y coordinate is the cell center Y divided by the outer-to-inner radius factor. These offset coordinates are not exact, but good enough for our purposes.</p>
+						
+						<p>The cell UV coordinates are the same as the found vector, plus &frac12; to align it with the cell center. We currently don't use this but could be used to texture the cells.</p>
+						
+						<p>The distance to center is found by passing the vector through <code>HexagonalCenterToEdgeDistance</code>.</p>
+						
+						<p>For the distance smoothing we use the <code class="shader">fwidth</code> of the distance to center to make the transition roughly two pixels wide.</p>
+						
+						<pre class="shader">	HexGridData d;
+	<ins>d.cellCenter = p - vectorFromCenterToPosition;</ins>
+	<ins>d.cellOffsetCoordinates.x = d.cellCenter.x - (aIsNearest ? 0.5 : 0.0);</ins>
+	<ins>d.cellOffsetCoordinates.y = d.cellCenter.y / OUTER_TO_INNER;</ins>
+	<ins>d.cellUV = vectorFromCenterToPosition + 0.5;</ins>
+	<ins>d.distanceToCenter = HexagonalCenterToEdgeDistance(vectorFromCenterToPosition);</ins>
+	<ins>d.distanceSmoothing = fwidth(d.distanceToCenter);</ins>
+	return d;</pre>
+					</section>
+					
+					<section>
+						<h3>Sharp Grid Lines</h3>
+						
+						<p>To create sharp analytical grid lines add an <code>ApplyGrid</code> function to <em>Terrain.hlsl</em> with parameters for a base color and hex grid data. Reduce the color to 20% by using <code>SmoothStep10</code> with 0.965 as the threshold.</p>
+						
+						<pre class="shader"><ins>// Apply an 80% darkening grid outline at hex center distance 0.965-1.</ins>
+<ins>float3 ApplyGrid (float3 baseColor, HexGridData h) {</ins>
+	<ins>return baseColor * (0.2 + 0.8 * h.Smoothstep10(0.965));</ins>
+<ins>}</ins></pre>
+						
+						<p>Remove the <code>GridTexture</code> parameter from <code>GetFragmentData_float</code> and make it use the new function to show the grid.</p>
+						
+						<pre class="shader">void GetFragmentData_float (
+	&hellip;
+	<del>//UnityTexture2D GridTexture,</del>
+	&hellip;
+) {
+	&hellip;
+
+	<del>//float4 grid = 1;</del>
+	<ins>HexGridData hgd = GetHexGridData(WorldPosition.xz);</ins>
+
+	if (ShowGrid) {
+		<del>//float2 gridUV = WorldPosition.xz;</del>
+		<del>//gridUV.x *= 1 / (4 * 8.66025404);</del>
+		<del>//gridUV.y *= 1 / (2 * 15.0);</del>
+		<del>//grid = GridTexture.Sample(GridTexture.samplerstate, gridUV);</del>
+		<ins>BaseColor = ApplyGrid(BaseColor, hgd);</ins>
+	}
+
+	&hellip;
+	
+	<del>//BaseColor *= grid.rgb;</del>
+	Exploration = Visibility.w;
+}</pre>
+						
+						<p>Also remove the texture from the <em>Terrain</em> shader graph and delete the <em>Grid</em> texture asset.</p>
+							
+						<figure>
+							<img src="analytical-grid/grid-texture.jpg" width="200" height="310" alt="texture">
+							<img src="analytical-grid/grid-analytical.jpg" width="200" height="310" alt="analytical">
+							<figcaption>Texture-based and analytical grid lines.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Feature Visibility</h3>
+						
+						<p>We can also use the new hex grid data in the vertex function of <em>Feature.hlsl</em> to find the cell offset coordinates, removing its <code>GridCoordinatesTexture</code> parameter.</p>
+						
+						<pre class="shader">void GetVertexCellData_float (
+	<del>//UnityTexture2D GridCoordinatesTexture,</del>
+	&hellip;
+) {
+	<del>//float2 gridUV = WorldPosition.xz;</del>
+	<del>//gridUV.x *= 1 / (4 * 8.66025404);</del>
+	<del>//gridUV.y *= 1 / (2 * 15.0);</del>
+	<del>//float2 cellDataCoordinates = floor(gridUV.xy) + GridCoordinatesTexture.SampleLevel(</del>
+	<del>//	GridCoordinatesTexture.samplerstate, gridUV, 0</del>
+	<del>//).rg;</del>
+	<del>//cellDataCoordinates *= 2;</del>
+	<ins>HexGridData hgd = GetHexGridData(WorldPosition.xz);</ins>
+	float4 cellData = GetCellData(<ins>hgd.cellOffsetCoordinates</ins>, EditMode);
+
+	&hellip;
+}</pre>
+						
+						<p>Also remove the texture from the <em>Feature</em> shader graph and delete the <em>Grid Coordinates</em> texture asset. Besides no longer needing the texture this also fixes some visibility artifacts caused by incorrect offset interpretations very close to some cell edges.</p>
+						
+						<figure>
+							<img src="analytical-grid/features-texture.jpg" width="265" height="321" alt="texture">
+							<img src="analytical-grid/features-analytical.jpg" width="265" height="321" alt="analytical">
+							<figcaption>Texture-based and analytical feature visibility.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Highlighting Cells</h2>
+					
+					<p>The hex cell data allows us to create other effects in the shader as well. Let's use it to highlight affected cells when editing the map.</p>
+					
+					<section>
+						<h3>Cell Highlighting Data</h3>
+						
+						<p>To know which cells are affected we have to send some highlighting data to the GPU. At minimum we'll need the brush center XZ coordinates in hex space. Add properties to retrieve these coordinates to <code>HexCoordinates</code>.</p>
+						
+						<pre>	<ins>public float HexX => X + Z / 2 + ((Z &amp; 1) == 0 ? 0f : 0.5f);</ins>
+
+	<ins>public float HexZ => Z * HexMetrics.outerToInner;</ins></pre>
+						
+						<p>We'll make <code>HexMapEditor</code> communicate the highlighing data to the shader by setting a global 4D vector shader property named <em>_CellHighlighting</em>. Its XY components contain the hex coordinates, its Z component contains the squared brush size plus &frac12;, and its W component contains the wrap size, in case a wrapping map is used. Set this data in a new <code>UpdateCellHighlightData</code> method with a cell parameter. If the cell is <code>null</code> instead clear the data, via a separate <code>ClearCellHighlightData</code> method that set the vector to (0, 0, &minus;1, 0).</p>
+						
+						<pre>	<ins>static int cellHighlightingId = Shader.PropertyToID("_CellHighlighting");</ins>
+	
+	&hellip;
+	
+	<ins>void UpdateCellHighlightData (HexCell cell) {</ins>
+		<ins>if (cell == null) {</ins>
+			<ins>ClearCellHighlightData();</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+
+		<ins>// Works up to brush size 6.</ins>
+		<ins>Shader.SetGlobalVector(</ins>
+			<ins>cellHighlightingId,</ins>
+			<ins>new Vector4(</ins>
+				<ins>cell.Coordinates.HexX,</ins>
+				<ins>cell.Coordinates.HexZ,</ins>
+				<ins>brushSize * brushSize + 0.5f,</ins>
+				<ins>HexMetrics.wrapSize</ins>
+			<ins>)</ins>
+		<ins>);</ins>
+	<ins>}</ins>
+
+	<ins>void ClearCellHighlightData () =></ins>
+		<ins>Shader.SetGlobalVector(cellHighlightingId, new Vector4(0f, 0f, -1f, 0f));</ins></pre>
+						
+						<p>In <code>Update</code>, if the cursor is not claimed by the UI and the primary mouse button isn't pressed, invoke <code>UpdateCellHighlightingData</code> with the cell currently under the cursor. If the cursor is claimed by the UI invoke <code>ClearHighlightData</code>. Also invoke <code>UpdateCellHighlightData</code> with the current cell at the end of <code>HandleInput</code>.</p>
+						
+						<pre>	void Update () {
+		if (!EventSystem.current.IsPointerOverGameObject()) {
+			if (Input.GetMouseButton(0)) {
+				HandleInput();
+				return;
+			}
+			<ins>else {</ins>
+				<ins>// Potential optimization: only do this if camera or cursor has changed.</ins>
+				<ins>UpdateCellHighlightData(GetCellUnderCursor());</ins>
+			<ins>}</ins>
+			&hellip;
+		}
+		<ins>else {</ins>
+			<ins>ClearCellHighlightData();</ins>
+		<ins>}</ins>
+		previousCell = null;
+	}
+	
+	&hellip;
+	
+	void HandleInput () {
+		&hellip;
+		<ins>UpdateCellHighlightData(currentCell);</ins>
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Showing Highlighted Cells</h3>
+						
+						<p>To check whether a cell is highlighted in the shader add an <code>IsHighlighted</code> function to <code>HexGridData</code> in <em>HexCellData.hlsl</em>. The relative positive-quadrant position of the cell to highlight is found by taking the absolute of the highlighting hex coordinates minus the cell center.</p>
+						
+						<p>Then in case world wrapping is enabled check whether the X position exceeds half the wrap size and if so wrap once. We can do this also when wrapping is disabled because in that case the wrap size is zero.</p>
+						
+						<p>The cell should be highlighted if the square magnitude of the relative position vector is less than the highlighting Z component, which is the squared edit radius plus &frac12;. This simple circular threshold check works up to brush size 6. This is acceptable because our largest brush size is only 4.</p>
+						
+						<pre class="shader">	<ins>// Is highlighed if square distance from cell to highlight center is below threshold.</ins>
+	<ins>// Works up to brush size 6.</ins>
+	<ins>bool IsHighlighted () {</ins>
+		<ins>float2 cellToHighlight = abs(_CellHighlighting.xy - cellCenter);</ins>
+
+		<ins>// Adjust for world X wrapping if needed.</ins>
+		<ins>if (cellToHighlight.x > _CellHighlighting.w * 0.5) {</ins>
+			<ins>cellToHighlight.x -= _CellHighlighting.w;</ins>
+		<ins>}</ins>
+
+		<ins>return dot(cellToHighlight, cellToHighlight) &lt; _CellHighlighting.z;</ins>
+	<ins>}</ins></pre>
+						
+						<p>We apply the highlight in <em>Terrain.hlsl</em> by adding a new <code>ApplyHighlight</code> function with parameters for a base color and hex grid data. The highlight is made by drawing a white hexagon outline by using <code>SmoothstepRange</code> with thresholds 0.68 and 0.8.</p>
+						
+						<pre class="shader"><ins>// Apply a white outline at hex center distance 0.68-0.8.</ins>
+<ins>float3 ApplyHighlight (float3 baseColor, HexGridData h) {</ins>
+	<ins>return saturate(h.SmoothstepRange(0.68, 0.8) + baseColor.rgb);</ins>
+<ins>}</ins></pre>
+						
+						<p>Apply the highlight if needed after showing the grid in <code>GetFragmentData_float</code>.</p>
+						
+						<pre class="shader">	if (ShowGrid) {
+		BaseColor = ApplyGrid(BaseColor, hgd);
+	}
+
+	<ins>if (hgd.IsHighlighted()) {</ins>
+		<ins>BaseColor = ApplyHighlight(BaseColor, hgd);</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="highlighting-cells/cell-highlighting.jpg" width="240" height="200">
+							<figcaption>Highlighting cells affected by terrain edit.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../2-3-0/index.html">Hex Map 2.3.0</a>.</p>
+					</section>
+					
+					<a href="../../tutorials/license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecoding-projects/hex-map-project/src/665c9a8069420d3646369a9854177392f676a0f0/?at=release%2F2.2.0" class="repository">repository</a>
+					<a href="Hex-Map-2-2-0.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../tutorials/index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../tutorials/become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../tutorials/donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials/tutorials.js"></script>
+	</body>
+</html>

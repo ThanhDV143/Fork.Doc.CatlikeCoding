@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/rendering/part-6/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/rendering/part-6/tutorial-image.jpg">
+		<meta property="og:title" content="Rendering 6">
+		<meta property="og:description" content="A Unity Rendering tutorial about using normal maps to create the illusion of bumpiness. Part 6 of 20.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Rendering 6</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/rendering/part-6/#article",
+				"headline": "Rendering 6",
+				"alternativeHeadline": "Bumpiness",
+				"datePublished": "2016-07-31",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Rendering tutorial about using normal maps to create the illusion of bumpiness. Part 6 of 20.",
+				"image": "https://catlikecoding.com/unity/tutorials/rendering/part-6/tutorial-image.jpg",
+				"dependencies": "Unity 5.4.0f3",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/rendering/", "name": "Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				TangentSpaceVisualizer: 1
+			};
+			
+			var hasAnimations = false;
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Rendering 6</h1>
+					<p>Bumpiness</p>
+					<ul>
+						<li>Perturb normals to simulate bumps.</li>
+						<li>Compute normals from a height field.</li>
+						<li>Sample and blend normal maps.</li>
+						<li>Convert from tangent space to world space.</li>
+					</ul>
+				</header>
+
+				<p>This is the sixth part of a tutorial series about rendering. The <a href="../part-5.1.html">previous part</a> added support for more complex lighting. This time, we'll create the illusion of more complex surfaces.</p>
+				
+				<p>This tutorial was made with Unity 5.4.0f3.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>It doesn't look like a smooth sphere anymore.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Bump Mapping</h2>
+					
+					<p>We can use albedo textures to create materials with complex color patterns. We can use normals to adjust the apparent surface curvature. With these tools, we can produces all kinds of surfaces. However, the surface of a single triangle will always be smooth. It can only interpolate between three normal vectors. So it cannot represent a rough or varied surface. This becomes obvious when forsaking an albedo texture and using only a solid color.</p>
+					
+					<p>A good example of this flatness is a simple quad. Add one to the scene and make it point upwards, by rotating it 90&deg; around the X axis. Give it our <em translate="no">Lighting</em> material, without textures and with a fully white tint.</p>
+					
+					<figure>
+						<img src="bump-mapping/flat.png" width="470" height="240">
+						<figcaption>Perfectly flat quad.</figcaption>
+					</figure>
+					
+					<p>Because the default skybox is very bright, it is hard to see the contribution of the other lights. So let's turn it off for this tutorial. You can do so by decreasing the <em translate="no">Ambient Intensity</em> to zero in the lighting settings. Then only enable the main directional light. Find a good point of view in the scene view so you can some light differences on the quad.</p>
+					
+					<figure>
+						<img alt="inspector" src="bump-mapping/ambient-intensity.png" width="320" height="102">
+						<img alt="scene" src="bump-mapping/no-ambient.png" width="470" height="240">
+						<figcaption>No ambient, only the main directional light.</figcaption>
+					</figure>
+					
+					<p>How could we make this quad appear non-flat? We could fake roughness by baking shading into the albedo texture. However, that would be completely static. If the lights change, or the objects move, so should the shading. If it doesn't, the illusion will be broken. And in case of specular reflections, even the camera isn't allowed to move.</p>
+					
+					<p>We can change the normals to create the illusion of a curving surface. But there are only four normals per quad, one for each vertex. This can only produce smooth transitions. If we want a varied and rough surface, we need more normals.</p>
+					
+					<p>We could subdivide our quad into smaller quads. This gives us more normals to work with. In fact, once we have more vertices, we can also move them around. Then we don't need the illusion of roughness, we can make an actual rough surface! But the sub-quads still have the same problem. Are we going to subdivide those too? That will lead to huge meshes with an enormous amount of triangles. That is fine when creating 3D models, but isn't feasible for real-time use in games.</p>
+					
+					<section>
+						<h3>Height Maps</h3>
+						
+						<p>A rough surface has a non-uniform elevation, compared to a flat surface. If we store this elevation data in a texture, we might be able to use it generate normal vectors per fragment, instead of per vertex. This idea is known as bump mapping, and was first formulated by James Blinn.</p>
+					
+						<p>Here is a height map to accompany our marble texture. It is an RGB texture with each channel set to the same value. Import it into your project, with the default import settings.</p>
+
+						<figure>
+							<img src="bump-mapping/marble-heights.png" width="256" height="256">
+							<figcaption>Height map for marble.</figcaption>
+						</figure>
+						
+						<p>Add a <code class="shader">_HeightMap</code> texture property to <em translate="no">My First Lighting Shader</em>. As it'll use the same UV as our albedo texture, it doesn't need its own scale and offset parameters. The default texture doesn't really matter, as long as it's uniform. Gray will do.</p>
+
+						<pre translate="no" class="shader">	Properties {
+		_Tint ("Tint", Color) = (1, 1, 1, 1)
+		_MainTex ("Albedo", 2D) = "white" {}
+		<ins>[NoScaleOffset] _HeightMap ("Heights", 2D) = "gray" {}</ins>
+		[Gamma] _Metallic ("Metallic", Range(0, 1)) = 0
+		_Smoothness ("Smoothness", Range(0, 1)) = 0.1
+	}</pre>
+
+						<figure>
+							<img src="bump-mapping/heights-inspector.png" width="320" height="206">
+							<figcaption>Material with height map.</figcaption>
+						</figure>
+
+						<p>Add the matching variable to the <em translate="no">My Lighting</em> include file, so we can access the texture. Let's see how it looks, by factoring it into the albedo.</p>
+
+						<pre translate="no" class="shader">float4 _Tint;
+sampler2D _MainTex;
+float4 _MainTex_ST;
+
+<ins>sampler2D _HeightMap;</ins>
+
+&hellip;
+
+float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+	i.normal = normalize(i.normal);
+
+	float3 viewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
+
+	float3 albedo = tex2D(_MainTex, i.uv).rgb * _Tint.rgb;
+	<ins>albedo *= tex2D(_HeightMap, i.uv);</ins>
+
+	&hellip;
+}</pre>
+						<figure>
+							<img src="bump-mapping/height-as-color.png" width="470" height="240">
+							<figcaption>Using heights as colors.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Adjusting Normals</h3>
+						
+						<p>Because our fragment normals are going to become more complex, let's move their initialization to a separate function. Also, get rid the height map test code.</p>
+						
+						<pre translate="no" class="shader"><ins>void InitializeFragmentNormal(inout Interpolators i) {</ins>
+	i.normal = normalize(i.normal);
+<ins>}</ins>
+
+float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+	<ins>InitializeFragmentNormal(i);</ins>
+
+	float3 viewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
+
+	float3 albedo = tex2D(_MainTex, i.uv).rgb * _Tint.rgb;
+<del>//	albedo *= tex2D(_HeightMap, i.uv);</del>
+
+	&hellip;
+}</pre>
+						
+						<p>Because we're currently working with a quad that lies in the XZ plane, its normal vector is always (0, 1, 0). So we can use a constant normal, ignoring the vertex data. Let's do that for now, and worry about different orientations later.</p>
+						
+						<pre translate="no" class="shader">void InitializeFragmentNormal(inout Interpolators i) {
+	<ins>i.normal = float3(0, 1, 0);</ins>
+	i.normal = normalize(i.normal);
+}</pre>
+						
+						<p>How do we include the height data in this? A naive approach is to use the height as the normal's Y component, before normalizing.</p>
+						
+						<pre translate="no" class="shader">void InitializeFragmentNormal(inout Interpolators i) {
+	<ins>float h = tex2D(_HeightMap, i.uv);</ins>
+	i.normal = float3(0, <ins>h</ins>, 0);
+	i.normal = normalize(i.normal);
+}</pre>
+						
+						<figure>
+							<img src="bump-mapping/height-as-normal.png" width="470" height="240">
+							<figcaption>Using heights as normals.</figcaption>
+						</figure>
+						
+						<p>This doesn't work, because normalization converts every vector back to (0, 1, 0). The black lines appear where the heights are zero, because normalization fails in those cases. We need a different method.</p>
+					</section>
+					
+					<section>
+						<h3>Finite Difference</h3>
+						
+						<p>Because we're working with texture data, we have two-dimensional data. There's the U and V dimensions. The heights can be thought of as going in a third dimension, upwards. We could say that the texture represents a function, `f(u,v) = h`. Let's begin by limiting ourselves to only the U dimension. So the function is reduced to `f(u) = h`. Can we derive normal vectors from this function?</p>
+						
+						<p>If we knew the slope of the function, then we could use it to compute its normal at any point. The slope is defined by the rate of change of `h`. This is its derivative, `h^'`. Because `h` is the result of a function, `h^'` is the result of a function as well. So we have the derivative function `f^'(u) = h^'`.</p>
+						
+						<p>Unfortunately, we do not know what these functions are. But we can approximate them. We can compare the heights at two different points in our texture. For example, at the extreme ends, using U coordinates 0 and 1. The difference between those two samples is the rate of change between those coordinates. Expressed as a function, that's `f(1) - f(0)`. We can use this to construct a tangent vector, `[[1],[f(1) - f(0)],[0]]`.</p>
+						
+						<figure>
+							<img src="bump-mapping/tangent-diagram.png" width="370" height="235">
+							<figcaption>Tangent vector from `[[0],[f(0)]]` to `[[1],[f(1)]]`.</figcaption>
+						</figure>
+						
+						<p>That's of course a very crude approximation of the real tangent vector. It treats the entire texture as a linear slope. We can do better by sampling two points that are closer together. For example, U coordinates 0 and &frac12;. The rate of change between those two points is `f(1/2) - f(0)`, per half a unit of U. Because it is easier to deal with rate of change per whole units, we divide it by the distance between the points, so we get `(f(1/2) - f(0))/(1/2) = 2(f(1/2) - f(0))`. That gives us the tangent vector `[[1],[2(f(1/2) - f(0))],[0]]`.</p>
+						
+						<p>In general, we have to do this relative to the U coordinate of every fragment that we render. The distance to the next point is defined by a constant delta. So the derivative function is approximated by `f^'(u) ~~ (f(u + delta) - f(u))/delta`.</p>
+						
+						<p>The smaller &delta; becomes, the better we approximate the true derivative function. Of course it cannot become zero, but when taken to its theoretical limit, you get `f^'(u) = lim_(delta->0)(f(u + delta) - f(u))/delta`. This method of approximating a derivative is known as the finite difference method.  With that, we can construct tangent vectors at any point, `[[1],[f^'(u)],[0]]`.</p>
+					</section>
+					
+					<section>
+						<h3>From Tangent to Normal</h3>
+						
+						<p>What value could we use for &delta; in our shader? The smallest sensible difference would cover a single texel of our texture. We can retrieve this information in the shader via a <code class="shader">float4</code> variable with the <code class="shader">_TexelSize</code> suffix. Unity sets those variables, similar to <code class="shader">_ST</code> variables.</p>
+						
+						<pre translate="no" class="shader">sampler2D _HeightMap;
+<ins>float4 _HeightMap_TexelSize;</ins></pre>
+						
+						<aside>
+							<h3>What is stored in <code class="shader">_TexelSize</code> variables?</h3>
+							<div>
+								<p>Its first two components contain the texel sizes, as fractions of U and V. The other two components contain the amount of pixels. For example, in case of a 256&times;128 texture, it will contain (0.00390625, 0.0078125, 256, 128).</p>
+							</div>
+						</aside>
+						
+						<p>Now we can sample the texture twice, compute the height derivative, and construct a tangent vector. Let's directly use that as our normal vector.</p>
+						
+						<pre translate="no" class="shader">	<ins>float2 delta = float2(_HeightMap_TexelSize.x, 0);</ins>
+	float <ins>h1</ins> = tex2D(_HeightMap, i.uv);
+	<ins>float h2 = tex2D(_HeightMap, i.uv + delta);</ins>
+	<ins>i.normal = float3(1, (h2 - h1) / delta.x, 0);</ins>
+
+	i.normal = normalize(i.normal);</pre>
+						
+						<p>Actually, because we're normalizing anyway, we can scale our tangent vector by &delta;. This eliminates a division and improves precision.</p>
+						
+						<pre translate="no" class="shader">	i.normal = float3(<ins>delta.x</ins>, <ins>h2 - h1</ins>, 0);</pre>
+						
+						<figure>
+							<img src="bump-mapping/tangent.png" width="470" height="240">
+							<figcaption>Using tangents as normals.</figcaption>
+						</figure>
+						
+						<p>We get a very pronounced result. That's because the heights have a range of one unit, which produces very steep slopes. As the perturbed normals don't actually change the surface, we don't want such huge differences. We can scale the heights by an arbitrary factor. Let's reduce the range to a single texel. We can do that by multiplying the height difference by &delta;, or by simply replacing &delta; with 1 in the tangent.</p>
+						
+						<pre translate="no" class="shader">	i.normal = float3(<ins>1</ins>, h2 - h1, 0);</pre>
+						
+						<figure>
+							<img src="bump-mapping/scaled-height.png" width="470" height="240">
+							<figcaption>Scaled heights.</figcaption>
+						</figure>
+						
+						<p>This is starting to look good, but the lighting is wrong. It is far too dark. That's because we're directly using the tangent as a normal. To turn it into an upward-pointing normal vector, we have to rotate the tangent 90&deg; around the Z axis.</p>
+						
+						<pre translate="no" class="shader">	i.normal = float3(<ins>h1 - h2</ins>, <ins>1</ins>, 0);</pre>
+						
+						<figure>
+							<img src="bump-mapping/rotated.png" width="470" height="240">
+							<figcaption>Using actual normals.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>How does that vector rotation work?</h3>
+							<div>
+								<p>You can rotate a 2D vector 90&deg; counter-clockwise by swapping the X and Y components of the vector, and flipping the sign of the new X component. So we end up with `[[-f^'(u)],[1],[0]]`.</p>
+						
+								<figure>
+									<img src="bump-mapping/vector-rotation.png" width="225" height="175">
+									<figcaption>Rotating a 2D vector 90&deg;.</figcaption>
+								</figure>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Central Difference</h3>
+						
+						<p>We've used finite difference approximations to create normal vectors. Specifically, by using the forward difference method. We take a point, and then look in one direction to determine the slope. As a result, the normal is biased in that direction. To get a better approximation of the normal, we can instead offset the sample points in both directions. This centers the linear approximation on the current point, and is known as the central difference method. This changes the derivative function to `f^'(u) = lim_(delta->0)(f(u + delta/2) - f(u - delta/2))/delta`.</p>
+						
+						<pre translate="no" class="shader">	float2 delta = float2(_HeightMap_TexelSize.x <ins>* 0.5</ins>, 0);
+	float h1 = tex2D(_HeightMap, i.uv <ins>- delta</ins>);
+	float h2 = tex2D(_HeightMap, i.uv + delta);
+	i.normal = float3(h1 - h2, 1, 0);</pre>
+						
+						<p>This shifts the bumps slightly, so they are better aligned with the height field. Besides that, their shape doesn't change.</p>
+					</section>
+					
+					<section>
+						<h3>Using Both Dimensions</h3>
+						
+						<p>The normals that we have created only take the change along U into account. We've been using the partial derivative of the function `f(u,v)` with respect to `u`. That's `f_u^'(u,v)`, or just `f_u^'` for short. We can also create normals along V, by using `f_v^'`. In that case, the tangent vector is `[[0],[f_v^'],[1]]` and the normal vector is `[[0],[1],[-f_v^']]`.</p>
+						
+						<pre translate="no" class="shader">	float2 <ins>du</ins> = float2(_HeightMap_TexelSize.x * 0.5, 0);
+	float <ins>u1</ins> = tex2D(_HeightMap, i.uv - du);
+	float <ins>u2</ins> = tex2D(_HeightMap, i.uv + du);
+	i.normal = float3(<ins>u1</ins> - <ins>u2</ins>, 1, 0);
+
+	<ins>float2 dv = float2(0, _HeightMap_TexelSize.y * 0.5);</ins>
+	<ins>float v1 = tex2D(_HeightMap, i.uv - dv);</ins>
+	<ins>float v2 = tex2D(_HeightMap, i.uv + dv);</ins>
+	<ins>i.normal = float3(0, 1, v1 - v2);</ins>
+
+	i.normal = normalize(i.normal);</pre>
+						
+						<figure>
+							<img src="bump-mapping/other-dimension.png" width="470" height="240">
+							<figcaption>Normals along V.</figcaption>
+						</figure>
+						
+						<p>We now have access to both the U and V tangents. Together, these vectors describe the surface of the height field at our fragment. By computing their cross product, we find the normal vector of the 2D height field.</p>
+						
+						<pre translate="no" class="shader">	float2 du = float2(_HeightMap_TexelSize.x * 0.5, 0);
+	float u1 = tex2D(_HeightMap, i.uv - du);
+	float u2 = tex2D(_HeightMap, i.uv + du);
+	<ins>float3 tu</ins> = float3(<ins>1</ins>, <ins>u2 - u1</ins>, 0);
+
+	float2 dv = float2(0, _HeightMap_TexelSize.y * 0.5);
+	float v1 = tex2D(_HeightMap, i.uv - dv);
+	float v2 = tex2D(_HeightMap, i.uv + dv);
+	<ins>float3 tv</ins> = float3(0, <ins>v2 - v1</ins>, <ins>1</ins>);
+
+	<ins>i.normal = cross(tv, tu);</ins>
+	i.normal = normalize(i.normal);</pre>
+						
+						<figure>
+							<img alt="quad" src="bump-mapping/normals.png" width="470" height="240">
+							<img alt="details" src="bump-mapping/normals-details.png" width="470" height="240">
+							<figcaption>Complete normals.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What's a cross product?</h3>
+							<div>
+								<p>The cross product between two vectors is geometrically defined as `A xx B = ||A||&nbsp;||B||&nbsp; sin (theta) N`. Here `N` is the unit vector perpendicular to the plane that contains both `A` and `B`. So `N` is the normal vector that we want.</p>
+								
+								<p>The `||A||&nbsp;||B||&nbsp; sin theta` part scales this vector. It's like the dot product, except it contains the sine of the angle between the vectors, instead of the cosine. If both vectors are of unit length, and the angle between them is 90&deg;, then the result is 1. As this is most likely not the case, we have to normalize the result of the cross operation. This works, as long as the angle between the vectors is neither 0&deg; nor 180&deg;, as the sine of those angles is zero.</p>
+								
+								<p>Algebraically, for 3D vectors, the cross product is defined as `A xx B = [[A_yB_z - A_zB_y],[A_zB_x - A_xB_z],[A_xB_y- A_yB_x]]`.</p>
+								
+								<pre translate="no" class="shader">float crossProduct = v1.yzx * v2.zxy - v1.zxy * v2.yzx;</pre>
+								
+								<p>Visually, the absolute magnitude of the produced vector corresponds with the surface area of the parallelogram that you can make with the two vectors.</p>
+								
+								<figure>
+									<img src="bump-mapping/cross-product.png" width="235" height="180">
+									<figcaption>Cross product.</figcaption>
+								</figure>
+								
+								<p>Note that `A xx B = - B xx A`. This means that the direction of the result depends on the order of the vectors. Because we want our vector to point upwards, we have to use <code class="shader">cross(ty, tx)</code>, not <code class="shader">cross(tx, ty)</code>.</p>
+							</div>
+						</aside>
+						
+						<p>When you calculate the cross product with the tangent vectors, you'll see that `[[0],[f_v^'],[1]] xx [[1],[f_u^'],[0]] = [[-f_u^'],[1],[-f_v^']]`. So we can construct the vector directly, instead of having to rely on the <code class="shader">cross</code> function.</p>
+						
+						<pre translate="no" class="shader">void InitializeFragmentNormal(inout Interpolators i) {
+	float2 du = float2(_HeightMap_TexelSize.x * 0.5, 0);
+	float u1 = tex2D(_HeightMap, i.uv - du);
+	float u2 = tex2D(_HeightMap, i.uv + du);
+<del>//	float3 tu = float3(1, u2 - u1, 0);</del>
+
+	float2 dv = float2(0, _HeightMap_TexelSize.y * 0.5);
+	float v1 = tex2D(_HeightMap, i.uv - dv);
+	float v2 = tex2D(_HeightMap, i.uv + dv);
+<del>//	float3 tv = float3(0, v2 - v1, 1);</del>
+
+<del>//	i.normal = cross(tv, tu);</del>
+	<ins>i.normal = float3(u1 - u2, 1, v1 - v2);</ins>
+	i.normal = normalize(i.normal);
+}</pre>
+					</section>
+					
+					<a href="bump-mapping/bump-mapping.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Normal Mapping</h2>
+					
+					<p>While bump mapping works, we have to perform multiple texture samples and finite difference calculations. This seems like a waste, as the resulting normal should always be the same. Why do all this work every frame? We can do it once and store the normals in a texture.</p>
+					
+					<aside>
+						<h3>Does this work with texture filtering?</h3>
+						<div>
+							<p>Bilinear and trilinear filtering will blend between normals vectors, just like normals are interpolated across triangles. So we'll have to normalize the sampled normal.</p>
+							
+							<p>You also have to make sure that each mipmap contains valid normals. You cannot simply downsample the texture as if it contained color data. The vectors have to be normalized as well. Unity will take care of this.</p>
+						</div>
+					</aside>
+					
+					<p>This means that we need a normal map. I could provide one, but we can let Unity do the work for us. Change the <em translate="no">Texture Type</em> of the height map to <em translate="no">Normal Map</em>. Unity automatically switches the texture to use trilinear filtering, and assumes that we want to use the grayscale image data to generate a normal map. This is exactly what we want, but change the <em translate="no">Bumpiness</em> to a much lower value, like 0.05.</p>
+					
+					<figure>
+						<img alt="inspector" src="normal-mapping/inspector.png" width="320" height="216">
+						<img alt="preview" src="normal-mapping/preview.png" width="320" height="254">
+						<figcaption>Generating normals from heights.</figcaption>
+					</figure>
+					
+					<p>After applying the import settings, Unity will compute the normal map. The original height map still exists, but Unity internally uses the generated map.</p>
+					
+					<p>Like we did when visualizing normals as colors, they have to be adjusted to fit inside the 0&ndash;1 range. So they are stored as `(N + 1)/2`. This would suggest that flat areas will appear light green. However, they appear light blue instead. That's because the most common convention for normal maps is to store the up direction in the Z component. The Y and Z coordinates are swapped, from Unity's point of view.</p>
+					
+					<section>
+						<h3>Sampling the Normal Map</h3>
+					
+						<p>Because a normal map is quite different than a height map, rename the shader property accordingly.</p>
+
+						<pre translate="no" class="shader">	Properties {
+		_Tint ("Tint", Color) = (1, 1, 1, 1)
+		_MainTex ("Albedo", 2D) = "white" {}
+		<ins>[NoScaleOffset] _NormalMap ("Normals", 2D) = "bump" {}</ins>
+<del>//		[NoScaleOffset] _HeightMap ("Heights", 2D) = "gray" {}</del>
+		[Gamma] _Metallic ("Metallic", Range(0, 1)) = 0
+		_Smoothness ("Smoothness", Range(0, 1)) = 0.1
+	}</pre>
+
+						<figure>
+							<img src="normal-mapping/material-with-normal-map.png" width="320" height="206">
+							<figcaption>Now using a normal map.</figcaption>
+						</figure>
+						
+						<p>We can remove all the height map code and replace it with a single texture sample, followed by a normalization.</p>
+
+						<pre translate="no" class="shader"><ins>sampler2D _NormalMap;</ins>
+
+<del>//sampler2D _HeightMap;</del>
+<del>//float4 _HeightMap_TexelSize;</del>
+
+&hellip;
+
+void InitializeFragmentNormal(inout Interpolators i) {
+	<ins>i.normal = tex2D(_NormalMap, i.uv).rgb;</ins>
+	i.normal = normalize(i.normal);
+}</pre>
+					
+						<p>Of course, we have to convert the normals back to their original &minus;1&ndash;1 range, by computing `2N - 1`.</p>
+
+						<pre translate="no" class="shader">	i.normal = tex2D(_NormalMap, i.uv).xyz <ins>* 2 - 1</ins>;</pre>
+						
+						<p>Also, make sure to swap Y and Z.</p>
+						
+						<pre translate="no" class="shader">	i.normal = tex2D(_NormalMap, i.uv).xyz * 2 - 1;
+	<ins>i.normal = i.normal.xzy;</ins></pre>
+
+						<figure>
+							<img src="normal-mapping/normals.png" width="470" height="240">
+							<figcaption>Using a normal map.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>DXT5nm</h3>
+						
+						<p>There is definitely something wrong with our normals. That's because Unity ended up encoding the normals in a different way than we expected. Even though the texture preview shows RGB encoding, Unity actually uses DXT5nm.</p>
+						
+						<p>The DXT5nm format only stores the X and Y components of the normal. Its Z component is discarded. The Y component is stored in the G channel, as you might expect. However, the X component is stored in the A channel. The R and B channels are not used.</p>
+						
+						<aside>
+							<h3>Why store X and Y that way?</h3>
+							<div>
+								<p>It seems wasteful to use a four-channel texture to store only two channels. When using an uncompressed texture, this is indeed true. The idea of the DXT5nm format is that it should be used with DXT5 texture compression. Unity does this by default.</p>
+								
+								<p>DXT5 compresses pixels by grouping blocks of 4&times;4 pixels and approximating them with two colors and lookup tables. The amount of bits used for the colors varies per channel. R and B get five bits each, G gets six bits, and A gets eight bits. That's one reason why the X coordinate is moved to the A channel. The other reason is that the RGB channels get one looking table, and the A gets its own lookup table. This keeps the X and Y components isolated.</p>
+								
+								<p>The compression is lossy, but acceptable for normal maps. Compared to an uncompressed 8-bit RGB texture, you get a 3:1 compression ratio.</p>
+								
+								<p>Unit encodes all normals maps with the DXT5nm format, whether you actually compress them or not. However, this is not true when targeting mobile platforms, because they do not support DXT5. In those cases, Unity will use regular RGB encoding.</p>
+							</div>
+						</aside>
+						
+						<p>So when using DXT5nm, we can only retrieve the first two components of our normal.</p>
+						
+						<pre translate="no" class="shader">	i.normal<ins>.xy</ins> = tex2D(_NormalMap, i.uv).<ins>wy</ins> * 2 - 1;</pre>
+						
+						<p>We have to infer the third component from the other two. Because normals are unit vectors, `||N|| = ||N||^2 =  N_x^2 + N_y^2 + N_z^2 = 1`. Thus `N_z = sqrt(1 - N_x^2 - N_y^2)`.</p>
+						
+						<pre translate="no" class="shader">	i.normal.xy = tex2D(_NormalMap, i.uv).wy * 2 - 1;
+	<ins>i.normal.z = sqrt(1 - dot(i.normal.xy, i.normal.xy));</ins>
+	i.normal = i.normal.xzy;</pre>
+						
+						<p>Theoretically, the result should be equal to the original Z component. However, because the texture has limited precision, and because of texture filtering, the result will often be different. It's close enough, though.</p>
+						
+						<p>Also, because of precision limitations, it is possible that `N_x^2 + N_y^2` ends up out of bounds. Make sure that this doesn't happen, by clamping the dot product.</p>
+						
+						<pre translate="no" class="shader">	i.normal.z = sqrt(1 - <ins>saturate(</ins>dot(i.normal.xy, i.normal.xy)<ins>)</ins>);</pre>
+						
+						<figure>
+							<img src="normal-mapping/dxt5nm.png" width="470" height="240">
+							<figcaption>Decoded DXT5nm normals.</figcaption>
+						</figure>
+					</section>
+						
+					<section>
+						<h3>Scaling Bumpiness</h3>
+						
+						<p>Because we bake the normals into a texture, we cannot scale them in the fragment shader. Or can we?</p>
+						
+						<p>We can scale the normal's X and Y components before computing Z. If we decrease X and Y, then Z will become larger, resulting in a flatter surface. The opposite will happen if we increase them. So we can adjust the bumpiness that way. As we're already clamping the squares of X and Y, we'll never end up with invalid normals.</p>
+						
+						<p>Let's add a bump scale property to our shader, just like Unity's standard shader.</p>
+						
+						<pre translate="no" class="shader">	Properties {
+		_Tint ("Tint", Color) = (1, 1, 1, 1)
+		_MainTex ("Albedo", 2D) = "white" {}
+		[NoScaleOffset] _NormalMap ("Normals", 2D) = "bump" {}
+		<ins>_BumpScale ("Bump Scale", Float) = 1</ins>
+		[Gamma] _Metallic ("Metallic", Range(0, 1)) = 0
+		_Smoothness ("Smoothness", Range(0, 1)) = 0.1
+	}</pre>
+						
+						<p>Incorporate this scale into our normal calculations.</p>
+						
+						<pre translate="no" class="shader">sampler2D _NormalMap;
+<ins>float _BumpScale;</ins>
+
+&hellip;
+
+void InitializeFragmentNormal(inout Interpolators i) {
+	i.normal.xy = tex2D(_NormalMap, i.uv).wy * 2 - 1;
+	<ins>i.normal.xy *= _BumpScale;</ins>
+	i.normal.z = sqrt(1 - saturate(dot(i.normal.xy, i.normal.xy)));
+	i.normal = i.normal.xzy;
+	i.normal = normalize(i.normal);
+}</pre>
+						
+						<p>To get bumps of about the same strength as we got while using the height map, reduce the scale to something like 0.25.</p>
+						
+						<figure>
+							<img alt="inspector" src="normal-mapping/bump-scale.png" width="320" height="134">
+							<img alt="quad" src="normal-mapping/scaled.png" width="470" height="240">
+							<img alt="details" src="normal-mapping/scaled-details.png" width="470" height="240">
+							<figcaption>Scaled bumps.</figcaption>
+						</figure>
+						
+						<p><em translate="no">UnityStandardUtils</em> contains the <code class="shader">UnpackScaleNormal</code> function. It automatically uses the correct decoding for normal maps, and scales normals as well. So let's take advantage of that convenient function.</p>
+						
+						<pre translate="no" class="shader">void InitializeFragmentNormal(inout Interpolators i) {
+<del>//	i.normal.xy = tex2D(_NormalMap, i.uv).wy * 2 - 1;</del>
+<del>//	i.normal.xy *= _BumpScale;</del>
+<del>//	i.normal.z = sqrt(1 - saturate(dot(i.normal.xy, i.normal.xy)));</del>
+	<ins>i.normal = UnpackScaleNormal(tex2D(_NormalMap, i.uv), _BumpScale);</ins>
+	i.normal = i.normal.xzy;
+	i.normal = normalize(i.normal);
+}</pre>
+						
+						<aside>
+							<h3>What does <code>UnpackScaleNormal</code> look like?</h3>
+							<div>
+								<p>Unity defines the <code class="shader">UNITY_NO_DXT5nm</code> keyword when targeting platforms that do not support DXT5nm. When this is the case, the function switches to the RGB format and does not support normal scaling. It also doesn't support scaling when targeting Shader Model 2, because of the instruction limit. So do not rely on the bump scale when targeting mobiles.</p>
+								
+								<pre translate="no" class="shader">half3 UnpackScaleNormal (half4 packednormal, half bumpScale) {
+	#if defined(UNITY_NO_DXT5nm)
+		return packednormal.xyz * 2 - 1;
+	#else
+		half3 normal;
+		normal.xy = (packednormal.wy * 2 - 1);
+		#if (SHADER_TARGET >= 30)
+			// SM2.0: instruction count limitation
+			// SM2.0: normal scaler is not supported
+			normal.xy *= bumpScale;
+		#endif
+		normal.z = sqrt(1.0 - saturate(dot(normal.xy, normal.xy)));
+		return normal;
+	#endif
+}</pre>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Combining Albedo and Bumps</h3>
+						
+						<p>Now that we have a functional normal map, you can check the difference it makes. When only using the marble albedo texture, our quad looks like perfectly polished stone. Add the normal map, and it becomes a much more interesting surface.</p>
+						
+						<figure>
+							<img alt="without" src="normal-mapping/without-bumps.png" width="470" height="240">
+							<img alt="with" src="normal-mapping/with-bumps.png" width="470" height="240">
+							<figcaption>Without vs. with bumps.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="normal-mapping/normal-mapping.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Bump Details</h2>
+					
+					<p>In <a href="../part-3.1.html">part 3, Combining Textures</a>, we created a shader with a detail texture. We did this with the albedo, but we can also do it with bumps. First, add support for detail albedo to the <em translate="no">My First Lighting Shader</em> as well.</p>
+					
+					<pre translate="no" class="shader">	Properties {
+		_Tint ("Tint", Color) = (1, 1, 1, 1)
+		_MainTex ("Albedo", 2D) = "white" {}
+		[NoScaleOffset] _NormalMap ("Normals", 2D) = "bump" {}
+		_BumpScale ("Bump Scale", Float) = 1
+		[Gamma] _Metallic ("Metallic", Range(0, 1)) = 0
+		_Smoothness ("Smoothness", Range(0, 1)) = 0.1
+		<ins>_DetailTex ("Detail Texture", 2D) = "gray" {}</ins>
+	}</pre>
+					
+					<figure>
+						<img src="bump-details/detail-inspector.png" width="320" height="290">
+						<figcaption>Now with detail albedo texture.</figcaption>
+					</figure>
+					
+					<p>Instead of adding an interpolator for the detail UV, let's manually pack both the main UV and detail UV in a single interpolator. The main UV go in XY, the detail UV go in ZW.</p>
+					
+					<pre translate="no" class="shader">struct Interpolators {
+	float4 position : SV_POSITION;
+<del>//	float2 uv : TEXCOORD0;</del>
+	<ins>float4</ins> uv : TEXCOORD0;
+	float3 normal : TEXCOORD1;
+	float3 worldPos : TEXCOORD2;
+
+	#if defined(VERTEXLIGHT_ON)
+		float3 vertexLightColor : TEXCOORD3;
+	#endif
+};</pre>
+					
+					<p>Add the required variables and fill the interpolator in the vertex program.</p>
+					
+					<pre translate="no" class="shader">sampler2D _MainTex, _DetailTex;
+sampler2D _MainTex<ins>, _DetailTex</ins>;
+float4 _MainTex_ST<ins>, _DetailTex_ST</ins>;
+
+&hellip;
+
+Interpolators MyVertexProgram (VertexData v) {
+	Interpolators i;
+	i.position = mul(UNITY_MATRIX_MVP, v.position);
+	i.worldPos = mul(unity_ObjectToWorld, v.position);
+	i.normal = UnityObjectToWorldNormal(v.normal);
+	i.uv<ins>.xy</ins> = TRANSFORM_TEX(v.uv, _MainTex);
+	<ins>i.uv.zw = TRANSFORM_TEX(v.uv, _DetailTex);</ins>
+	ComputeVertexLightColor(i);
+	return i;
+}</pre>
+					
+					<p>Now we have should use <code class="shader">i.uv.xy</code> instead of <code class="shader">i.uv</code>, when we need the main UV.</p>
+					
+					<pre translate="no" class="shader">void InitializeFragmentNormal(inout Interpolators i) {
+	i.normal = UnpackScaleNormal(tex2D(_NormalMap, i.uv<ins>.xy</ins>), _BumpScale);
+	i.normal = i.normal.xzy;
+	i.normal = normalize(i.normal);
+}
+
+float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+	InitializeFragmentNormal(i);
+
+	float3 viewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
+
+	float3 albedo = tex2D(_MainTex, i.uv<ins>.xy</ins>).rgb * _Tint.rgb;
+
+	&hellip;
+}</pre>
+					
+					<p>Factor the detail texture into the albedo.</p>
+					
+					<pre translate="no" class="shader">	float3 albedo = tex2D(_MainTex, i.uv.xy).rgb * _Tint.rgb;
+	<ins>albedo *= tex2D(_DetailTex, i.uv.zw) * unity_ColorSpaceDouble;</ins></pre>
+					
+					<figure>
+						<img alt="without" src="bump-details/without-bumps.png" width="470" height="240">
+						<img alt="with" src="bump-details/with-bumps.png" width="470" height="240">
+						<figcaption>Detailed albedo, without vs. with bumps.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Detail Normals</h3>
+						
+						<p>As the detail texture of our marble material is grayscale, we can use it to generate a normal map. Duplicate it and change its <em translate="no">Import Type</em> to <em translate="no">Normal Map</em>. Decrease its <em translate="no">Bumpiness</em> to something like 0.1 and leave all other settings as they were.</p>
+						
+						<p>As we're fading out the mipmaps, the colors fade to gray. As a result, the detail normal map that Unity generates fades to flat. So they fade out together.</p>
+						
+						<figure>
+							<img alt="inspector" src="bump-details/detail-normals-inspector.png" width="320" height="358">
+							<img alt="preview" src="bump-details/detail-normals-preview.png" width="320" height="254">
+							<figcaption>Detail normals texture.</figcaption>
+						</figure>
+						
+						<p>Add a property for the detail normal map to our shader. Give it a bump scale as well.</p>
+						
+						<pre translate="no" class="shader">	Properties {
+		_Tint ("Tint", Color) = (1, 1, 1, 1)
+		_MainTex ("Albedo", 2D) = "white" {}
+		[NoScaleOffset] _NormalMap ("Normals", 2D) = "bump" {}
+		_BumpScale ("Bump Scale", Float) = 1
+		[Gamma] _Metallic ("Metallic", Range(0, 1)) = 0
+		_Smoothness ("Smoothness", Range(0, 1)) = 0.1
+		_DetailTex ("Detail Texture", 2D) = "gray" {}
+		<ins>[NoScaleOffset] _DetailNormalMap ("Detail Normals", 2D) = "bump" {}</ins>
+		<ins>_DetailBumpScale ("Detail Bump Scale", Float) = 1</ins>
+	}</pre>
+						
+						<figure>
+							<img src="bump-details/detail-bumps-inspector.png" width="320" height="166">
+							<figcaption>Detail normal map and scale.</figcaption>
+						</figure>
+						
+						<p>Add the required variables and fetch the detail normal map, just like the main normal map. Before we combine them, show just the detail normal.</p>
+						
+						<pre translate="no" class="shader">sampler2D _NormalMap<ins>, _DetailNormalMap</ins>;
+float _BumpScale<ins>, _DetailBumpScale</ins>;
+
+&hellip;
+
+void InitializeFragmentNormal(inout Interpolators i) {
+	i.normal = UnpackScaleNormal(tex2D(_NormalMap, i.uv.xy), _BumpScale);
+	<ins>i.normal =</ins>
+		<ins>UnpackScaleNormal(tex2D(_DetailNormalMap, i.uv.zw), _DetailBumpScale);</ins>
+	i.normal = i.normal.xzy;
+	i.normal = normalize(i.normal);
+}</pre>
+						<figure>
+							<img src="bump-details/detail-normals.png" width="470" height="240">
+							<figcaption>Detail bumps.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Blending Normals</h3>
+						
+						<p>We combined the main and detail albedo by multiplying them together. We cannot do this with normals, because they are vectors. But we could average them, before normalizing.</p>
+						
+						<pre translate="no" class="shader">void InitializeFragmentNormal(inout Interpolators i) {
+	<ins>float3 mainNormal</ins> =
+		UnpackScaleNormal(tex2D(_NormalMap, i.uv.xy), _BumpScale);
+	<ins>float3 detailNormal</ins> =
+		UnpackScaleNormal(tex2D(_DetailNormalMap, i.uv.zw), _DetailBumpScale);
+	<ins>i.normal = (mainNormal + detailNormal) * 0.5;</ins>
+	i.normal = i.normal.xzy;
+	i.normal = normalize(i.normal);
+}</pre>
+						
+						<figure>
+							<img src="bump-details/averaged-normals.png" width="470" height="240">
+							<figcaption>Averaged normals.</figcaption>
+						</figure>
+						
+						<p>The result isn't very good. Both the main and detail bumps get flattened. Ideally, when one of them is flat, it shouldn't affect the other at all.</p>
+						
+						<p>What we're effectively trying to do here, is combine two height fields. Averaging those makes no sense. It makes a lot more sense to add them. When adding two height functions, their slopes &ndash; thus their derivatives &ndash; are added as well. Can we extract the derivatives from the normals?</p>
+						
+						<p>Earlier, we constructed our own normal vector by normalizing `[[-f_u^'],[1],[-f_v^']]`. Our normal maps contain normals of the same type, except with their Y and Z components swapped. So they're of the form `[[-f_u^'],[-f_v^'],[1]]`. However, these normals have been scaled by the normalization process. So we start with `[[-s f_u^'],[-s f_v^'],[s]]`, where `s` is an arbitrary scale factor. The Z component is equal to this factor. This means that we can find the partial derivatives by dividing X and Y by Z. This only fails when Z is zero, which corresponds with a vertical surface. Our bumps are nowhere near that steep, so we don't need to worry about that.</p>
+						
+						<p>Once we have the derivatives, we can add them to find the derivatives of the summed height fields. Then, we convert back to a normal vector. The resulting vector, before normalizing, is `[[M_x/M_z + D_x/D_z],[M_y/M_z + D_y/D_z],[1]]`.</p>
+						
+						<pre translate="no" class="shader">void InitializeFragmentNormal(inout Interpolators i) {
+	<ins>float3 mainNormal</ins> =
+		UnpackScaleNormal(tex2D(_NormalMap, i.uv.xy), _BumpScale);
+	<ins>float3 detailNormal</ins> =
+		UnpackScaleNormal(tex2D(_DetailNormalMap, i.uv.zw), _DetailBumpScale);
+	<ins>i.normal =</ins>
+		<ins>float3(mainNormal.xy / mainNormal.z + detailNormal.xy / detailNormal.z, 1);</ins>
+	i.normal = i.normal.xzy;
+	i.normal = normalize(i.normal);
+}</pre>
+						
+						<figure>
+							<img src="bump-details/added-derivatives.png" width="470" height="240">
+							<figcaption>Adding derivatives.</figcaption>
+						</figure>
+						
+						<p>This produces a much better result! It works quite well when combining maps that are mostly flat. However, combining steep slopes will still lose details. A slightly alternative method is whiteout blending. First, multiply the new normal by `M_zD_z`. We can do this, because we normalize afterwards anyway. This gives us the vector `[[M_xD_z + D_xM_z],[M_yD_z + D_yM_z],[M_zD_z]]`. Then drop the scaling of X and Y, leading to `[[M_x + D_x],[M_y + D_y],[M_zD_z]]`.</p>
+						
+						<p>This tweak exaggerates the X and Y components, and thus produces more pronounced bumps along steep slopes. But when one of the normals is flat, the other normal is not altered.</p>
+						
+						<aside>
+							<h3>Why is it known as whiteout blending?</h3>
+							<div>
+								<p>This method was first publicly described by Christopher Oat, at SIGGRAPH’07. It was used in the <em translate="no">Ruby: Whiteout</em> demo of AMD, hence its name.</p>
+							</div>
+						</aside>
+						
+						<pre translate="no" class="shader">	i.normal =
+		<ins>float3(mainNormal.xy + detailNormal.xy, mainNormal.z * detailNormal.z);</ins>
+<del>//		float3(mainNormal.xy / mainNormal.z + detailNormal.xy / detailNormal.z, 1);</del></pre>
+						
+						<figure>
+							<img src="bump-details/mixed-normals.png" width="470" height="240">
+							<figcaption>Whiteout blending normals, with albedo.</figcaption>
+						</figure>
+						
+						<p><em translate="no">UnityStandardUtils</em> contains the <code class="shader">BlendNormals</code> function, which also uses whiteout blending. So let's that function. It also normalizes the result, so we don't have to do that ourselves anymore.</p>
+						
+						<pre translate="no" class="shader">	i.normal = <ins>BlendNormals(mainNormal, detailNormal);</ins>
+<del>//		float3(mainNormal.xy + detailNormal.xy, mainNormal.z * detailNormal.z);</del>
+	i.normal = i.normal.xzy;
+<del>//	i.normal = normalize(i.normal);</del>
+</pre>
+						
+						<aside>
+							<h3>What does <code class="shader">BlendNormals</code> look like?</h3>
+							<div>
+								<p>It performs the exact same computations that we did.</p>
+								
+								<pre translate="no" class="shader">half3 BlendNormals (half3 n1, half3 n2) {
+	return normalize(half3(n1.xy + n2.xy, n1.z * n2.z));
+}</pre>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="bump-details/bump-details.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Tangent Space</h2>
+					
+					<p>Up to this points, we have assumed that we're shading a flat surface that is aligned with the XZ plane. But for this technique to be of any use, it must work for arbitrary geometry.</p>
+					
+					<figure>
+						<img alt="mesh" src="tangents/mesh-normals.png" width="260" height="170">
+						<img alt="mapped" src="tangents/mapped-normals.png" width="260" height="170">
+						<figcaption>Incorrectly bump mapping a cube and sphere.</figcaption>
+					</figure>
+					
+					<p>One of the faces of a cube can be aligned so that it matches our assumptions. We could support the other sides, by swapping and flipping dimensions. But this assumes a cube that is axis-aligned. When the cube has an arbitrary rotation, it becomes more complex. We have to transform the results of our bump mapping code so it matches the real orientation of the face.</p>
+					
+					<p>Can we know the orientation of a face? For that, we need vectors that define the U and V axes. Those two, plus the normal vector, define a 3D space which matches our assumptions. Once we have that space, we can use it to transform the bumps to world space.</p>
+					
+					<p>As we already have the normal vector `N`, we only require one additional vector. The cross product of those two vectors defines the third one.</p>
+					
+					<p>The additional vector is provided as part of the mesh's vertex data. As it lies in the plane defined by the surface normal, it is known as the tangent vector `T`. By convention, this vector matches the U axis, pointing to the right.</p>
+					
+					<p>The third vector is known as `B`, the bitangent, or the binormal. As Unity refers to it as the binormal, so will I. This vector defines the V axis, pointing forward. The standard way to derive the bitangent is via `B = N xx T`. However, this will produce a vector that points backwards, not forwards. To correct this, the result has to be multiplied with &minus;1. This factor is stored as an extra fourth component of `T`.</p>
+						
+					<aside>
+						<h3>Why store &minus;1 in the tangent vector?</h3>
+						<div>
+							<p>A common technique when creating 3D models with bilateral symmetry &ndash; like people and animals &ndash; is to left-right mirror the mesh. This means you only have to edit one side of the mesh. And you only need half the texture data you'd otherwise require. This means that the normal and tangent vectors are mirrored as well. However, the binormal should not be mirrored! To support this, the mirrored tangents store 1 in their fourth component, instead of &minus;1. So this data is actually variable. That's why it has to be explicitly provided.</p>
+						</div>
+					</aside>
+					
+					<p>So we can use the vertex normal and tangent to construct a 3D space that matches the mesh surface. This space is known as tangent space, the tangent basis, or TBN space. In the case of a cube, tangent space is uniform per face. In the case of a sphere, tangent space wraps around its surface.</p>
+					
+					<p>In order to construct this space, the mesh has to contain tangent vectors. Fortunately, Unity's default meshes contain this data. When importing a mesh into Unity, you either import your own tangents, or have Unity generate them for you.</p>
+					
+					<section>
+						<h3>Visualizing Tangent Space</h3>
+						
+						<p>To get an idea of how tangent space works, let's code a quick visualization of it. Create a <code>TangentSpaceVisualizer</code> component with an <code>OnDrawGizmos</code> method.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class TangentSpaceVisualizer : MonoBehaviour {</ins>
+
+	<ins>void OnDrawGizmos () {</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Each time gizmos are drawn, grab the mesh from the game object's mesh filter, and use it to show its tangent space. Of course this only works if there actually is a mesh. Grab the <code>shadedMesh</code>, not the <code>mesh</code>. The first gives us a reference to the mesh asset, while the second would create a copy.</p>
+						
+						<aside>
+							<h3>Why does the <code>MeshFilter.mesh</code> property create a copy?</h3>
+							<div>
+								<p>Suppose you have a game object that uses a mesh asset. You want to tweak the mesh of only that game object, at run time. Then you want to create a local copy of the mesh asset, specific to that object. That's why <code>MeshFilter.mesh</code> creates a copy.</p>
+							</div>
+						</aside>
+						
+						<pre translate="no">	void OnDrawGizmos () {
+		<ins>MeshFilter filter = GetComponent&lt;MeshFilter>();</ins>
+		<ins>if (filter) {</ins>
+			<ins>Mesh mesh = filter.sharedMesh;</ins>
+			<ins>if (mesh) {</ins>
+				<ins>ShowTangentSpace(mesh);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	}
+
+	<ins>void ShowTangentSpace (Mesh mesh) {</ins>
+	<ins>}</ins></pre>
+						
+						<p>First, we'll show the normal vectors. Get the vertex positions and normals from the mesh, and use those to draw lines. We have to transform them to world space so they match the geometry in the scene. As the normal corresponds with the up direction in tangent space, let's give them a green color.</p>
+						
+						<pre translate="no">	void ShowTangentSpace (Mesh mesh) {
+		<ins>Vector3[] vertices = mesh.vertices;</ins>
+		<ins>Vector3[] normals = mesh.normals;</ins>
+		<ins>for (int i = 0; i &lt; vertices.Length; i++) {</ins>
+			<ins>ShowTangentSpace(</ins>
+				<ins>transform.TransformPoint(vertices[i]),</ins>
+				<ins>transform.TransformDirection(normals[i])</ins>
+			<ins>);</ins>
+		<ins>}</ins>
+	}
+
+	<ins>void ShowTangentSpace (Vector3 vertex, Vector3 normal) {</ins>
+		<ins>Gizmos.color = Color.green;</ins>
+		<ins>Gizmos.DrawLine(vertex, vertex + normal);</ins>
+	<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Isn't it inefficient to retrieve the mesh data every time?</h3>
+							<div>
+								<p>Yes, it is. As this is just a quick visualization, we needn't bother optimizing this.</p>
+							</div>
+						</aside>
+						
+						<p>Add this component to some objects with a mesh to see their vertex normals.</p>
+						
+						<figure>
+							<img src="tangents/gizmos-normal.png" width="280" height="190">
+							<figcaption>Showing normals.</figcaption>
+						</figure>
+						
+						<p>What is a sensible length of the lines? It depends on the geometry. So let's add a configurable scale. Let's also support a configurable offset, which pushes the lines away from the surface. That makes it easier to inspect overlapping vertices.</p>
+						
+						<pre translate="no">	<ins>public float offset = 0.01f;</ins>
+	<ins>public float scale = 0.1f;</ins>
+
+	void ShowTangentSpace (Vector3 vertex, Vector3 normal) {
+		<ins>vertex += normal * offset;</ins>
+		Gizmos.color = Color.green;
+		Gizmos.DrawLine(vertex, vertex + normal <ins>* scale</ins>);
+	}</pre>
+						
+						<figure>
+							<img alt="inspector" src="tangents/inspector.png" width="320" height="80"><br>
+							<img alt="scene" src="tangents/gizmos-offset-scale.png" width="280" height="190">
+							<figcaption>Offset and scaled.</figcaption>
+						</figure>
+						
+						<p>Now include the tangent vectors. They works just like normal vectors, except that they're 4D vectors. As they point rightward locally, give them a red color.</p>
+						
+						<pre translate="no">	void ShowTangentSpace (Mesh mesh) {
+		Vector3[] vertices = mesh.vertices;
+		Vector3[] normals = mesh.normals;
+		<ins>Vector4[] tangents = mesh.tangents;</ins>
+		for (int i = 0; i &lt; vertices.Length; i++) {
+			ShowTangentSpace(
+				transform.TransformPoint(vertices[i]),
+				transform.TransformDirection(normals[i]),
+				<ins>transform.TransformDirection(tangents[i])</ins>
+			);
+		}
+	}
+
+	void ShowTangentSpace (Vector3 vertex, Vector3 normal<ins>, Vector3 tangent</ins>) {
+		vertex += normal * offset;
+		Gizmos.color = Color.green;
+		Gizmos.DrawLine(vertex, vertex + normal * scale);
+		<ins>Gizmos.color = Color.red;</ins>
+		<ins>Gizmos.DrawLine(vertex, vertex + tangent * scale);</ins>
+	}</pre>
+						
+						<figure>
+							<img src="tangents/gizmos-tangents.png" width="280" height="190">
+							<figcaption>Showing normals and tangents.</figcaption>
+						</figure>
+						
+						<p>Finally, construct and show the binormal vectors with a blue line.</p>
+						
+						<pre translate="no">	void ShowTangentSpace (Mesh mesh) {
+		&hellip;
+		for (int i = 0; i &lt; vertices.Length; i++) {
+			ShowTangentSpace(
+				transform.TransformPoint(vertices[i]),
+				transform.TransformDirection(normals[i]),
+				transform.TransformDirection(tangents[i])<ins>,</ins>
+				<ins>tangents[i].w</ins>
+			);
+		}
+	}
+
+	void ShowTangentSpace (
+		Vector3 vertex, Vector3 normal, Vector3 tangent<ins>, float binormalSign</ins>
+	) {
+		&hellip;
+		<ins>Vector3 binormal = Vector3.Cross(normal, tangent) * binormalSign;</ins>
+		<ins>Gizmos.color = Color.blue;</ins>
+		<ins>Gizmos.DrawLine(vertex, vertex + binormal * scale);</ins>
+	}</pre>
+						
+						<figure>
+							<img src="tangents/gizmos-binormal.png" width="280" height="190">
+							<figcaption>Showing the complete tangent space.</figcaption>
+						</figure>
+						
+						<p>You can see that the tangent space is different but constant for each face of a default cube. In case of a default sphere, the tangent space is different for each vertex. As as result, the tangent space will be interpolated across triangles, resulting in a curved space.</p>
+						
+						<figure>
+							<img src="tangents/sphere-tangent-space.png" width="360" height="360">
+							<figcaption>Tangents space around default sphere.</figcaption>
+						</figure>
+						
+						<p>Wrapping tangent space around a sphere is problematic. Unity's default sphere uses the longitude-latitude texture layout. It's like wrapping a piece of paper around a ball, forming a cylinder. Then, the top and bottom of the cylinder are crumpled until they match the sphere. So the poles are quite messy. Unity's default sphere combines that with a cubic vertex layout, which exacerbates the problem. They're fine for mock-ups, but don't expect the default meshes to produce high-quality results.</p>
+					</section>
+					
+					<section>
+						<h3>Tangent Space in the Shader</h3>
+						
+						<p>To access the tangents in our shader, we have to add them to the <code class="shader">VertexData</code> struct.</p>
+						
+						<pre translate="no" class="shader">struct VertexData {
+	float4 position : POSITION;
+	float3 normal : NORMAL;
+	<ins>float4 tangent : TANGENT;</ins>
+	float2 uv : TEXCOORD0;
+};</pre>
+						
+						<p>And we have to include them as an additional interpolator. The order of the interpolators doesn't matter, but I like to keep the normal and tangent together.</p>
+						
+						<pre translate="no" class="shader">struct Interpolators {
+	float4 position : SV_POSITION;
+	float4 uv : TEXCOORD0;
+	float3 normal : TEXCOORD1;
+	<ins>float4 tangent : TEXCOORD2;</ins>
+	float3 worldPos : <ins>TEXCOORD3</ins>;
+
+	#if defined(VERTEXLIGHT_ON)
+		float3 vertexLightColor : <ins>TEXCOORD4</ins>;
+	#endif
+};</pre>
+						
+						<p>Transform the tangent to world space in the vertex program, using <code class="shader">UnityObjectToWorldDir</code> from <em translate="no">UnityCG</em>. Of course this only applies to the XYZ part of the tangent. Its W component needs to be passed along unmodified.</p>
+						
+						<pre translate="no" class="shader">Interpolators MyVertexProgram (VertexData v) {
+	Interpolators i;
+	i.position = mul(UNITY_MATRIX_MVP, v.position);
+	i.worldPos = mul(unity_ObjectToWorld, v.position);
+	i.normal = UnityObjectToWorldNormal(v.normal);
+	<ins>i.tangent = float4(UnityObjectToWorldDir(v.tangent.xyz), v.tangent.w);</ins>
+	i.uv.xy = TRANSFORM_TEX(v.uv, _MainTex);
+	i.uv.zw = TRANSFORM_TEX(v.uv, _DetailTex);
+	ComputeVertexLightColor(i);
+	return i;
+}</pre>
+						
+						<aside>
+							<h3>What does <code>UnityObjectToWorldDir</code> look like?</h3>
+							<div>
+								<p>It is simply a direction transformation, using the world-to-object matrix.</p>
+								
+								<pre translate="no" class="shader">// Transforms direction from object to world space
+inline float3 UnityObjectToWorldDir( in float3 dir ) {
+    return normalize(mul((float3x3)unity_ObjectToWorld, dir));
+}</pre>
+							</div>
+						</aside>
+						
+						<p>We now have access to both the normal and the tangent in the fragment shader. So we can construct the binormal in <code class="shader">InitializeFragmentNormal</code>. However, we must take care to not replace the original normal with the bumped normal. The bumped normal exists in tangent space, so keep it separate.</p>
+						
+						<pre translate="no" class="shader">void InitializeFragmentNormal(inout Interpolators i) {
+	float3 mainNormal =
+		UnpackScaleNormal(tex2D(_NormalMap, i.uv.xy), _BumpScale);
+	float3 detailNormal =
+		UnpackScaleNormal(tex2D(_DetailNormalMap, i.uv.zw), _DetailBumpScale);
+	<ins>float3 tangentSpaceNormal</ins> = BlendNormals(mainNormal, detailNormal);
+	<ins>tangentSpaceNormal</ins> = <ins>tangentSpaceNormal</ins>.xzy;
+
+	<ins>float3 binormal = cross(i.normal, i.tangent.xyz) * i.tangent.w;</ins>
+}</pre>
+						
+						<aside>
+							<h3>Shouldn't we normalize the normal and tangent vectors?</h3>
+							<div>
+								<p>If we want to ensure that we're working with unit vectors, then indeed we should do that. In fact, to create a proper 3D space, we should also ensure that the angle between the normal and tangent is 90&deg;.</p>
+								
+								<p>However, we're not going to bother with that. You'll find out why in the next section.</p>
+							</div>
+						</aside>
+						
+						<p>Now we can convert the bumped normal from tangent space to world space.</p>
+						
+						<pre translate="no" class="shader">	float3 binormal = cross(i.normal, i.tangent.xyz) * i.tangent.w;
+
+	<ins>i.normal = normalize(</ins>
+		<ins>tangentSpaceNormal.x * i.tangent +</ins>
+		<ins>tangentSpaceNormal.y * i.normal +</ins>
+		<ins>tangentSpaceNormal.z * binormal</ins>
+	<ins>);</ins></pre>
+						
+						<p>We can also get rid of the explicit YZ swap, combining it with the space conversion.</p>
+						
+						<pre translate="no" class="shader"><del>//	tangentSpaceNormal = tangentSpaceNormal.xzy;</del>
+	
+	float3 binormal = cross(i.normal, i.tangent.xyz) * i.tangent.w;
+
+	i.normal = normalize(
+		tangentSpaceNormal.x * i.tangent +
+		tangentSpaceNormal.y * <ins>binormal</ins> +
+		tangentSpaceNormal.z * <ins>i.normal</ins>
+	;</pre>
+						
+						<figure>
+							<img src="tangents/tangent-to-world.png" width="260" height="170">
+							<figcaption>Converted normals.</figcaption>
+						</figure>
+						
+						<p>There is one additional detail, when constructing the binormal. Suppose an object has its scale set to (-1, 1, 1). That means that it is mirrored. We have to flip the binormal in this case, to correctly mirror the tangent space as well. In fact, we have to do this when an odd number of dimensions are negative. <em translate="no">UnityShaderVariables</em> helps us with this, by defining the <code class="shader">float4 unity_WorldTransformParams</code> variable. Its fourth component contains &minus;1 when we need to flip the binormal, and 1 otherwise.</p>
+						
+						<pre translate="no" class="shader">	float3 binormal = cross(i.normal, i.tangent.xyz) *
+		<ins>(</ins>i.tangent.w <ins>* unity_WorldTransformParams.w)</ins>;</pre>
+						
+						<aside>
+							<h3>What other data does <code class="shader">unity_WorldTransformParams</code> contain?</h3>
+							<div>
+								<p>I don't know. It is not used for anything else. At least, not yet.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Synched Tangent Space</h3>
+						
+						<p>When a 3D artist creates a detailed model, the usual approach is to build a very high-resolution model. All the details are actual 3D geometry. To make this work in a game, a low-resolution version of the model is generated. The details are baked into textures for this model.</p>
+						
+						<p>The normals of the high-resolution model are baked into a normal map. This is done by converting the normals from world space to tangent space. When rendering the low-resolution model in a game, this conversion is reversed.</p>
+						
+						<p>This process works fine, as long as both conversions use the same algorithm and tangent space. When they don't, the in-game results will be wrong. This can cause 3D artists a lot of grief. So you have to make sure that your normal map generator, Unity's mesh import process, and the shader are all synchronized. This is known as a synched tangent space workflow.</p>
+						
+						<aside>
+							<h3>What about our normal maps?</h3>
+							<div>
+								<p>We generated our normal maps from height fields. As such, they have a flat reference frame, and their tangent space is regular. So when they're applied to an object with a curving tangent space, the final normals will be distorted, compared to the height fields. This is fine, because the exact appearance of the marble doesn't matter.</p>
+							</div>
+						</aside>
+						
+						<p>Since version 5.3, Unity uses mikktspace. So make sure that you're using mikktspace as well when generating your normal maps. When importing a mesh, you can allow Unity to generate the tangent vectors for you, as it uses the mikktspace algorithm for that. Alternatively, export mikktspace tangents yourself and have Unity use those.</p>
+						
+						<aside>
+							<h3>What is mikktspace?</h3>
+							<div>
+								<p>It is a standard for tangent space and normal generation, created by Morten Mikkelsen. The name is shorthand for Mikkelsen's tangent space.</p>
+								
+								<p>For a shader to by synchronized with mikktspace, it has to receive normalized normal and tangent vectors in the vertex program. These vectors are then interpolated, and not renormalized per fragment. The binormal is found by computing <code class="shader">cross(normal.xyz, tangent.xyz) * tangent.w</code>. So our shader is synchronized with mikktspace, and so are Unity's standard shaders.</p>
+								
+								<p>Note that mikktspace is not guaranteed to be regular. The angle between the normal and tangent is free to vary. This isn't a problem, as long as the distortion doesn't become too great. Because we only use it to convert normals, consistency is all that matters.</p>
+							</div>
+						</aside>
+						
+						<p>When using mikktspace, there is one choice to make. The binormal can either be constructed in the fragment program &ndash; like we do &ndash; or in the vertex program &ndash; like Unity does. Both approaches produce slightly different binormals.</p>
+						
+						<figure>
+							<img src="tangents/binormal-difference.png" width="260" height="170">
+							<figcaption>Exaggerated binormal difference.</figcaption>
+						</figure>
+						
+						<p>So when generating your normal map for Unity, use settings that corresponds with calculating binormals per vertex. Or go ahead and assume they're calculated per fragment, and use a shader that does so as well.</p>
+						
+						<aside>
+							<h3>Tangent space is a hassle, can we make do without it?</h3>
+							<div>
+								<p>Because tangent space wraps around the surface of objects, the exact shape of the object doesn't matter. You can apply any tangent-space normal map to it. You can tile the maps too, as we have done. Also, when a mesh is deformed because it is animated, tangent space &ndash; and thus the normal map &ndash; deforms along with it.</p>
+								
+								<p>If you do away with tangent space, you have to work with object-space normal maps. These maps don't stick to a surface. So they cannot tile, they cannot be applied to different shapes, and they cannot deform along with a mesh. Also, they don't work well with texture compression.</p>
+								
+								<p>So there are very good reasons to work with tangent space. Having said that, there are also ways to work with tangent-space normals, without explicitly providing tangent vectors. Such techniques rely on shader derivative instructions, which we'll cover in a future tutorial. But that doesn't eliminate the need for a synched workflow.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Binormals Per Vertex or Fragment</h3>
+
+						<p>If we want to be consistent with Unity's standard shaders, we have to calculate the binormal per vertex. The upside of doing that is that we don't have to compute a cross product in the fragment shader. The downside is that we need an additional interpolator.</p>
+
+						<p>If you're not sure which method to use, you can always support both. Let's say that if <code class="shader">BINORMAL_PER_FRAGMENT</code> is defined, we calculate the binormal per fragment. Otherwise, we do it per vertex. In the former case, we keep our <code class="shader">float4</code> tangent interpolator. In the latter, we need two <code class="shader">float3</code> interpolators instead.</p>
+
+						<pre translate="no" class="shader">struct Interpolators {
+	float4 position : SV_POSITION;
+	float4 uv : TEXCOORD0;
+	float3 normal : TEXCOORD1;
+
+	<ins>#if defined(BINORMAL_PER_FRAGMENT)</ins>
+		float4 tangent : TEXCOORD2;
+	<ins>#else</ins>
+		<ins>float3 tangent : TEXCOORD2;</ins>
+		<ins>float3 binormal : TEXCOORD3;</ins>
+	<ins>#endif</ins>
+
+	float3 worldPos : <ins>TEXCOORD4</ins>;
+
+	#if defined(VERTEXLIGHT_ON)
+		float3 vertexLightColor : <ins>TEXCOORD5</ins>;
+	#endif
+};</pre>
+
+						<aside>
+							<h3>Does that mean we skip an interpolator?</h3>
+							<div>
+								<p>We're only using <code class="shader">TEXCOORD3</code> when we need a binormal interpolator. So when <code class="shader">BINORMAL_PER_FRAGMENT</code> is defined, we skip this interpolator index. This is fine, we can use whichever interpolator indices we want, up to the maximum.</p>
+							</div>
+						</aside>
+
+						<p>Let's put the binormal calculation in its own function. We can then use it in either the vertex or the fragment shader.</p>
+
+						<pre translate="no" class="shader"><ins>float3 CreateBinormal (float3 normal, float3 tangent, float binormalSign) {</ins>
+	<ins>return cross(normal, tangent.xyz) *</ins>
+		<ins>(binormalSign * unity_WorldTransformParams.w);</ins>
+<ins>}</ins>
+
+Interpolators MyVertexProgram (VertexData v) {
+	Interpolators i;
+	i.position = mul(UNITY_MATRIX_MVP, v.position);
+	i.worldPos = mul(unity_ObjectToWorld, v.position);
+	i.normal = UnityObjectToWorldNormal(v.normal);
+
+	<ins>#if defined(BINORMAL_PER_FRAGMENT)</ins>
+		i.tangent = float4(UnityObjectToWorldDir(v.tangent.xyz), v.tangent.w);
+	<ins>#else</ins>
+		<ins>i.tangent = UnityObjectToWorldDir(v.tangent.xyz);</ins>
+		<ins>i.binormal = CreateBinormal(i.normal, i.tangent, v.tangent.w);</ins>
+	<ins>#endif</ins>
+		
+	i.uv.xy = TRANSFORM_TEX(v.uv, _MainTex);
+	i.uv.zw = TRANSFORM_TEX(v.uv, _DetailTex);
+	ComputeVertexLightColor(i);
+	return i;
+}
+
+&hellip;
+
+void InitializeFragmentNormal(inout Interpolators i) {
+	float3 mainNormal =
+		UnpackScaleNormal(tex2D(_NormalMap, i.uv.xy), _BumpScale);
+	float3 detailNormal =
+		UnpackScaleNormal(tex2D(_DetailNormalMap, i.uv.zw), _DetailBumpScale);
+	float3 tangentSpaceNormal = BlendNormals(mainNormal, detailNormal);
+
+	<ins>#if defined(BINORMAL_PER_FRAGMENT)</ins>
+		float3 binormal = <ins>CreateBinormal(i.normal, i.tangent.xyz, i.tangent.w);</ins>
+	<ins>#else</ins>
+		<ins>float3 binormal = i.binormal;</ins>
+	<ins>#endif</ins>
+	
+	i.normal = normalize(
+		tangentSpaceNormal.x * i.tangent +
+		tangentSpaceNormal.y * binormal +
+		tangentSpaceNormal.z * i.normal
+	);
+}</pre>
+						
+						<p>As <code class="shader">BINORMAL_PER_FRAGMENT</code> is not defined anywhere, our shader will now calculate the binormals per vertex. If you want to calculate them per fragment, you have to define <code class="shader">BINORMAL_PER_FRAGMENT</code> somewhere. You can consider this a configuration option of our include file. As such, it makes sense to define it inside <em translate="no">My First Lighting Shader</em>, before including <em translate="no">My Lighting</em>.</p>
+
+						<p>As it makes sense to use the same setting for all our passes, we have to define it in both the base and the additive pass. But we can also put it inside a <code class="shader">CGINCLUDE</code> block at the top of our shader. The contents of that block is included inside all <code class="shader">CGPROGRAM</code> blocks.</p>
+
+						<pre translate="no" class="shader">	Properties {
+		&hellip;
+	}
+
+	<ins>CGINCLUDE</ins>
+
+	<ins>#define BINORMAL_PER_FRAGMENT</ins>
+
+	<ins>ENDCG</ins>
+
+	SubShader {
+		&hellip;
+	}</pre>
+							
+						<p>You can verify that this works by inspecting the compiled shader code. For example, here are the interpolators used by D3D11, without <code class="shader">BINORMAL_PER_FRAGMENT</code> defined.</p>
+
+						<pre translate="no" class="shader">// Output signature:
+//
+// Name                 Index   Mask Register SysValue  Format   Used
+// -------------------- ----- ------ -------- -------- ------- ------
+// SV_POSITION              0   xyzw        0      POS   float   xyzw
+// TEXCOORD                 0   xyzw        1     NONE   float   xyzw
+// TEXCOORD                 1   xyz         2     NONE   float   xyz 
+// TEXCOORD                 2   xyz         3     NONE   float   xyz 
+// TEXCOORD                 3   xyz         4     NONE   float   xyz 
+// TEXCOORD                 4   xyz         5     NONE   float   xyz </pre>
+						
+						<p>And here they are, when <code class="shader">BINORMAL_PER_FRAGMENT</code> is defined.</p>
+						
+						<pre translate="no" class="shader">// Output signature:
+//
+// Name                 Index   Mask Register SysValue  Format   Used
+// -------------------- ----- ------ -------- -------- ------- ------
+// SV_POSITION              0   xyzw        0      POS   float   xyzw
+// TEXCOORD                 0   xyzw        1     NONE   float   xyzw
+// TEXCOORD                 1   xyz         2     NONE   float   xyz 
+// TEXCOORD                 2   xyzw        3     NONE   float   xyzw
+// TEXCOORD                 4   xyz         4     NONE   float   xyz </pre>
+							
+						<p>The next tutorial is <a href="../part-7.1.html">Shadows</a>.</p>
+					</section>
+					
+					<a href="tangents/tangents.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Rendering-6.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

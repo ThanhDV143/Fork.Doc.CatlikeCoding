@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/hex-map/part-9/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/hex-map/part-9/tutorial-image.jpg">
+		<meta property="og:title" content="Hex Map 9">
+		<meta property="og:description" content="A Unity Hex Map tutorial about adding additional terrain features to cells. Part 9 of 27.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hex Map 9</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/hex-map/part-9/#article",
+				"headline": "Hex Map 9",
+				"alternativeHeadline": "Terrain Features",
+				"datePublished": "2016-09-23",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Hex Map tutorial about adding additional terrain features to cells. Part 9 of 27.",
+				"image": "https://catlikecoding.com/unity/tutorials/hex-map/part-9/tutorial-image.jpg",
+				"dependencies": "Unity 5.3.1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/hex-map/", "name": "Hex Map" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				EdgeVertices: 1,
+				HexCell: 1,
+				HexEdgeType: 1,
+				HexCoordinates: 1,
+				HexCoordinatesDrawer: 1,
+				HexDirection: 1,
+				HexDirectionExtensions: 1,
+				HexFeatureCollection: 1,
+				HexFeatureManager: 1,
+				HexGrid: 1,
+				HexGridChunk: 1,
+				HexHash: 1,
+				HexMapCamera: 1,
+				HexMapEditor: 1,
+				HexMesh: 1,
+				HexMetrics: 1,
+				ListPool: 1,
+				OptionalToggle: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Hex Map</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hex Map 9</h1>
+					<p>Terrain Features</p>
+					<ul>
+						<li>Add detail objects to the terrain.</li>
+						<li>Support feature density levels.</li>
+						<li>Use a variety of objects per level.</li>
+						<li>Mix three different feature types.</li>
+					</ul>
+				</header>
+
+				<p>This tutorial is the ninth part of a series about <a href="../index.html">hexagon maps</a>. This installment is about adding details to the terrain. Features like buildings and trees.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A clash between trees, farmland, and urbanization.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Adding Support for Features</h2>
+					
+					<p>While the shape of our terrain has variation, there isn't much going on. It is a lifeless place. To make it come alive, we need to add things like trees and building. These features are not part of the terrain mesh. They are separate objects. But that doesn't stop us from adding them when triangulating the terrain.</p>
+					
+					<p><code>HexGridChunk</code> doesn't care about how a mesh works. It simply orders one of its <code>HexMesh</code> children to add a triangle, or a quad. Likewise, it can have a child that takes care of feature placement for it.</p>
+					
+					<section>
+						<h3>Feature Manager</h3>
+						
+						<p>Let's create a <code>HexFeatureManager</code> component that's responsible for the features of a single chunk. Using the same design as <code>HexMesh</code>, we'll give it a <code>Clear</code>, an <code>Apply</code>, and an <code>AddFeature</code> method. As features have to be placed somewhere, the <code>AddFeature</code> method gets a position parameter.</p>
+						
+						<p>We begin with a stub implementation that doesn't actually do anything.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class HexFeatureManager : MonoBehaviour {</ins>
+
+	<ins>public void Clear () {}</ins>
+
+	<ins>public void Apply () {}</ins>
+
+	<ins>public void AddFeature (Vector3 position) {}</ins>
+<ins>}</ins></pre>
+						
+						<p>We can now add a reference to such a component to <code>HexGridChunk</code>. Then we can include it in the triangulation process, just like all the <code>HexMesh</code> children.</p>
+						
+						<pre translate="no">	<ins>public HexFeatureManager features;</ins>
+
+	public void Triangulate () {
+		terrain.Clear();
+		rivers.Clear();
+		roads.Clear();
+		water.Clear();
+		waterShore.Clear();
+		estuaries.Clear();
+		<ins>features.Clear();</ins>
+		for (int i = 0; i &lt; cells.Length; i++) {
+			Triangulate(cells[i]);
+		}
+		terrain.Apply();
+		rivers.Apply();
+		roads.Apply();
+		water.Apply();
+		waterShore.Apply();
+		estuaries.Apply();
+		<ins>features.Apply();</ins>
+	}</pre>
+						
+						<p>Let's start by placing a single feature in the center of every cell.</p>
+						
+						<pre translate="no">	void Triangulate (HexCell cell) {
+		for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++) {
+			Triangulate(d, cell);
+		}
+		<ins>features.AddFeature(cell.Position);</ins>
+	}</pre>
+						
+						<p>Now we need the actual feature manager. Add another child object to the <em translate="no">Hex Grid Chunk</em> prefab and give it a <code>HexFeatureManager</code> component. Then we can connect the chunk to it.</p>
+						
+						<figure>
+							<img alt="hierarchy" src="adding-support-for-features/hierarchy.png" width="140" height="146">
+							<img alt="feature object" src="adding-support-for-features/features-child-object.png" width="320" height="156">
+							<img alt="chunk prefab" src="adding-support-for-features/chunk-prefab.png" width="320" height="166">
+							<figcaption>Feature manager added to chunk prefab.</figcaption>
+						</figure>
+						
+					</section>
+					
+					<section>
+						<h3>Feature Prefab</h3>
+						
+						<p>What kind of feature shall we make? For our first test, a cube will do. Create a fairly large cube, say scaled to (3, 3, 3), and turn it into a prefab. Create a material for it as well. I used a default material with a red color. Remove its collider, as we don't need it.</p>
+						
+						<figure>
+							<img src="adding-support-for-features/feature-prefab.png" width="320" height="202">
+							<figcaption>Feature cube prefab.</figcaption>
+						</figure>
+						
+						<p>Our feature managers need a reference to this prefab, so add one to <code>HexFeatureManager</code>, then hook them up. Because placement requires accessing the transform component, use that as the reference type.</p>
+						
+						<pre translate="no">	<ins>public Transform featurePrefab;</ins></pre>
+						
+						<figure>
+							<img src="adding-support-for-features/manager-with-prefab.png" width="320" height="58">
+							<figcaption>Feature manager with prefab.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Instantiating Features</h3>
+						
+						<p>Our setup is complete, we can start adding features! It's as simple as instantiating the prefab in <code>HexFeatureManager.AddFeature</code> and setting the position.</p>
+						
+						<pre translate="no">	public void AddFeature (Vector3 position) {
+		<ins>Transform instance = Instantiate(featurePrefab);</ins>
+		<ins>instance.localPosition = position;</ins>
+	}</pre>
+						
+						<figure>
+							<img src="adding-support-for-features/instances.png" width="330" height="200">
+							<figcaption>Feature instances.</figcaption>
+						</figure>
+						
+						<p>From now on, the terrain will be filled with cubes. At least, the top half of cubes. Because the local origin of Unity's cube mesh lies at the center of the cube, the bottom half is submerged below the terrain surface. To place the cubes on top of the terrain, we have to move them upwards by half their height.</p>
+						
+						<pre translate="no">	public void AddFeature (Vector3 position) {
+		Transform instance = Instantiate(featurePrefab);
+		<ins>position.y += instance.localScale.y * 0.5f;</ins>
+		instance.localPosition = position;
+	}</pre>
+						
+						<figure>
+							<img src="adding-support-for-features/instances-moved.png" width="330" height="200">
+							<figcaption>Sitting on top of the terrain.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What if we're using a different mesh?</h3>
+							<div>
+								<p>This approach is specifically for the default cube. If you're using a custom mesh, it is a better idea to design them so their local origin sits at their bottom. Then you don't have to adjust the position at all.</p>
+							</div>
+						</aside>
+						
+						<p>Of course our cells are perturbed, so we should perturb the position of our features as well. That does away with the perfect regularity of the grid.</p>
+						
+						<pre translate="no">		instance.localPosition = <ins>HexMetrics.Perturb(</ins>position<ins>)</ins>;</pre>
+						
+						<figure>
+							<img src="adding-support-for-features/instances-perturbed.png" width="330" height="200">
+							<figcaption>Perturbed features.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Destroying Features</h3>
+						
+						<p>Every time a chunk is refreshed, we create new features. This means that we currently keep creating more and more features in the same positions. To prevent duplicates, we have to get rid of the old features when the chunk is cleared.</p>
+						
+						<p>A quick way to do this is by creating a container game object and make all features children of this object. Then when <code>Clear</code> is invoked, we destroy this container and create a new one. The container itself will be a child of its manager.</p>
+						
+						<pre translate="no">	<ins>Transform container;</ins>
+
+	public void Clear () {
+		<ins>if (container) {</ins>
+			<ins>Destroy(container.gameObject);</ins>
+		<ins>}</ins>
+		<ins>container = new GameObject("Features Container").transform;</ins>
+		<ins>container.SetParent(transform, false);</ins>
+	}
+	
+	&hellip;
+	
+	public void AddFeature (Vector3 position) {
+		Transform instance = Instantiate(featurePrefab);
+		position.y += instance.localScale.y * 0.5f;
+		instance.localPosition = HexMetrics.Perturb(position);
+		<ins>instance.SetParent(container, false);</ins>
+	}</pre>
+						
+						<aside>
+							<h3>Isn't it inefficient to create and destroy features all the time?</h3>
+							<div>
+								<p>It sure feels like it. But we shouldn't be concerned about that at this time. First we get feature placement right. Once we've covered that, and it turns out to be a bottleneck, then we can get smart about efficiency. That's when we might end up using the <code>HexFeatureManager.Apply</code> method as well. But that's for a future tutorial. Fortunately, it really isn't that bad, because we've split the terrain into chunks.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="adding-support-for-features/adding-support-for-features.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Feature Placement</h2>
+					
+					<p>We're currently placing a feature in the center of every cell. This is fine for otherwise empty cells. But it doesn't look good for cells that contain rivers and roads, or that are underwater.</p>
+					
+					<figure>
+						<img src="feature-placement/everywhere.png" width="330" height="210">
+						<figcaption>Features placed everywhere.</figcaption>
+					</figure>
+					
+					<p>So let's make sure that a cell is clear before we add a feature to it in <code>HexGridChunk.Triangulate</code>.</p>
+					
+					<pre translate="no">		<ins>if (!cell.IsUnderwater &amp;&amp; !cell.HasRiver &amp;&amp; !cell.HasRoads) {</ins>
+			features.AddFeature(cell.Position);
+		<ins>}</ins></pre>
+					
+					<figure>
+						<img src="feature-placement/limited.png" width="330" height="210">
+						<figcaption>Limited placement.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>One Feature Per Direction</h3>
+						
+						<p>Having only a single feature per cell isn't very much. There's plenty of room for more. Let's add an addition feature to the center of each of a cell's six triangles. So one per direction.</p>
+						
+						<p>We do this in the other <code>Triangulate</code> method, when we know that there isn't a river. We still have to check whether we're underwater or whether there's a road. But in this case, we only care about roads going in the current direction.</p>
+						
+						<pre translate="no">	void Triangulate (HexDirection direction, HexCell cell) {
+		&hellip;
+
+		if (cell.HasRiver) {
+			&hellip;
+		}
+		else {
+			TriangulateWithoutRiver(direction, cell, center, e);
+
+			<ins>if (!cell.IsUnderwater &amp;&amp; !cell.HasRoadThroughEdge(direction)) {</ins>
+				<ins>features.AddFeature((center + e.v1 + e.v5) * (1f / 3f));</ins>
+			<ins>}</ins>
+		}
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="feature-placement/many-features.png" width="330" height="230">
+							<figcaption>Many features, but not adjacent to rivers.</figcaption>
+						</figure>
+						
+						<p>This produces a lot more features! They appear next to roads, but they still shy away from rivers. To get features along rivers, we can also add them when inside <code>TriangulateAdjacentToRiver</code>. But once again only when not underwater, and not on top of a road.</p>
+						
+						<pre translate="no">	void TriangulateAdjacentToRiver (
+		HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e
+	) {
+		&hellip;
+
+		<ins>if (!cell.IsUnderwater &amp;&amp; !cell.HasRoadThroughEdge(direction)) {</ins>
+			<ins>features.AddFeature((center + e.v1 + e.v5) * (1f / 3f));</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<img src="feature-placement/features-adjacent-to-river.png" width="330" height="230">
+							<figcaption>Also adjacent to rivers.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Can we render that many objects?</h3>
+							<div>
+								<p>Many features would produce many draw calls, but Unity's dynamic batching helps us out here. As the features are small, their meshes should have few vertices. That allows many of them to be combined in a single batch. But if it turns out to be a bottleneck, we'll deal with it later. It is also possible to use instancing, which is comparable to dynamic batching when using many small meshes.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="feature-placement/feature-placement.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Feature Variety</h2>
+					
+					<p>All our feature objects have the exact same orientation, which doesn't look organic at all. So let's give each a random rotation.</p>
+					
+					<pre translate="no">	public void AddFeature (Vector3 position) {
+		Transform instance = Instantiate(featurePrefab);
+		position.y += instance.localScale.y * 0.5f;
+		instance.localPosition = HexMetrics.Perturb(position);
+		<ins>instance.localRotation = Quaternion.Euler(0f, 360f * Random.value, 0f);</ins>
+		instance.SetParent(container, false);
+	}
+</pre>
+					
+					<figure>
+						<img src="feature-variety/rotated.png" width="330" height="230">
+						<figcaption>Random rotations.</figcaption>
+					</figure>
+					
+					<p>This produces a much more varied result. Unfortunately, every time a chunk is refreshed, its features end up with new random rotations. Editing something shouldn't case the nearby features to spasm, so we need a different approach.</p>
+					
+					<p>We have a noise texture, which is always the same. However, that texture contains Perlin gradient noise, which is locally coherent. This is exactly what we want when perturbing the cell positions of vertices. But we don't need coherent rotations. All rotations should be equally likely and mixed up. So what we need is a texture with non-gradient random values, and sample it without bilinear filtering. That is actually a hash grid, which forms the basis for gradient noise.</p>
+					
+					<section>
+						<h3>Creating a Hash Grid</h3>
+						
+						<p>We can create a hash grid with an array of floats and fill it once with random values. That way we don't need a texture at all. Let's add it to <code>HexMetrics</code>. 256 by 256 should offer enough variety.</p>
+						
+						<pre translate="no">	<ins>public const int hashGridSize = 256;</ins>
+
+	<ins>static float[] hashGrid;</ins>
+
+	<ins>public static void InitializeHashGrid () {</ins>
+		<ins>hashGrid = new float[hashGridSize * hashGridSize];</ins>
+		<ins>for (int i = 0; i &lt; hashGrid.Length; i++) {</ins>
+			<ins>hashGrid[i] = Random.value;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>The random values are generated by a mathematical formula that always produces the same results. Which sequence you get depends on a seed number, which defaults to the current time value. That's why you get different results each play session.</p>
+						
+						<p>To allow recreation of the exact same features, we have to add a seed parameter to our initialization method.</p>
+						
+						<pre translate="no">	public static void InitializeHashGrid (<ins>int seed</ins>) {
+		hashGrid = new float[hashGridSize * hashGridSize];
+		<ins>Random.InitState(seed);</ins>
+		for (int i = 0; i &lt; hashGrid.Length; i++) {
+			hashGrid[i] = Random.value;
+		}
+	}</pre>
+						
+						<p>Now that we have initialized the random number stream, we'll always get the same sequence out of it. So all supposedly random events that would happen after generating the map will always be the same as well. We can prevent this by saving the state of the random number generator before initializing it. After we're done, we set it back to its old state.</p>
+						
+						<pre translate="no">		<ins>Random.State currentState = Random.state;</ins>
+		Random.InitState(seed);
+		for (int i = 0; i &lt; hashGrid.Length; i++) {
+			hashGrid[i] = Random.value;
+		}
+		<ins>Random.state = currentState;</ins></pre>
+						
+						<p>Initialization of the hash grid is done by <code>HexGrid</code>, at the same time that it assigns the noise texture. So that's in <code>HexGrid.Start</code> and <code>HexGrid.Awake</code>. Make sure that we're not generating it more often than necessary.</p>
+						
+						<pre translate="no">	<ins>public int seed;</ins>
+
+	void Awake () {
+		HexMetrics.noiseSource = noiseSource;
+		<ins>HexMetrics.InitializeHashGrid(seed);</ins>
+
+		&hellip;
+	}
+
+	void OnEnable () {
+		<ins>if (!HexMetrics.noiseSource) {</ins>
+			HexMetrics.noiseSource = noiseSource;
+			<ins>HexMetrics.InitializeHashGrid(seed);</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>The public seed allows us to choose a seed value for the map. Any value will do. I picked 1234.</p>
+						
+						<figure>
+							<img src="feature-variety/seed.png" width="320" height="184">
+							<figcaption>Choosing a seed.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Using the Hash Grid</h3>
+						
+						<p>To make use of the hash grid, add a sampling method to <code>HexMetrics</code>. Like <code>SampleNoise</code>, it uses the XZ coordinates of a position to retrieve a value. The hash index is found by clamping the coordinates to integer values, then taking the remainder of the integer division by the grid size.</p>
+						
+						<pre translate="no">	<ins>public static float SampleHashGrid (Vector3 position) {</ins>
+		<ins>int x = (int)position.x % hashGridSize;</ins>
+		<ins>int z = (int)position.z % hashGridSize;</ins>
+		<ins>return hashGrid[x + z * hashGridSize];</ins>
+	<ins>}</ins></pre>
+						
+						<aside>
+							<h3>What does <code>%</code> do?</h3>
+							<div>
+								<p>This is the modulo operator. It computer the remainder of divisions, in our case integer divisions. For example, the sequence &minus;4, &minus;3, &minus;2, &minus;1, 0, 1, 2, 3, 4 modulo 3 becomes &minus;1, 0, &minus;2, &minus;1, 0, 1, 2, 0, 1.</p>
+							</div>
+						</aside>
+						
+						<p>This works for positive coordinates, but not for negative coordinates, as the remainder would be negative for those numbers. We can fix that by adding the grid size to negative results.</p>
+						
+						<pre translate="no">		int x = (int)position.x % hashGridSize;
+		<ins>if (x &lt; 0) {</ins>
+			<ins>x += hashGridSize;</ins>
+		<ins>}</ins>
+		int z = (int)position.z % hashGridSize;
+		<ins>if (z &lt; 0) {</ins>
+			<ins>z += hashGridSize;</ins>
+		<ins>}</ins></pre>
+						
+						<p>Now we produce a different value for each square unit. We don't actually need a grid this dense. The features are further apart than that. We can stretch the grid by scaling down the position before computing the index. A unique value per 4 by 4 square should be sufficient.</p>
+						
+						<pre translate="no">	<ins>public const float hashGridScale = 0.25f;</ins>
+
+	public static float SampleHashGrid (Vector3 position) {
+		int x = (int)<ins>(</ins>position.x <ins>* hashGridScale)</ins> % hashGridSize;
+		if (x &lt; 0) {
+			x += hashGridSize;
+		}
+		int z = (int)<ins>(</ins>position.z <ins>* hashGridScale)</ins> % hashGridSize;
+		if (z &lt; 0) {
+			z += hashGridSize;
+		}
+		return hashGrid[x + z * hashGridSize];
+	}</pre>
+						
+						<p>Go back to <code>HexFeatureManager.AddFeature</code> and use our new hash grid to obtain a value. Once we use that to set the rotation, our features will remain motionless when we edit the terrain.</p>
+						
+						<pre translate="no">	public void AddFeature (Vector3 position) {
+		<ins>float hash = HexMetrics.SampleHashGrid(position);</ins>
+		Transform instance = Instantiate(featurePrefab);
+		position.y += instance.localScale.y * 0.5f;
+		instance.localPosition = HexMetrics.Perturb(position);
+		instance.localRotation = Quaternion.Euler(0f, 360f * <ins>hash</ins>, 0f);
+		instance.SetParent(container, false);
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Placement Threshold</h3>
+						
+						<p>While features have varying rotations, their placement still has an obvious pattern. Every cell has seven features crowding it. We can introduce chaos to this setup by arbitrarily omitting some of the features. How can we decide whether to add a feature or not? By consulting another random value!</p>
+						
+						<p>So now we need two hash values instead of one. We support this by using <code>Vector2</code> instead of <code>float</code> as our hash grid array type. But vector operations don't make sense for our hash values, so let's create a special struct for this purpose. All it needs are two floats. And let's add a static method to create a randomized value pair.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public struct HexHash {</ins>
+
+	<ins>public float a, b;</ins>
+
+	<ins>public static HexHash Create () {</ins>
+		<ins>HexHash hash;</ins>
+		<ins>hash.a = Random.value;</ins>
+		<ins>hash.b = Random.value;</ins>
+		<ins>return hash;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Doesn't it need to be serializable?</h3>
+							<div>
+								<p>We're only storing these structures in our hash grid, which is static so isn't serialized by Unity during recompiles. So it doesn't need to be serializable.</p>
+							</div>
+						</aside>
+						
+						<p>Adjust <code>HexMetrics</code> so it uses this new struct.</p>
+						
+						<pre translate="no">	static <ins>HexHash</ins>[] hashGrid;
+
+	public static void InitializeHashGrid (int seed) {
+		hashGrid = new <ins>HexHash</ins>[hashGridSize * hashGridSize];
+		Random.State currentState = Random.state;
+		Random.InitState(seed);
+		for (int i = 0; i &lt; hashGrid.Length; i++) {
+			hashGrid[i] = <ins>HexHash.Create()</ins>;
+		}
+		Random.state = currentState;
+	}
+
+	public static <ins>HexHash</ins> SampleHashGrid (Vector3 position) {
+		&hellip;
+	}</pre>
+						
+						<p>Now <code>HexFeatureManager.AddFeature</code> has access to two hash values. Let's use the first one to decide whether we actually add a feature, or skip it. If the value is 0.5 or larger, we bail. This will eliminate about half of the features. We use the second value to determine the rotation, as usual.</p>
+						
+						<pre translate="no">	public void AddFeature (Vector3 position) {
+		<ins>HexHash</ins> hash = HexMetrics.SampleHashGrid(position);
+		<ins>if (hash.a >= 0.5f) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+		Transform instance = Instantiate(featurePrefab);
+		position.y += instance.localScale.y * 0.5f;
+		instance.localPosition = HexMetrics.Perturb(position);
+		instance.localRotation = Quaternion.Euler(0f, 360f * <ins>hash.b</ins>, 0f);
+		instance.SetParent(container, false);
+	}</pre>
+						
+						<figure>
+							<img src="feature-variety/threshold.png" width="330" height="230">
+							<figcaption>Feature density reduced to 50%.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="feature-variety/feature-variety.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Painting Features</h2>
+					
+					<p>Instead of placing features everywhere, let's make them editable. But we're not going to paint individual features. Instead, we'll add a feature level to every cell. This level controls the likelihood of features appearing in the cell. The default is zero, which guarantees that there are no features present.</p>
+					
+					<p>As our red cubes don't look like natural features of the terrain, let's say that they are buildings. They represent urban development. So let's add an urban level to <code>HexCell</code>.</p>
+					
+					<pre translate="no">	<ins>public int UrbanLevel {</ins>
+		<ins>get {</ins>
+			<ins>return urbanLevel;</ins>
+		<ins>}</ins>
+		<ins>set {</ins>
+			<ins>if (urbanLevel != value) {</ins>
+				<ins>urbanLevel = value;</ins>
+				<ins>RefreshSelfOnly();</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	<ins>int urbanLevel;</ins></pre>
+					
+					<p>We could ensure that the urban level is zero for underwater cell, but that is not necessary. We already omit features when underwater. And maybe we'll add urban water features at some point, like docks or underwater structures.</p>
+					
+					<section>
+						<h3>Density Slider</h3>
+						
+						<p>To edit the urban level, add support for another slider to <code>HexMapEditor</code>.</p>
+						
+						<pre translate="no">	<ins>int activeUrbanLevel;</ins>
+	
+	&hellip;
+	
+	<ins>bool applyUrbanLevel;</ins>
+	
+	&hellip;
+	
+	<ins>public void SetApplyUrbanLevel (bool toggle) {</ins>
+		<ins>applyUrbanLevel = toggle;</ins>
+	<ins>}</ins>
+	
+	<ins>public void SetUrbanLevel (float level) {</ins>
+		<ins>activeUrbanLevel = (int)level;</ins>
+	<ins>}</ins>
+
+	void EditCell (HexCell cell) {
+		if (cell) {
+			&hellip;
+			if (applyWaterLevel) {
+				cell.WaterLevel = activeWaterLevel;
+			}
+			<ins>if (applyUrbanLevel) {</ins>
+				<ins>cell.UrbanLevel = activeUrbanLevel;</ins>
+			<ins>}</ins>
+			if (riverMode == OptionalToggle.No) {
+				cell.RemoveRiver();
+			}
+			&hellip;
+		}
+	}</pre>
+						
+						<p>Add another slide to the UI and connect it to the appropriate methods. I put it in a new panel on the right side of the screen, to prevent overcrowding of the left panel.</p>
+						
+						<p>How many levels do we need? Let's stick to four, representing zero, low, medium, and high density development.</p>
+						
+						<figure>
+							<img alt="scene" src="painting-features/slider.png" width="108" height="56">
+							<img alt="inspector" src="painting-features/slider-inspector.png" width="320" height="196">
+							<figcaption>Urban slider.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Adjusting the Threshold</h3>
+						
+						<p>Now that we have an urban level, we have to use that to determine whether we place features or not. To do so, we have to add the urban level as an extra parameter to <code>HexFeatureManager.AddFeature</code>. Let's go one step further and just pass along the cell itself. That will be more convenient later.</p>
+						
+						<p>A quick way to make use of the urban level is to multiply it by 0.25 and use that as the new threshold to bail. That way, the probability of a feature appearing increases by 25% per level.</p>
+						
+						<pre translate="no">	public void AddFeature (<ins>HexCell cell,</ins> Vector3 position) {
+		HexHash hash = HexMetrics.SampleHashGrid(position);
+		if (hash.a >= <ins>cell.UrbanLevel * 0.25f</ins>) {
+			return;
+		}
+		&hellip;
+	}</pre>
+						
+						<p>To make this work, pass along the cells in <code>HexGridChunk</code>.</p>
+						
+						<pre translate="no">	void Triangulate (HexCell cell) {
+		&hellip;
+		if (!cell.IsUnderwater &amp;&amp; !cell.HasRiver &amp;&amp; !cell.HasRoads) {
+			features.AddFeature(<ins>cell, </ins> cell.Position);
+		}
+	}
+
+	void Triangulate (HexDirection direction, HexCell cell) {
+		&hellip;
+			if (!cell.IsUnderwater &amp;&amp; !cell.HasRoadThroughEdge(direction)) {
+				features.AddFeature(<ins>cell,</ins> (center + e.v1 + e.v5) * (1f / 3f));
+			}
+		&hellip;
+	}
+	
+	&hellip;
+	
+	void TriangulateAdjacentToRiver (
+		HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e
+	) {
+		&hellip;
+
+		if (!cell.IsUnderwater &amp;&amp; !cell.HasRoadThroughEdge(direction)) {
+			features.AddFeature(<ins>cell,</ins> (center + e.v1 + e.v5) * (1f / 3f));
+		}
+	}</pre>
+						
+						<figure>
+							<img src="painting-features/urban-levels.png" width="320" height="210">
+							<figcaption>Painting urban density levels.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="painting-features/painting-features.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Multiple Feature Prefabs</h2>
+					
+					<p>A difference in feature probability is not sufficient to create a clear distinction between lower and higher urban levels. Some cells simply end up with fewer or more buildings than expected. We can make the difference much clearer by using a different prefab for each level.</p>
+					
+					<p>Get rid of the <code>featurePrefab</code> field in <code>HexFeatureManager</code> and replace it with an array for the urban prefabs. Use the urban level minus one as an index to retrieve the appropriate prefab.</p>
+					
+					<pre translate="no"><del>//	public Transform featurePrefab;</del>
+	<ins>public Transform[] urbanPrefabs;</ins>
+	
+	public void AddFeature (HexCell cell, Vector3 position) {
+		&hellip;
+		Transform instance = Instantiate(<ins>urbanPrefabs[cell.UrbanLevel - 1]</ins>);
+		&hellip;
+	}</pre>
+					
+					<p>Create two duplicates of the feature prefab and rename and adjust them to represent the three different urban levels. Level 1 is low density, so I used a unit-sized cube to represent a hovel. I set the scale of the level 2 prefab to (1.5, 2, 1.5) to suggest a larger two-story building. For level 3, I used (2, 5, 2) to indicate a high-rise.</p>
+					
+					<figure>
+						<img alt="inspector" src="multiple-feature-prefabs/multiple-prefabs-inspector.png" width="320" height="130">
+						<img alt="scene" src="multiple-feature-prefabs/multiple-prefabs.png" width="320" height="220">
+						<figcaption>Using a different prefab for each urban level.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Mixing Prefabs</h3>
+						
+						<p>We don't need to limit ourselves to a strict segregation of building type. We can mix them a bit, just like in the real world. Instead of using a single threshold per level, let's use three per level, one per building type.</p>
+						
+						<p>For level 1, let's use a 40% chance for a hovel. The other building won't appear at all. This requires the threshold triplet (0.4, 0, 0).</p>
+						
+						<p>For level 2, let's replace the hovels with larger buildings, and add a 20% chance for additional hovels. Still no high-rises. That suggests the threshold triplet (0.2, 0.4, 0).</p>
+						
+						<p>For level 3, let's upgrade the medium buildings to high-rises, replace the hovels again, and add another 20% change for more hovels. The thresholds for that would be (0.2, 0.2, 0.4).</p>
+						
+						<p>So the idea is that we upgrade existing building and add new ones in empty lots as the urban level increases. To replace an existing building, we have to use the same hash value ranges. If hashes between 0 and 0.4 were hovels at level 1, the same range should produce high-rises at level 3. Specifically, at level 3 high-rises should spawn for hash values in the 0&ndash;0.4 range, the two-story houses in the 0.4&ndash;0.6 range, and the hovels in the 0.6&ndash;0.8 range. If we check them from highest to lowest, we can do this with the threshold triplet (0.4, 0.6, 0.8). The level 2 thresholds then become (0, 0.4, 0.6), and the level 1 thresholds become (0, 0, 0.4).</p>
+						
+						<p>Let's store these thresholds in <code>HexMetrics</code> as a collection of arrays, with a method to get the thresholds for a specific level. As we're only concerned with levels that have features, we ignore level 0.</p>
+						
+						<pre translate="no">	<ins>static float[][] featureThresholds = {</ins>
+		<ins>new float[] {0.0f, 0.0f, 0.4f},</ins>
+		<ins>new float[] {0.0f, 0.4f, 0.6f},</ins>
+		<ins>new float[] {0.4f, 0.6f, 0.8f}</ins>
+	<ins>};</ins>
+						
+	<ins>public static float[] GetFeatureThresholds (int level) {</ins>
+		<ins>return featureThresholds[level];</ins>
+	<ins>}</ins></pre>
+						
+						<p>Next, we add a method to <code>HexFeatureManager</code> which uses a level and hash value to select a prefab. If the level is larger than zero, we retrieve the thresholds using the level decreased by one. Then we loop through the thresholds until one exceeds the hash value. That means we found a prefab. If we didn't, we return null.</p>
+						
+						<pre translate="no">	<ins>Transform PickPrefab (int level, float hash) {</ins>
+		<ins>if (level > 0) {</ins>
+			<ins>float[] thresholds = HexMetrics.GetFeatureThresholds(level - 1);</ins>
+			<ins>for (int i = 0; i &lt; thresholds.Length; i++) {</ins>
+				<ins>if (hash &lt; thresholds[i]) {</ins>
+					<ins>return urbanPrefabs[i];</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>return null;</ins>
+	<ins>}</ins></pre>
+						
+						<p>This approach requires us to reorder the prefab references so they go from high to low density.</p>
+						
+						<figure>
+							<img src="multiple-feature-prefabs/reversed-prefabs.png" width="320" height="130">
+							<figcaption>Reversed prefabs.</figcaption>
+						</figure>
+						
+						<p>Use this new method in <code>AddFeature</code> to pick a prefab. If we end up without one, bail. Otherwise, instantiate it and continue as before.</p>
+						
+						<pre translate="no">	public void AddFeature (HexCell cell, Vector3 position) {
+		HexHash hash = HexMetrics.SampleHashGrid(position);
+<del>//		if (hash.a >= cell.UrbanLevel * 0.25f) {</del>
+<del>//			return;</del>
+<del>//		}</del>
+<del>//		Transform instance = Instantiate(urbanPrefabs[cell.UrbanLevel - 1]);</del>
+		<ins>Transform prefab = PickPrefab(cell.UrbanLevel, hash.a);</ins>
+		<ins>if (!prefab) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+		<ins>Transform instance = Instantiate(prefab);</ins>
+		position.y += instance.localScale.y * 0.5f;
+		instance.localPosition = HexMetrics.Perturb(position);
+		instance.localRotation = Quaternion.Euler(0f, 360f * hash.b, 0f);
+		instance.SetParent(container, false);
+	}</pre>
+						
+						<figure>
+							<img src="multiple-feature-prefabs/mixing-prefabs.png" width="320" height="210">
+							<figcaption>Mixing prefabs.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Variation Per Level</h3>
+						
+						<p>By now we have a nice mix of buildings, but it are still just three distinct ones. We can increase the variety even more by associating a collection of prefabs to each urban density level. Then we pick one of those at random. This requires a new random value, so add a third one to <code>HexHash</code>.</p>
+						
+						<pre translate="no">	public float a, b<ins>, c</ins>;
+
+	public static HexHash Create () {
+		HexHash hash;
+		hash.a = Random.value;
+		hash.b = Random.value;
+		<ins>hash.c = Random.value;</ins>
+		return hash;
+	}</pre>
+						
+						<p>Turn <code>HexFeatureManager.urbanPrefabs</code> into an array of arrays, and add a <code>choice</code> parameter to the <code>PickPrefab</code> method. Use it to index the nested array by multiplying it with that array's length and casting to an integer.</p>
+						
+						<pre translate="no">	public Transform[]<ins>[]</ins> urbanPrefabs;
+	
+	&hellip;
+
+	Transform PickPrefab (int level, float hash<ins>, float choice</ins>) {
+		if (level > 0) {
+			float[] thresholds = HexMetrics.GetFeatureThresholds(level - 1);
+			for (int i = 0; i &lt; thresholds.Length; i++) {
+				if (hash &lt; thresholds[i]) {
+					return urbanPrefabs[i][<ins>(int)(choice * urbanPrefabs[i].Length)</ins>];
+				}
+			}
+		}
+		return null;
+	}</pre>
+						
+						<p>Let's base this choice on the second hash value, B. This requires that the rotation changes from B to C.</p>
+
+						<pre translate="no">	public void AddFeature (HexCell cell, Vector3 position) {
+		HexHash hash = HexMetrics.SampleHashGrid(position);
+		Transform prefab = PickPrefab(cell.UrbanLevel, hash.a<ins>, hash.b</ins>);
+		if (!prefab) {
+			return;
+		}
+		Transform instance = Instantiate(prefab);
+		position.y += instance.localScale.y * 0.5f;
+		instance.localPosition = HexMetrics.Perturb(position);
+		instance.localRotation = Quaternion.Euler(0f, 360f * <ins>hash.c</ins>, 0f);
+		instance.SetParent(container, false);
+	}</pre>
+
+						<p>Before we continue, we have to be aware that <code>Random.value</code> can produce the value 1. This would cause our array index to go out of bounds. To guarantee that this doesn't happen, scale the hash values down a little bit. Just scale them all, so we don't need to worry about which one we use.</p>
+
+						<pre translate="no">	public static HexHash Create () {
+		HexHash hash;
+		hash.a = Random.value <ins>* 0.999f</ins>;
+		hash.b = Random.value <ins>* 0.999f</ins>;
+		hash.c = Random.value <ins>* 0.999f</ins>;
+		return hash;
+	}
+</pre>
+
+						<p>Unfortunately, the inspector does not show arrays of arrays. So we cannot configure them. To work around this, create a serializable struct that encapsulates the nested array. Give it a method that takes care of the conversion from a choice to an array index and returns the prefab.</p>
+
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>[System.Serializable]</ins>
+<ins>public struct HexFeatureCollection {</ins>
+
+	<ins>public Transform[] prefabs;</ins>
+
+	<ins>public Transform Pick (float choice) {</ins>
+		<ins>return prefabs[(int)(choice * prefabs.Length)];</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Use an array of these collections in <code>HexFeatureManager</code>, instead of the nested arrays.</p>
+
+						<pre translate="no"><del>//	public Transform[][] urbanPrefabs;</del>
+	<ins>public HexFeatureCollection[] urbanCollections;</ins>
+
+	&hellip;
+
+	Transform PickPrefab (int level, float hash, float choice) {
+		if (level > 0) {
+			float[] thresholds = HexMetrics.GetFeatureThresholds(level - 1);
+			for (int i = 0; i &lt; thresholds.Length; i++) {
+				if (hash &lt; thresholds[i]) {
+					return <ins>urbanCollections[i].Pick(choice)</ins>;
+				}
+			}
+		}
+		return null;
+	}</pre>
+						
+						<p>You can now define multiple buildings per density level. As they're independent, you don't need to use the same amount per level. I simply used two variants per level, adding a longer lower variant to each. I set their scales to (3.5, 3, 2), (2.75, 1.5, 1.5), and (1.75, 1, 1).</p>
+
+						<figure>
+							<img alt="inspector" src="multiple-feature-prefabs/collections-inspector.png" width="320" height="346">
+							<img alt="scene" src="multiple-feature-prefabs/collections.png" width="320" height="220">
+							<figcaption>Two building types per density level.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="multiple-feature-prefabs/multiple-feature-prefabs.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Multiple Feature Types</h2>
+					
+					<p>With our current setup we can create decent urban settings. But terrain can contain more than just buildings. What about farms? What about plants? Let's add levels for those to <code>HexCell</code> as well. They're not exclusive, they can mix.</p>
+					
+					<pre translate="no">	<ins>public int FarmLevel {</ins>
+		<ins>get {</ins>
+			<ins>return farmLevel;</ins>
+		<ins>}</ins>
+		<ins>set {</ins>
+			<ins>if (farmLevel != value) {</ins>
+				<ins>farmLevel = value;</ins>
+				<ins>RefreshSelfOnly();</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	<ins>public int PlantLevel {</ins>
+		<ins>get {</ins>
+			<ins>return plantLevel;</ins>
+		<ins>}</ins>
+		<ins>set {</ins>
+			<ins>if (plantLevel != value) {</ins>
+				<ins>plantLevel = value;</ins>
+				<ins>RefreshSelfOnly();</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	int urbanLevel<ins>, farmLevel, plantLevel</ins>;</pre>
+					
+					<p>Of course this requires support for two addition slides in <code>HexMapEditor</code>.</p>
+					
+					<pre translate="no">	int activeUrbanLevel<ins>, activeFarmLevel, activePlantLevel;</ins>
+
+	bool applyUrbanLevel<ins>, applyFarmLevel, applyPlantLevel</ins>;
+
+	&hellip;
+
+	<ins>public void SetApplyFarmLevel (bool toggle) {</ins>
+		<ins>applyFarmLevel = toggle;</ins>
+	<ins>}</ins>
+
+	<ins>public void SetFarmLevel (float level) {</ins>
+		<ins>activeFarmLevel = (int)level;</ins>
+	<ins>}</ins>
+
+	<ins>public void SetApplyPlantLevel (bool toggle) {</ins>
+		<ins>applyPlantLevel = toggle;</ins>
+	<ins>}</ins>
+
+	<ins>public void SetPlantLevel (float level) {</ins>
+		<ins>activePlantLevel = (int)level;</ins>
+	<ins>}</ins>
+
+	&hellip;
+
+	void EditCell (HexCell cell) {
+		if (cell) {
+			&hellip;
+			if (applyUrbanLevel) {
+				cell.UrbanLevel = activeUrbanLevel;
+			}
+			<ins>if (applyFarmLevel) {</ins>
+				<ins>cell.FarmLevel = activeFarmLevel;</ins>
+			<ins>}</ins>
+			<ins>if (applyPlantLevel) {</ins>
+				<ins>cell.PlantLevel = activePlantLevel;</ins>
+			<ins>}</ins>
+			&hellip;
+		}
+	}</pre>
+					
+					<p>Add them to the UI, as expected.</p>
+					
+					<figure>
+						<img src="multiple-feature-types/sliders.png" width="108" height="144">
+						<figcaption>Three sliders.</figcaption>
+					</figure>
+					
+					<p>And <code>HexFeatureManager</code> needs additional collections as well.</p>
+					
+					<pre translate="no">	public HexFeatureCollection[]
+		urbanCollections<ins>, farmCollections, plantCollections</ins>;
+</pre>
+					
+					<figure>
+						<img src="multiple-feature-types/three-sets-of-collections.png" width="320" height="310">
+						<figcaption>Three feature collections.</figcaption>
+					</figure>
+					
+					<p>I gave both the farms and plants two prefabs per density level, just like the urban collections. I used cubes for all of them. The farms got a light green material, while the plants got a dark green material.</p>
+					
+					<p>I made the farm cubes 0.1 units high, to represent rectangular plots of farmland. The high-density scales are (2.5, 0.1, 2.5) and (3.5, 0.1, 2). The medium lots are 1.75 square and 2.5 by 1.25. Low density got 1 square and 1.5 by 0.75.</p>
+					
+					<p>The plant prefabs represent tall trees and large shrubs. The high-density ones are biggest, at (1.25, 4.5, 1.25) and (1.5, 3, 1.5). Medium scales are (0.75, 3, 0.75) and (1, 1.5, 1). The smallest plants have sizes (0.5, 1.5, 0.5) and (0.75, 1, 0.75).</p>
+					
+					<section>
+						<h3>Feature Selection</h3>
+						
+						<p>Each feature type should get its own hash value, so they have different spawn patterns. This makes it possible to mix them. So add two additional values to <code>HexHash</code>.</p>
+						
+						<pre translate="no">	public float a, b, c<ins>, d, e</ins>;
+
+	public static HexHash Create () {
+		HexHash hash;
+		hash.a = Random.value * 0.999f;
+		hash.b = Random.value * 0.999f;
+		hash.c = Random.value * 0.999f;
+		<ins>hash.d = Random.value * 0.999f;</ins>
+		<ins>hash.e = Random.value * 0.999f;</ins>
+		return hash;
+	}</pre>
+						
+						<p><code>HexFeatureManager.PickPrefab</code> now has to work with different collections. Add a parameter to it to facilitate this. Also, change the hash used for the prefab variant choice to D, and the one for the rotation to E.</p>
+						
+						<pre translate="no">	Transform PickPrefab (
+		<ins>HexFeatureCollection[] collection,</ins>
+		int level, float hash, float choice
+	) {
+		if (level > 0) {
+			float[] thresholds = HexMetrics.GetFeatureThresholds(level - 1);
+			for (int i = 0; i &lt; thresholds.Length; i++) {
+				if (hash &lt; thresholds[i]) {
+					return <ins>collection</ins>[i].Pick(choice);
+				}
+			}
+		}
+		return null;
+	}
+
+	public void AddFeature (HexCell cell, Vector3 position) {
+		HexHash hash = HexMetrics.SampleHashGrid(position);
+		Transform prefab = PickPrefab(
+			<ins>urbanCollections,</ins> cell.UrbanLevel, hash.a, <ins>hash.d</ins>
+		);
+		&hellip;
+		instance.localRotation = Quaternion.Euler(0f, 360f * <ins>hash.e</ins>, 0f);
+		instance.SetParent(container, false);
+	}</pre>
+						
+						<p>Currently <code>AddFeature</code> picks an urban prefab. That's fine, but now we have more options. So let's pick another prefab as well, from the farms. We'll use B as its hash value. The variant choice can just rely on D again.</p>
+						
+						<pre translate="no">		Transform prefab = PickPrefab(
+			urbanCollections, cell.UrbanLevel, hash.a, hash.d
+		);
+		<ins>Transform otherPrefab = PickPrefab(</ins>
+			<ins>farmCollections, cell.FarmLevel, hash.b, hash.d</ins>
+		<ins>);</ins>
+		if (!prefab) {
+			return;
+		}
+</pre>
+						
+						<p>Which prefab do we end up instantiating? If one of them ends up as null, then the choice is clear. But when both exist, we have to make a decision. Let's just use the one with the lowest hash value.</p>
+						
+						<pre translate="no">		Transform otherPrefab = PickPrefab(
+			farmCollections, cell.FarmLevel, hash.b, hash.d
+		);
+		if (<ins>prefab</ins>) {
+			<ins>if (otherPrefab &amp;&amp; hash.b &lt; hash.a) {</ins>
+				<ins>prefab = otherPrefab;</ins>
+			<ins>}</ins>
+		}
+		<ins>else if (otherPrefab) {</ins>
+			<ins>prefab = otherPrefab;</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			return;
+		}</pre>
+						
+						<figure>
+							<img src="multiple-feature-types/urban-farm.png" width="320" height="220">
+							<figcaption>A mix of urban and farm features.</figcaption>
+						</figure>
+						
+						<p>Next, we do the same for plants, using the C hash value.</p>
+						
+						<pre translate="no">		if (prefab) {
+			if (otherPrefab &amp;&amp; hash.b &lt; hash.a) {
+				prefab = otherPrefab;
+			}
+		}
+		else if (otherPrefab) {
+			prefab = otherPrefab;
+		}
+		<ins>otherPrefab = PickPrefab(</ins>
+			<ins>plantCollections, cell.PlantLevel, hash.c, hash.d</ins>
+		<ins>);</ins>
+		<ins>if (prefab) {</ins>
+			<ins>if (otherPrefab &amp;&amp; hash.c &lt; hash.a) {</ins>
+				<ins>prefab = otherPrefab;</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>else if (otherPrefab) {</ins>
+			<ins>prefab = otherPrefab;</ins>
+		<ins>}</ins>
+		else {
+			return;
+		}</pre>
+						
+						<p>However, we can't just copy the code like that. When we end up picking farm instead of urban, we should compare the plant hash with the farm hash. Not with the urban hash. So we have to keep track of which hash we decided to go with, and compare with that one.</p>
+						
+						<pre translate="no">		<ins>float usedHash = hash.a;</ins>
+		if (prefab) {
+			if (otherPrefab &amp;&amp; hash.b &lt; hash.a) {
+				prefab = otherPrefab;
+				<ins>usedHash = hash.b;</ins>
+			}
+		}
+		else if (otherPrefab) {
+			prefab = otherPrefab;
+			<ins>usedHash = hash.b;</ins>
+		}
+		otherPrefab = PickPrefab(
+			plantCollections, cell.PlantLevel, hash.c, hash.d
+		);
+		if (prefab) {
+			if (otherPrefab &amp;&amp; hash.c &lt; <ins>usedHash</ins>) {
+				prefab = otherPrefab;
+			}
+		}
+		else if (otherPrefab) {
+			prefab = otherPrefab;
+		}
+		else {
+			return;
+		}</pre>
+						
+						<figure>
+							<img src="multiple-feature-types/urban-farm-plant.png" width="350" height="240">
+							<figcaption>Urban, farm, and plant feature mix.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../part-10/index.html">Walls</a>.</p>
+					</section>
+					
+					<a href="multiple-feature-types/multiple-feature-types.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Hex-Map-9.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

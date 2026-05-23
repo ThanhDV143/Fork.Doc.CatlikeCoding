@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/hex-map-2/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/hex-map/part-2/tutorial-image.png">
+		<meta property="og:title" content="Hex Map 2">
+		<meta property="og:description" content="A Unity Hex Map tutorial about blending cell colors. Part 2 of 27.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hex Map 2</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/hex-map/part-2/#article",
+				"headline": "Hex Map 2",
+				"alternativeHeadline": "Blending Cell Colors",
+				"datePublished": "2016-02-07",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Hex Map tutorial about blending cell colors. Part 2 of 27.",
+				"image": "https://catlikecoding.com/unity/tutorials/hex-map/part-2/tutorial-image.png",
+				"dependencies": "Unity 5.3.1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/hex-map/", "name": "Hex Map" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				HexCell: 1,
+				HexCoordinates: 1,
+				HexCoordinatesDrawer: 1,
+				HexDirection: 1,
+				HexDirectionExtensions: 1,
+				HexGrid: 1,
+				HexMapEditor: 1,
+				HexMesh: 1,
+				HexMetrics: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Hex Map</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hex Map 2</h1>
+					<p>Blending Cell Colors</p>
+					<ul>
+						<li>Connect neighbors.</li>
+						<li>Interpolate colors across triangles.</li>
+						<li>Create blend regions.</li>
+						<li>Simplify geometry.</li>
+					</ul>
+				</header>
+
+				<p>This tutorial is the second part of a series about <a href="../index.html">hexagon maps</a>. The previous installment laid the foundation of our grid and gave us the ability to edit cells. Each cell has its own solid color. The color change between cells is abrupt. This time we'll introduce transition zones, blending between colors of adjacent cells.</p>
+				
+				<figure>
+					<img src="tutorial-image.png" width="512" height="256">
+					<figcaption>Smudged cell transitions.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Cell Neighbors</h2>
+					
+					<p>Before we can blend between cells colors, we need to know which cells are adjacent to each other. Each cells has six neighbors, which we can identify with a compass direction. The directions are northeast, east, southeast, southwest, west, and northwest. Let's create an enumeration for that and put it in its own script file.</p>
+					
+					<pre translate="no"><ins>public enum HexDirection {</ins>
+	<ins>NE, E, SE, SW, W, NW</ins>
+<ins>}</ins></pre>
+					
+					<aside>
+						<h3>What's an <code>enum</code>?</h3>
+						<div>
+							<p>You use <code>enum</code> to define an enumeration type, which is an ordered list of names. A variable of this type can have one of these names as its value. Each of these names corresponds to a number, by default starting at zero. They are useful whenever you need a limited list of named options.</p>
+							
+							<p>Under the hood, enums are simply integers. You can add, subtract, and cast them to integer and back. You could also declare them to be of a handful of other types, but integers are the norm.</p>
+						</div>
+					</aside>
+					
+					<figure>
+						<img src="cell-neighbors/directions.png" width="285" height="270">
+						<figcaption>Six neighbors, six directions.</figcaption>
+					</figure>
+					
+					<p>To store these neighbors, add an array to <code>HexCell</code>. While we could make it public, instead we'll make it private and provide access methods using a direction. Also ensure that it serializes so the connections survive recompiles.</p>
+					
+					<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>HexCell[] neighbors;</ins></pre>
+					
+					<aside>
+						<h3>Do we need to store the neighbor connections?</h3>
+						<div>
+							<p>We could also determine the neighbors via coordinates, and then retrieve the desired cell from the grid. However, storing the relations per cell is straightforward, so we'll do that.</p>
+						</div>
+					</aside>
+					
+					<p>The neighbor array now shows up in the inspector. As each cell has six neighbors, set the array size to 6 for our <i>Hex Cell</i> prefab.</p>
+					
+					<figure>
+						<img src="cell-neighbors/prefab.png" width="320" height="220">
+						<figcaption>Our prefab comes with room for six neighbors.</figcaption>
+					</figure>
+					
+					<p>Now add a public method to retrieve a cell's neighbor in one direction. As a direction is always between 0 and 5, we don't need to check whether the index lies within the bounds of the array.</p>
+					
+					<pre translate="no">	<ins>public HexCell GetNeighbor (HexDirection direction) {</ins>
+		<ins>return neighbors[(int)direction];</ins>
+	<ins>}</ins></pre>
+					
+					<p>Add a method to set a neighbor too.</p>
+					
+					<pre translate="no">	<ins>public void SetNeighbor (HexDirection direction, HexCell cell) {</ins>
+		<ins>neighbors[(int)direction] = cell;</ins>
+	<ins>}</ins></pre>
+					
+					<p>Neighbor relationships are bidirectional. So when setting a neighbor in one direction, it makes sense to immediately set the neighbor in the opposite direction as well.</p>
+					
+					<pre translate="no">	public void SetNeighbor (HexDirection direction, HexCell cell) {
+		neighbors[(int)direction] = cell;
+		<ins>cell.neighbors[(int)direction.Opposite()] = this;</ins>
+	}</pre>
+					
+					<figure>
+						<img src="cell-neighbors/bidirectional.png" width="200" height="125">
+						<figcaption>Neighbors in opposite directions.</figcaption>
+					</figure>
+					
+					<p>Of course this assumes that we could ask a direction for its opposite. We can support this, by creating an extension method for <code>HexDirection</code>. To get the opposite direction, add 3 to the original direction. This only works for the first three directions though, for the others we have to subtract 3 instead.</p>
+					
+					<pre translate="no">public enum HexDirection {
+	NE, E, SE, SW, W, NW
+}
+
+<ins>public static class HexDirectionExtensions {</ins>
+
+	<ins>public static HexDirection Opposite (this HexDirection direction) {</ins>
+		<ins>return (int)direction &lt; 3 ? (direction + 3) : (direction - 3);</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+					
+					<aside>
+						<h3>What's an extension method?</h3>
+						<div>
+							<p>An extension method is a static method inside a static class that behaves like an instance method of some type. That type could be anything, a class, an interface, a struct, a primitive value, or an enum. The first argument of an extension method needs to have the <code>this</code> keyword. It defines the type and instance value that the method will operate on.</p>
+							
+							<p>Does this allow us to add methods to everything? Yes, just like you could write any static method that has any type as its argument. Is this a good idea? When used in moderation, it can be. It is a tool that has its uses, but wielding it with abandon will produce an unstructured mess.</p>
+						</div>
+					</aside>
+					
+					<section>
+						<h3>Connecting Neighbors</h3>
+
+						<p>We can initialize the neighbor relationship in <code>HexGrid.CreateCell</code>. As we go through the cells row by row, left to right, we know which cells have already been created. Those are the cells that we can connect to.</p>
+						
+						<p>The simplest is the E&ndash;W connection. The first cell of each row doesn't have a west neighbor. But all other cells in the row do. And these neighbors have been created before the cell we're currently working with. So we can connect them.</p>
+						
+						<figure>
+							<img src="cell-neighbors/neighbors-e-w.png" width="270" height="225">
+							<figcaption>Connecting from E to W as cells are created.</figcaption>
+						</figure>
+
+						<pre translate="no">	void CreateCell (int x, int z, int i) {
+		&hellip;
+		cell.color = defaultColor;
+
+		<ins>if (x > 0) {</ins>
+			<ins>cell.SetNeighbor(HexDirection.W, cells[i - 1]);</ins>
+		<ins>}</ins>
+
+		Text label = Instantiate&lt;Text>(cellLabelPrefab);
+		&hellip;
+	}</pre>
+					
+						<figure>
+							<img src="cell-neighbors/east-west-connected.png" width="320" height="220">
+							<figcaption>East and west neighbors are connected.</figcaption>
+						</figure>
+						
+						<p>We have two more bidirectional connections to make. As these are between different grid rows, we can only connect with the previous row. This means that we have to skip the first row entirely.</p>
+						
+						<pre translate="no">		if (x > 0) {
+			cell.SetNeighbor(HexDirection.W, cells[i - 1]);
+		}
+		<ins>if (z > 0) {</ins>
+		<ins>}</ins></pre>
+						
+						<p>As the rows zigzag, they have to be treated differently. Let's first deal with the even rows. As all cells in such rows have a SE neighbor, we can connect to those.</p>
+						
+						<figure>
+							<img src="cell-neighbors/neighbors-even-nw-se.png" width="270" height="225">
+							<figcaption>Connecting from NW to SE on even rows.</figcaption>
+						</figure>
+						
+						<pre translate="no">		if (z > 0) {
+			<ins>if ((z &amp; 1) == 0) {</ins>
+				<ins>cell.SetNeighbor(HexDirection.SE, cells[i - width]);</ins>
+			<ins>}</ins>
+		}</pre>
+						
+						<aside>
+							<h3>What does <code>z &amp; 1</code> do?</h3>
+							<div>
+								<p>While <code>&amp;&amp;</code> is the boolean AND operator, <code>&amp;</code> is the bitwise AND operator. It performs the same logic, but on each individual pair of bits of its operands. So both bits of a pair need to be 1 for the result to be 1. For example, <code>10101010 &amp; 00001111</code> yields <code>00001010</code>.</p>
+								
+								<p>Internally, numbers are binary. They only use 0s and 1s. In binary, the sequence 1, 2, 3, 4 is written as 1, 10, 11, 100. As you can see, even number always have 0 as the least significant digit.</p>
+								
+								<p>We use the binary AND as a mask, ignoring everything except the first bit. If the result is 0, then we have an even number.</p>
+							</div>
+						</aside>
+						
+						<p>We can connect to the SW neighbors as well. Except for the first cell in each row, as it doesn't have one.</p>
+						
+						<figure>
+							<img src="cell-neighbors/neighbors-even-ne-sw.png" width="270" height="225">
+							<figcaption>Connecting from NE to SW on even rows.</figcaption>
+						</figure>
+						
+						<pre translate="no">		if (z > 0) {
+			if ((z &amp; 1) == 0) {
+				cell.SetNeighbor(HexDirection.SE, cells[i - width]);
+				<ins>if (x > 0) {</ins>
+					<ins>cell.SetNeighbor(HexDirection.SW, cells[i - width - 1]);</ins>
+				<ins>}</ins>
+			}
+		}</pre>
+						
+						<p>The odds rows follow the same logic, but mirrored. Once that's done, all neighbors in our grid are connected.</p>
+						
+						<pre translate="no">		if (z > 0) {
+			if ((z &amp; 1) == 0) {
+				cell.SetNeighbor(HexDirection.SE, cells[i - width]);
+				if (x > 0) {
+					cell.SetNeighbor(HexDirection.SW, cells[i - width - 1]);
+				}
+			}
+			<ins>else {</ins>
+				<ins>cell.SetNeighbor(HexDirection.SW, cells[i - width]);</ins>
+				<ins>if (x &lt; width - 1) {</ins>
+					<ins>cell.SetNeighbor(HexDirection.SE, cells[i - width + 1]);</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+		}</pre>
+						
+						<figure>
+							<img src="cell-neighbors/all-connected.png" width="320" height="220">
+							<figcaption>All neighbors are connected.</figcaption>
+						</figure>
+						
+						<p>Of course not every cell is connected to exactly six neighbors. The cells that form the border of our grid end up with at least two and at most five neighbors. This is something that we have to be aware of.</p>
+						
+						<figure>
+							<img src="cell-neighbors/neighbor-count.png" width="270" height="225">
+							<figcaption>Neighbors per cell.</figcaption>
+						</figure>
+						
+					</section>
+					
+					<a href="cell-neighbors/cell-neighbors.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Blending Colors</h2>
+					
+					<p>Color blending will make the triangulation of each cell more complex. So let's isolate the code of triangulating a single part. As we have directions now, let's use those to identify the parts, instead of a numeric index.</p>
+					
+					<pre translate="no">	void Triangulate (HexCell cell) {
+		for (<ins>HexDirection d = HexDirection.NE</ins>; <ins>d &lt;= HexDirection.NW</ins>; <ins>d++</ins>) {
+			<ins>Triangulate(d, cell);</ins>
+		}
+	}
+
+	<ins>void Triangulate (HexDirection direction, HexCell cell) {</ins>
+		Vector3 center = cell.transform.localPosition;
+		AddTriangle(
+			center,
+			center + HexMetrics.corners[<ins>(int)direction</ins>],
+			center + HexMetrics.corners[<ins>(int)direction</ins> + 1]
+		);
+		AddTriangleColor(cell.color);
+	<ins>}</ins></pre>
+					
+					<p>Now that we're using directions, it would be nice if we could fetch corners with directions, instead of having to convert to indices.</p>
+					
+					<pre translate="no">		AddTriangle(
+			center,
+			center + HexMetrics.<ins>GetFirstCorner(direction)</ins>,
+			center + HexMetrics.<ins>GetSecondCorner(direction)</ins>
+		);</pre>
+					
+					<p>This requires the addition of two static methods to <code>HexMetrics</code>. As a bonus, this allows us to make the corners array private.</p>
+					
+					<pre translate="no">	<ins>static</ins> Vector3[] corners = {
+		new Vector3(0f, 0f, outerRadius),
+		new Vector3(innerRadius, 0f, 0.5f * outerRadius),
+		new Vector3(innerRadius, 0f, -0.5f * outerRadius),
+		new Vector3(0f, 0f, -outerRadius),
+		new Vector3(-innerRadius, 0f, -0.5f * outerRadius),
+		new Vector3(-innerRadius, 0f, 0.5f * outerRadius),
+		new Vector3(0f, 0f, outerRadius)
+	};
+
+	<ins>public static Vector3 GetFirstCorner (HexDirection direction) {</ins>
+		<ins>return corners[(int)direction];</ins>
+	<ins>}</ins>
+
+	<ins>public static Vector3 GetSecondCorner (HexDirection direction) {</ins>
+		<ins>return corners[(int)direction + 1];</ins>
+	<ins>}</ins></pre>
+					
+					<section>
+						<h3>Multiple Colors Per Triangle</h3>
+						
+						<p>Right now the <code>HexMesh.AddTriangleColor</code> method has a single color argument. This can only produce a triangle with a solid color. Let's add an alternative that supports a separate color for each vertex.</p>
+						
+						<pre translate="no">	<ins>void AddTriangleColor (Color c1, Color c2, Color c3) {</ins>
+		<ins>colors.Add(c1);</ins>
+		<ins>colors.Add(c2);</ins>
+		<ins>colors.Add(c3);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can start blending colors! Begin by simply using the neighbor's color for the other two vertices.</p>
+						
+						<pre translate="no">	void Triangulate (HexDirection direction, HexCell cell) {
+		Vector3 center = cell.transform.localPosition;
+		AddTriangle(
+			center,
+			center + HexMetrics.GetFirstCorner(direction),
+			center + HexMetrics.GetSecondCorner(direction)
+		);
+		<ins>HexCell neighbor = cell.GetNeighbor(direction);</ins>
+		AddTriangleColor(cell.color, <ins>neighbor.color, neighbor.color</ins>);
+	}</pre>
+						
+						<p>Unfortunately, this will produce a <code>NullReferenceException</code> because our border cells don't have six neighbors. What should we do when we lack a neighbor? Let's be pragmatic and use the cell itself as a substitute.</p>
+						
+						<pre translate="no">		HexCell neighbor = cell.GetNeighbor(direction) <ins>?? cell</ins>;</pre>
+						
+						<aside>
+							<h3>What does <code>??</code> do?</h3>
+							<div>
+								<p>This is known as the null-coalescing operator. Simply put, <code>a ?? b</code> is a shorter alternative for <code>a != null ? a : b</code>.</p>
+								
+								<p>There are some shenanigans here, because Unity does custom work when comparing something with components. This operator bypasses that and does and honest comparison with <code>null</code>. But that's only an issue when you're destroying objects.</p>
+							</div>
+						</aside>
+						
+						<figure>
+							<img src="blending-colors/direct-neighbor-colors.png" width="485" height="240">
+							<figcaption>Color blending, but incorrect.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Where did the coordinate labels go?</h3>
+							<div>
+								<p>They're still there, but I've hidden the UI layer for the screenshots.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Color Averaging</h3>
+						
+						<p>Color blending works, but our current results are obviously incorrect. The color at the edges of our hexagons should be the average of the two adjacent cells.</p>
+						
+						<pre translate="no">		HexCell neighbor = cell.GetNeighbor(direction) ?? cell;
+		<ins>Color edgeColor = (cell.color + neighbor.color) * 0.5f;</ins>
+		AddTriangleColor(cell.color, <ins>edgeColor</ins>, <ins>edgeColor</ins>);</pre>
+						
+						<figure>
+							<img src="blending-colors/edge-average-colors.png" width="485" height="240">
+							<figcaption>Blending across edges.</figcaption>
+						</figure>
+						
+						<p>While we are now blending across edges, we still get sharp color boundaries. This happens because each vertex of a hexagon is shared by three hexagons in total.</p>
+						
+						<figure>
+							<img src="blending-colors/three-neighbors.png" width="200" height="270">
+							<figcaption>Three neighbors, four colors.</figcaption>
+						</figure>
+						
+						<p>This means that we also have to consider the neighbors of the previous and next directions. So we end up with four colors, in two sets of three.</p>
+						
+						<p>Let's add two addition methods to <code>HexDirectionExtensions</code> to easily jump to the previous and next directions.</p>
+						
+						<pre translate="no">	<ins>public static HexDirection Previous (this HexDirection direction) {</ins>
+		<ins>return direction == HexDirection.NE ? HexDirection.NW : (direction - 1);</ins>
+	<ins>}</ins>
+
+	<ins>public static HexDirection Next (this HexDirection direction) {</ins>
+		<ins>return direction == HexDirection.NW ? HexDirection.NE : (direction + 1);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can retrieve all three neighbors and perform two three-way blends.</p>
+						
+						<pre translate="no">		<ins>HexCell prevNeighbor = cell.GetNeighbor(direction.Previous()) ?? cell;</ins>
+		HexCell neighbor = cell.GetNeighbor(direction) ?? cell;
+		<ins>HexCell nextNeighbor = cell.GetNeighbor(direction.Next()) ?? cell;</ins>
+		
+		AddTriangleColor(
+			cell.color,
+			<ins>(cell.color + prevNeighbor.color + neighbor.color) / 3f</ins>,
+			<ins>(cell.color + neighbor.color + nextNeighbor.color) / 3f</ins>
+		);</pre>
+						
+						<figure>
+							<img src="blending-colors/corner-average-colors.png" width="485" height="240">
+							<figcaption>Blending across corners.</figcaption>
+						</figure>
+						
+						<p>This produces correct color transitions, except along the border of the grid. The border cells don't agree on the colors of the missing neighbors, so you still see sharp boundaries there. Overall though, our current approach doesn't produce a pleasing result. We need a better strategy.</p>
+						
+					</section>
+					
+					<a href="blending-colors/blending-colors.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Blend Regions</h2>
+					
+					<p>Blending across the entire surface of a hexagon leads to a blurry mess. You can no longer clearly see the individual cells. We can improve this a lot by only blending near the edges of hexagons. That leaves an inner hexagonal region with a solid color.</p>
+					
+					<figure>
+						<img src="blend-regions/blend-regions.png" width="200" height="195">
+						<figcaption>Solid cores with blend regions.</figcaption>
+					</figure>
+					
+					<p>How large should this solid region be, versus the blend region? Different distributions lead to different visuals. We can define this region as a fraction of the outer radius. Let's make it 75%. This leads to two new metrics, which add up to 100%.</p>
+					
+					<pre translate="no">	<ins>public const float solidFactor = 0.75f;</ins>
+	
+	<ins>public const float blendFactor = 1f - solidFactor;</ins></pre>
+					
+					<p>With the new solid factor, we can create methods to retrieve the corners of solid inner hexagons.</p>
+					
+					<pre translate="no">	<ins>public static Vector3 GetFirstSolidCorner (HexDirection direction) {</ins>
+		<ins>return corners[(int)direction] * solidFactor;</ins>
+	<ins>}</ins>
+
+	<ins>public static Vector3 GetSecondSolidCorner (HexDirection direction) {</ins>
+		<ins>return corners[(int)direction + 1] * solidFactor;</ins>
+	<ins>}</ins></pre>
+					
+					<p>Now change <code>HexMesh.Triangulate</code> so it uses these solid corners instead of the original ones. Leave the colors as they are for now.</p>
+					
+					<pre translate="no">		AddTriangle(
+			center,
+			center + HexMetrics.<ins>GetFirstSolidCorner</ins>(direction),
+			center + HexMetrics.<ins>GetSecondSolidCorner</ins>(direction)
+		);</pre>
+					
+					<figure>
+						<img src="blend-regions/solid-hexagons.png" width="485" height="240">
+						<figcaption>Solid hexagons, no edges.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Triangulating Blend Regions</h3>
+						
+						<p>We need to fill the empty space that we have created by shrinking our triangles. This space has the shape of a trapezoid in each direction. We can use a quad to cover it. So create methods to add a quad and its colors.</p>
+						
+						<figure>
+							<img src="blend-regions/trapezoid.png" width="180" height="145">
+							<figcaption>Trapezoid edge.</figcaption>
+						</figure>
+						
+						<pre translate="no">	<ins>void AddQuad (Vector3 v1, Vector3 v2, Vector3 v3, Vector3 v4) {</ins>
+		<ins>int vertexIndex = vertices.Count;</ins>
+		<ins>vertices.Add(v1);</ins>
+		<ins>vertices.Add(v2);</ins>
+		<ins>vertices.Add(v3);</ins>
+		<ins>vertices.Add(v4);</ins>
+		<ins>triangles.Add(vertexIndex);</ins>
+		<ins>triangles.Add(vertexIndex + 2);</ins>
+		<ins>triangles.Add(vertexIndex + 1);</ins>
+		<ins>triangles.Add(vertexIndex + 1);</ins>
+		<ins>triangles.Add(vertexIndex + 2);</ins>
+		<ins>triangles.Add(vertexIndex + 3);</ins>
+	<ins>}</ins>
+
+	<ins>void AddQuadColor (Color c1, Color c2, Color c3, Color c4) {</ins>
+		<ins>colors.Add(c1);</ins>
+		<ins>colors.Add(c2);</ins>
+		<ins>colors.Add(c3);</ins>
+		<ins>colors.Add(c4);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Rework <code>HexMesh.Triangulate</code> so the triangle gets a single color and the quad blends between the solid color and the two corner colors.</p>
+						
+						<pre translate="no">	void Triangulate (HexDirection direction, HexCell cell) {
+		Vector3 center = cell.transform.localPosition;
+		<ins>Vector3 v1 =</ins> center + HexMetrics.GetFirstSolidCorner(direction)<ins>;</ins>
+		<ins>Vector3 v2 =</ins> center + HexMetrics.GetSecondSolidCorner(direction)<ins>;</ins>
+
+		AddTriangle(center, <ins>v1</ins>, <ins>v2</ins>);
+		<ins>AddTriangleColor(cell.color);</ins>
+
+		<ins>Vector3 v3 = center + HexMetrics.GetFirstCorner(direction);</ins>
+		<ins>Vector3 v4 = center + HexMetrics.GetSecondCorner(direction);</ins>
+
+		<ins>AddQuad(v1, v2, v3, v4);</ins>
+
+		HexCell prevNeighbor = cell.GetNeighbor(direction.Previous()) ?? cell;
+		HexCell neighbor = cell.GetNeighbor(direction) ?? cell;
+		HexCell nextNeighbor = cell.GetNeighbor(direction.Next()) ?? cell;
+
+		<ins>AddQuadColor</ins>(
+			cell.color,
+			<ins>cell.color,</ins>
+			(cell.color + prevNeighbor.color + neighbor.color) / 3f,
+			(cell.color + neighbor.color + nextNeighbor.color) / 3f
+		);
+	}</pre>
+						
+						<figure>
+							<img src="blend-regions/blend-trapezoids.png" width="485" height="240">
+							<figcaption>Blending with trapezoid edges.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Edge Bridges</h3>
+						
+						<p>This is starting to look better, but we're still not there yet. The color blend between two neighbors gets polluted by the cells adjacent to the edge. To prevent this, we have to cut the corners from our trapezoid and turn it into a rectangle. It then forms a bridge between a cell and its neighbor, leaving gaps at the sides.</p>
+						
+						<figure>
+							<img src="blend-regions/edge-bridge.png" width="135" height="130">
+							<figcaption>Edge Bridge.</figcaption>
+						</figure>
+						
+						<p>We can find the new positions of <code>v3</code> and <code>v4</code> by starting from <code>v1</code> and <code>v2</code>, then moving along the bridge, straight to the edge of the cell. So what is this bridge offset? You can find it by taking the midpoint between the two relevant corners, then applying the blend factor to that. This is a job for <code>HexMetrics</code>.</p>
+						
+						<pre translate="no">	<ins>public static Vector3 GetBridge (HexDirection direction) {</ins>
+		<ins>return (corners[(int)direction] + corners[(int)direction + 1]) *</ins>
+			<ins>0.5f * blendFactor;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Back to <code>HexMesh</code>, it now makes sense to add a variant of <code>AddQuadColor</code> that only needs two colors.</p>
+						
+						<pre translate="no">	<ins>void AddQuadColor (Color c1, Color c2) {</ins>
+		<ins>colors.Add(c1);</ins>
+		<ins>colors.Add(c1);</ins>
+		<ins>colors.Add(c2);</ins>
+		<ins>colors.Add(c2);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Adjust <code>Triangulate</code> so it creates correctly blending bridges between neighbors.</p>
+						
+						<pre translate="no">		<ins>Vector3 bridge = HexMetrics.GetBridge(direction);</ins>
+		Vector3 v3 = <ins>v1 + bridge</ins>;
+		Vector3 v4 = <ins>v2 + bridge</ins>;
+
+		AddQuad(v1, v2, v3, v4);
+
+		HexCell prevNeighbor = cell.GetNeighbor(direction.Previous()) ?? cell;
+		HexCell neighbor = cell.GetNeighbor(direction) ?? cell;
+		HexCell nextNeighbor = cell.GetNeighbor(direction.Next()) ?? cell;
+
+		AddQuadColor(cell.color, <ins>(cell.color + neighbor.color) * 0.5f</ins>);</pre>
+						
+						<figure>
+							<img src="blend-regions/bridges-only.png" width="485" height="240">
+							<figcaption>Correctly colored bridges, with corner gaps.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Filling the Gaps</h3>
+						
+						<p>We are now left with a triangular gap wherever three cells meet. We got those holes by cutting off the triangular sides of our trapezoids. So let's add those triangles back.</p>
+						
+						<p>First consider the triangle that connects with the previous neighbor. Its first vertex has the cell's color. Its second vertex's color is a three-color blend. And the final vertex has the same color as halfway across the bridge.</p>
+						
+						<pre translate="no">		<ins>Color bridgeColor =</ins> (cell.color + neighbor.color) * 0.5f<ins>;</ins>
+		AddQuadColor(cell.color, <ins>bridgeColor</ins>);
+
+		<ins>AddTriangle(v1, center + HexMetrics.GetFirstCorner(direction), v3);</ins>
+		<ins>AddTriangleColor(</ins>
+			<ins>cell.color,</ins>
+			<ins>(cell.color + prevNeighbor.color + neighbor.color) / 3f,</ins>
+			<ins>bridgeColor</ins>
+		<ins>);</ins></pre>
+						
+						<figure>
+							<img src="blend-regions/one-corner.png" width="485" height="240">
+							<figcaption>Almost there.</figcaption>
+						</figure>
+						
+						<p>Finally, the other triangle work the same way, except that its second vertex touches the bridge, instead of its third vertex.</p>
+						
+						<pre translate="no">		<ins>AddTriangle(v2, v4, center + HexMetrics.GetSecondCorner(direction));</ins>
+		<ins>AddTriangleColor(</ins>
+			<ins>cell.color,</ins>
+			<ins>bridgeColor,</ins>
+			<ins>(cell.color + neighbor.color + nextNeighbor.color) / 3f</ins>
+		<ins>);</ins></pre>
+						
+						<figure>
+							<img src="blend-regions/full-blending.png" width="485" height="240">
+							<figcaption>Completely filled.</figcaption>
+						</figure>
+						
+						<p>Now we have nice blend regions that we can give any size that we want. Fuzzy or crisp cell edges, it is up to you. But you'll notice that the blending near the grid border is still not correct. Again, we will let that rest for now, and instead focus our attention on another matter.</p>
+						
+						<aside>
+							<h3>But the color transitions are still ugly?</h3>
+							<div>
+								<p>That are the limits of linear color blending. Indeed it is not that great with flat colors. We'll upgrade to terrain materials and do some fancier blending in a future tutorial.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="blend-regions/blend-regions.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Fusing Edges</h2>
+					
+					<p>Take a look at the topology of our grid. What distinct shapes are there? If we ignore the border, then we can identify three distinct shape types. There are single-color hexagons, dual-color rectangles, and triple-color triangles. You find all three shapes wherever three cells meet.</p>
+					
+					<figure>
+						<img src="fusing-edges/three-different-shapes.png" width="200" height="195">
+						<figcaption>Three visual structures.</figcaption>
+					</figure>
+					
+					<p>So every two hexagons are connected by a single rectangular bridge. And every three hexagons are connected by a single triangle. However, we triangulate in a more complex way. We currently use two quads to connect a pair of hexagons, instead of just one. And we're using a total of six triangles to connect three hexagons. That seems excessive. Also, if we were to directly connect with a single shape, we wouldn't need to do any color averaging. So we could get away with less complexity, less work, and less triangles.</p>
+					
+					<figure>
+						<img src="fusing-edges/many-triangles.png" width="485" height="240">
+						<figcaption>More complex than needed.</figcaption>
+					</figure>
+					
+					<aside>
+						<h3>Why didn't we do that in the first place?</h3>
+						<div>
+							<p>You will probably ask that question a lot during your life. That's because hindsight comes later. This an example of code evolving in a logical way, up to a point that new insight is gained, which leads to a new approach. Such a flash of insight often happens just after you think that you are done.</p>
+						</div>
+					</aside>
+					
+					<section>
+						<h3>Direct Bridges</h3>
+						
+						<p>Our edge bridges right now consist of two quads. To make them go all the way across to the next hexagon, we have to double the bridge length. This means that we no longer have to average the two corners in <code>HexMetrics.GetBridge</code>. Instead we just add them and then multiply with the blend factor.</p>
+						
+						<pre translate="no">	public static Vector3 GetBridge (HexDirection direction) {
+		return (corners[(int)direction] + corners[(int)direction + 1]) *
+			<ins>blendFactor</ins>;
+	}</pre>
+						
+						<figure>
+							<img src="fusing-edges/single-bridges.png" width="485" height="240">
+							<figcaption>Bridges go all the way across, and overlap.</figcaption>
+						</figure>
+						
+						<p>The bridges now form direct connections between hexagons. But we're still generating two per connection, one in each direction, which overlap. So only one of the two cells has to create a bridge between them.</p>
+						
+						<p>Let's first simplify our triangulation code. Remove everything that deals with the edge triangles and color blending. Then move the code that adds the bridge quad to a new method. Pass the first two vertices to this method, so we don't have to derive them again.</p>
+						
+						<pre translate="no">	void Triangulate (HexDirection direction, HexCell cell) {
+		Vector3 center = cell.transform.localPosition;
+		Vector3 v1 = center + HexMetrics.GetFirstSolidCorner(direction);
+		Vector3 v2 = center + HexMetrics.GetSecondSolidCorner(direction);
+
+		AddTriangle(center, v1, v2);
+		AddTriangleColor(cell.color);
+
+		<ins>TriangulateConnection(direction, cell, v1, v2);</ins>
+	}
+
+	<ins>void TriangulateConnection (</ins>
+		<ins>HexDirection direction, HexCell cell, Vector3 v1, Vector3 v2</ins>
+	<ins>) {</ins>
+		HexCell neighbor = cell.GetNeighbor(direction) ?? cell;
+		
+		Vector3 bridge = HexMetrics.GetBridge(direction);
+		Vector3 v3 = v1 + bridge;
+		Vector3 v4 = v2 + bridge;
+
+		AddQuad(v1, v2, v3, v4);
+		AddQuadColor(cell.color, <ins>neighbor.color</ins>);
+	}</pre>
+						
+						<p>Now we can easily limit the triangulation of connections. Start by only adding a bridge when we're dealing with a NE connection.</p>
+						
+						<pre translate="no">		<ins>if (direction == HexDirection.NE) {</ins>
+			TriangulateConnection(direction, cell, v1, v2);
+		<ins>}</ins></pre>
+						
+						<figure>
+							<img src="fusing-edges/ne-bridges.png" width="465" height="230">
+							<figcaption>Only bridges in NE direction.</figcaption>
+						</figure>
+						
+						<p>It looks like we can cover all connections by only triangulating them in the first three directions. So NE, E, and SE.</p>
+						
+						<pre translate="no">		if (direction <ins>&lt;= HexDirection.SE</ins>) {
+			TriangulateConnection(direction, cell, v1, v2);
+		}</pre>
+						<figure>
+							<img src="fusing-edges/all-bridges.png" width="480" height="245">
+							<figcaption>All internal bridges, some border bridges.</figcaption>
+						</figure>
+						
+						<p>All connections between two adjacent cells are now covered. But we also got some bridges that lead out of the grid, to nowhere. Let's get rid of those, by bailing out of <code>TriangulateConnection</code> when we end up with no neighbor. So we no longer replace missing neighbors with the cell itself.</p>
+						
+						<pre translate="no">	void TriangulateConnection (
+		HexDirection direction, HexCell cell, Vector3 v1, Vector3 v2
+	) {
+		HexCell neighbor = <ins>cell.GetNeighbor(direction)</ins>;
+		<ins>if (neighbor == null) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+		
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="fusing-edges/only-internal-bridges.png" width="465" height="225">
+							<figcaption>Only internal bridges.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Triangular Connections</h3>
+						
+						<p>We have to plug the triangular holes again. Let's do this for the triangle that connects to the next neighbor. Once again, we should only do this if that neighbor actually exists.</p>
+						
+						<pre translate="no">	void TriangulateConnection (
+		HexDirection direction, HexCell cell, Vector3 v1, Vector3 v2
+	) {
+		&hellip;
+
+		<ins>HexCell nextNeighbor = cell.GetNeighbor(direction.Next());</ins>
+		<ins>if (nextNeighbor != null) {</ins>
+			<ins>AddTriangle(v2, v4, v2);</ins>
+			<ins>AddTriangleColor(cell.color, neighbor.color, nextNeighbor.color);</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>What is the position of the third vertex? I put in <code>v2</code> as a placeholder, but that is obviously not correct. As each edge of these triangles connects with a bridge, we can find it by traveling along the bridge of the next neighbor.</p>
+						
+						<pre translate="no">			AddTriangle(v2, v4, v2 <ins>+ HexMetrics.GetBridge(direction.Next())</ins>);</pre>
+						
+						<figure>
+							<img src="fusing-edges/all-connections.png" width="465" height="225">
+							<figcaption>Once again, a complete triangulation.</figcaption>
+						</figure>
+						
+						<p>Are we done? Not yet, as we're now producing overlapping triangles. Because three cells share one triangular connection, we only need to add them for two connections. So just NE and E will do.</p>
+						
+						<pre translate="no">		if (<ins>direction &lt;= HexDirection.E &amp;&amp;</ins> nextNeighbor != null) {
+			AddTriangle(v2, v4, v2 + HexMetrics.GetBridge(direction.Next()));
+			AddTriangleColor(cell.color, neighbor.color, nextNeighbor.color);
+		}
+</pre>
+						
+						<p>The next tutorial is <a href="../part-3.1.html">Elevation and Terraces</a>.</p>
+						
+					</section>
+					
+					<a href="fusing-edges/fusing-edges.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Hex-Map-2.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

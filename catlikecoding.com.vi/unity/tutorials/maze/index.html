@@ -1,0 +1,1943 @@
+<!DOCTYPE html>
+<html>
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/maze/">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/maze/maze.png">
+		<meta property="og:image:width" content="720">
+		<meta property="og:image:height" content="450">
+		<meta property="og:description" content="A Unity C# scripting tutorial in which you will generate and walk through your own maze.">
+		<meta name="description" content="A Unity C# scripting tutorial in which you will generate and walk through your own maze.">
+		<meta property="og:title" content="Maze, a Unity C# Tutorial">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<title>Maze, a Unity C# Tutorial</title>
+		<link href="../../default.css" rel="stylesheet">
+		<script>
+			var customTypes = {
+				GameManager: 1,
+				IntVector2: 1,
+				Maze: 1,
+				MazeCell: 1,
+				MazeCellEdge: 1,
+				MazeDirection: 1,
+				MazeDirections: 1,
+				MazeDoor: 1,
+				MazePassage: 1,
+				MazeRoom: 1,
+				MazeRoomElement: 1,
+				MazeRoomSettings: 1,
+				MazeWall: 1,
+				Player: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header data-type="tutorial"></header>
+
+		<article class="tutorial" itemscope="" itemtype="http://schema.org/TechArticle">
+			<h1 itemprop="name headline">Maze<span>, building your own randomized place</span></h1>
+
+			<div class="instructions">
+				<span itemprop="about description">In this tutorial we'll generate a maze with multiple distinct areas and navigate through it.</span>
+				You'll learn to
+				<ul>
+					<li>fill a 2D rectangle with a maze-generating algorithm;</li>
+					<li>visualize the algorithm by using a coroutine;</li>
+					<li>place walls and doors;</li>
+					<li>use object inheritance;</li>
+					<li>use extension methods;</li>
+					<li>move through the maze;</li>
+					<li>combine first-person view and an overlay map;</li>
+					<li>determine visible rooms.</li>
+				</ul>
+				
+				<p><em>This tutorial has been superseded by <a href="../prototypes/maze-2/index.html">Maze 2</a>.</em></p>
+				
+				<p><span itemprop="dependencies">You're assumed to know the basics of the Unity editor and scripting. If you've completed the <a href="https://catlikecoding.com/unity/tutorials/clock/">Clock</a> and <a href="https://catlikecoding.com/unity/tutorials/constructing-a-fractal/">Fractal</a> tutorials you're good to go.</span></p>
+				<p>This tutorial requires at least Unity 4.5. It won't work with earlier versions.</p>
+			</div>
+			
+			<aside class="share"></aside>
+
+			<figure>
+				<img src="maze.png" width="720" height="450" itemprop="image">
+				<figcaption>Enter a random maze of your own creation.</figcaption>
+			</figure>
+			
+			<h2>Random Mazes</h2>
+
+			<div class="instructions">
+				<p>You've probably seen quite a few randomly generated mazes, either in digital form or in print. There is a huge variety of maze types, but fundamentally they always boil down to the same thing. A maze is a collection or areas linked together such that you can start anywhere and from there be able to visit every other area. The shape and layout of these areas and how exactly they are connected defines the character of the maze.</p>
+			</div>
+			
+			<h2>Game Flow</h2>
+			
+			<div class="instructions">
+				<p>If we were to make a game, we would first have to generate a maze and then spawn a player avatar that can navigate that maze. Then whenever a new game is started, we have to destroy the current maze, generate a new one, and place the avatar in it again. Let's create a game manager to take care of this.</p>
+				<p>Create a new project and place a default directional light somewhere out of the way for some basic lighting. Then add a new <code>GameManager</code> C# script. Let's arrange the assets by type, so put it in a new <i>Scripts</i> folder. Then create a new empty game object named <i>Game Manager</i> and add our new script component to it.</p>
+			</div>
+			
+			<figure>
+				<img src="01-project.png" width="796" height="102">
+				<figcaption>The Basics.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Our <code>GameManager</code> component simply begins the game when its <code>Start</code> method is called. We also let it restart the game whenever the player presses space. To support that, we need to check each update whether the <strong>space</strong> key has been pressed.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-get-key-down" id="q-get-key-down">How does <code>GetKeyDown</code> work?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+<mark>using System.Collections;</mark>
+
+<mark>public class GameManager : MonoBehaviour {</mark>
+
+	<mark>private void Start () {</mark>
+		<mark>BeginGame();</mark>
+	<mark>}</mark>
+	
+	<mark>private void Update () {</mark>
+		<mark>if (Input.GetKeyDown(KeyCode.Space)) {</mark>
+			<mark>RestartGame();</mark>
+		<mark>}</mark>
+	<mark>}</mark>
+
+	<mark>private void BeginGame () {}</mark>
+
+	<mark>private void RestartGame () {}</mark>
+<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>To begin a game we need to create a maze. So let's add a <code>Maze</code> script, then create a new empty game object named <i>Maze</i> and attach the script to it. Turn it into a prefab by dragging it into a new <i>Prefabs</i> folder that we also create to hold it. Once that's done, get rid of the instance in the hierarchy.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-prefab" id="q-prefab">What's a prefab?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+<mark>using System.Collections;</mark>
+
+<mark>public class Maze : MonoBehaviour {}</mark></pre>
+			
+			<figure>
+				<img src="01-maze-prefab.png" width="796" height="160">
+				<figcaption>Maze prefab.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Now we can add a reference to this prefab to <code>GameManager</code> so it can create instances of it. Add a public variable for the prefab reference and a private one to hold the instance. Then we can instantiate a maze in <code>BeginGame</code> and destroy it in <code>RestartGame</code> before we begin a new game.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-instantiate" id="q-instantiate">What does <code>Instantiate</code> do?</a></li>
+					<li><a href="index.html#a-as" id="q-as">What does <code>as</code> do?</a></li>
+					<li><a href="index.html#a-destroy" id="q-destroy">What does <code>Destroy</code> do?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>public Maze mazePrefab;</mark>
+
+	<mark>private Maze mazeInstance;</mark>
+
+	private void BeginGame () {
+		<mark>mazeInstance = Instantiate(mazePrefab) as Maze;</mark>
+	}
+
+	private void RestartGame () {
+		<mark>Destroy(mazeInstance.gameObject);</mark>
+		<mark>BeginGame();</mark>
+	}</pre>
+			
+			<figure>
+				<img src="01-maze-config.png" width="326" height="58">
+				<figcaption>Game Manager can now create a maze.</figcaption>
+			</figure>
+			
+			<h2>Maze Fundamentals</h2>
+			
+			<div class="instructions">
+				<p>Right now the game manager already does its job. When entering play mode, a maze instance is created, while pressing space destroys it and makes a new one. Now it's up to <code>Maze</code> to generate its contents.</p>
+				<p>We are going to create a flat maze by filling a rectangular grid of configurable size. I'll make it 20 by 20. We'll store the cells in a 2D array and create a new <code>MazeCell</code> script to represent the cells. We also need a cell prefab to instantiate.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public int sizeX, sizeZ;</mark>
+	
+	<mark>public MazeCell cellPrefab;</mark>
+
+	<mark>private MazeCell[,] cells;</mark></pre>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+
+<mark>public class MazeCell : MonoBehaviour {}</mark></pre>
+			
+			<div class="instructions">
+				<p>We need a 3D visualization for our cells. Create a new game object named <i>Maze Cell</i> and add the <code>MazeCell</code> component to it. Then create a default quad object, make it a child of the cell and set its rotation to (90,0,0). That gives us a very simple floor tile that fills the cell's area. Turn the whole thing into a prefab, get rid of the instance, and give <code>Maze</code> a reference to it.</p>
+			</div>
+			
+			<figure>
+				<img alt="maze cell" src="02-maze-cell-prefab.png" width="582" height="545">
+				<img alt="maze" src="02-maze-configured.png" width="326" height="94">
+				<figcaption>Maze cell prefab and a configured maze.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We should now add a <code>Generate</code> method to <code>Maze</code> that will take care of constructing the maze contents. We start with creating our 2D array and simply filling the entire grid with new cells by means of a double for-loop. We put the creation of individual cells in its own method. We instantiate a new cell, put it in the array and give it a descriptive name. We also make it a child object of our maze and position it so that the entire grid is centered.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public void Generate () {</mark>
+		<mark>cells = new MazeCell[sizeX, sizeZ];</mark>
+		<mark>for (int x = 0; x &lt; sizeX; x++) {</mark>
+			<mark>for (int z = 0; z &lt; sizeZ; z++) {</mark>
+				<mark>CreateCell(x, z);</mark>
+			<mark>}</mark>
+		<mark>}</mark>
+	<mark>}</mark>
+
+	<mark>private void CreateCell (int x, int z) {</mark>
+		<mark>MazeCell newCell = Instantiate(cellPrefab) as MazeCell;</mark>
+		<mark>cells[x, z] = newCell;</mark>
+		<mark>newCell.name = "Maze Cell " + x + ", " + z;</mark>
+		<mark>newCell.transform.parent = transform;</mark>
+		<mark>newCell.transform.localPosition = new Vector3(x - sizeX * 0.5f + 0.5f, 0f, z - sizeZ * 0.5f + 0.5f);</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now let <code>GameManager</code> call <code>Generate</code> and the maze should appear when you enter play mode.</p>
+			</div>
+			
+			<pre translate="no">	private void BeginGame () {
+		mazeInstance = Instantiate(mazePrefab) as Maze;
+		<mark>mazeInstance.Generate();</mark>
+	}</pre>
+			
+			<figure>
+				<img src="02-maze-generated.png" width="640" height="370">
+				<figcaption>20 by 20 maze cells.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We get a full grid of cells, but we can't immediately see in what order the cells were generated. It would be useful &ndash; and even a bit of fun &ndash; to slow down the generation process so we could see how it works. We can do this by turning <code>Generate</code> into a coroutine and inserting some delay before each step. I'll set it to 0.01 seconds, which means generating 20 by 20 cells would take roughly four seconds, assuming your frame rate is high enough.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-wait-for-seconds" id="q-wait-for-seconds">How does <code>WaitForSeconds</code> work?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>public float generationStepDelay;</mark>
+
+	public <mark>IEnumerator</mark> Generate () {
+		<mark>WaitForSeconds delay = new WaitForSeconds(generationStepDelay);</mark>
+		cells = new MazeCell[sizeX, sizeZ];
+		for (int x = 0; x &lt; sizeX; x++) {
+			for (int z = 0; z &lt; sizeZ; z++) {
+				<mark>yield return delay;</mark>
+				CreateCell(x, z);
+			}
+		}
+	}</pre>
+			
+			<div class="instructions">
+				<p>We now have to change <code>GameManager</code> so it starts the coroutine properly. Also, it is important to stop the coroutine when the game is restarted, because it might not have finished generating yet. As we only have to worry about one coroutine, we can take care of this by simply calling <code>StopAllCoroutines</code>. So yes, you can press space while a maze is still being generated and it will immediately start generating a new one.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-coroutine-live" id="q-coroutine-live">Where does a coroutine live?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	private void BeginGame () {
+		mazeInstance = Instantiate(mazePrefab) as Maze;
+		<mark>StartCoroutine(</mark>mazeInstance.Generate()<mark>)</mark>;
+	}
+
+	private void RestartGame () {
+		<mark>StopAllCoroutines();</mark>
+		Destroy(mazeInstance.gameObject);
+		BeginGame();
+	}</pre>
+			
+			<figure>
+				<img alt="generating" src="02-maze-generating.png" width="640" height="370">
+				<img alt="maze" src="02-maze-delay.png" width="326" height="112">
+				<figcaption>Maze generation with step delay.</figcaption>
+			</figure>
+			
+			<h2>Cell Coordinates and Integer Vectors</h2>
+			
+			<div class="instructions">
+				<p>To generate a real maze, we will be adding cells to our maze in a random way instead of using the double loop that we're using at this moment. So we will probably be using maze coordinates to figure out where we are at any given step. As we are operating in a 2D space, we need to use two integers. It would be convenient if we could manipulate the coordinates as a single value, like <code>Vector2</code> but with ints instead of floats. Unfortunately such a structure does not exist, but we can create one ourselves.</p>
+				<p>Let's add a new <code>IntVector2</code> script and make it a <code>struct</code> instead of a <code>class</code>. We give it a public <code>x</code> and <code>z</code> integer. That gives us two integers bundled together as a single value. We'll also add a special constructor method to it, which allows us to define values via <code>new IntVector2(1, 2)</code>.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-immutable" id="q-immutable">Why isn't <code>IntVector2</code> immutable?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no"><mark>public struct IntVector2 {</mark>
+
+	<mark>public int x, z;</mark>
+	
+	<mark>public IntVector2 (int x, int z) {</mark>
+		<mark>this.x = x;</mark>
+		<mark>this.z = z;</mark>
+	<mark>}</mark>
+<mark>}</mark></pre>
+			
+			<figure>
+				<img src="03-int-vector.png" width="252" height="84">
+				<figcaption>We now have an integer vector.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We will most likely be adding these vectors together at some point. We could create a method for that. But it would be even more convenient if we could simply use the <code>+</code> operator. Fortunately, we can do this by creating an operator method, which is how Unity's vectors support operation as well. So yes, adding two vectors means that you're calling a method.</p>
+				<p>Let's add support for the <code>+</code> operator now. You can define the other operators as well, but addition is all we need here.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-modify-argument" id="q-modify-argument">Aren't we changing <code>a</code> here?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>public static IntVector2 operator + (IntVector2 a, IntVector2 b) {</mark>
+		<mark>a.x += b.x;</mark>
+		<mark>a.z += b.z;</mark>
+		<mark>return a;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now we can use our integer vector type to add coordinates to <code>MazeCell</code>.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-coordinates" id="q-coordinates">Shouldn't cell coordinates be fixed?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>public IntVector2 coordinates;</mark></pre>
+			
+			<div class="instructions">
+				<p>And we can adjust <code>Maze</code> so it uses <code>IntVector2</code> when creating the cells and for its size as well, instead of using two separate integers.</p>
+			</div>
+			
+			<pre translate="no">	public <mark>IntVector2</mark> size;
+	
+	public IEnumerator Generate () {
+		WaitForSeconds delay = new WaitForSeconds(generationStepDelay);
+		cells = new MazeCell[size<mark>.x</mark>, size<mark>.z</mark>];
+		for (int x = 0; x &lt; size<mark>.x</mark>; x++) {
+			for (int z = 0; z &lt; size<mark>.z</mark>; z++) {
+				yield return delay;
+				CreateCell(<mark>new IntVector2(x, z)</mark>);
+			}
+		}
+	}
+
+	private void CreateCell (<mark>IntVector2 coordinates</mark>) {
+		MazeCell newCell = Instantiate(cellPrefab) as MazeCell;
+		cells[<mark>coordinates.</mark>x, <mark>coordinates.</mark>z] = newCell;
+		<mark>newCell.coordinates = coordinates;</mark>
+		newCell.name = "Maze Cell " + <mark>coordinates.</mark>x + ", " + <mark>coordinates.</mark>z;
+		newCell.transform.parent = transform;
+		newCell.transform.localPosition =
+			new Vector3(<mark>coordinates.</mark>x - size<mark>.x</mark> * 0.5f + 0.5f, 0f, <mark>coordinates.</mark>z - size<mark>.z</mark> * 0.5f + 0.5f);
+	}</pre>
+			
+			<div class="instructions">
+				<p>Unfortunately there's something wrong now. The maze's size no longer shows up in the inspector. This is because Unity does not save our custom struct. Fortunately, this is easy to solve by adding the <code>Serializable</code> attribute from the <code>System</code> namespace to <code>IntVector2</code>.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-attribute" id="q-attribute">What's an attribute?</a></li>
+					<li><a href="index.html#a-serialization" id="q-serialization">How does serialization work?</a></li>
+					<li><a href="index.html#a-serializable-struct" id="q-serializable-struct">Can a struct be Serializable?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no"><mark>[System.Serializable]</mark>
+public struct IntVector2</pre>
+			
+			<figure>
+				<img src="03-maze-size.png" width="326" height="130">
+				<figcaption>Maze size as an integer vector.</figcaption>
+			</figure>
+			
+			<h2>Random Cell Generation</h2>
+			
+			<div class="instructions">
+				<p>Let's do away with our double loop that <code>Maze</code> uses to generate a regular pattern of cells. Instead we'll pick some random coordinates inside the maze and start generating a line of cells from there, until we run out of the maze.</p>
+			</div>
+			
+			<pre translate="no">	public IEnumerator Generate () {
+		WaitForSeconds delay = new WaitForSeconds(generationStepDelay);
+		cells = new MazeCell[size.x, size.z];
+		<mark>IntVector2 coordinates = RandomCoordinates;</mark>
+		<mark>while (ContainsCoordinates(coordinates)) {</mark>
+			yield return delay;
+			<mark>CreateCell(coordinates);</mark>
+			<mark>coordinates.z += 1;</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>To make this work we have to also add a <code>RandomCoordinates</code> property to <code>Maze</code> that produces some coordinates inside it, plus a <code>ContainsCoordinates</code> method that checks whether some coordinates fall inside the maze. Let's make them public as they would be useful for anything that deals with mazes.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-properties" id="q-properties">How do properties work?</a></li>
+					<li><a href="index.html#a-and-also" id="q-and-also">What does <code>&amp;&amp;</code> do?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>public IntVector2 RandomCoordinates {</mark>
+		<mark>get {</mark>
+			<mark>return new IntVector2(Random.Range(0, size.x), Random.Range(0, size.z));</mark>
+		<mark>}</mark>
+	<mark>}</mark>
+
+	<mark>public bool ContainsCoordinates (IntVector2 coordinate) {</mark>
+		<mark>return coordinate.x >= 0 &amp;&amp; coordinate.x &lt; size.x &amp;&amp; coordinate.z >= 0 &amp;&amp; coordinate.z &lt; size.z;</mark>
+	<mark>}</mark></pre>
+			
+			<figure>
+				<img src="04-line-of-cells.png" width="640" height="370">
+				<figcaption>A random line of cells along the Z axis.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>But we don't want to walk in a straight line, we want to move in a random direction each step. But what directions are there to choose from? Let's create a <code>MazeDirection</code> enum type to explicitly define that we have the north, east, south, and west directions. Place it in its own script file.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-enum" id="q-enum">What's an <code>enum</code>?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+
+<mark>public enum MazeDirection {</mark>
+	<mark>North,</mark>
+	<mark>East,</mark>
+	<mark>South,</mark>
+	<mark>West</mark>
+<mark>}</mark></pre>
+			
+			<figure>
+				<img src="04-maze-direction.png" width="252" height="100">
+				<figcaption>Getting a sense of direction.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Now it would be handy if we could ask for a random direction. Unfortunately an enum is not a class or a struct, so we cannot define methods or properties inside it. What we could do is add another static class and put a random property there. Let's use the plural version as its name and place it in the same file as <code>MazeDirection</code>. We also add a <code>Count</code> constant so we have an official way to know how many directions there are.</p>
+			</div>
+			
+			<pre translate="no"><mark>public static class MazeDirections {</mark>
+
+	<mark>public const int Count = 4;</mark>
+
+	<mark>public static MazeDirection RandomValue {</mark>
+		<mark>get {</mark>
+			<mark>return (MazeDirection)Random.Range(0, Count);</mark>
+		<mark>}</mark>
+	<mark>}</mark>
+<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now we can get a random direction, but how do we adjust the current coordinates based on that? It would be convenient if we could convert a direction into an integer vector somehow. Let's add a method to <code>MazeDirections</code> to take care of that. We'll use a private static array of vectors to make this conversion easy.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private static IntVector2[] vectors = {</mark>
+		<mark>new IntVector2(0, 1),</mark>
+		<mark>new IntVector2(1, 0),</mark>
+		<mark>new IntVector2(0, -1),</mark>
+		<mark>new IntVector2(-1, 0)</mark>
+	<mark>};</mark>
+
+	<mark>public static IntVector2 ToIntVector2 (MazeDirection direction) {</mark>
+		<mark>return vectors[(int)direction];</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>This allows us to convert an arbitrary direction into an integer vector via <code>MazeDirections.ToIntVector2(someDirection)</code>. While this works, it looks aweful. It would've been convenient if we could do it via <code>someDirection.ToIntVector2()</code> instead. The good news is that we can achieve this by using an extension method. With just a slight change to <code>ToIntVector2</code> it will behave as if it were an instance method of <code>MazeDirection</code>.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-extension-method" id="q-extension-method">What's an extension method?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	public static IntVector2 ToIntVector2 (<mark>this</mark> MazeDirection direction) {
+		return vectors[(int)direction];
+	}</pre>
+			
+			<div class="instructions">
+				<p>With these additions it is now easy to have <code>Maze</code> generate a new cell in a random direction each step. We do have to guard against visiting a cell more than once, so let's add a convenient method to retrieve the maze's cell at some coordinates.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public MazeCell GetCell (IntVector2 coordinates) {</mark>
+		<mark>return cells[coordinates.x, coordinates.z];</mark>
+	<mark>}</mark>
+	
+	public IEnumerator Generate () {
+		WaitForSeconds delay = new WaitForSeconds(generationStepDelay);
+		cells = new MazeCell[size.x, size.z];
+		IntVector2 coordinates = RandomCoordinates;
+		while (ContainsCoordinates(coordinates) <mark>&amp;&amp; GetCell(coordinates) == null</mark>) {
+			yield return delay;
+			CreateCell(coordinates);
+			coordinates <mark>+= MazeDirections.RandomValue.ToIntVector2()</mark>;
+		}
+	}</pre>
+			
+			<figure>
+				<img src="04-short-random-walk.png" width="640" height="370">
+				<figcaption>A short random walk.</figcaption>
+			</figure>
+			
+			<h2>Backtracking</h2>
+			
+			<div class="instructions">
+				<p>As you will see when entering play mode and pressing space a few times, only a few cells get generated each time. This happens because it is likely that we bump into an already filled cell. One way to improve our approach is to keep track of a list of active cells. Each time we create a cell, we add it to this list. Then the next generation step we try to move one random step from the last cell in this list. If we cannot do this move, instead of immediately stopping, we remove the current cell from the active list. This way we will do a step backward and try again each time we fail, until the list is empty.</p>
+				<p>We're going to use a list of maze cells, so start by adding the <code>Systems.Collections.Generic</code> namespace to those used by <code>Maze</code>.</p>
+			</div>
+			
+			<pre translate="no">using UnityEngine;
+using System.Collections;
+<mark>using System.Collections.Generic;</mark>
+
+public class Maze : MonoBehaviour</pre>
+			
+			<div class="instructions">
+				<p>Then we create a temporary list inside the <code>Generate</code> method. To keep the method simple, let's put the generation steps in their own methods and supply the active list to them as an argument.</p>
+			</div>
+			
+			<pre translate="no">	public IEnumerator Generate () {
+		WaitForSeconds delay = new WaitForSeconds(generationStepDelay);
+		cells = new MazeCell[size.x, size.z];
+		<mark>List&lt;MazeCell> activeCells = new List&lt;MazeCell>();</mark>
+		<mark>DoFirstGenerationStep(activeCells);</mark>
+		while (<mark>activeCells.Count > 0</mark>) {
+			yield return delay;
+			<mark>DoNextGenerationStep(activeCells);</mark>
+		}
+	}</pre>
+		
+			<div class="instructions">
+				<p>The <code>DoFirstGenerationStep</code> method is very short right now. The <code>DoNextGenerationStep</code> is a bit longer, because it has to retrieve the current cell, check whether the move is possible, and take care of removing cells from the list.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void DoFirstGenerationStep (List&lt;MazeCell> activeCells) {</mark>
+		<mark>activeCells.Add(CreateCell(</mark>RandomCoordinates<mark>));</mark>
+	<mark>}</mark>
+
+	<mark>private void DoNextGenerationStep (List&lt;MazeCell> activeCells) {</mark>
+		<mark>int currentIndex = activeCells.Count - 1;</mark>
+		<mark>MazeCell currentCell = activeCells[currentIndex];</mark>
+		<mark>MazeDirection direction =</mark> MazeDirections.RandomValue<mark>;</mark>
+		IntVector2 coordinates = <mark>currentCell.coordinates + direction</mark>.ToIntVector2();
+		if (ContainsCoordinates(coordinates) &amp;&amp; GetCell(coordinates) == null) {
+			<mark>activeCells.Add(</mark>CreateCell(coordinates)<mark>);</mark>
+		}
+		<mark>else {</mark>
+			<mark>activeCells.RemoveAt(currentIndex);</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>One additional change needed to make this work is to let <code>CreateCell</code> return the new cell that it creates.</p>
+			</div>
+			
+			<pre translate="no">	private <mark>MazeCell</mark> CreateCell (IntVector2 coordinates) {
+		MazeCell newCell = Instantiate(cellPrefab) as MazeCell;
+		cells[coordinates.x, coordinates.z] = newCell;
+		newCell.coordinates = coordinates;
+		newCell.name = "Maze Cell " + coordinates.x + ", " + coordinates.z;
+		newCell.transform.parent = transform;
+		newCell.transform.localPosition =
+			new Vector3(coordinates.x - size.x * 0.5f + 0.5f, 0f, coordinates.z - size.z * 0.5f + 0.5f);
+		<mark>return newCell;</mark>
+	}</pre>
+			
+			<figure>
+				<img src="05-backtracking.png" width="640" height="370">
+				<figcaption>A larger walk with backtracking.</figcaption>
+			</figure>
+	
+			<h2>Connecting the Cells</h2>
+			
+			<div class="instructions">
+				<p>While we now tend to generate longer paths of cells, it's still far from a complete maze. We should really be smart about how we move from cell to cell.</p>
+				<p>It's time to keep track of the connections between cells. Each cell has four edges, each of which connects to a neighboring cell, unless it would lead outside of the maze. We could either create a a single bidirectional edge between two cells, or give each their own unidirectional edge. We choose the latter approach, because it is more flexible.</p>
+				<p>Add a script for the new <code>MazeCellEdge</code> component type. Give it a reference to the cell it belongs to and one to the other cell that it connects with. Also give it a direction so we remember its orientation.</p>
+			</div>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+
+<mark>public class MazeCellEdge : MonoBehaviour {</mark>
+
+	<mark>public MazeCell cell, otherCell;</mark>
+	
+	<mark>public MazeDirection direction;</mark>
+<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>We want to make the edges children of their cells and place them in the same location. Also, once an edge is created its cell should know about it as well. Let's create an <code>Initialize</code> method to take care of this.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public void Initialize (MazeCell cell, MazeCell otherCell, MazeDirection direction) {</mark>
+		<mark>this.cell = cell;</mark>
+		<mark>this.otherCell = otherCell;</mark>
+		<mark>this.direction = direction;</mark>
+		<mark>cell.SetEdge(direction, this);</mark>
+		<mark>transform.parent = cell.transform;</mark>
+		<mark>transform.localPosition = Vector3.zero;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now we need to add a <code>SetEdge</code> method to <code>MazeCell</code>. Let's add a <code>GetEdge</code> method as well, because that is bound to be useful later. Our cells will store their edges in an array, but no one else needs to know how that works, so we make it private.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private MazeCellEdge[] edges = new MazeCellEdge[MazeDirections.Count];</mark>
+
+	<mark>public MazeCellEdge GetEdge (MazeDirection direction) {</mark>
+		<mark>return edges[(int)direction];</mark>
+	<mark>}</mark>
+
+	<mark>public void SetEdge (MazeDirection direction, MazeCellEdge edge) {</mark>
+		<mark>edges[(int)direction] = edge;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Whenever we move from one cell to a new one, we should tell both cells that the edges that connect them are now passages. Whenever we move out of the maze or bump into an already created cell, the edges should become walls instead of passages. So we really have two types of cell edges. Let's add a <code>MazePassage</code> and a <code>MazeWall</code> component that both extend <code>MazeCellEdge</code> and place them in their own files. Because we only want to use these types and never create an instance of the generic <code>MazeCellEdge</code>, we mark it as abstract.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-abstract" id="q-abstract">What does it mean to be abstract?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">public <mark>abstract</mark> class MazeCellEdge : MonoBehaviour</pre>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+
+<mark>public class MazePassage : MazeCellEdge {}</mark></pre>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+
+<mark>public class MazeWall : MazeCellEdge {}</mark></pre>
+			
+			<figure>
+				<img src="06-edges.png" width="252" height="144">
+				<figcaption>Three new edgy scripts.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Now we can create a prefab for the passage. It's simply an empty game object with a <code>MazePassage</code> component added to it. A wall prefab can be created the same way, except that we also give it a default cube as a child. This cube is our wall's 3D representation. Let's make it 0.05 units thick and position it so that it will end up flush with the north edge of a cell.</p>
+			</div>
+			
+			<figure>
+				<img src="06-edge-prefabs.png" width="582" height="586">
+				<figcaption>Two new prefabs, showing the wall's cube.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>With the prefabs ready, <code>Maze</code> can now get a reference to both, so it can generate instances of them.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public MazePassage passagePrefab;</mark>
+	<mark>public MazeWall wallPrefab;</mark></pre>
+			
+			<figure>
+				<img src="06-maze-with-edges.png" width="326" height="130">
+				<figcaption>Maze with edge prefab references.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Now we can create passages and walls in <code>DoNextGenerationStep</code>. Let's assume we have convenient methods for that. When we would go out of the maze, we add a wall. If we're still inside the maze, we need to check if the current cell's neightbor doesn't exist yet. If so, we create it and place a passage in between them. But if the neighbor already exists, we separate them with a wall.</p>
+			</div>
+			
+			<pre translate="no">	private void DoNextGenerationStep (List&lt;MazeCell> activeCells) {
+		int currentIndex = activeCells.Count - 1;
+		MazeCell currentCell = activeCells[currentIndex];
+		MazeDirection direction = MazeDirections.RandomValue;
+		IntVector2 coordinates = currentCell.coordinates + direction.ToIntVector2();
+		if (ContainsCoordinates(coordinates)) {
+			<mark>MazeCell neighbor =</mark> GetCell(coordinates);
+			<mark>if (neighbor</mark> == null<mark>) {</mark>
+				<mark>neighbor = CreateCell(coordinates);</mark>
+				<mark>CreatePassage(currentCell, neighbor, direction);</mark>
+				activeCells.Add(<mark>neighbor</mark>);
+			}
+			<mark>else {</mark>
+				<mark>CreateWall(currentCell, neighbor, direction);</mark>
+				<mark>activeCells.RemoveAt(currentIndex);</mark>
+			<mark>}</mark>
+		}
+		else {
+			<mark>CreateWall(currentCell, null, direction);</mark>
+			activeCells.RemoveAt(currentIndex);
+		}
+	}</pre>
+			
+			<div class="instructions">
+				<p>The <code>CreatePassage</code> and <code>CreateWall</code> methods simply instantiate their respective prefabs and initialize them, once for both cells. The only real difference between them is that <code>CreateWall</code>'s second cell won't exist at the edge of the maze.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void CreatePassage (MazeCell cell, MazeCell otherCell, MazeDirection direction) {</mark>
+		<mark>MazePassage passage = Instantiate(passagePrefab) as MazePassage;</mark>
+		<mark>passage.Initialize(cell, otherCell, direction);</mark>
+		<mark>passage = Instantiate(passagePrefab) as MazePassage;</mark>
+		<mark>passage.Initialize(otherCell, cell, direction.GetOpposite());</mark>
+	<mark>}</mark>
+
+	<mark>private void CreateWall (MazeCell cell, MazeCell otherCell, MazeDirection direction) {</mark>
+		<mark>MazeWall wall = Instantiate(wallPrefab) as MazeWall;</mark>
+		<mark>wall.Initialize(cell, otherCell, direction);</mark>
+		<mark>if (otherCell != null) {</mark>
+			<mark>wall = Instantiate(wallPrefab) as MazeWall;</mark>
+			<mark>wall.Initialize(otherCell, cell, direction.GetOpposite());</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>The code above makes use of a convenient <code>GetOpposite</code> method that doesn't exist yet, so let's quickly add it to <code>MazeDirections</code>.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private static MazeDirection[] opposites = {</mark>
+		<mark>MazeDirection.South,</mark>
+		<mark>MazeDirection.West,</mark>
+		<mark>MazeDirection.North,</mark>
+		<mark>MazeDirection.East</mark>
+	<mark>};</mark>
+
+	<mark>public static MazeDirection GetOpposite (this MazeDirection direction) {</mark>
+		<mark>return opposites[(int)direction];</mark>
+	<mark>}</mark></pre>
+			
+			<figure>
+				<img src="06-walls-without-rotation.png" width="640" height="370">
+				<figcaption>Walls without rotation.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We have now added some invisible passages and visible walls to the maze. So we can see that the walls are always on the north side of cells, which is incorrect. We fix this by rotating in the right direction in <code>MazeCellEdge</code>'s <code>Initialize</code> method.</p>
+			</div>
+			
+			<pre translate="no">	public void Initialize (MazeCell cell, MazeCell otherCell, MazeDirection direction) {
+		this.cell = cell;
+		this.otherCell = otherCell;
+		this.direction = direction;
+		cell.SetEdge(direction, this);
+		transform.parent = cell.transform;
+		transform.localPosition = Vector3.zero;
+		<mark>transform.localRotation = direction.ToRotation();</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>And yes, this means we're going to add yet another convenient method to <code>MazeDirections</code>.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private static Quaternion[] rotations = {</mark>
+		<mark>Quaternion.identity,</mark>
+		<mark>Quaternion.Euler(0f, 90f, 0f),</mark>
+		<mark>Quaternion.Euler(0f, 180f, 0f),</mark>
+		<mark>Quaternion.Euler(0f, 270f, 0f)</mark>
+	<mark>};</mark>
+	
+	<mark>public static Quaternion ToRotation (this MazeDirection direction) {</mark>
+		<mark>return rotations[(int)direction];</mark>
+	<mark>}</mark></pre>
+			
+			<figure>
+				<img src="06-walls-rotated.png" width="640" height="370">
+				<figcaption>Walls with rotation.</figcaption>
+			</figure>
+			
+			<h2>Generating the Entire Maze</h2>
+			
+			<div class="instructions">
+				<p>While the walls are now correctly rotated, we still don't fill the entire maze. Even worse, we're also generating completely walled-off sections, making them unreachable from anywhere else in the maze. This can happen because we choose a completely random direction each step, which could lead to us placing a wall where a passage had already been defined.</p>
+				<p>To completely fill the maze, we should only remove a cell from the active list when all its edges have been initialized. This is the first thing we should check for in <code>DoNextGenerationStep</code>, because a cell in the active list will have become fully initialized when all its neighbors have been visited. And to prevent placing incorrect walls, we should only pick a random direction that is not yet initialized for the current cell.</p>
+			</div>
+			
+			<pre translate="no">	private void DoNextGenerationStep (List&lt;MazeCell> activeCells) {
+		int currentIndex = activeCells.Count - 1;
+		MazeCell currentCell = activeCells[currentIndex];
+		<mark>if (currentCell.IsFullyInitialized) {</mark>
+			activeCells.RemoveAt(currentIndex);
+			<mark>return;</mark>
+		<mark>}</mark>
+		MazeDirection direction = <mark>currentCell.RandomUninitializedDirection</mark>;
+		IntVector2 coordinates = currentCell.coordinates + direction.ToIntVector2();
+		if (ContainsCoordinates(coordinates)) {
+			MazeCell neighbor = GetCell(coordinates);
+			if (neighbor == null) {
+				neighbor = CreateCell(coordinates);
+				CreatePassage(currentCell, neighbor, direction);
+				activeCells.Add(neighbor);
+			}
+			else {
+				CreateWall(currentCell, neighbor, direction);
+				<mark>// No longer remove the cell here.</mark>
+			}
+		}
+		else {
+			CreateWall(currentCell, null, direction);
+			<mark>// No longer remove the cell here.</mark>
+		}
+	}</pre>
+			
+			<div class="instructions">
+				<p>We can easily check whether a cell is fully initialized by having <code>MazeCell</code> keep track of how often an edge has been set.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private int initializedEdgeCount;</mark>
+
+	<mark>public bool IsFullyInitialized {</mark>
+		<mark>get {</mark>
+			<mark>return initializedEdgeCount == MazeDirections.Count;</mark>
+		<mark>}</mark>
+	<mark>}</mark>
+	
+	<mark>public void SetEdge (MazeDirection direction, MazeCellEdge edge) {</mark>
+		<mark>edges[(int)direction] = edge;</mark>
+		<mark>initializedEdgeCount += 1;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>To get an unbiased random uninitialized direction is a little less straightforward. One way is to randomly decide how many uninitialized directions we should skip. Then we loop through our edges array and whenever we find a hole we check whether we are out of skips. If so, this is our direction. Otherwise, we decrease our amount of skips by one.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public MazeDirection RandomUninitializedDirection {</mark>
+		<mark>get {</mark>
+			<mark>int skips = Random.Range(0, MazeDirections.Count - initializedEdgeCount);</mark>
+			<mark>for (int i = 0; i &lt; MazeDirections.Count; i++) {</mark>
+				<mark>if (edges[i] == null) {</mark>
+					<mark>if (skips == 0) {</mark>
+						<mark>return (MazeDirection)i;</mark>
+					<mark>}</mark>
+					<mark>skips -= 1;</mark>
+				<mark>}</mark>
+			<mark>}</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>This will work as long as there are uninitialized edges remaining, otherwise we shouldn't call this method. If we did, we would run through the loop without returning and won't have any result. In fact, the compiler will complain that not all code paths return a value. We solve this by throwing an <code>InvalidOperationException</code> at the end of the method, which is the most appropriate exception for this case. This will result in a useful error message in Unity's console if we make a mistake somewhere and call this method when we shouldn't.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-throw" id="q-throw">What does <code>throw</code> do?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	public MazeDirection RandomUninitializedDirection {
+		get {
+			int skips = Random.Range(0, MazeDirections.Count - initializedEdgeCount);
+			for (int i = 0; i &lt; MazeDirections.Count; i++) {
+				if (edges[i] == null) {
+					if (skips == 0) {
+						return (MazeDirection)i;
+					}
+					skips -= 1;
+				}
+			}
+			<mark>throw new System.InvalidOperationException("MazeCell has no uninitialized directions left.");</mark>
+		}
+	}</pre>
+			
+			<figure>
+				<img src="07-complete-maze.png" width="640" height="370">
+				<figcaption>A complete maze.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Finally, we can generate a complete maze! We are now using one flavor of the Growing Tree algorithm. In case you're curious, you can change the nature of the maze you generate by using a different method to select the current index in <code>DoNextGenerationStep</code>. I have chosen to always select the last index, which causes the algorithm to dive into narrow paths that run all over the maze. Always selecting the first or the middle index will produce very different behavior. Another option is to just pick a random index. Or to choose between two approaches each step. You could even make this configurable if you like, see the <a href="https://catlikecoding.com/unity/tutorials/graphs/">Graphs tutorial</a> for a way to do that.</p>
+			</div>
+			
+			<figure>
+				<img alt="first" src="07-first-index.png" width="320" height="185">
+				<img alt="middle" src="07-middle-index.png" width="320" height="185">
+				<img alt="random" src="07-random-index.png" width="320" height="185">
+				<img alt="last" src="07-last-index.png" width="320" height="185">
+				<figcaption>Comparing first, middle, random, and last index approaches.</figcaption>
+			</figure>
+			
+			<h2>Decorating the Maze</h2>
+			
+			<div class="instructions">
+				<p>Our maze looks rather dull. Let's add some variety by introducing different wall sections. We can do this by hanging some very simple paintings on the walls.</p>
+				<p>First, create a few materials for the paintings, just to add some color variety. Put them together in a new <i>Materials</i> folder and give them any color you like. Next, drag the wall prefab into the scene and name it <i>Wall with Painting 1</i>. Add a new default cube named <i>Painting</i> to this instance. Give the cube a material, then scale and position it so it looks like it's hanging on the wall. Then turn the whole thing into a new prefab. Repeat this until you have enough paintings. I made three.</p>
+			</div>
+			
+			<figure>
+				<img alt="materials and prefabs" src="08-painting.png" width="310" height="270">
+				<img alt="materials and prefabs" src="08-wall-prefabs.png" width="252" height="308">
+				<figcaption>Walls with paintings.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Now change <code>Maze</code> so it has an array of wall prefabs instead of a single one. Then we can pick one at random from the array whenever we need to instantiate a new wall.</p>
+			</div>
+			
+			<pre translate="no">	public MazeWall<mark>[]</mark> wallPrefab<mark>s</mark>;
+	
+	private void CreateWall (MazeCell cell, MazeCell otherCell, MazeDirection direction) {
+		MazeWall wall = Instantiate(wallPrefab<mark>s[Random.Range(0, wallPrefabs.Length)]</mark>) as MazeWall;
+		wall.Initialize(cell, otherCell, direction);
+		if (otherCell != null) {
+			wall = Instantiate(wallPrefab<mark>s[Random.Range(0, wallPrefabs.Length)]</mark>) as MazeWall;
+			wall.Initialize(otherCell, cell, direction.GetOpposite());
+		}
+	}</pre>
+			
+			<div class="instructions">
+				<p>Then you can add all your wall prefabs to the array of the maze prefab. I added the empty wall multiple times, so it is more likely to be picked. Otherwise the maze will be brimming with paintings.</p>
+			</div>
+			
+			<figure>
+				<img alt="wall prefab array" src="08-maze-wall-prefabs-array.png" width="326" height="328">
+				<img alt="maze with paintings" src="08-maze-with-paintings.png" width="640" height="354">
+				<figcaption>Making an artsy maze.</figcaption>
+			</figure>
+			
+			<h2>Placing Doors</h2>
+			
+			<div class="instructions">
+				<p>Doors are another interesting element to add to our maze. Let's add a <code>MazeDoor</code> component that extends <code>MazePassage</code>. Because it will have a rotating part, add a public <code>Transform</code> variable to it named <i>hinge</i>.</p>
+			</div>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+
+<mark>public class MazeDoor : MazePassage {</mark>
+	
+	<mark>public Transform hinge;</mark>
+<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>We will build a door frame from four cubes and put another cube in it with a new <i>Door</i> material, plus a door handle on the right side of it. To allow the door to rotate properly, add an empty game object named <i>Hinge</i> on the left side of the door with a Z-position of 0.5. Make the door and handle objects children of it. Add the <code>MazeDoor</code> component to the root object and connect its hinge, then turn it into a prefab.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-prefab-hierarchy" id="q-prefab-hierarchy">Where are the prefab hinge's children?</a></li>
+				</ul>
+			</aside>
+			
+			<figure>
+				<img alt="door assets" src="09-door-assets.png" width="252" height="406">
+				<img alt="door model" src="09-door-model.png" width="280" height="280">
+				<img alt="door hinge" src="09-door-hinge.png" width="280" height="280"><br>
+				<img alt="door hierarchy" src="09-door-hierarchy.png" width="100" height="130">
+				<img alt="door component" src="09-door-component.png" width="326" height="112">
+				<figcaption>Creating a door.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p><code>Maze</code> can now get a reference to the door prefab. We want to spawns doors instead of passages some of the time, but really not that often because otherwise the maze will get flooded with doors. So let's add a <code>doorProbabilty</code> configuration option and use that to decide whether we place a door or a passage. I set it to 0.1, which means that one out of ten passage will become a door.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-question-mark" id="q-question-mark">What does the question mark do?</a></li>
+					<li><a href="index.html#a-range" id="q-range">What does <code>Range</code> do?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>public MazeDoor doorPrefab;</mark>
+
+	<mark>[Range(0f, 1f)]</mark>
+	<mark>public float doorProbability;</mark>
+	
+	private void CreatePassage (MazeCell cell, MazeCell otherCell, MazeDirection direction) {
+		<mark>MazePassage prefab = Random.value &lt; doorProbability ? doorPrefab : passagePrefab;</mark>
+		MazePassage passage = Instantiate(<mark>prefab</mark>) as MazePassage;
+		passage.Initialize(cell, otherCell, direction);
+		passage = Instantiate(<mark>prefab</mark>) as MazePassage;
+		passage.Initialize(otherCell, cell, direction.GetOpposite());
+	}</pre>
+			
+			<figure>
+				<img alt="maze configured" src="09-maze-configured.png" width="326" height="166">
+				<img alt="maze with doors" src="09-maze-with-doors-incorrect.png" width="640" height="354">
+				<figcaption>Doors added to the maze.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We now get doors, but there is something wrong. All the doors are have their handle on the right side, even opposite sides of the same door! We need to make sure that the other side of a door swivels in the opposite direction.</p>
+				<p>We know that the sides of a door are created one after the other. If a door could somehow know that it was created second, it can then mirror itself. What we could do is add a convenient private property to <code>MazeDoor</code> that somehow gives us the opposite side of the door. Then we can mirror and reposition our hinge if the other side already exists. We add this functionality to <code>Initialize</code> by overriding that method with out own version. Inside it, we first call the original version and then do the additional work.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-base" id="q-base">What's <code>base</code>?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>private MazeDoor OtherSideOfDoor {</mark>
+		<mark>get {</mark>
+			<mark>return otherCell.GetEdge(direction.GetOpposite()) as MazeDoor;</mark>
+		<mark>}</mark>
+	<mark>}</mark>
+	
+	<mark>public override void Initialize (MazeCell primary, MazeCell other, MazeDirection direction) {</mark>
+		<mark>base.Initialize(primary, other, direction);</mark>
+		<mark>if (OtherSideOfDoor != null) {</mark>
+			<mark>hinge.localScale = new Vector3(-1f, 1f, 1f);</mark>
+			<mark>Vector3 p = hinge.localPosition;</mark>
+			<mark>p.x = -p.x;</mark>
+			<mark>hinge.localPosition = p;</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>However, we can't just override any method of the class that we're extending. The original class must have declared that this is possible by marking the method as virtual. So we add the virtual keyword to the <code>Initialize</code> method of <code>MazeCellEdge</code>.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-virtual" id="q-virtual">Why is <code>virtual</code> needed?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	public <mark>virtual</mark> void Initialize (MazeCell cell, MazeCell otherCell, MazeDirection direction) {
+		this.cell = cell;
+		this.otherCell = otherCell;
+		this.direction = direction;
+		cell.SetEdge(direction, this);
+		transform.parent = cell.transform;
+		transform.localPosition = Vector3.zero;
+		transform.localRotation = direction.ToRotation();
+	}</pre>
+			
+			<figure>
+				<img src="09-maze-with-doors-correct.png" width="640" height="354">
+				<figcaption>Now with correct doors.</figcaption>
+			</figure>
+			
+			<h2>Adding Rooms</h2>
+			
+			<div class="instructions">
+				<p>Our maze is uniformly white and that is rather boring. Let's spice things up by breaking the maze into rooms of different types. Then we can adjust the appearance of each room based on its type.</p>
+				<p>Create a new serialized <code>MazeRoomSettings</code> class with a public material references for floors and walls.</p>
+			</div>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+<mark>using System;</mark>
+
+<mark>[Serializable]</mark>
+<mark>public class MazeRoomSettings {</mark>
+
+	<mark>public Material floorMaterial, wallMaterial;</mark>
+<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now we can give <code>Maze</code> an array of these settings, defining the available room types. Then create a few materials with varying colors and populate the array. Four room types is a good amount for a 20 by 20 maze.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public MazeRoomSettings[] roomSettings;</mark></pre>
+			
+			<figure>
+				<img src="10-room-settings-assets.png" width="252" height="420">
+				<img src="10-room-settings.png" width="326" height="418">
+				<figcaption>Room settings.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Now we are also going to add a <code>MazeRoom</code> class so we can easily keep track of which cell belongs to which room. For now it simply is a wrapper for a list of cells, and it also has a reference to its settings and settings index. We have it extend <code>ScriptableObject</code> so Unity will keep the references intact if we were to cause a recompile while in play mode.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-scriptable-object" id="q-scriptable-object">What's a <code>ScriptableObject</code>?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+<mark>using System.Collections.Generic;</mark>
+
+<mark>public class MazeRoom : ScriptableObject {</mark>
+
+	<mark>public int settingsIndex;</mark>
+
+	<mark>public MazeRoomSettings settings;</mark>
+	
+	<mark>private List&lt;MazeCell> cells = new List&lt;MazeCell>();</mark>
+	
+	<mark>public void Add (MazeCell cell) {</mark>
+		<mark>cell.room = this;</mark>
+		<mark>cells.Add(cell);</mark>
+	<mark>}</mark>
+<mark>}</mark></pre>
+			
+			<figure>
+				<img src="10-maze-room-script.png" width="252" height="194">
+				<figcaption>Maze room script.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We also give <code>MazeCell</code> a reference to its room. While we're at it, let's also give it an <code>Initialize</code> method that takes care of assigning the right materials. As we only have the floor quad to worry about, we just grab the first child and be done with it.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public MazeRoom room;</mark>
+	
+	<mark>public void Initialize (MazeRoom room) {</mark>
+		<mark>room.Add(this);</mark>
+		<mark>transform.GetChild(0).GetComponent&lt;Renderer>().material = room.settings.floorMaterial;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now add a room list and a method to create a new room to <code>Maze</code>. We'll use it to create a new room for the first cell and each time we spawn a door.</p>
+				<p>If we were to just pick a random room type, it would be possible for two adjacent rooms to have the same type. While this is not really a problem, we get more variety by making sure that this won't happen. This can be done by checking whether we picked the same index as the room we came from. If so, we'll just add one to the index and wrap around. It's biased, but that's not a big deal here. Initially we'll pass a negative index so any room is fine.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-remainder" id="q-remainder">What does <code>%</code> do?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>private List&lt;MazeRoom> rooms = new List&lt;MazeRoom>();</mark>
+	
+	<mark>private MazeRoom CreateRoom (int indexToExclude) {</mark>
+		<mark>MazeRoom newRoom = ScriptableObject.CreateInstance&lt;MazeRoom>();</mark>
+		<mark>newRoom.settingsIndex = Random.Range(0, roomSettings.Length);</mark>
+		<mark>if (newRoom.settingsIndex == indexToExclude) {</mark>
+			<mark>newRoom.settingsIndex = (newRoom.settingsIndex + 1) % roomSettings.Length;</mark>
+		<mark>}</mark>
+		<mark>newRoom.settings = roomSettings[newRoom.settingsIndex];</mark>
+		<mark>rooms.Add(newRoom);</mark>
+		<mark>return newRoom;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>It is now possible to create a new room in <code>DoFirstGenerationStep</code>. That will take care of the first cell. To put all the other cells in a room as well, we modify <code>CreatePassage</code> so it checks whether a door has been placed. If so, the other cell is the first of a new room. If not, it belongs to the same room as the previous cell.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-is" id="q-is">What does <code>is</code> do?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	private void DoFirstGenerationStep (List&lt;MazeCell> activeCells) {
+		<mark>MazeCell newCell =</mark> CreateCell(RandomCoordinates);
+		<mark>newCell.Initialize(CreateRoom(-1));</mark>
+		activeCells.Add(<mark>newCell</mark>);
+	}
+	
+	private void CreatePassage (MazeCell cell, MazeCell otherCell, MazeDirection direction) {
+		MazePassage prefab = Random.value &lt; doorProbability ? doorPrefab : passagePrefab;
+		MazePassage passage = Instantiate(prefab) as MazePassage;
+		passage.Initialize(cell, otherCell, direction);
+		passage = Instantiate(prefab) as MazePassage;
+		<mark>if (passage is MazeDoor) {</mark>
+			<mark>otherCell.Initialize(CreateRoom(cell.room.settingsIndex));</mark>
+		<mark>}</mark>
+		<mark>else {</mark>
+			<mark>otherCell.Initialize(cell.room);</mark>
+		<mark>}</mark>
+		passage.Initialize(otherCell, cell, direction.GetOpposite());
+	}</pre>
+			
+			<figure>
+				<img src="10-colored-floors.png" width="640" height="354">
+				<figcaption>Now with colored floors.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>To also color the walls, we need to adjust <code>MazeWall</code>. Give it a reference to its wall child and configure it for all the wall prefabs that you have created. This allows us to set the wall's material in an override of the <code>Initialize</code> method.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public Transform wall;</mark>
+
+	<mark>public override void Initialize (MazeCell cell, MazeCell otherCell, MazeDirection direction) {</mark>
+		<mark>base.Initialize(cell, otherCell, direction);</mark>
+		<mark>wall.GetComponent&lt;Renderer>().material = cell.room.settings.wallMaterial;</mark>
+	<mark>}</mark></pre>
+			
+			<figure>
+				<img src="10-wall-reference.png" width="326" height="112">
+				<figcaption>Configuring a wall reference.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We have to do the same for <code>MazeDoor</code>, except now we set the material of all its direct children except for the hinge.</p>
+			</div>
+			
+			<pre translate="no">	public override void Initialize (MazeCell primary, MazeCell other, MazeDirection direction) {
+		base.Initialize(primary, other, direction);
+		if (OtherSideOfDoor != null) {
+			hinge.localScale = new Vector3(-1f, 1f, 1f);
+			Vector3 p = hinge.localPosition;
+			p.x = -p.x;
+			hinge.localPosition = p;
+		}
+		<mark>for (int i = 0; i &lt; transform.childCount; i++) {</mark>
+			<mark>Transform child = transform.GetChild(i);</mark>
+			<mark>if (child != hinge) {</mark>
+				<mark>child.GetComponent&lt;Renderer>().material = cell.room.settings.wallMaterial;</mark>
+			<mark>}</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<figure>
+				<img src="10-colored-rooms.png" width="640" height="354">
+				<figcaption>Fully colored rooms.</figcaption>
+			</figure>
+			
+			<h2>Expanding Rooms</h2>
+			
+			<div class="instructions">
+				<p>We've been talking about rooms all this time, but they're really more like winding corridors. If we can prevent walls from being placed between two cell that belong to the same room, then the rooms will become more open areas.</p>
+				<p>Add a new <code>CreatePassageInSameRoom</code> method that simply creates a passage between two cells, with no chance of a door. Then update <code>DoNextGenerationStep</code> so it calls this method when two cells share a room, instead of placing a wall.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void CreatePassageInSameRoom (MazeCell cell, MazeCell otherCell, MazeDirection direction) {</mark>
+		<mark>MazePassage passage = Instantiate(passagePrefab) as MazePassage;</mark>
+		<mark>passage.Initialize(cell, otherCell, direction);</mark>
+		<mark>passage = Instantiate(passagePrefab) as MazePassage;</mark>
+		<mark>passage.Initialize(otherCell, cell, direction.GetOpposite());</mark>
+	<mark>}</mark>
+	
+	private void DoNextGenerationStep (List<MazeCell> activeCells) {
+		int currentIndex = activeCells.Count - 1;
+		MazeCell currentCell = activeCells[currentIndex];
+		if (currentCell.IsFullyInitialized) {
+			activeCells.RemoveAt(currentIndex);
+			return;
+		}
+		MazeDirection direction = currentCell.RandomUninitializedDirection;
+		IntVector2 coordinates = currentCell.coordinates + direction.ToIntVector2();
+		if (ContainsCoordinates(coordinates)) {
+			MazeCell neighbor = GetCell(coordinates);
+			if (neighbor == null) {
+				neighbor = CreateCell(coordinates);
+				CreatePassage(currentCell, neighbor, direction);
+				activeCells.Add(neighbor);
+			}
+			<mark>else if (currentCell.room == neighbor.room) {</mark>
+				<mark>CreatePassageInSameRoom(currentCell, neighbor, direction);</mark>
+			<mark>}</mark>
+			else {
+				CreateWall(currentCell, neighbor, direction);
+			}
+		}
+		else {
+			CreateWall(currentCell, null, direction);
+		}
+	}</pre>
+	
+			<figure>
+				<img src="11-open-rooms.png" width="640" height="354">
+				<figcaption>Some breathing room.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We can go a step further and even join together adjacent rooms if they share the same settings. Besides creating larger rooms that way, fusing rooms from different parts of the maze creates loops. This means that there will be multiple ways to navigate it and you could end up walking in circles.</p>
+				<p>All that's really needed for this change is to relax our room comparison.</p>
+			</div>
+			
+			<pre translate="no">	private void DoNextGenerationStep (List&lt;MazeCell> activeCells) {
+		int currentIndex = activeCells.Count - 1;
+		MazeCell currentCell = activeCells[currentIndex];
+		if (currentCell.IsFullyInitialized) {
+			activeCells.RemoveAt(currentIndex);
+			return;
+		}
+		MazeDirection direction = currentCell.RandomUninitializedDirection;
+		IntVector2 coordinates = currentCell.coordinates + direction.ToIntVector2();
+		if (ContainsCoordinates(coordinates)) {
+			MazeCell neighbor = GetCell(coordinates);
+			if (neighbor == null) {
+				neighbor = CreateCell(coordinates);
+				CreatePassage(currentCell, neighbor, direction);
+				activeCells.Add(neighbor);
+			}
+			else if (currentCell.room<mark>.settingsIndex</mark> == neighbor.room<mark>.settingsIndex</mark>) {
+				CreatePassageInSameRoom(currentCell, neighbor, direction);
+			}
+			else {
+				CreateWall(currentCell, neighbor, direction);
+			}
+		}
+		else {
+			CreateWall(currentCell, null, direction);
+		}
+	}</pre>
+			
+			<div class="instructions">
+				<p>While this looks correct, we will now have different rooms with open passages connecting them. We should also get rid of one of the room instances as it is assimilated by the other. So let's add an <code>Assimilate</code> method to <code>MazeRoom</code>.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public void Assimilate (MazeRoom room) {</mark>
+		<mark>for (int i = 0; i &lt; room.cells.Count; i++) {</mark>
+			<mark>Add(room.cells[i]);</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Then we have <code>Maze</code> check whether it's connecting different rooms, in which case it assimilates and removes the other room.</p>
+			</div>
+			
+			<pre translate="no">	private void CreatePassageInSameRoom (MazeCell cell, MazeCell otherCell, MazeDirection direction) {
+		MazePassage passage = Instantiate(passagePrefab) as MazePassage;
+		passage.Initialize(cell, otherCell, direction);
+		passage = Instantiate(passagePrefab) as MazePassage;
+		passage.Initialize(otherCell, cell, direction.GetOpposite());
+		<mark>if (cell.room != otherCell.room) {</mark>
+			<mark>MazeRoom roomToAssimilate = otherCell.room;</mark>
+			<mark>cell.room.Assimilate(roomToAssimilate);</mark>
+			<mark>rooms.Remove(roomToAssimilate);</mark>
+			<mark>Destroy(roomToAssimilate);</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<figure>
+				<img src="11-joined-rooms.png" width="640" height="354">
+				<figcaption>Now with large rooms and loops.</figcaption>
+			</figure>
+			
+			<h2>Walking Around</h2>
+			
+			<div class="instructions">
+				<p>It's high time we walked around in our own maze. Create a simple player model, attach a new <code>Player</code> component that we create as well, and turn it into a prefab.</p>
+			</div>
+			
+			<figure>
+				<img alt="player assets" src="12-player-assets.png" width="252" height="612">
+				<img alt="player-prefab" src="12-player-prefab.png" width="326" height="461">
+				<figcaption>A square player.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Give <code>Player</code> a public method so we can tell it what cell it's in. Also give it an <code>Update</code> method that moves the player when an arrow key is pressed. Movement should only happen if the edge we would cross is a passage, otherwise we're blocked.</p>
+			</div>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+
+<mark>public class Player : MonoBehaviour {</mark>
+
+	<mark>private MazeCell currentCell;</mark>
+
+	<mark>public void SetLocation (MazeCell cell) {</mark>
+		<mark>currentCell = cell;</mark>
+		<mark>transform.localPosition = cell.transform.localPosition;</mark>
+	<mark>}</mark>
+
+	<mark>private void Move (MazeDirection direction) {</mark>
+		<mark>MazeCellEdge edge = currentCell.GetEdge(direction);</mark>
+		<mark>if (edge is MazePassage) {</mark>
+			<mark>SetLocation(edge.otherCell);</mark>
+		<mark>}</mark>
+	<mark>}</mark>
+
+	<mark>private void Update () {</mark>
+		<mark>if (Input.GetKeyDown(KeyCode.UpArrow)) {</mark>
+			<mark>Move(MazeDirection.North);</mark>
+		<mark>}</mark>
+		<mark>else if (Input.GetKeyDown(KeyCode.RightArrow)) {</mark>
+			<mark>Move(MazeDirection.East);</mark>
+		<mark>}</mark>
+		<mark>else if (Input.GetKeyDown(KeyCode.DownArrow)) {</mark>
+			<mark>Move(MazeDirection.South);</mark>
+		<mark>}</mark>
+		<mark>else if (Input.GetKeyDown(KeyCode.LeftArrow)) {</mark>
+			<mark>Move(MazeDirection.West);</mark>
+		<mark>}</mark>
+	<mark>}</mark>
+<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now give <code>GameManager</code> both a reference to the player prefab and a local reference to a current player.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public Player playerPrefab;</mark>
+
+	<mark>private Player playerInstance;</mark>
+			</pre>
+			
+			<figure>
+				<img src="12-game-manager.png" width="326" height="76">
+				<figcaption>Game manager wants a player now.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We should instantiate a new player after the maze has finished generating. However, we currently start a coroutine and move on. In order to wait, we turn <code>BeginGame</code> into a coroutine as well. Then we can yield the other coroutine, so it finishes before we continue ourselves and create the player and give it a random location. Also, make sure to destroy the current player in <code>RestartGame</code>, if it has already been created.</p>
+			</div>
+
+			<pre translate="no">	private void Start () {
+		<mark>StartCoroutine(</mark>BeginGame()<mark>)</mark>;
+	}
+	
+	private IEnumerator BeginGame () {
+		mazeInstance = Instantiate(mazePrefab) as Maze;
+		<mark>yield return</mark> StartCoroutine(mazeInstance.Generate());
+		<mark>playerInstance = Instantiate(playerPrefab) as Player;</mark>
+		<mark>playerInstance.SetLocation(mazeInstance.GetCell(mazeInstance.RandomCoordinates));</mark>
+	}
+
+	private void RestartGame () {
+		StopAllCoroutines();
+		Destroy(mazeInstance.gameObject);
+		<mark>if (playerInstance != null) {</mark>
+			<mark>Destroy(playerInstance.gameObject);</mark>
+		<mark>}</mark>
+		<mark>StartCoroutine(</mark>BeginGame()<mark>)</mark>;
+	}</pre>
+			
+			<figure>
+				<img src="12-exploring.png" width="640" height="354">
+				<figcaption>A player exploring our maze.</figcaption>
+			</figure>
+			
+			<h2>What It Looks Like</h2>
+			
+			<div class="instructions">
+				<p>What would our maze look like, when viewing it through the eyes of the player? Let's find out by adding a camera to the player prefab! You can do so by dragging an instance of the player prefab into the scene, creating a default camera, making it a child of the player, and then clicking the prefab <i>Apply</i> button of the player instance. I position the camera at a height of 0.7 and rotate it ten degrees around its X axis so it doesn't stare straight ahead but looks a bit to the floor.</p>
+			</div>
+			
+			<figure>
+				<img src="13-player-camera.png" width="582" height="230">
+				<img src="13-player-view.png" width="640" height="354">
+				<figcaption>Player camera in action.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Keep in mind that the main camera is also still being rendered. The player camera is just rendered on top of it, because it has the default depth of zero while the default main camera has a depth of -1. Unity will also complain that there are two audio listeners in the scene at the same time, so we have to do something about that.</p>
+				<p>What about we keep both cameras, but turn the main camera view into a map overlay? First, remove the audio listener from the main camera and increase its depth value to one. That will make it render after and on top of the player's camera.</p>
+			</div>
+			
+			<figure>
+				<img src="13-main-camera.png" width="326" height="400">
+				<figcaption>Tweaked main camera.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Now we again only see the main camera as it's rendering after the player camera. To turn it into a smaller overlay, we reduce its view rectangle after a maze has been generated. We also set it to cover the entire view before we start generating. That ensures that we get a full-size view of the maze while it is being generated.</p>
+			</div>
+			
+			<pre translate="no">	private IEnumerator BeginGame () {
+		<mark>Camera.main.rect = new Rect(0f, 0f, 1f, 1f);</mark>
+		mazeInstance = Instantiate(mazePrefab) as Maze;
+		yield return StartCoroutine(mazeInstance.Generate());
+		playerInstance = Instantiate(playerPrefab) as Player;
+		playerInstance.SetLocation(mazeInstance.GetCell(mazeInstance.RandomCoordinates));
+		<mark>Camera.main.rect = new Rect(0f, 0f, 0.5f, 0.5f);</mark>
+	}
+</pre>
+			
+			<figure>
+				<img src="13-overlay-opaque.png" width="640" height="354">
+				<figcaption>An overlay map.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>This works, but it would be nicer if the map was rendered on top of the player's view without its own background. Fortunately, we can easily achieve this by changing the camera's clear flags to <i>Depth</i>. When generating the maze, it should use its default flags value, which is <i>SkyBox</i>.</p>
+			</div>
+			
+			<pre translate="no">	private IEnumerator BeginGame () {
+		<mark>Camera.main.clearFlags = CameraClearFlags.Skybox;</mark>
+		Camera.main.rect = new Rect(0f, 0f, 1f, 1f);
+		mazeInstance = Instantiate(mazePrefab) as Maze;
+		yield return StartCoroutine(mazeInstance.Generate());
+		playerInstance = Instantiate(playerPrefab) as Player;
+		playerInstance.SetLocation(mazeInstance.GetCell(mazeInstance.RandomCoordinates));
+		<mark>Camera.main.clearFlags = CameraClearFlags.Depth;</mark>
+		Camera.main.rect = new Rect(0f, 0f, 0.5f, 0.5f);
+	}</pre>
+			
+			<figure>
+				<img src="13-overlay-transparent.png" width="640" height="354">
+				<figcaption>Now without nasty background.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>The player can move and have a map, but we are stuck looking to the north all the time. To change this, <code>Player</code> need to keep track of where it's looking and respond to user input to change its rotation. Let's use <strong>Q</strong> to rotate counterclockwise and <strong>E</strong> to rotate clockwise. While we're at it, we can also support the common <strong>WASD</strong> key bindings.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private MazeDirection currentDirection;</mark>
+
+	<mark>private void Look (MazeDirection direction) {</mark>
+		<mark>transform.localRotation = direction.ToRotation();</mark>
+		<mark>currentDirection = direction;</mark>
+	<mark>}</mark>
+
+	private void Update () {
+		if (<mark>Input.GetKeyDown(KeyCode.W) ||</mark> Input.GetKeyDown(KeyCode.UpArrow)) {
+			Move(MazeDirection.North);
+		}
+		else if (<mark>Input.GetKeyDown(KeyCode.D) ||</mark> Input.GetKeyDown(KeyCode.RightArrow)) {
+			Move(MazeDirection.East);
+		}
+		else if (<mark>Input.GetKeyDown(KeyCode.S) ||</mark> Input.GetKeyDown(KeyCode.DownArrow)) {
+			Move(MazeDirection.South);
+		}
+		else if (<mark>Input.GetKeyDown(KeyCode.A) ||</mark> Input.GetKeyDown(KeyCode.LeftArrow)) {
+			Move(MazeDirection.West);
+		}
+		<mark>else if (Input.GetKeyDown(KeyCode.Q)) {</mark>
+			<mark>Look(currentDirection.GetNextCounterclockwise());</mark>
+		<mark>}</mark>
+		<mark>else if (Input.GetKeyDown(KeyCode.E)) {</mark>
+			<mark>Look(currentDirection.GetNextClockwise());</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>We also add two convenient methods to <code>MazeDirections</code> that gives us the next direction in clockwise and counterclockwise order.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public static MazeDirection GetNextClockwise (this MazeDirection direction) {</mark>
+		<mark>return (MazeDirection)(((int)direction + 1) % Count);</mark>
+	<mark>}</mark>
+
+	<mark>public static MazeDirection GetNextCounterclockwise (this MazeDirection direction) {</mark>
+		<mark>return (MazeDirection)(((int)direction + Count - 1) % Count);</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now we can both move and rotate, but the movement is absolute instead of relative to our orientation. Let's change that.</p>
+			</div>
+			
+			<pre translate="no">	private void Update () {
+		if (Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.UpArrow)) {
+			Move(<mark>currentDirection</mark>);
+		}
+		else if (Input.GetKeyDown(KeyCode.D) || Input.GetKeyDown(KeyCode.RightArrow)) {
+			Move(<mark>currentDirection.GetNextClockwise()</mark>);
+		}
+		else if (Input.GetKeyDown(KeyCode.S) || Input.GetKeyDown(KeyCode.DownArrow)) {
+			Move(<mark>currentDirection.GetOpposite()</mark>);
+		}
+		else if (Input.GetKeyDown(KeyCode.A) || Input.GetKeyDown(KeyCode.LeftArrow)) {
+			Move(<mark>currentDirection.GetNextCounterclockwise()</mark>);
+		}
+		else if (Input.GetKeyDown(KeyCode.Q)) {
+			Look(currentDirection.GetNextCounterclockwise());
+		}
+		else if (Input.GetKeyDown(KeyCode.E)) {
+			Look(currentDirection.GetNextClockwise());
+		}
+	}</pre>
+			
+			<h2>Opening Doors</h2>
+			
+			<div class="instructions">
+				<p>So far we've been walking straight through doors without opening them. We could use various approaches to opening doors, but a simple one is to just open all doors of a cell after the player enters it, and close them again when the player exited it. In fact, other stuff might happen as well, so we'll use a generic approach.</p>
+				<p>Have <code>Player</code> notify cells when it enters and exits them in <code>SetLocation</code>, by calling two new methods. Check whether there's a cell to exit, because the first time a location is set this won't be the case.</p>
+			</div>
+			
+			<pre translate="no">	public void SetLocation (MazeCell cell) {
+		<mark>if (currentCell != null) {</mark>
+			<mark>currentCell.OnPlayerExited();</mark>
+		<mark>}</mark>
+		currentCell = cell;
+		transform.localPosition = cell.transform.localPosition;
+		<mark>currentCell.OnPlayerEntered();</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p><code>MazeCell</code> doesn't do anything with those events itself, but passes them along to its edges.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public void OnPlayerEntered () {</mark>
+		<mark>for (int i = 0; i &lt; edges.Length; i++) {</mark>
+			<mark>edges[i].OnPlayerEntered();</mark>
+		<mark>}</mark>
+	<mark>}</mark>
+	
+	<mark>public void OnPlayerExited () {</mark>
+		<mark>for (int i = 0; i &lt; edges.Length; i++) {</mark>
+			<mark>edges[i].OnPlayerExited();</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>We add those methods to <code>MazeCellEdge</code> as empty and virtual. That way nothing happens by default, but subclasses can override this.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public virtual void OnPlayerEntered () {}</mark>
+
+	<mark>public virtual void OnPlayerExited () {}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now we can add overrides for <code>MazeDoor</code> to rotate its hinge. Because there are two sides of a door, we have to rotate both of them.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public override void OnPlayerEntered () {</mark>
+		<mark>OtherSideOfDoor.hinge.localRotation = hinge.localRotation = Quaternion.Euler(0f, -90f, 0f);</mark>
+	<mark>}</mark>
+	
+	<mark>public override void OnPlayerExited () {</mark>
+		<mark>OtherSideOfDoor.hinge.localRotation = hinge.localRotation = Quaternion.identity;</mark>
+	<mark>}</mark></pre>
+			
+			<figure>
+				<img src="14-open-door.png" width="640" height="354">
+				<figcaption>A door opened in our face.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>It works! Doors are now open when we stand next to them. Unfortunately the doors always rotate in the same direction. This means that about half the time the door will cut through our view in an ugly and obscuring way. We can solve this by always rotating doors away from where the player is currently standing. This can be done by remembering whether a door is mirrored and rotating based on that.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private static Quaternion</mark>
+		<mark>normalRotation = Quaternion.Euler(0f, -90f, 0f),</mark>
+		<mark>mirroredRotation = Quaternion.Euler(0f, 90f, 0f);</mark>
+
+	<mark>private bool isMirrored;</mark>
+
+	public override void Initialize (MazeCell primary, MazeCell other, MazeDirection direction) {
+		base.Initialize(primary, other, direction);
+		if (OtherSideOfDoor != null) {
+			<mark>isMirrored = true;</mark>
+			hinge.localScale = new Vector3(-1f, 1f, 1f);
+			Vector3 p = hinge.localPosition;
+			p.x = -p.x;
+			hinge.localPosition = p;
+		}
+		for (int i = 0; i &lt; transform.childCount; i++) {
+			Transform child = transform.GetChild(i);
+			if (child != hinge) {
+				child.GetComponent&lt;Renderer>().material = cell.room.settings.wallMaterial;
+			}
+		}
+	}
+
+	public override void OnPlayerEntered () {
+		OtherSideOfDoor.hinge.localRotation = hinge.localRotation =
+			<mark>isMirrored ? mirroredRotation : normalRotation</mark>;
+	}</pre>
+			
+			<figure>
+				<img src="14-open-door-away.png" width="640" height="354">
+				<figcaption>Always-push doors.</figcaption>
+			</figure>
+			
+			<h2>Hiding Rooms</h2>
+			
+			<div class="instructions">
+				<p>An additional thing we could do is only show the room that the player is currently inside of. Besides reducing what is shown on the map, it can also eliminate lots of unnecessary draw calls for the player camera. As this functionality operates on entire rooms, let's add <code>Show</code> and <code>Hide</code> method to <code>MazeRoom</code>, which call the same methods on all their cells.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-obscured" id="q-obscured">Why does obscured stuff get rendered?</a></li>
+				</ul>
+			</aside>
+			
+			<figure>
+				<img alt="without hiding" src="15-much-overdraw.png" width="320" height="185">
+				<img alt="with hiding" src="15-little-overdraw.png" width="320" height="185">
+				<figcaption>Overdraw without hiding and with hiding rooms.</figcaption>
+			</figure>
+			
+			<pre translate="no">	<mark>public void Hide () {</mark>
+		<mark>for (int i = 0; i &lt; cells.Count; i++) {</mark>
+			<mark>cells[i].Hide();</mark>
+		<mark>}</mark>
+	<mark>}</mark>
+	
+	<mark>public void Show () {</mark>
+		<mark>for (int i = 0; i &lt; cells.Count; i++) {</mark>
+			<mark>cells[i].Show();</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>We let <code>MazeCell</code> implement this functionality by simply switching its game object on and off.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public void Show () {</mark>
+		<mark>gameObject.SetActive(true);</mark>
+	<mark>}</mark>
+
+	<mark>public void Hide () {</mark>
+		<mark>gameObject.SetActive(false);</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>And we also let <code>Maze</code> hide all rooms when it's done generating.</p>
+			</div>
+			
+			<pre translate="no">	public IEnumerator Generate () {
+		WaitForSeconds delay = new WaitForSeconds(generationStepDelay);
+		cells = new MazeCell[size.x, size.z];
+		List&lt;MazeCell> activeCells = new List&lt;MazeCell>();
+		DoFirstGenerationStep(activeCells);
+		while (activeCells.Count > 0) {
+			yield return delay;
+			DoNextGenerationStep(activeCells);
+		}
+		<mark>for (int i = 0; i &lt; rooms.Count; i++) {</mark>
+			<mark>rooms[i].Hide();</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>This will place the player in an invisible maze. To make the rooms appear and disappear, we let <code>MazeCell</code> show and hide its room when it is entered or exited.</p>
+			</div>
+			
+			<pre translate="no">	public void OnPlayerEntered () {
+		<mark>room.Show();</mark>
+		for (int i = 0; i &lt; edges.Length; i++) {
+			edges[i].OnPlayerEntered();
+		}
+	}
+	
+	public void OnPlayerExited () {
+		<mark>room.Hide();</mark>
+		for (int i = 0; i &lt; edges.Length; i++) {
+			edges[i].OnPlayerExited();
+		}
+	}</pre>
+			
+			<figure>
+				<img src="15-looking-at-hidden-room.png" width="640" height="354">
+				<figcaption>Looking into the void.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>So all rooms except the one that we are currently in are now hidden. Unfortunately, this means that when we open a door we will look into an invisible room. Fortunately this is easy to solve. All we have to do is have <code>MazeDoor</code> show and hide the other cell's room when it is opened and closed.</p>
+			</div>
+			
+			<pre translate="no">	public override void OnPlayerEntered () {
+		OtherSideOfDoor.hinge.localRotation = hinge.localRotation =
+			isMirrored ? mirroredRotation : normalRotation;
+		<mark>OtherSideOfDoor.cell.room.Show();</mark>
+	}
+	
+	public override void OnPlayerExited () {
+		OtherSideOfDoor.hinge.localRotation = hinge.localRotation = Quaternion.identity;
+		<mark>OtherSideOfDoor.cell.room.Hide();</mark>
+	}</pre>
+			
+			<figure>
+				<img src="15-shown-when-door-open.png" width="640" height="354">
+				<figcaption>Rooms shown and hidden at the right time.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>And indeed now rooms also show up when we could see them through an open door.</p>
+				<p>We can keep adding and tweaking the maze, but I will end the tutorial here. Have fun giving the maze your own special touch!</p>
+				<p>Enjoyed the tutorial? <a href="https://www.patreon.com/catlikecoding">Help me make more by becoming a patron!</a></p>
+			</div>
+			
+			<aside class="share"></aside>
+			
+			<h2>Downloads</h2>
+
+			<dl>
+				<dt><a href="maze-01.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Maze', '01']);" target="_blank" download rel="nofollow">maze-01.unitypackage</a></dt>
+				<dd>The project after Game Flow.</dd>
+				<dt><a href="maze-02.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Maze', '02']);" target="_blank" download rel="nofollow">maze-02.unitypackage</a></dt>
+				<dd>The project after Maze Fundamentals.</dd>
+				<dt><a href="maze-03.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Maze', '03']);" target="_blank" download rel="nofollow">maze-03.unitypackage</a></dt>
+				<dd>The project after Cell Coordinates and Integer Vectors.</dd>
+				<dt><a href="maze-04.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Maze', '04']);" target="_blank" download rel="nofollow">maze-04.unitypackage</a></dt>
+				<dd>The project after Random Cell Generation.</dd>
+				<dt><a href="maze-05.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Maze', '05']);" target="_blank" download rel="nofollow">maze-05.unitypackage</a></dt>
+				<dd>The project after Backtracking.</dd>
+				<dt><a href="maze-06.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Maze', '06']);" target="_blank" download rel="nofollow">maze-06.unitypackage</a></dt>
+				<dd>The project after Connecting the Cells.</dd>
+				<dt><a href="maze-07.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Maze', '07']);" target="_blank" download rel="nofollow">maze-07.unitypackage</a></dt>
+				<dd>The project after Generating the Entire Maze.</dd>
+				<dt><a href="maze-08.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Maze', '08']);" target="_blank" download rel="nofollow">maze-08.unitypackage</a></dt>
+				<dd>The project after Decorating the Maze.</dd>
+				<dt><a href="maze-09.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Maze', '09']);" target="_blank" download rel="nofollow">maze-09.unitypackage</a></dt>
+				<dd>The project after Placing Doors.</dd>
+				<dt><a href="maze-10.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Maze', '10']);" target="_blank" download rel="nofollow">maze-10.unitypackage</a></dt>
+				<dd>The project after Adding Rooms.</dd>
+				<dt><a href="maze-11.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Maze', '11']);" target="_blank" download rel="nofollow">maze-11.unitypackage</a></dt>
+				<dd>The project after Expanding Rooms.</dd>
+				<dt><a href="maze-12.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Maze', '12']);" target="_blank" download rel="nofollow">maze-12.unitypackage</a></dt>
+				<dd>The project after Walking Around.</dd>
+				<dt><a href="maze-13.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Maze', '13']);" target="_blank" download rel="nofollow">maze-13.unitypackage</a></dt>
+				<dd>The project after What it Looks Like.</dd>
+				<dt><a href="maze-14.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Maze', '14']);" target="_blank" download rel="nofollow">maze-14.unitypackage</a></dt>
+				<dd>The project after Opening Doors.</dd>
+				
+				<dt><a href="maze-finished.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Maze', 'Final']);" target="_blank">maze-finished.unitypackage</a></dt>
+				<dd>The finished project.</dd>
+			</dl>
+		</article>
+			
+		<h1>Questions &amp; Answers</h1>
+		
+		<dl class="questions-answers">
+			<dt><a href="index.html#q-get-key-down" id="a-get-key-down">How does <code>GetKeyDown</code> work?</a></dt>
+			<dd>
+				<p>The <code>Input</code> class has a collection of static methods and properties to get information about user input. Its <code>GetKeyDown</code> method returns <code>true</code> in the frame that a physical button has been pressed down by the user. You pass it the code of the key you're interested in.</p>
+				<p>This method only returns <code>true</code> during the frame that the key became active. The <code>GetKey</code> method will also return <code>true</code> as long as the key stays pressed. The <code>GetKeyUp</code> method will return <code>true</code> in the frame that the buttom was released. <code>Input</code> has similar methods for mouse buttons and configurable input buttons.</p>
+			</dd>
+			<dt><a href="index.html#q-prefab" id="a-prefab">What's a prefab?</a></dt>
+			<dd>
+				<p>A prefab is a Unity object &ndash; or hierarchy of objects &ndash; that doesn't exist in the scene and hasn't been activated. You use it as a template, creating clones of it and adding those to the scene.</p>
+			</dd>
+			<dt><a href="index.html#q-instantiate" id="a-instantiate">What does <code>Instantiate</code> do?</a></dt>
+			<dd>
+				<p>Unity's <code>Object</code> class, which every MonoBehaviour inherits from, contains the static <code>Instantiate</code> method. This method creates a clone of whatever <code>Object</code> instance you pass to it. Optionally, you can supply a new position and rotation for the clone, otherwise it keeps the values of the original.</p>
+				<p>Note that <code>Instantiate</code> returns an <code>Object</code> reference. If you want to do something with the new clone, you have to cast it to its specific type, which in our case is <code>Maze</code>.</p>
+				<p>Typically, this method is used with prefabs, but you can also clone objects that already exist in the scene.</p>
+			</dd>
+			<dt><a href="index.html#q-as" id="a-as">What does <code>as</code> do?</a></dt>
+			<dd>
+				<p>The <code>as</code> operator is for casting to a different type. We could have also written <code>(Maze)Instantiate</code>. The big difference is that casting in the latter way could perform custom type conversion and will result in an error when used on an incompatible type. The <code>as</code> operator doesn't convert anything, it only checks whether the object instance is of the correct type. If so, it passes along the reference, otherwise it will result in <code>null</code>, not an error. As such, it only works with reference types, not value types.</p>
+			</dd>
+			<dt><a href="index.html#q-destroy" id="a-destroy">What does <code>Destroy</code> do?</a></dt>
+			<dd>
+				<p><code>Destroy</code> is sort-of the counterpart of <code>Instantiate</code>. Pass it a component or a game object, and it will make sure it gets destroyed. This means that memory will be freed, which might activate the garbage collector at some point.</p>
+				<p>Note that we are destroying <code>mazeInstance.gameObject</code>, because we want the entire game object gone, not just its <code>Maze</code> component.</p>
+			</dd>
+			<dt><a href="index.html#q-wait-for-seconds" id="a-wait-for-seconds">How does <code>WaitForSeconds</code> work?</a></dt>
+			<dd>
+				<p>The <code>WaitForSeconds</code> object will monitor Unity's time value and simply keep iterating until the specified amount of seconds have passed. As corountines perform one iteration step per frame, its precision is only as good as the frame rate.</p>
+				<p>Note that we can reuse the <code>WaitForSeconds</code> instance. We don't need to create a new one every time. Just don't use it in two coroutines at the same time.</p>
+			</dd>
+			<dt><a href="index.html#q-coroutine-live" id="a-coroutine-live">Where does a coroutine live?</a></dt>
+			<dd>
+				<p>A coroutine is attached to the <code>MonoBehaviour</code> object who's <code>StartCoroutine</code> was called. In our case <code>GameManager</code> starts the coroutine, so it is attached to our game manager instance and lives and dies with it. <code>Maze</code> just provided the iterator. That's why we need to stop the coroutine when we destroy our maze instance. If we wouldn't, Unity would complain that our coroutine is accessing a destroyed object.</p>
+				<p>We could have also attached the coroutine to <code>Maze</code> and it would work just fine without us having to manually stop the coroutine. Later on we'll still have a reason to stop a coroutine manually, though.</p>
+			</dd>
+			<dt><a href="index.html#q-immutable" id="a-immutable">Why isn't <code>IntVector2</code> immutable?</a></dt>
+			<dd>
+				<p>Value types like <code>int</code> and <code>float</code> are immutable. This means that you cannot change the values themselves. They have no identity, they represent constant concepts. A 3 is always a 3. Executing 3 + 1 does not change the 3 nor the 1, it produces a new 4.</p>
+				<p>A <code>struct</code> is a custom value type. It is good design to make them immutable as well, because if we did then everything would be ideal. Value types are immutable. Passing them around copies them. They don't act like objects some of the time.</p>
+				<p>We could make our vector immutable by simply keeping its components private and not adding public functionality to change them.</p>
+				<p>However, Unity's various vector structs are not immutable. This is often convenient and fast, but also inconsistent. We can do <code>someVector.x = 3</code>, which changes an existing vector. But we cannot do <code>someTransform.localPostion.x = 3</code>, because of various reasons.</p>
+				<p>The Unity developers decided to make vectors mutable value types, and there are good practical reasons to do so. For the sake of consistency, let's use the same approach for own own vector.</p>
+			</dd>
+			<dt><a href="index.html#q-modify-argument" id="a-modify-argument">Aren't we changing <code>a</code> here?</a></dt>
+			<dd>
+				<p>Yes, we are changing <code>a</code> inside the operator method. We could also make room for a new vector, but why should we? Our <code>IntVector2</code> is a struct so it's passed by value. We can mess around with the argument as much as we like, it won't change the caller's value at all. We could do this even if we had decided to make <code>IntVector2</code> immutable, because we're inside the struct's defintion and know what we're doing. Right?</p>
+			</dd>
+			<dt><a href="index.html#q-coordinates" id="a-coordinates">Shouldn't cell coordinates be fixed?</a></dt>
+			<dd>
+				<p>A cell will get its coordinates when it is created and will never change position. So it would be good design if there would be no way for someone to change the coordinates of a cell. But because we make the coordinates public, everyone could change them at any time!</p>
+				<p>We could make the coordinates private and provide an initializer method to set them once. But then we would need to make sure that the initialize method is never called again. But once we've done that, anyone could still get to the game object and do lots of destructive stuff. Like remove the cell component, or destroy the entire game object! How could we stop that? We cannot.</p>
+				<p>I'm not saying you shouldn't protect the coordinates, but pointing out that no matter what design principles you apply, you're never safe when working with Unity objects. And then there's reflection. Don't assume to be safe, make sure programmers behave.</p>
+			</dd>
+			<dt><a href="index.html#q-attribute" id="a-attribute">What's an attribute?</a></dt>
+			<dd>
+				<p>An attribute is a means to attach metadata to fields, methods, and types. For example, you can tell Unity how to display a variable in the editor, whether to save or not save data, indicate that a component requires other components, and lots of other stuff.</p>
+				<p>Atributes are added between brackets in front of whatever they're attached to and can have arguments, like <code>[Nice] int number</code> or <code>[Nice(42)] int number</code>. Multiple attributes are separated by commas, like <code>[Nice, Sweet] int number</code>.</p>
+			</dd>
+			<dt><a href="index.html#q-serialization" id="a-serialization">How does serialization work?</a></dt>
+			<dd>
+				<p>Serialization is the process of converting a collection of data in memory into a stream of data that can be stored in a persistent state or transmitted over a network. It's what Unity does when it saves your scene and asset data. Deserialization is its complement, constructing data in memory from a stream.</p>
+				<p>This functionality is part of .NET and you can read more about it on <a href="http://msdn.microsoft.com/en-us/library/7ay27kt9.aspx">MSDN</a>, though it's not required.</p>
+			</dd>
+			<dt><a href="index.html#q-serializable-struct" id="a-serializable-struct">Can a struct be Serializable?</a></dt>
+			<dd>
+				<p>Yes, since Unity 4.5 custom structs can be serialized. Anything saying they can't be serialized is outdated.</p>
+				<p>So don't change <code>IntVector2</code> into a class. If you do, the algorithm will fail unless you make sure you never adjust the values of a coordinate. For example, the plus operator method tweaks one of its arguments, which is fine for structs as they are copied, but not for classes.</p>
+			</dd>
+			<dt><a href="index.html#q-properties" id="a-properties">How do properties work?</a></dt>
+			<dd>
+				<p>Properties are methods that pretend to be a variable. It's a form of syntactic sugar. Here is an example property.</p>
+				<p><code>int X { get { return x; } set { x = value; } }</code></p>
+				<p>And here is what is basically boils down to.</p>
+				<p><code>int GetX () { return x; } int SetX (int value) { x = value; }</code></p>
+				<p>You can leave out the set or the get part, in which case you have a read-only or a write-only property. You can also give get and set difference access modifiers.</p>
+			</dd>
+			<dt><a href="index.html#q-and-also" id="a-and-also">What does <code>&amp;&amp;</code> do?</a></dt>
+			<dd>
+				<p>The <code>&amp;&amp;</code> operator is used for boolean logic and stands for <i>"and also"</i>. In other words, <code>x &amp;&amp; y</code> is only true if both <code>x</code> and <code>y</code> are true.</p>
+				<p>Note that if <code>x</code> is found to be false, there's no point in checking <code>y</code> anymore. If <code>y</code> were a method call or property, it won't be invoked.</p>
+				<p>The companion of <code>&amp;&amp;</code> is the <code>||</code> operator, which stands for <i>"or else"</i>. So <code>x || y</code> is true if at least one of them is. Also, if <code>x</code> is found to be true, then <code>y</code> will not be considered.</p>
+			</dd>
+			<dt><a href="index.html#q-enum" id="a-enum">What's an <code>enum</code>?</a></dt>
+			<dd>
+				<p>You use <code>enum</code> to define an enumeration type, which is an ordered list of names. A variable of this type can have one of these names as its value. Each of these names corresponds to a number, by default starting at zero. They are useful whenever you need a limited list of named options.</p>
+				<p>Under the hood, enums are simply integers. This means that you can freely convert between an <code>enum</code> type and <code>int</code>, which we will use quite a bit. You could also declare them to be of a handfull of other types, but we stick to using integers.</p>
+				<p>Just to be sure, <code>enum</code> has nothing to do with enumerators or iterators.</p>
+			</dd>
+			<dt><a href="index.html#q-extension-method" id="a-extension-method">What's an extension method?</a></dt>
+			<dd>
+				<p>An extension method is a static method inside a static class that behaves like an instance method of some type. That type could be anything, a class, an interface, a struct, a primitive value, or an enum. The first argument of an extension method needs to have the <code>this</code> keyword and defines the type and instance value that the method will operate on.</p>
+				<p>Does this allow us to add methods to everything? Yes, just like you could write any static method that has any type as its argument. Is this a good idea? When used in moderation, it can be. It's a specialized tool that has its uses, but wielded it with abandon will result in an unstructured mess.</p>
+			</dd>
+			<dt><a href="index.html#q-abstract" id="a-abstract">What does it mean to be abstract?</a></dt>
+			<dd>
+				<p>When a class is abstract it does not allow objects instances of itself to be created. By itself that would be rather useless, but this does not prevent subclasses of itself to be instantiated. Basically, it acts like a foundation, to be extended by other classes but not usable on its own.</p>
+				<p>Abstract classes can have abstract methods as well. These are methods without a body. This enforces that all subclasses will have to provide their own implementation of that method, unless they are abstract as well.</p>
+			</dd>
+			<dt><a href="index.html#q-throw" id="a-throw">What does <code>throw</code> do?</a></dt>
+			<dd>
+				<p>The <code>throw</code> keyword works like <code>return</code>, except that it passes along something throwable &ndash; an error or exception &ndash; instead of the appropriate return type. When something is thrown, invocations will fail upward until it is caught somewhere, which usually result in an error message. In case of a mobila app that's optimized with <i>Fast but no Exceptions</i>, it will cause a crash.</p>
+			</dd>
+			<dt><a href="index.html#q-prefab-hierarchy" id="a-prefab-hierarchy">Where are the prefab hinge's children?</a></dt>
+			<dd>
+				<p>Unfortunately, Unity only shows the direct children of a prefab asset root. Even though they aren't shown, the children do exist. The prefab's preview shows their 3D models, and they will be visible in any instance added to the scene. You can edit the invisible parts by dragging the prefab into the scene, making changes to the instance, and applying it back to the prefab. This approach will be necessary until Unity fully supports nested prefabs.</p>
+			</dd>
+			<dt><a href="index.html#q-question-mark" id="a-question-mark">What does the question mark do?</a></dt>
+			<dd>
+				<p>The question mark, combined with a colon, is a short version of an if-else statement. For example, you could write a full if-else block.</p>
+				<p><code>int y; if(x > 1) { y = 10; } else { y = 20; }</code></p>
+				<p>But you can also use this condensed syntax.</p>
+				<p><code>int y = x > 1 ? 10 : 20;</code></p>
+			</dd>
+			<dt><a href="index.html#q-range" id="a-range">What does <code>Range</code> do?</a></dt>
+			<dd>
+				<p>The <code>Range</code> attribute tells the Unity editor to use a slider to display an int or float variable. Its arguments determine the minimum and maximum values allowed by the slider.</p>
+			</dd>
+			<dt><a href="index.html#q-base" id="a-base">What's <code>base</code>?</a></dt>
+			<dd>
+				<p>The <code>base</code> keyword is a reference to the object instance itself, just like the <code>this</code> keyword. The important difference is that it also represents the base type that the class extends. This allows you to access functionality that you override. A typical use case is to override a method by first calling the base method and then adding your own stuff, which is exactly what we do here. Had we omitted the keyword, we would've created an infinite recursion and the method would keep invoking itself until we got a stack overflow exception.</p>
+			</dd>
+			<dt><a href="index.html#q-virtual" id="a-virtual">Why is <code>virtual</code> needed?</a></dt>
+			<dd>
+				<p>Not marking a method as virtual is useful for preventing subclasses from overriding your own implementation. But the technical reason is because there's an important difference between a non-virtual and a virtual method. Looking at it from a very low level, a method call requires a jump to some place where the instructions for that method are stored. If this method were always the same, the jump will always be to the same place. Easy. But when a method can be overridden by a subclass, where we need to jump depends on the type of the object it's being invoked on. This problem is solved by looking up the method's location in a table. This table is known as a <i>virtual method table</i>, hence the name of the keyword. If you didn't know about that table, <i>overridable</i> would probably make more sense.</p>
+			</dd>
+			<dt><a href="index.html#q-scriptable-object" id="a-scriptable-object">What's a <code>ScriptableObject</code>?</a></dt>
+			<dd>
+				<p>You typically extend <code>ScriptableObject</code> when creating your own asset type, because Unity can store these objects just like game objects and components. An additional benefit is that such objects are correctly stored and retrieved when scripts are recompiled while Unity is in play mode. This means we could tweaks scripts while walking around a maze and our rooms will be preserved.</p>
+				<p>Couldn't we just add the <code>Serializable</code> attribute to <code>MazeRoom</code>? No, because Unity copies such data by value and does not maintain the relationships between objects. We will give cells a reference to their room, and this would mean that after a recompile each cell will have its own copy of the room. While things will initially look fine, it will quickly lead to problems.</p>
+				<p>An alternative is to extend <code>MonoBehaviour</code> instead, in which case each room would be a component and we'd have to attach them to a game object, the maze being the most logical choice.</p>
+			</dd>
+			<dt><a href="index.html#q-remainder" id="a-remainder">What does <code>%</code> do?</a></dt>
+			<dd>
+				<p>The <code>%</code> operator computes the remainder of a division. For example, <code>3 % 4</code> is 3, <code>4 % 4</code> is zero, and <code>5 % 4</code> is 1. When used on a non-negative integer and the length of an array that has at least one element, the result will always be a valid index for that array.</p>
+			</dd>
+			<dt><a href="index.html#q-is" id="a-is">What does <code>is</code> do?</a></dt>
+			<dd>
+				<p>The <code>is</code> operator is the companion of the <code>as</code> operation. Instead of casting, it tells you whether an object is of some type.</p>
+			</dd>
+			<dt><a href="index.html#q-obscured" id="a-obscured">Why does obscured stuff get rendered?</a></dt>
+			<dd>
+				<p>You only need to render what you can see, right? But how do you know what you can and cannot see?</p>
+				<p>Unity only renders stuff that is active. Also, it only renders stuff that the camera could theoretically see, everything that lies outside of its view is not queued for rendering. The graphics card will detect when it's about to fill a pixel that's behind something else, so it won't need to bother to shade it. However, we had to go all the way to the pixel level before this discovery was made, which means that we have to process lots of stuff that we end up not seeing.</p>
+				<p>To improve performance, some trick must be used to quickly determine what's really visible, and only send that to the graphics card. This is known as occlusion culling and is nontrivial. Unity Pro has a solution for it, but it is not suited for randomly generated mazes. Fortunately, our simple trick of hiding rooms already helps a lot.</p>
+			</dd>
+		</dl>
+
+		<footer></footer>
+		<script src="../../jquery.js"></script>
+		<script src="../../default.js"></script>
+	</body>
+</html>

@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/procedural-meshes/uv-sphere/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/procedural-meshes/uv-sphere/tutorial-image.jpg">
+		<meta property="og:title" content="UV Sphere">
+		<meta property="og:description" content="A Unity C# Procedural Meshes tutorial about creating an UV sphere.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>UV Sphere</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/procedural-meshes/uv-sphere/#article",
+				"headline": "UV Sphere",
+				"alternativeHeadline": "Wrapping a Grid Around a Sphere",
+				"datePublished": "2022-01-31",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity C# Procedural Meshes tutorial about creating an UV sphere.",
+				"image": "https://catlikecoding.com/unity/tutorials/procedural-meshes/uv-sphere/tutorial-image.jpg",
+				"dependencies": "Unity 2020.3.23f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/procedural-meshes/", "name": "Procedural Meshes" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				FlatHexagonGrid: 1,
+				IMeshGenerator: 1,
+				IMeshStreams: 1,
+				G: 1,
+				GizmoMode: 1,
+				MaterialMode: 1,
+				MeshJob: 1,
+				MeshJobScheduleDelegate: 1,
+				MeshType: 1,
+				MultiStream: 1,
+				PointyHexagonGrid: 1,
+				ProceduralMesh: 1,
+				S: 1,
+				SharedSquareGrid: 1,
+				SharedTriangleGrid: 1,
+				SingleStream: 1,
+				SquareGrid: 1,
+				Stream0: 1,
+				TriangleUInt16: 1,
+				UVSphere: 1,
+				Vertex: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Procedural Meshes</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>UV Sphere</h1>
+					<p>Wrapping a Grid Around a Sphere</p>
+					<ul>
+						<li>Visualize vertex data via gizmos.</li>
+						<li>Wrap a square grid around a sphere.</li>
+						<li>Eliminate degenerate triangles and unused vertices.</li>
+						<li>Use lat/lon maps and cube maps to texture a sphere.</li>
+					</ul>
+				</header>
+				
+				<p>This is the fifth tutorial in a series about <a href="../index.html">procedural meshes</a>. This time we bend and deform a square grid to create a sphere.</p>
+				
+				<p>This tutorial is made with Unity 2020.3.23f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A sphere made by deforming a square grid.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Gizmos</h2>
+					
+					<p>Unlike flat grids a sphere is a 3D shape. We cannot see its entire surface at once. This makes it harder to visually judge where its vertices lie. So before we start generating a sphere we'll add a way to visualize the vertex data of the mesh. We do this via Unity's Gizmos API.</p>
+					
+					<figure>
+						<img src="gizmos/no-gizmos.png" width="330" height="190">
+						<figcaption>Shared triangle grid without gizmos.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Showing Vertices</h3>
+						
+						<p>To show vertices <code>ProceduralMesh</code> needs to access them. We do this via the simple Mesh API, retrieving them via the mesh's <code>vertices</code> property, which generates and returns a <code>Vector3</code> array. Do this at the end of <code>Update</code> and keep track of the array via a field.</p>
+						
+						<pre translate="no">	<ins>Vector3[] vertices;</ins>
+
+	&hellip;
+
+	void Update () {
+		GenerateMesh();
+		enabled = false;
+
+		<ins>vertices = mesh.vertices;</ins>
+	}</pre>
+						
+						<p>To draw gizmos we need to introduce a special <code>OnDrawGizmos</code> method. Unity will invoke it each time it renders a new frame in the scene window. We only have vertices if a mesh has been generated in play mode, so we have to abort from the method if there isn't a mesh.</p>
+						
+						<pre translate="no">	<ins>void OnDrawGizmos () {</ins>
+		<ins>if (mesh == null) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Can gizmos also be shown in the game window?</h3>
+							<div>
+								<p>Yes, you can enable them via the game window's toolbar.</p>
+							</div>
+						</aside>
+						
+						<p>We'll use small spheres to represent the vertices. We can draw a gizmo sphere by invoking <code>Gizmos.Drawsphere</code> with a position and a radius, for which we'll use 0.02. Do this for all vertices.</p>
+						
+						<pre translate="no">		if (mesh == null) {
+			return;
+		}
+
+		<ins>for (int i = 0; i &lt; vertices.Length; i++) {</ins>
+			<ins>Gizmos.DrawSphere(vertices[i], 0.02f);</ins>
+		<ins>}</ins></pre>
+						
+						<figure>
+							<img src="gizmos/vertices-white.png" width="330" height="190">
+							<figcaption>Vertices visualized with white spheres.</figcaption>
+						</figure>
+						
+						<p>The gizmos are white by default, which isn't a good color because it's hard to see on a light background. We can change the gizmo color by assigning a new one to the <code>Gizmos.color</code> property. Let's use cyan instead.</p>
+						
+						<pre translate="no">		<ins>Gizmos.color = Color.cyan;</ins>
+		for (int i = 0; i &lt; vertices.Length; i++) {
+			Gizmos.DrawSphere(vertices[i], 0.02f);
+		}</pre>
+						
+						<figure>
+							<img src="gizmos/vertices-cyan.png" width="330" height="190">
+							<figcaption>Cyan vertices.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Normals and Tangents</h3>
+						
+						<p>Let's also visualize the mesh's normal and tangent vectors. These are all the same for flat grids, but it'll be more complex for spheres. The normals are 3D vectors and the tangents are 4D vectors. Retrieve and keep track of them as well, via the appropriate mesh properties.</p>
+						
+						<pre translate="no">	Vector3[] vertices<ins>, normals</ins>;
+
+	<ins>Vector4[] tangents</ins>;
+
+	&hellip;
+
+	void Update () {
+		GenerateMesh();
+		enabled = false;
+
+		vertices = mesh.vertices;
+		<ins>normals = mesh.normals;</ins>
+		<ins>tangents = mesh.tangents;</ins>
+	}</pre>
+						
+						<p>The vectors can be visualized with short lines, drawn via the <code>Gizmos.DrawRay</code> method. It has a starting position and a vector as parameters, for which we'll use the vertex position and the appropriate vector, scaled down to a length of 0.2. We'll make the normals green and the tangents red.</p>
+						
+						<pre translate="no">		<ins>//Gizmos.color = Color.cyan;</ins>
+		for (int i = 0; i &lt; vertices.Length; i++) {
+			<ins>Vector3 position = vertices[i];</ins>
+			<ins>Gizmos.color = Color.cyan;</ins>
+			Gizmos.DrawSphere(<ins>position</ins>, 0.02f);
+			<ins>Gizmos.color = Color.green;</ins>
+			<ins>Gizmos.DrawRay(position, normals[i] * 0.2f);</ins>
+			<ins>Gizmos.color = Color.red;</ins>
+			<ins>Gizmos.DrawRay(position, tangents[i] * 0.2f);</ins>
+		}</pre>
+						
+						<figure>
+							<img src="gizmos/normals-tangents.png" width="330" height="190">
+							<figcaption>Green normals and red tangents.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>World-Space Gizmos</h3>
+						
+						<p>Our gizmos correctly visualize the vertex data, as long as we do not adjust the transformation of our game object. Although we use object-space data to draw the gizmos, they're drawn directly in world space, so aren't affected by the game object's transformation.</p>
+						
+						<figure>
+							<img src="gizmos/gizmos-object-space.png" width="330" height="190">
+							<figcaption>Gizmos drawn in object space.</figcaption>
+						</figure>
+						
+						<p>To correctly transform the vertex positions we have to invoke <code>TransformPoint</code> on the game object's <code>Transform</code> component, passing it the position. Store the component reference in a variable so we only have to access our component's <code>transform</code> property once.</p>
+						
+						<pre translate="no">		<ins>Transform t = transform;</ins>
+		for (int i = 0; i &lt; vertices.Length; i++) {
+			Vector3 position = <ins>t.TransformPoint(</ins>vertices[i]<ins>)</ins>;
+			&hellip;
+		}</pre>
+						
+						<figure>
+							<img src="gizmos/world-space-positions.png" width="330" height="190">
+							<figcaption>World-space positions.</figcaption>
+						</figure>
+						
+						<p>We also have to transform the normals and tangents, which is done via the <code>TransformDirection</code> method. This method only applies the rotation, ignoring scale and position.</p>
+						
+						<pre translate="no">			Gizmos.DrawRay(position, <ins>t.TransformDirection(</ins>normals[i]<ins>)</ins> * 0.2f);
+			Gizmos.color = Color.red;
+			Gizmos.DrawRay(position, <ins>t.TransformDirection(</ins>tangents[i]<ins>)</ins> * 0.2f);</pre>
+
+						<figure>
+							<img src="gizmos/world-space-normals-tangents.png" width="330" height="190">
+							<figcaption>World-space normals and tangents.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Is that transformation correct for nonuniform scales?</h3>
+							<div>
+								<p>No, if you applied a nonuniform scale the normals and tangents would appear incorrect. We could create a correct transformation, but the current approach suffices for our visualization.</p>
+								
+								<p>If you're interested in the correct transformation, see <a href="../../custom-srp/directional-lights/index.html#1.2">Custom SRP / Directional Lights</a>.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Optional Gizmos</h3>
+						
+						<p>We won't be interested in seeing all vertex data all the time, so let's make what's shown configurable. Add a gizmos configuration field for this, with a new <code>GizmoMode</code> enum type with options for showing nothing, vertices, normals, or tangents.</p>
+						
+						<pre translate="no">	<ins>public enum GizmoMode { Nothing, Vertices, Normals, Tangents }</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>GizmoMode gizmos;</ins></pre>
+						
+						<p>To make it possible to mix options we'll turn the enum into a set of boolean flags, where each option has its own bit. The only exception is the option for nothing, which represents none of the bits being set.</p>
+						
+						<p>We indicate that the enum should be interpreted as boolean flags by attaching the <code>System.Flags</code> attribute to it. Then we use the first bit for vertices, the second for normals, and the third for tangents. So we assign explicit values to our four enum options, specifically 0, 1, binary 10, and binary 100.</p>
+						
+						<pre translate="no">	<ins>[System.Flags]</ins>
+	public enum GizmoMode { Nothing <ins>= 0</ins>, Vertices <ins>= 1</ins>, Normals <ins>= 0b10</ins>, Tangents <ins>= 0b100</ins> }</pre>
+						
+						<figure>
+							<img src="gizmos/vertices-normals-selection.png" width="320" height="150">
+							<figcaption>Selecting only vertices and normals.</figcaption>
+						</figure>
+						
+						<p>Because we might not need the mesh data anymore we'll set the array fields to <code>null</code> in <code>Update</code>.</p>
+						
+						<pre translate="no">	void Update () {
+		GenerateMesh();
+		enabled = false;
+
+		vertices = <ins>null</ins>;
+		normals = <ins>null</ins>;
+		tangents = <ins>null</ins>;
+	}</pre>
+						
+						<p>And we can also skip drawing gizmos if they're set to nothing.</p>
+						
+						<pre translate="no">	void OnDrawGizmos () {
+		if (<ins>gizmos == GizmoMode.Nothing ||</ins> mesh == null) {
+			return;
+		}
+		
+		&hellip;
+	}</pre>
+						
+						<p>We can check what needs to be drawn by masking the gizmos configuration with the three visible options, using the boolean AND <code>&amp;</code> operator, then checking whether the result isn't zero. Keep track of this for each option with boolean variables.</p>
+						
+						<pre translate="no">		if (gizmos == GizmoMode.Nothing || mesh == null) {
+			return;
+		}
+		
+		<ins>bool drawVertices = (gizmos &amp; GizmoMode.Vertices) != 0;</ins>
+		<ins>bool drawNormals = (gizmos &amp; GizmoMode.Normals) != 0;</ins>
+		<ins>bool drawTangents = (gizmos &amp; GizmoMode.Tangents) != 0;</ins></pre>
+						
+						<p>After what we retrieve the required mesh data. At this point vertex positions are always needed, but normals and tangents only if their visualization is enabled. Also, we only have to do this if our fields are currently set to <code>null</code>.</p>
+						
+						<pre translate="no">		bool drawTangents = (gizmos &amp; GizmoMode.Tangents) != 0;
+
+		<ins>if (vertices == null) {</ins>
+			<ins>vertices = mesh.vertices;</ins>
+		<ins>}</ins>
+		<ins>if (drawNormals &amp;&amp; normals == null) {</ins>
+			<ins>normals = mesh.normals;</ins>
+		<ins>}</ins>
+		<ins>if (drawTangents &amp;&amp; tangents == null) {</ins>
+			<ins>tangents = mesh.tangents;</ins>
+		<ins>}</ins></pre>
+						
+						<p>Finally, only draw the desired gizmos in the loop.</p>
+						
+						<pre translate="no">		for (int i = 0; i &lt; vertices.Length; i++) {
+			Vector3 position = t.TransformPoint(vertices[i]);
+			<ins>if (drawVertices) {</ins>
+				Gizmos.color = Color.cyan;
+				Gizmos.DrawSphere(position, 0.02f);
+			<ins>}</ins>
+			<ins>if (drawNormals) {</ins>
+				Gizmos.color = Color.green;
+				Gizmos.DrawRay(position, t.TransformDirection(normals[i]) * 0.2f);
+			<ins>}</ins>
+			<ins>if (drawTangents) {</ins>
+				Gizmos.color = Color.red;
+				Gizmos.DrawRay(position, t.TransformDirection(tangents[i]) * 0.2f);
+			<ins>}</ins>
+		}</pre>
+						
+						<figure>
+							<img src="gizmos/vertices-normals-drawn.png" width="330" height="190">
+							<figcaption>Drawing only vertices and normals.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>From Square to Sphere</h2>
+					
+					<p>The simplest way to create a sphere is to take a square grid, turn it into a cylinder, and then squeeze its top and bottom. The result is a spherical parametric surface commonly known as a UV sphere. We used the same approach to create a sphere in <a href="../../basics/mathematical-surfaces/index.html#4.2">Basics / Mathematical Surfaces</a>, although this time our UV domain is 0&ndash;1 instead of &minus;1&ndash;1.</p>
+					
+					<aside>
+						<h3>Isn't there a better way to create a sphere?</h3>
+						<div>
+							<p>There are various ways to create a sphere mesh. The UV sphere has a bad vertex distribution, but it's the simplest to generate. So we start with a UV sphere in this tutorial and will cover other sphere mesh types later.</p>
+						</div>
+					</aside>
+					
+					<section>
+						<h3>UV Square Grid</h3>
+						
+						<p>Begin by duplicating <code>SharedSquareGrid</code> and renaming it to <code>UVSphere</code>. We'll create a unit sphere, so with a radius of one. Thus its bounds should be set to 2 in all dimensions.</p>
+						
+						<pre translate="no">	public struct <ins>UVSphere</ins> : IMeshGenerator {
+		
+		public Bounds Bounds => new Bounds(Vector3.zero, new Vector3(<ins>2f</ins>, <ins>2f</ins>, <ins>2f</ins>));
+		
+		&hellip;
+	}</pre>
+						
+						<p>Add the sphere as a mesh option to <code>ProceduralMesh</code>.</p>
+						
+						<pre translate="no">	static MeshJobScheduleDelegate[] jobs = {
+		&hellip;
+		MeshJob&lt;PointyHexagonGrid, SingleStream>.ScheduleParallel<ins>,</ins>
+		<ins>MeshJob&lt;UVSphere, SingleStream>.ScheduleParallel</ins>
+	};
+	
+	public enum MeshType {
+		SquareGrid€, SharedSquareGrid€, SharedTriangleGrid€,
+		FlatHexagonGrid€, PointyHexagonGrid€<ins>, UVSphere€</ins>
+	};</pre>
+						
+						<p>Our current square grid lies on the XZ plane, but we'll change it to lie on the XY plane instead. Also, as we're creating a parametric surface that's not going to remain axis-aligned we'll use U and V instead of X and Z. Replace Z with U and X with V.</p>
+						
+						<pre translate="no">		public void Execute&lt;S> (int <ins>u</ins>, S streams) where S : struct, IMeshStreams {
+			int vi = (Resolution + 1) * <ins>u</ins>, ti = 2 * Resolution * (<ins>u</ins> - 1);
+
+			&hellip;
+			
+			vertex.position.x = -0.5f;
+			vertex.position.z = (float)<ins>u</ins> / Resolution - 0.5f;
+			vertex.texCoord0.y = (float)<ins>u</ins> / Resolution;
+			streams.SetVertex(vi, vertex);
+			vi += 1;
+
+			for (int <ins>v</ins> = 1; <ins>v</ins> &lt;= Resolution; <ins>v</ins>++, vi++, ti += 2) {
+				vertex.position.x = (float)<ins>v</ins> / Resolution - 0.5f;
+				vertex.texCoord0.x = (float)<ins>v</ins> / Resolution;
+				streams.SetVertex(vi, vertex);
+
+				if (<ins>u</ins> > 0) { &hellip; }
+			}
+		}</pre>
+						
+						<p>This time we'll create columns from bottom to top instead of stacked rows, and we initially shift the position range from &minus;&frac12;&mdash;&frac12; to 0&ndash;1.</p>
+						
+						<pre translate="no">			vertex.position.x = <ins>(float)u / Resolution</ins>;
+			<del>//vertex.position.z = (float)u / Resolution - 0.5f;</del>
+			vertex.texCoord0.<ins>x</ins> = (float)u / Resolution;
+			streams.SetVertex(vi, vertex);
+			vi += 1;
+
+			for (int v = 1; v &lt;= Resolution; v++, vi++, ti += 2) {
+				vertex.position.<ins>y</ins> = (float)v / Resolution<ins>;</ins> <del>// - 0.5f;</del>
+				vertex.texCoord0.<ins>y</ins> = (float)v / Resolution;
+				&hellip;
+			}</pre>
+						
+						<p>This requires us to reverse the triangle winding order, which we do by swapping the relative <code>-1</code> and <code>-Resolution - 1</code> vertex indices of the triangles.</p>
+						
+						<pre translate="no">					streams.SetTriangle(
+						ti + 0, vi + int3€(-Resolution - 2, <ins>-Resolution - 1</ins>, <ins>-1</ins>)
+					);
+					streams.SetTriangle(
+						ti + 1, vi + int3€(<ins>-1</ins>, <ins>-Resolution - 1</ins>, 0)
+					);</pre>
+						
+						<p>Finally, to keep the vertical grid visually correct we have to make the normal vectors point backward instead of up. The tangents remain the same, still pointing to the right.</p>
+						
+						<pre translate="no">			vertex.normal.<ins>z</ins> = <ins>-1f</ins>;</pre>
+						
+						<figure>
+							<img src="from-square-to-sphere/uv-square.png" width="200" height="200">
+							<figcaption>UV square on XY plane.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Cylinder</h3>
+						
+						<p>To turn the flat grid into a vertical cylinder we switch to using `[[sin(2piu/r)],[v/r],[-cos(2piu/r)]]` for the vertex position, with `r` being the resolution. This way the grid starts with zero for X coordinates and &minus;1 for Z coordinates and then wraps around the origin counterclockwise.</p>
+						
+						<pre translate="no">			vertex.position.x = <ins>sin(2f * PI *</ins> u / Resolution<ins>)</ins>;
+			<ins>vertex.position.z = -cos(2f * PI * u / Resolution);</ins></pre>
+						
+						<figure>
+							<img src="from-square-to-sphere/cylinder-normals-tangents-incorrect.png" width="280" height="220">
+							<figcaption>Cylinder with incorrect normals and tangents.</figcaption>
+						</figure>
+						
+						<p>All vertices in a column have the same normal vector, which is equal to the position with Y fixed at zero.</p>
+						
+						<pre translate="no">			<del>//vertex.normal.z = -1f;</del>
+			vertex.tangent.xw = float2€(1f, -1f);
+			
+			vertex.position.x = sin(2f * PI * u / Resolution);
+			vertex.position.z = -cos(2f * PI * u / Resolution);
+			<ins>vertex.normal = vertex.position;</ins></pre>
+						
+						<figure>
+							<img src="from-square-to-sphere/cylinder-normals-correct.png" width="280" height="220">
+							<figcaption>Correct normals.</figcaption>
+						</figure>
+						
+						<p>The tangent vectors are also constant per column. They're equal to the normal vectors, rotated 90&deg; counterclockwise.</p>
+						
+						<pre translate="no">			<del>//vertex.tangent.xw = float2(1f, -1f);</del>
+			<ins>vertex.tangent.w = -1f;</ins>
+
+			vertex.position.x = sin(2f * PI * u / Resolution);
+			vertex.position.z = -cos(2f * PI * u / Resolution);
+			vertex.normal = vertex.position;
+			<ins>vertex.tangent.x = -vertex.position.z;</ins>
+			<ins>vertex.tangent.z = vertex.position.x;</ins></pre>
+						
+						<figure>
+							<img src="from-square-to-sphere/cylinder-tangents-correct.png" width="280" height="220">
+							<figcaption>Correct tangents.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>How does that rotation work?</h3>
+							<div>
+								<p>Rotating a point 180&deg; around the origin in 2D can be done by negating both of its coordinates. Rotating by only 90&deg; is done by only negating one of the coordinates, and swapping them. Which coordinate is negated determines the rotation direction.</p>
+								
+								<p>Here's an example of a 360&deg; counterclockwise rotation in 90&deg; increments for the point `[[3],[4]]`: `[[3],[4]]->[[-4],[3]]->[[-3],[-4]]->[[4],[-3]]->[[3],[4]]`.</p>
+								
+								<figure>
+									<img src="from-square-to-sphere/rotation-90.png" width="140" height="140">
+									<figcaption>90&deg; rotations.</figcaption>
+								</figure>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Sphere</h3>
+						
+						<p>To go from cylinder to sphere we have to squeeze it at the top and bottom, creating the north and south poles. Thus our horizontal vertex rings no longer all have the same radius, except for the poles, where the radius is zero. We start with the south pole, so the position and normal vectors both point down.</p>
+						
+						<pre translate="no">			var vertex = new Vertex();
+			<ins>vertex.position.y = vertex.normal.y = -1f;</ins>
+			vertex.tangent.w = -1f;
+			
+			<del>//vertex.position.x = sin(2f * PI * u / Resolution);</del>
+			<del>//vertex.position.z = -cos(2f * PI * u / Resolution);</del>
+			<del>//vertex.normal = vertex.position;</del></pre>
+						
+						<p>However, we can still use the constant circle point as a basis for all vertices in the column, by adjusting its radius later. And the tangents are still constant per column, as they aren't affected by the radius. So let's calculate the same again, now storing the 2D circle coordinates in a separate variable. We can also delay negating the cosine until after setting the tangent.</p>
+						
+						<pre translate="no">
+			<del>//vertex.tangent.x = -vertex.position.z;</del>
+			<del>//vertex.tangent.z = vertex.position.x;</del>
+			<ins>float2 circle;</ins>
+			<ins>circle.x = sin(2f * PI * u / Resolution);</ins>
+			<ins>circle.y = cos(2f * PI * u / Resolution);</ins>
+			<ins>vertex.tangent.xz = circle.yx;</ins>
+			<ins>circle.y = -circle.y;</ins></pre>
+						
+						<p>The circle radius is equal to `sin(piv/r)` from pole to pole.</p>
+						
+						<pre translate="no">			for (int v = 1; v &lt;= Resolution; v++, vi++, ti += 2) {
+				<ins>float circleRadius = sin(PI * v / Resolution);</ins>
+				<ins>vertex.position.xz = circle * circleRadius;</ins>
+				vertex.position.y = (float)v / Resolution;
+				&hellip;
+			}</pre>
+						
+						<p>And we also have to set the Y coordinates to `-cos(piv/r)` to make it spherical.</p>
+						
+						<pre translate="no">				vertex.position.y = <ins>-cos(PI *</ins> v / Resolution<ins>)</ins>;</pre>
+						
+						<p>With the position correct we can once again use it for the normal vector as well.</p>
+						
+						<pre translate="no">				vertex.position.y = -cos(PI * v / Resolution);
+				<ins>vertex.normal = vertex.position;</ins></pre>
+						
+						<figure>
+							<img src="from-square-to-sphere/sphere.png" width="280" height="220">
+							<figcaption>Resolution 8 sphere.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Sphere Resolution</h3>
+						
+						<p>Because our sphere isn't a flat grid it degenerates when the resolution is too low. Let's first consider vertex columns. Each column represents half a meridian on our sphere, a half-circle line going from pole to pole, with fixed longitude and varying latitude. At resolution 1 we only have two vertices along this line, at the poles. Thus our sphere mesh is reduced to an invisible line. We need at least resolution 2, which would add a vertex on the equator. This gives us a single quad per quadrant, one of the south hemisphere and one on the north hemisphere.</p>
+						
+						<p>We could enforce a minimum resolution of 2, but let's instead change how we apply the resolution to our UV sphere. Instead of applying the resolution to the entire south-north line, we apply it per quadrant. Thus we effectively double the resolution in the V dimension of our parametric surface. To make it easy to work with this adjusted resolution introduce a private <code>ResolutionV</code> property for it.</p>
+						
+						<pre translate="no">		<ins>int ResolutionV => 2 * Resolution;</ins></pre>
+						
+						<p>Use this new resolution instead of the regular one for the V dimension when determining the vertex and index counts.</p>
+						
+						<pre translate="no">		public int VertexCount => (Resolution + 1) * (<ins>ResolutionV</ins> + 1);
+
+		public int IndexCount => 6 * Resolution * <ins>ResolutionV</ins>;</pre>
+						
+						<p>We also need to use it when determining the offsets of the vertex and triangle indices at the start of <code>Execute</code>.</p>
+						
+						<pre translate="no">			int vi = (<ins>ResolutionV</ins> + 1) * u, ti = 2 * <ins>ResolutionV</ins> * (u - 1);</pre>
+						
+						<p>And the entire loop also need to use it.</p>
+						
+						<pre translate="no">			for (int v = 1; v &lt;= <ins>ResolutionV</ins>; v++, vi++, ti += 2) {
+				float circleRadius = sin(PI * v / <ins>ResolutionV</ins>);
+				vertex.position.xz = circle * circleRadius;
+				vertex.position.y = -cos(PI * v / <ins>ResolutionV</ins>);
+				vertex.normal = vertex.position;
+				vertex.texCoord0.y = (float)v / <ins>ResolutionV</ins>;
+
+				if (u > 0) {
+					streams.SetTriangle(
+						ti + 0, vi + int3(-<ins>ResolutionV</ins> - 2, -<ins>ResolutionV</ins> - 1, -1)
+					);
+					streams.SetTriangle(
+						ti + 1, vi + int3(-1, -<ins>ResolutionV</ins> - 1, 0)
+					);
+				}
+			}</pre>
+						
+						<figure>
+							<img src="from-square-to-sphere/double-v-resolution.png" width="270" height="270">
+							<figcaption>Doubled V resolution; orthographic view.</figcaption>
+						</figure>
+						
+						<p>We have to do the same for the resolution in the U dimension. As in this case we're dealing with entire circles of latitude&mdash;and thus four quadrants&mdash;it makes most sense to use quadruple the original resolution. Add a property for this as well.</p>
+						
+						<pre translate="no">		<ins>int ResolutionU => 4 * Resolution;</ins></pre>
+						
+						<p>Use the U resolution for the vertex and index counts, and also for the job length.</p>
+						
+						<pre translate="no">		public int VertexCount => (<ins>ResolutionU</ins> + 1) * (ResolutionV + 1);
+
+		public int IndexCount => 6 * <ins>ResolutionU</ins> * ResolutionV;
+		
+		public int JobLength => <ins>ResolutionU</ins> + 1;</pre>
+						
+						<p>In <code>Execute</code> the U resolution is used to construct the circle and horizontal texture coordinates, before the loop.</p>
+						
+						<pre translate="no">			circle.x = sin(2f * PI * u / <ins>ResolutionU</ins>);
+			circle.y = cos(2f * PI * u / <ins>ResolutionU</ins>);
+			vertex.tangent.xz = circle.yx;
+			circle.y = -circle.y;
+			vertex.texCoord0.x = (float)u / <ins>ResolutionU</ins>;</pre>
+						
+						<p>Now our sphere is reduced to a tetrahedron at resolution 1, which doesn't look much like a sphere but is at least a valid 3D shape. The vertex distribution now roughly approximates a square lattice near the equator. The vertices do bunch up at the poles, but this is inherent to the parametric surface and we cannot avoid it.</p>
+						
+						<figure>
+							<img src="from-square-to-sphere/quadruple-u-resolution-1.png" width="270" height="270" alt="1">
+							<img src="from-square-to-sphere/quadruple-u-resolution-8.png" width="270" height="270" alt="8">
+							<figcaption>Quadruple V resolution; resolution 1 and 8.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>South Pole</h3>
+						
+						<p>When investigating the poles of our sphere it becomes clear that the quads that touch them degenerate into triangles, because the circles of latitude at the poles have a radius of zero. This is most obvious at resolution 1, with all quads are affected. Let's analyze the south pole of this octahedron-like sphere.</p>
+						
+						<figure>
+							<img src="from-square-to-sphere/south-pole-u-incorrect.png" width="270" height="270">
+							<figcaption>South pole; resolution 1; twisted texturing.</figcaption>
+						</figure>
+						
+						<p>Besides a missing triangle per quad it is also obvious that the texture is twisted. This happens because we only see the triangle that uses the vertex from the same meridian generated when setting the triangle column. This vertex has the same horizontal coordinate as the rest of the line, but visually it can be considered to lie in between both meridians of a triangle column. So it makes more sense to shift the texture coordinate counterclockwise by half a step for the first vertex.</p>
+						
+						<pre translate="no">			vertex.texCoord0.x = <ins>(u - 0.5f)</ins> / ResolutionU;
+			streams.SetVertex(vi, vertex);
+			vi += 1;
+			<ins>vertex.texCoord0.x = (float)u / ResolutionU;</ins></pre>
+						
+						<p>This straightens the texture horizontally. There is still a discontinuity between adjacent triangles, skipping a triangular region, but we cannot get rid of these seams.</p>
+						
+						<figure>
+							<img src="from-square-to-sphere/south-pole-u-correct.png" width="270" height="270">
+							<figcaption>Correct texturing.</figcaption>
+						</figure>
+						
+						<p>There is a similar problem with the tangents. When their gizmos are turned on it is clear that they also match those of the meridians.</p>
+						
+						<figure>
+							<img src="from-square-to-sphere/south-pole-tangents-incorrect.png" width="270" height="270">
+							<figcaption>Twisted tangents.</figcaption>
+						</figure>
+						
+						<p>But once again it makes more sense to set the bottom vertex tangent to halfway between the meridians, going counterclockwise by half a step. Let's also move all code for the first vertex above the circle.</p>
+						
+						<pre translate="no">			var vertex = new Vertex();
+			vertex.position.y = vertex.normal.y = -1f;
+			<ins>vertex.tangent.x = cos(2f * PI * (u - 0.5f) / ResolutionU);</ins>
+			<ins>vertex.tangent.z = sin(2f * PI * (u - 0.5f) / ResolutionU);</ins>
+			vertex.tangent.w = -1f;
+			<ins>vertex.texCoord0.x = (u - 0.5f) / ResolutionU;</ins>
+			<ins>streams.SetVertex(vi, vertex);</ins>
+			<ins>vi += 1;</ins>
+
+			float2 circle;
+			circle.x = sin(2f * PI * u / ResolutionU);
+			circle.y = cos(2f * PI * u / ResolutionU);
+			vertex.tangent.xz = circle.yx;
+			circle.y = -circle.y;
+			<del>//vertex.texCoord0.x = (u - 0.5f) / ResolutionU;</del>
+			<del>//streams.SetVertex(vi, vertex);</del>
+			<del>//vi += 1;</del>
+			vertex.texCoord0.x = (float)u / ResolutionU;</pre>
+						
+						<figure>
+							<img src="from-square-to-sphere/south-pole-tangents-correct.png" width="270" height="270">
+							<figcaption>Correct tangents.</figcaption>
+						</figure>
+						
+						<p>Although the visual difference is slight, this fixes the twisting of tangent space.</p>
+					</section>
+					
+					<section>
+						<h3>North Pole</h3>
+						
+						<p>The north pole has the same problem that the south pole had, so we have to fix it as well.</p>
+						
+						<figure>
+							<img src="from-square-to-sphere/north-pole-incorrect.png" width="270" height="270">
+							<figcaption>Incorrect north pole.</figcaption>
+						</figure>
+						
+						<p>Because both polar vertices have the same tangents and horizontal texture coordinates we can set the north pole vertex directly after setting the south pole vertex, before the loop. We only have to set its Y position and normal components and its vertical texture coordinate to 1.</p>
+						
+						<pre translate="no">			streams.SetVertex(vi, vertex);
+
+			<ins>vertex.position.y = vertex.normal.y = 1f;</ins>
+			<ins>vertex.texCoord0.y = 1f;</ins>
+			<ins>streams.SetVertex(vi + ResolutionV, vertex);</ins>
+			vi += 1;</pre>
+						
+						<p>To prevent the loop from setting the north pole vertex we have to shorten it by one iteration. So instead of continuing while V is less that or equal to the V resolution it must be strictly less than the V resolution. To keep setting the last quad we now need to duplicate the triangle-setting block from the loop and insert it after the loop.</p>
+						
+						<pre translate="no">			for (int v = 1; v <ins>&lt;</ins> ResolutionV; v++, vi++, ti += 2) { &hellip; }
+
+			<ins>if (u > 0) {</ins>
+				<ins>streams.SetTriangle(</ins>
+					<ins>ti + 0, vi + int3€(-ResolutionV - 2, -ResolutionV - 1, -1)</ins>
+				<ins>);</ins>
+				<ins>streams.SetTriangle(</ins>
+					<ins>ti + 1, vi + int3€(-1, -ResolutionV - 1, 0)</ins>
+				<ins>);</ins>
+			<ins>}</ins></pre>
+						
+						<figure>
+							<img src="from-square-to-sphere/north-pole-wrong-vertices.png" width="270" height="270">
+							<figcaption>Using the wrong vertices.</figcaption>
+						</figure>
+						
+						<p>We initially get a result that is even more twisted than before, because we only see the first triangle of the quad and it uses the vertex from the previous meridian. We have to change it so we use the one from the current meridian.</p>
+						
+						<pre translate="no">				streams.SetTriangle(
+					ti + 0, vi + int3€(-ResolutionV - 2, <ins>0</ins>, -1)
+				);</pre>
+						
+						<figure>
+							<img src="from-square-to-sphere/north-pole-correct.png" width="270" height="270">
+							<figcaption>Correct north pole.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Degenerate Triangles</h3>
+						
+						<p>Because the quads that touch the poles degenerate into triangles each of those quads has one triangle that isn't visible. At the north pole this is the second triangle. We can demonstrate that it isn't needed by collapsing it to a single point, by only using the first vertex index. This doesn't affect the appearance of the sphere.</p>
+						
+						<pre translate="no">				streams.SetTriangle(
+					ti + 0, vi + int3€(-ResolutionV - 2, 0, -1)
+				);
+				streams.SetTriangle(
+					ti + 1, <ins>0</ins>
+				);</pre>
+						
+						<p>We can do the same at the south pole, though in this case it's the first triangle of the quad. To make this work we have to also insert the triangle-setting block before the loop and make the loop skip setting triangles during its first iteration. Also put the statement that increments the triangle index inside these block instead of in the <code>for</code> statement.</p>
+						
+						<pre translate="no">			<ins>if (u > 0) {</ins>
+				<ins>streams.SetTriangle(</ins>
+					<ins>ti + 0, 0</ins>
+				<ins>);</ins>
+				<ins>streams.SetTriangle(</ins>
+					<ins>ti + 1, vi + int3€(-1, -ResolutionV - 1, 0)</ins>
+				<ins>);</ins>
+				<ins>ti += 2;</ins>
+			<ins>}</ins>
+
+			for (int v = 1; v &lt; ResolutionV; v++, vi++<ins>) {</ins> <ins>//, ti += 2) {</ins>
+				&hellip;
+
+				if (u > 0 <ins>&amp;&amp; v > 1</ins>) {
+					streams.SetTriangle(
+						ti + 0, vi + int3€(-ResolutionV - 2, -ResolutionV - 1, -1)
+					);
+					streams.SetTriangle(
+						ti + 1, vi + int3€(-1, -ResolutionV - 1, 0)
+					);
+					<ins>ti += 2;</ins>
+				}
+			}</pre>
+						
+						<p>The sphere still appears the same. Now we can eliminate the degenerate triangles from the mesh. There are two per column, so there is effectively one less quad per column. Adjust the index count accordingly.</p>
+						
+						<pre translate="no">		public int IndexCount => 6 * ResolutionU * <ins>(</ins>ResolutionV <ins>- 1)</ins>;</pre>
+						
+						<p>Also adjust the triangle offset at the start of <code>Execute</code>.</p>
+						
+						<pre translate="no">			int vi = (ResolutionV + 1) * u, ti = 2 * <ins>(</ins>ResolutionV <ins>- 1)</ins> * (u - 1);</pre>
+						
+						<p>Then remove the code that adds the degenerate triangles. Make sure that the triangle index is incremented only once before the loop starts.</p>
+						
+						<pre translate="no">			if (u > 0) {
+				<del>//streams.SetTriangle(ti + 0, 0);</del>
+				streams.SetTriangle(<ins>ti</ins>, vi + int3€(-1, -ResolutionV - 1, 0));
+				ti += <ins>1</ins>;
+			}
+
+			for (int v = 1; v &lt; ResolutionV; v++, vi++) { &hellip; }
+
+			if (u > 0) {
+				streams.SetTriangle(<ins>ti</ins>, vi + int3€(-ResolutionV - 2, 0, -1));
+				<del>//streams.SetTriangle(ti + 1, 0);</del>
+			}</pre>
+					</section>
+					
+					<section>
+						<h3>Vertex Seam</h3>
+						
+						<p>Our code has become a bit messy with all the checks based on U and V. We can simplify things by considering the first vertex line a special case. This is the line that doesn't have its own accompanying triangle column and it overlaps the last vertex line. Let's consider this the vertex seam that stitches both sides of the wrapped grid together.</p>
+						
+						<p>Duplicate <code>Execute</code> and rename it to <code>ExecuteSeam</code>. We'll use this method for the single case when U equals zero, so remove its U parameter and replace all usage of U with constant values. Also eliminate all code that deals with triangles.</p>
+						
+						<pre translate="no">		<ins>public void ExecuteSeam&lt;S> (S streams) where S : struct, IMeshStreams {</ins>
+			int vi = <ins>0;</ins> <del>//, ti = &hellip;</del>
+
+			var vertex = new Vertex();
+			vertex.position.y = vertex.normal.y = -1f;
+			vertex.tangent.x = cos(2f * PI * <ins>0.5f</ins> / ResolutionU);
+			vertex.tangent.z = sin(2f * PI * <ins>0.5f</ins> / ResolutionU);
+			vertex.tangent.w = -1f;
+			vertex.texCoord0.x = <ins>0.5f</ins> / ResolutionU;
+			streams.SetVertex(vi, vertex);
+
+			&hellip;
+
+			float2 circle;
+			circle.x = sin(<ins>0f</ins>);
+			circle.y = cos(<ins>0f</ins>);
+			vertex.tangent.xz = circle.yx;
+			circle.y = -circle.y;
+			vertex.texCoord0.x = <ins>0f</ins>;
+
+			<del>//if (u > 0) { &hellip; }</del>
+
+			for (int v = 1; v &lt; ResolutionV; v++, vi++) {
+				&hellip;
+
+				<del>//if (u > 0 && v > 1) { &hellip; }</del>
+			}
+
+			<del>//if (u > 0) { &hellip; }</del>
+		}</pre>
+						
+						<p>Next, rename <code>Execute</code> to <code>ExecuteRegular</code> and remove the code that checks whether U is greater than zero, because that will always be the case.</p>
+						
+						<pre translate="no">		public void <ins>ExecuteRegular</ins>&lt;S> (int u, S streams) where S : struct, IMeshStreams {
+			&hellip;
+
+			<del>//if (u > 0) {</del>
+			streams.SetTriangle(ti, vi + int3(-1, -ResolutionV - 1, 0));
+			ti += 1;
+			<del>//}</del>
+
+			for (int v = 1; v &lt; ResolutionV; v++, vi++) {
+				&hellip;
+
+				if (<ins>v > 1</ins>) { &hellip; }
+			}
+
+			<del>//if (u > 0) {</del>
+			streams.SetTriangle(ti, vi + int3(-ResolutionV - 2, 0, -1));
+			<del>//}</del>
+		}</pre>
+						
+						<p>Now introduce a new <code>Execute</code> method that invokes <code>ExecuteSeam</code> when U equals zero and invokes <code>ExecuteRegular</code> otherwise.</p>
+						
+						<pre translate="no">		<ins>public void Execute&lt;S> (int u, S streams) where S : struct, IMeshStreams {</ins>
+			<ins>if (u == 0) {</ins>
+				<ins>ExecuteSeam(streams);</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>ExecuteRegular(u, streams);</ins>
+			<ins>}</ins>
+		<ins>}</ins></pre>
+						
+						
+						<p>At this point our sphere still gets generated correctly, but we can simplify <code>ExecuteSeam</code> further. We don't need to calculate the circle point because the sine of zero is zero and the cosine of zero is one.</p>
+						
+						<pre translate="no">			<del>//float2 circle;</del>
+			<del>//circle.x = sin(0f);</del>
+			<del>//circle.y = cos(0f);</del>
+			vertex.tangent.xz = <ins>float2€(1f, 0f)</ins>;
+			<del>//circle.y = -circle.y;</del>
+			vertex.texCoord0.x = 0f;
+
+			for (int v = 1; v &lt; ResolutionV; v++, vi++) {
+				float circleRadius = sin(PI * v / ResolutionV);
+				<del>//vertex.position.xz = circle * circleRadius;</del>
+				<ins>vertex.position.z = -circleRadius;</ins>
+				&hellip;
+			}</pre>
+						
+						<p>Also, because all regular columns use their own polar vertices the seam doesn't need polar vertices of its own. Thus we can reduce the vertex count by two.</p>
+						
+						<pre translate="no">		public int VertexCount => (ResolutionU + 1) * (ResolutionV + 1) <ins>- 2</ins>;</pre>
+						
+						<p>This simplifies <code>ExecuteSeam</code> further, eliminating the polar vertices. We can now also directly use the iterator variable of the loop&mdash;minus one&mdash;instead of having to rely on a separate vertex index.</p>
+						
+						<pre translate="no">			<del>//int vi = 0;</del>
+
+			var vertex = new Vertex();
+			<del>//vertex.position.y = vertex.normal.y = -1f;</del>
+			vertex.tangent.x = <ins>1f</ins>;
+			<del>//vertex.tangent.z = sin(2f * PI * 0.5f / ResolutionU);</del>
+			vertex.tangent.w = -1f;
+			<del>//vertex.texCoord0.x = 0.5f / ResolutionU;</del>
+			<del>//streams.SetVertex(vi, vertex);</del>
+
+			<del>//&hellip;</del>
+
+			for (int v = 1; v &lt; ResolutionV; v++<ins>) {</ins> <ins>//, vi++) {</ins>
+				&hellip;
+				streams.SetVertex(<ins>v - 1</ins>, vertex);
+			}</pre>
+						
+						<p>To make this work we also have to adjust <code>ExecuteRegular</code> at bit. First, the initial vertex index is reduced by two.</p>
+						
+						<pre translate="no">			int vi = (ResolutionV + 1) * u <ins>- 2</ins>, ti = 2 * (ResolutionV - 1) * (u - 1);</pre>
+						
+						<p>Second, the vertex offset to the vertex line on the left side of the triangle column is now different for the first triangle column, when U equals 1. This is the case because the seam doesn't have a north pole vertex. To make this easy to code we'll put the vertex offset that shifts to the left vertex line in a variable. This shift to the left would get us the top left vertex index of the quad.</p>
+						
+						<pre translate="no">			<ins>int shiftLeft = -ResolutionV - 1;</ins>
+			
+			streams.SetTriangle(ti, vi + int3€(-1, <ins>shiftLeft</ins>, 0));
+			ti += 1;
+			
+			for (int v = 1; v &lt; ResolutionV; v++, vi++) {
+				&hellip;
+
+				if (v > 1) {
+					streams.SetTriangle(ti + 0, vi + int3€(<ins>shiftLeft - 1</ins>, <ins>shiftLeft</ins>, -1));
+					streams.SetTriangle(ti + 1, vi + int3€(-1, <ins>shiftLeft</ins>, 0));
+					ti += 2;
+				}
+			}
+			
+			streams.SetTriangle(ti, vi + int3€(<ins>shiftLeft - 1</ins>, 0, -1));</pre>
+						
+						<p>Instead of writing <code>-Resolution - 1</code> we can also write <code>-1 - Resolution</code>.</p>
+						
+						<pre translate="no">			int shiftLeft = <ins>-1 - ResolutionV</ins>;</pre>
+						
+						<p>When we're dealing with the seam that misses the north pole vertex we must compensate for that gap, by starting at 0 instead of &minus;1.</p>
+						
+						<pre translate="no">			int shiftLeft = <ins>(u == 1 ? 0 : -1)</ins> - ResolutionV;</pre>
+						
+						<p>At this point our sphere is still the same, but now without two useless vertices.</p>
+					</section>
+					
+					<section>
+						<h3>Sincos</h3>
+						
+						<p>There is one more easy optimization that we can make. When inspecting the code generated by Burst we find multiple call instructions to <code>burst.Sleef_sinf_u35</code> and <code>burst.Sleef_cosf_u35</code>, matching our calculations of sines and cosines. These are jumps to code blocks that calculate the trigonometric functions. Ideally we minimize the amount of call instructions to keep execution local and also try to keep the amount of trigonometry to a minimum. We can do both by taking advantage of the <code>sincos</code> method from the Mathematics API.</p>
+						
+						<p>The <code>sincos</code> method calculates the sine and cosine for the same value together, which can save some work compared to calculating them separately. It has three parameters. Its first parameter is the input value. Its other two parameters are outputs for the calculated sine and cosine values.</p>
+						
+						<p>Beginning with the calculation of the polar tangent in <code>ExecuteRegular</code>, we can directly supply the tangent components as output arguments, by writing <code>out</code> in front of each.</p>
+						
+						<pre translate="no">			var vertex = new Vertex();
+			vertex.position.y = vertex.normal.y = -1f;
+			<del>//vertex.tangent.x = cos(2f * PI * (u - 0.5f) / ResolutionU);</del>
+			<del>//vertex.tangent.z = sin(2f * PI * (u - 0.5f) / ResolutionU);</del>
+			<ins>sincos(</ins>
+				<ins>2f * PI * (u - 0.5f) / ResolutionU,</ins>
+				<ins>out vertex.tangent.z, out vertex.tangent.x</ins>
+			<ins>);</ins></pre>
+						
+						<p>We can do the same when calculating the circle.</p>
+						
+						<pre translate="no">			float2 circle;
+			<del>//circle.x = sin(2f * PI * u / ResolutionU);</del>
+			<del>//circle.y = cos(2f * PI * u / ResolutionU);</del>
+			<ins>sincos(2f * PI * u / ResolutionU, out circle.x, out circle.y);</ins></pre>
+						
+						<p>And when calculating the circle radius and Y position inside the loop.</p>
+						
+						<pre translate="no">			for (int v = 1; v &lt; ResolutionV; v++, vi++) {
+				<ins>sincos(</ins>
+					<ins>PI * v / ResolutionV,</ins>
+					<ins>out float circleRadius, out vertex.position.y</ins>
+				<ins>);</ins>
+				<del>//float circleRadius = sin(PI * v / ResolutionV);</del>
+				vertex.position.xz = circle * circleRadius;
+				vertex.position.y = -<ins>vertex.position.y</ins>;
+				&hellip;
+			}</pre>
+						
+						<p>In this case we can also eliminate the statement that negates the Y position by rotating 180&deg; via the addition of &pi; to the <code>sincos</code> input. This means that we now have to negate the radius instead, but we don't need an extra line of code for that.</p>
+						
+						<pre translate="no">				sincos(
+					<ins>PI +</ins> PI * v / ResolutionV,
+					out float circleRadius, out vertex.position.y
+				);
+				vertex.position.xz = circle * <ins>-</ins>circleRadius;
+				<del>//vertex.position.y = -vertex.position.y;</del></pre>
+						
+						<p>Apply the same trick to the loop inside <code>ExecuteSeam</code>. In this case we end up not needing any negations at all.</p>
+						
+						<pre translate="no">			for (int v = 1; v &lt; ResolutionV; v++) {
+				<ins>sincos(</ins>
+					<ins>PI + PI * v / ResolutionV,</ins>
+					<ins>out vertex.position.z, out vertex.position.y</ins>
+				<ins>);</ins>
+				<del>//float circleRadius = sin(PI * v / ResolutionV);</del>
+				<del>//vertex.position.z = -circleRadius;</del>
+				<del>//vertex.position.y = -cos(PI * v / ResolutionV);</del>
+				&hellip;
+			}</pre>
+						
+						<p>Inspecting the code generated by Burst now reveals that the call instructions are gone. Burst has inserted the <code>sincos</code> code directly into our job.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Texturing a Sphere</h2>
+					
+					<p>The material that we currently use isn't appropriate for projection onto a sphere, especially when it is set to ripple. So we'll provide alternative materials for when showing a sphere.</p>
+					
+					<section>
+						<h3>Material Selection</h3>
+						
+						<p>To make switching materials easier we'll add a material configuration option to <code>ProceduralMesh</code>, using a new <code>MaterialMode</code> enum type. Initially provide options for a flat and a ripple material.
+						
+						<pre translate="no">	<ins>public enum MaterialMode { Flat, Ripple }</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>MaterialMode material;</ins></pre>
+						
+						<p>To make this work we also need a reference to these materials. Add a material array configuration option for this as well.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>Material[] materials;</ins></pre>
+						
+						<p>Then we can select the appropriate material and assign it to the <code>material</code> property of the <code>MeshRenderer</code> component in <code>Update</code>.</p>
+						
+						<pre translate="no">	void Update () {
+		&hellip;
+
+		<ins>GetComponent&lt;MeshRenderer>().material = materials[(int)material];</ins>
+	}</pre>
+						
+						<aside>
+							<h3>Shouldn't we store a reference to <code>MeshRenderer</code> in a field?</h3>
+							<div>
+								<p>We could do that, but because we only update when we adjust our component it's not necessary to worry about efficiency here.</p>
+							</div>
+						</aside>
+						
+						<p>Duplicate our current material so we get two variants, one with the ripple disabled, named <em translate="no">Flat</em> and one with the ripple enabled, named <em translate="no">Ripple</em>. Add these to the <em translate="no">Materials</em> array of our component, in the appropriate order. Then also remove the material from the <code>MeshRenderer</code> component's array, as we now set it ourselves.</p>
+						
+						<figure>
+							<img src="texturing-a-sphere/material-selection.png" width="320" height="385">
+							<figcaption>Material selection configured.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Lat/Lon Maps</h3>
+						
+						<p>Our sphere's texture coordinates match the equirectangular projection of a sphere onto a rectangle. It projects the meridians and circles of latitude onto straight lines, partitioning the map into regular squares. Textures with this projection are commonly known as lat/lon maps. They typically have a 2:1 aspect ratio. <a href="texturing-a-sphere/latlon-base-map.png">Here</a> is a base map that uses such a projection.</p>
+						
+						<figure>
+							<img src="texturing-a-sphere/latlon-base-map.png" width="256" height="128">
+							<figcaption>Lat/lon base map.</figcaption>
+						</figure>
+						
+						<p>And <a href="texturing-a-sphere/latlon-normal-map.png">Here</a> is an accompanying normal map.</p>
+						
+						<figure>
+							<img src="texturing-a-sphere/latlon-normal-map.png" width="256" height="128">
+							<figcaption>Lat/lon normal map.</figcaption>
+						</figure>
+						
+						<p>Add an entry for the lat/lon map to <code>MaterialMode</code>.</p>
+						
+						<pre translate="no">	public enum MaterialMode { Flat, Ripple<ins>, LatLonMap</ins> }</pre>
+						
+						<p>Then duplicate the <em translate="no">Flat</em> material, rename it appropriately, and use the lat/lon textures for it.</p>
+						
+						<figure>
+							<img src="texturing-a-sphere/sphere-with-latlon.png" width="270" height="270">
+							<figcaption>Sphere with lat/lon material.</figcaption>
+						</figure>
+						
+						<p>This kind of map fits the sphere much better, not showing any obvious distortion near the poles. However, it doesn't hide the discontinuities of the texture coordinates in the mesh itself. The texture could be designed to take these discontinuities into account, hiding them, but only for a specific fixed sphere resolution. If you're concerned about the quality of the poles then there are better options.</p>
+						
+						<figure>
+							<img src="texturing-a-sphere/pole-discontinuities.png" width="270" height="270">
+							<figcaption>Discontinuities at north pole; resolution 2.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Cube Maps</h3>
+						
+						<p>An alternative way to texture a sphere is by using cube maps. The benefit of a cube map over a lat/lon map is that it has a much more uniform mapping. Better texture quality can be achieved with smaller textures.</p>
+						
+						<p><a href="texturing-a-sphere/cube-base-map.png">Here</a> is a cube base map, using a horizontal layout that places the six cube faces in a row.</p>
+						
+						<figure>
+							<img src="texturing-a-sphere/cube-base-map.png" width="384" height="64">
+							<figcaption>Cube base map.</figcaption>
+						</figure>
+						
+						<p>After importing it into Unity set its <em translate="no">Texture Shape</em> to <em translate="no">Cube</em>. All other options can remain at their default values. Unity will automatically detect the row layout and convert the texture to a valid cube map.</p>
+						
+						<figure>
+							<img src="texturing-a-sphere/cube-base-map-import-settings.png" width="320" height="200">
+							<figcaption>Cube base map import settings.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why does the texture's preview sphere appear inverted?</h3>
+							<div>
+								<p>Unity assumes that cube maps are used for environmental reflections, so the preview treats it as an environment map.</p>
+							</div>
+						</aside>
+						
+						<p>And <a href="texturing-a-sphere/cube-normal-map.png">here</a> is an accompanying normal cube map, using the same layout.</p>
+						
+						<figure>
+							<img src="texturing-a-sphere/cube-normal-map.png" width="384" height="64">
+							<figcaption>Cube normal map.</figcaption>
+						</figure>
+						
+						<p>This normal maps doesn't look like a common normal map because it stores the normal vectors in object space instead of in tangent space. Thus its vectors point in all directions instead of mostly up.</p>
+						
+						<p>When importing this normal map its <em translate="no">Texture Type</em> should be kept as <em translate="no">Default</em> and not set to <em translate="no">Normal map</em>, because otherwise Unity would interpret it as a tangent-space normal map and perform an incorrect conversion. We do have to explicitly turn off <em translate="no">sRGB (Color Texture)</em> to indicate that this texture does not contain color data and sRGB color conversion should not be applied when sampling it.</p>
+						
+						<figure>
+							<img src="texturing-a-sphere/cube-normal-map-import-settings.png" width="320" height="200">
+							<figcaption>Cube normal map import settings.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Cube Map Shader Graph</h3>
+						
+						<p>Create a new shader graph for a material based on cube maps. Give it <em translate="no">Base Map</em> and <em translate="no">Normal Map</em> properties, both of the <em translate="no">Cubemap</em> type.</p>
+						
+						<figure>
+							<img src="texturing-a-sphere/cube-map-properties.png" width="210" height="76">
+							<figcaption>Cube map properties.</figcaption>
+						</figure>
+						
+						<p>To use the base map for the base color we can pass it to a <em translate="no">Sample Cubemap</em> node. Instead of regular texture coordinates we need to pass it a direction vector, for which we can use the object-space position. The node indicates that it needs a world-space vector because Unity again assumes we're sampling an environment map.</p>
+						
+						<figure>
+							<img src="texturing-a-sphere/sampling-base-cube-map.png" width="620" height="240">
+							<figcaption>Sampling the base cube map.</figcaption>
+						</figure>
+						
+						<p>Although this is enough to use the cube map for the base color, this won't produce satisfying results. Because the <em translate="no">Sample Cubemap</em> node is assumed to be used for sampling environmental reflections it has a LOD parameter that's used to manually select a mipmap of the texture. This is used to control the sharpness of the reflections. However, we don't need manual control here, we want to automatically get the correct mipmap, as if sampling a regular texture. The solution is to use a <em translate="no">CustomCubemap</em> custom function node instead.</p>
+						
+						<p>Give the custom function node a <em translate="no">Cube</em> cube map input and a <em translate="no">Dir</em> 3D vector input. Give in a single <em translate="no">Out</em> 3D vector output.</p>
+						
+						<figure>
+							<img src="texturing-a-sphere/custom-sampling-function.png" width="286" height="386">
+							<figcaption>Custom function for cube sampling.</figcaption>
+						</figure>
+						
+						<p>The code body of the node consists of invoking the <code class="shader">SAMPLE_TEXTURECUBE</code> macro, with the <code>tex</code> and <code>samplerstate</code> fields of <code>Cube</code> as argument, followed by the sample direction. We only need the first three components of the result.</p>
+						
+						<pre class="shader" translate="no">Out = SAMPLE_TEXTURECUBE(
+	Cube.tex,
+	Cube.samplerstate,
+	Dir
+).xyz;</pre>
+						
+						<p>Now use our custom node instead of <em translate="no">Sample Cubemap</em>.</p>
+						
+						<figure>
+							<img src="texturing-a-sphere/custom-sampling-cube-base-map.png" width="580" height="160">
+							<figcaption>Custom sampling the cube base map.</figcaption>
+						</figure>
+						
+						<p>To apply our object-space normal map we have to first set the graph's <em translate="no">Fragment Normal Space</em> to <em translate="no">Object</em>.</p>
+						
+						<figure>
+							<img src="texturing-a-sphere/fragment-normal-object-space.png" width="296" height="196">
+							<figcaption>Fragment normals set to object space.</figcaption>
+						</figure>
+						
+						<p>Then use a duplicate of our custom function node to sample the normal map, convert the vector range from 0&ndash;1 to &minus;1&ndash;1, and use it to set the object-space fragment normal.</p>
+						
+						<figure>
+							<img src="texturing-a-sphere/sampling-normal-cube-map.png" width="730" height="342">
+							<figcaption>Sampling the normal cube map.</figcaption>
+						</figure>
+						
+						<p>Finally, create a material from this shader graph, add it to our game object's materials array, and add an entry for it to <code>MaterialMode</code>.</p>
+						
+						<pre translate="no">	public enum MaterialMode { Flat, Ripple, LatLonMap<ins>, CubeMap</ins> }</pre>
+						
+						<p>Along the equator of our sphere the cube map and the lat/lon map look mostly the same, but the quality of the cube map is superior the closer you get to the poles. There are no discontinuities at the poles, because the cube map does not rely on the texture coordinates of the mesh.</p>
+						
+						<figure>
+							<img src="texturing-a-sphere/pole-cube-map.png" width="270" height="270">
+							<figcaption>North pole with cube map; resolution 2.</figcaption>
+						</figure>
+						
+						<p>This also means that only vertex positions are needed when relying on cube maps. Texture coordinates, normal vectors, and tangent vectors can be omitted. If the original vertex normals are needed&mdash;for example for shadow sampling offsets&mdash;the object-space vertex positions can be used instead. Note that you need to use separate object-space position nodes for supplying vertex and fragment data in shader graph.</p>
+						
+						<figure>
+							<img src="texturing-a-sphere/object-space-position-as-normal.png" width="420" height="140">
+							<figcaption>Using object-space position as vertex normal vector.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../cube-sphere/index.html">Cube Sphere</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/procedural-meshes-05-uv-sphere/" class="repository">repository</a>
+					<a href="UV-Sphere.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

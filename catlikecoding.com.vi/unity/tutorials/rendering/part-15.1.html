@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/rendering/part-15/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/rendering/part-15/tutorial-image.jpg">
+		<meta property="og:title" content="Rendering 15">
+		<meta property="og:description" content="A Unity Rendering tutorial about how to render deferred lights. Part 15 of 20.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Rendering 15</title>
+		<link href="../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/rendering/part-15/#article",
+				"headline": "Rendering 15",
+				"alternativeHeadline": "Deferred Lights",
+				"datePublished": "2017-04-30",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Rendering tutorial about how to render deferred lights. Part 15 of 20.",
+				"image": "https://catlikecoding.com/unity/tutorials/rendering/part-15/tutorial-image.jpg",
+				"dependencies": "Unity 5.6.0",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/rendering/", "name": "Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				DeferredFogEffect: 1,
+				MyLightingShaderGUI: 1,
+				RenderingMode: 1,
+				RenderingSettings: 1,
+				SmoothnessSource: 1,
+				TangentSpaceVisualizer: 1
+			};
+			
+			var hasAnimations = false;
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../products/utilities/frame-rate-counter/index.html"><img src="../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../index.html">Unity</a></li>
+					<li><a href="../index.html">Tutorials</a></li>
+					<li><a href="index.html">Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Rendering 15</h1>
+					<p>Deferred Lights</p>
+					<ul>
+						<li>Use a custom light shader.</li>
+						<li>Decode LDR colors.</li>
+						<li>Add lighting in a separate pass.</li>
+						<li>Support directional, spotlight, and point lights.</li>
+						<li>Manually sample shadow maps.</li>
+					</ul>
+				</header>
+
+				<p>This is part 15 of a tutorial series about rendering. In the <a href="part-14.1.html">previous installment</a>, we added fog. Now we'll create our own deferred lights.</p>
+				
+				<p>From now on, the Rendering tutorials are made with Unity 5.6.0. This Unity version changes a few things in both the editor and shaders, but you should still be able to find your way.</p>
+				
+				<figure>
+					<img src="part-15/tutorial-image.jpg" width="512" height="256">
+					<figcaption>Playing with our own deferred lights.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Light Shader</h2>
+					
+					<p>We added support for the deferred rendering path in <a href="part-13.1.html">Rendering 13, Deferred Shading</a>. All we had to do was fill the G-buffers. The lights were rendered later. The tutorial briefly explained how those lights were added by Unity. This time, we'll render these lights ourselves.</p>
+					
+					<p>To test the lights, I'll use a simple scene with its ambient intensity set to zero. It is rendered with a deferred HDR camera.</p>
+					
+					<figure>
+						<img alt="lit" src="part-15/light-shader/scene-lit.png" width="380" height="180">
+						<img alt="unlit" src="part-15/light-shader/scene-unlit.png" width="380" height="180">
+						<figcaption>Test scene, with and without directional light.</figcaption>
+					</figure>
+					
+					<p>All objects in the scene are rendered to the G-buffers with our own shader. But the lights are rendered with Unity's default deferred shader, which is named <em translate="no">Hidden / Internal-DefferedShader</em>. You can verify this by going to the graphics settings via <em translate="no">Edit / Project Settings / Graphics</em> and switching the <em translate="no">Deferred</em> shader mode to <em translate="no">Custom shader</em>.</p>
+					
+					<figure>
+						<img src="part-15/light-shader/default-shader.png" width="320" height="128">
+						<figcaption>Default deferred light shader.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Using a Custom Shader</h3>
+						
+						<p>Each deferred light is rendered in a separate pass, modifying the colors of the image. Effectively, they're image effects, like our deferred fog shader from <a href="part-14.1.html">the previous tutorial</a>. Let's start with a simple shader that overwrites everything with black.</p>
+						
+						<pre translate="no" class="shader">Shader "Custom/DeferredShading" {
+	
+	Properties {
+	}
+
+	SubShader {
+
+		Pass {
+			Cull Off
+			ZTest Always
+			ZWrite Off
+			
+			CGPROGRAM
+
+			#pragma target 3.0
+			#pragma vertex VertexProgram
+			#pragma fragment FragmentProgram
+			
+			#pragma exclude_renderers nomrt
+			
+			#include "UnityCG.cginc"
+
+			struct VertexData {
+				float4 vertex : POSITION;
+			};
+
+			struct Interpolators {
+				float4 pos : SV_POSITION;
+			};
+
+			Interpolators VertexProgram (VertexData v) {
+				Interpolators i;
+				i.pos = UnityObjectToClipPos(v.vertex);
+				return i;
+			}
+
+			float4 FragmentProgram (Interpolators i) : SV_Target {
+				return 0;
+			}
+
+			ENDCG
+		}
+	}
+}</pre>
+						
+						<p>Instruct Unity to use this shader when rendering deferred lights.</p>
+						
+						<figure>
+							<img src="part-15/light-shader/custom-shader.png" width="320" height="40">
+							<figcaption>Using our custom shader.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>A Second Pass</h3>
+						
+						<p>After switching to our shader, Unity complains that it doesn't have enough passes. Apparently, a second pass is needed. Let's just duplicate the pass that we already have and see what happens.</p>
+						
+						<pre translate="no" class="shader">		Pass {
+			&hellip;
+		}
+
+		<ins>Pass {</ins>
+			<ins>&hellip;</ins>
+		<ins>}</ins></pre>
+						
+						<p>Unity now accepts our shader and uses it to render the directional light. As a result, everything becomes black. The only exception is the sky. The stencil buffer is used as a mask to avoid rendering there, because the directional light doesn't affect the background.</p>
+						
+						<figure>
+							<img alt="lit" src="part-15/light-shader/custom-lit.png" width="370" height="80">
+							<img alt="unlit" src="part-15/light-shader/custom-unlit.png" width="370" height="80">
+							<figcaption>Custom shader, lit and unlit.</figcaption>
+						</figure>
+						
+						<p>But what about that second pass? Remember that when HDR is disabled, light data is logarithmically encoded. A final pass is needed to reverse this encoding. That's what the second pass is for. So if you disabled HDR for the camera, the second pass of our shader will also be used, once.</p>
+					</section>
+					
+					<section>
+						<h3>Avoiding the Sky</h3>
+						
+						<p>When rendering in LDR mode, you might see the sky turn black too. This can happen in the scene view or the game view. If the sky turns black, the conversion pass doesn't correctly use the stencil buffer as a mask. To fix this, explicitly configure the stencil settings of the second pass. We should only render when we're dealing with a fragment that's not part of the background. The appropriate stencil value is provided via <code class="shader">_StencilNonBackground</code>.</p>
+						
+						<pre translate="no" class="shader">		Pass {
+			Cull Off
+			ZTest Always
+			ZWrite Off
+
+			<ins>Stencil {</ins>
+				<ins>Ref [_StencilNonBackground]</ins>
+				<ins>ReadMask [_StencilNonBackground]</ins>
+				<ins>CompBack Equal</ins>
+				<ins>CompFront Equal</ins>
+			<ins>}</ins>
+			
+			&hellip;
+		}</pre>
+						
+						<aside>
+							<h3>Can we debug the stencil buffer?</h3>
+							<div>
+								<p>Unfortunately, the frame debugger doesn't show any information about the stencil buffer, neither its contents nor how passes use it. Maybe this will be added in a future version.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Converting Colors</h3>
+						
+						<p>To make the second pass work, we have to convert the data in the light buffer. Like our fog shader, a full-screen quad is drawn with UV coordinates that we can use to sample the buffer.</p>
+						
+						<pre translate="no" class="shader">			struct VertexData {
+				float4 vertex : POSITION;
+				<ins>float2 uv : TEXCOORD0;</ins>
+			};
+
+			struct Interpolators {
+				float4 pos : SV_POSITION;
+				<ins>float2 uv : TEXCOORD0;</ins>
+			};
+
+			Interpolators VertexProgram (VertexData v) {
+				Interpolators i;
+				i.pos = UnityObjectToClipPos(v.vertex);
+				<ins>i.uv = v.uv;</ins>
+				return i;
+			}</pre>
+						
+						<p>The light buffer itself is made available to the shader via the <code class="shader">_LightBuffer</code> variable.</p>
+						
+						<pre translate="no" class="shader">			<ins>sampler2D _LightBuffer;</ins>
+
+			&hellip;
+
+			float4 FragmentProgram (Interpolators i) : SV_Target {
+				return <ins>tex2D(_LightBuffer, i.uv)</ins>;
+			}</pre>
+						
+						<figure>
+							<img src="part-15/light-shader/raw-ldr.png" width="370" height="80">
+							<figcaption>Raw LDR data, when unlit.</figcaption>
+						</figure>
+						
+						<p>LDR colors are logarithmically encoded, using the formula 2<sup>-C</sup>. To decode this, we have to use the formula -log<sub>2</sub> C.</p>
+						
+						<pre translate="no" class="shader">				return <ins>-log2(</ins>tex2D(_LightBuffer, i.uv)<ins>)</ins>;</pre>
+						
+						<figure>
+							<img src="part-15/light-shader/custom-unlit.png" width="370" height="80">
+							<figcaption>Decoded unlit LDR image.</figcaption>
+						</figure>
+						
+						<p>Now that we know that it works, enable HDR again.</p>
+					</section>
+					
+					<a href="part-15/light-shader/light-shader.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Directional Lights</h2>
+					
+					<p>The first pass takes care of rendering the lights, so it's going to be fairly complicated. Let's create an include file for it, named <em translate="no">MyDeferredShading.cginc</em>. Copy all code from the pass to this file.</p>
+					
+					<pre translate="no" class="shader"><ins>#if !defined(MY_DEFERRED_SHADING)</ins>
+<ins>#define MY_DEFERRED_SHADING</ins>
+
+<ins>#include "UnityCG.cginc"</ins>
+
+<ins>&hellip;</ins>
+
+<ins>#endif</ins></pre>
+					
+					<p>Then include <em translate="no">MyDeferredShading</em> in the first pass.</p>
+					
+					<pre translate="no" class="shader">		Pass {
+			Cull Off
+			ZTest Always
+			ZWrite Off
+
+			CGPROGRAM
+
+			#pragma vertex VertexProgram
+			#pragma fragment FragmentProgram
+
+			#pragma exclude_renderers nomrt
+
+			<ins>#include "MyDeferredShading.cginc"</ins>
+
+			ENDCG
+		}</pre>
+					
+					<p>Because we're supposed to add light to the image, we have to make sure that we don't erase what's already been rendered. We can do so by changing the blend mode to combine the full source and destination colors.</p>
+					
+					<pre translate="no" class="shader">			<ins>Blend One One</ins>
+			Cull Off
+			ZTest Always
+			ZWrite Off</pre>
+					
+					<p>We need shader variants for all possible light configurations. The <code class="shader">multi_compile_lightpass</code> compiler directive creates all keyword combinations that we need. The only exception is HDR mode. We have to add a separate multi-compile directive for that.</p>
+					
+					<pre translate="no" class="shader">			#pragma exclude_renderers nomrt
+
+			<ins>#pragma multi_compile_lightpass</ins>
+			<ins>#pragma multi_compile _ UNITY_HDR_ON</ins></pre>
+					
+					<p>Although this shader is used for all three light types, we'll first limit ourselves to directional lights only.</p>
+					
+					<section>
+						<h3>G-Buffer UV Coordinates</h3>
+						
+						<p>We need UV coordinates to sample from the G-buffers. Unfortunately, Unity doesn't supply light passes with convenient texture coordinates. Instead, we have to derive them from the clip-space position. To do so, we can use the <code class="shader">ComputeScreenPos</code>, which is defined in <code>UnityCG</code>. This function produces homogeneous coordinates, just like the clip-space coordinates, so we have to use a <code class="shader">float4</code> to store them.</p>
+						
+						<pre translate="no" class="shader">struct Interpolators {
+	float4 pos : SV_POSITION;
+	<ins>float4 uv : TEXCOORD0;</ins>
+};
+
+Interpolators VertexProgram (VertexData v) {
+	Interpolators i;
+	i.pos = UnityObjectToClipPos(v.vertex);
+	<ins>i.uv = ComputeScreenPos(i.pos);</ins>
+	return i;
+}</pre>
+						
+						<p>In the fragment program, we can compute the final 2D coordinates. As explained in <a href="part-7.1.html">Rendering 7, Shadows</a>, this has to happen after interpolation.</p>
+						
+						<pre translate="no" class="shader">float4 FragmentProgram (Interpolators i) : SV_Target {
+	<ins>float2 uv = i.uv.xy / i.uv.w;</ins>
+
+	return 0;
+}</pre>
+					</section>
+					
+					<section>
+						<h3>World Position</h3>
+						
+						<p>When we created our <a href="part-14.1.html">deferred fog image effect</a>, we had to figure out the fragment's distance from the camera. We did so by shooting rays from the camera through each fragment to the far plane, then scaling those by the fragment's depth value. We can use the same approach here to reconstruct the fragment's world position.</p>
+						
+						<p>In the case of directional lights, the rays for the four vertices of the quad are supplied as normal vectors. So we can just pass them through the vertex program and interpolate them.</p>
+						
+						<pre translate="no" class="shader">struct VertexData {
+	float4 vertex : POSITION;
+	<ins>float3 normal : NORMAL;</ins>
+};
+
+struct Interpolators {
+	float4 pos : SV_POSITION;
+    float4 uv : TEXCOORD0;
+    <ins>float3 ray : TEXCOORD1;</ins>
+};
+
+Interpolators VertexProgram (VertexData v) {
+	Interpolators i;
+	i.pos = UnityObjectToClipPos(v.vertex);
+	i.uv = ComputeScreenPos(i.pos);
+	<ins>i.ray = v.normal;</ins>
+	return i;
+}</pre>
+						
+						<p>We can find the depth value in the fragment program by sampling the <code class="shader">_CameraDepthTexture</code> texture and linearizing it, just like we did for the fog effect.</p>
+						
+						<pre translate="no" class="shader"><ins>UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);</ins>
+
+&hellip;
+
+float4 FragmentProgram (Interpolators i) : SV_Target {
+	float2 uv = i.uv.xy / i.uv.w;
+	
+	<ins>float depth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv);</ins>
+	<ins>depth = Linear01Depth(depth);</ins>
+
+	return 0;
+}</pre>
+						
+						<p>However, a big difference is that we supplied rays that reached the far plane to our fog shader. In this case, we are supplied with rays that reach the near plane. We have to scale them so we get rays that reach the far plane. This can be done by scaling the ray so its Z coordinate becomes 1, and multiplying it with the far plane distance.</p>
+						
+						<pre translate="no" class="shader">	depth = Linear01Depth(depth);
+
+	<ins>float3 rayToFarPlane = i.ray * _ProjectionParams.z / i.ray.z;</ins></pre>
+						
+						<p>Scaling this ray by the depth value gives us a position. The supplied rays are defined in view space, which is the camera's local space. So we end up with the fragment's position in view space as well.</p>
+						
+						<pre translate="no" class="shader">	float3 rayToFarPlane = i.ray * _ProjectionParams.z / i.ray.z;
+	<ins>float3 viewPos = rayToFarPlane * depth;</ins></pre>
+						
+						<p>The conversion from this space to world space is done with the <code class="shader">unity_CameraToWorld</code> matrix, which is defined in <em translate="no">ShaderVariables</em>.</p>
+						
+						<pre translate="no" class="shader">	float3 viewPos = rayToFarPlane * depth;
+	<ins>float3 worldPos = mul(unity_CameraToWorld, float4(viewPos, 1)).xyz;</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Reading G-Buffer Data</h3>
+						
+						<p>Next, we need access to the G-buffers to retrieve the surface properties. The buffers are made available via three <code class="shader">_CameraGBufferTexture</code> variables.</p>
+						
+						<pre translate="no" class="shader"><ins>sampler2D _CameraGBufferTexture0;</ins>
+<ins>sampler2D _CameraGBufferTexture1;</ins>
+<ins>sampler2D _CameraGBufferTexture2;</ins></pre>
+						
+						<p>We filled these same buffers in the <a href="part-13.1.html">Rendering 13, Deferred Shader</a> tutorial. Now we get to read from them. We need the albedo, specular tint, smoothness, and normal.</p>
+						
+						<pre translate="no" class="shader">	float3 worldPos = mul(unity_CameraToWorld, float4(viewPos, 1)).xyz;
+
+	<ins>float3 albedo = tex2D(_CameraGBufferTexture0, uv).rgb;</ins>
+	<ins>float3 specularTint = tex2D(_CameraGBufferTexture1, uv).rgb;</ins>
+	<ins>float3 smoothness = tex2D(_CameraGBufferTexture1, uv).a;</ins>
+	<ins>float3 normal = tex2D(_CameraGBufferTexture2, uv).rgb * 2 - 1;</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Computing BRDF</h3>
+						
+						<p>The BRDF functions are defined in <em translate="no">UnityPBSLighting</em>, so we'll have to include that file.</p>
+						
+						<pre translate="no" class="shader"><del>//#include "UnityCG.cginc"</del>
+<ins>#include "UnityPBSLighting.cginc"</ins></pre>
+
+						
+						<p>Now we only need three more bits of data before we can invoke the BRDF function in our fragment program. First is the view direction, which is found as usual.</p>
+						
+						<pre translate="no" class="shader">	float3 worldPos = mul(unity_CameraToWorld, float4(viewPos, 1)).xyz;
+	<ins>float3 viewDir = normalize(_WorldSpaceCameraPos - worldPos);</ins></pre>
+						
+						<p>Second is the surface reflectivity. We derive that from the specular tint. It's simply the strongest color component. We can use the <code class="shader">SpecularStrength</code> function to extract it.</p>
+						
+						<pre translate="no" class="shader">	float3 albedo = tex2D(_CameraGBufferTexture0, uv).rgb;
+	float3 specularTint = tex2D(_CameraGBufferTexture1, uv).rgb;
+	float3 smoothness = tex2D(_CameraGBufferTexture1, uv).a;
+	float3 normal = tex2D(_CameraGBufferTexture2, uv).rgb * 2 - 1;
+	<ins>float oneMinusReflectivity = 1 - SpecularStrength(specularTint);</ins></pre>
+						
+						<p>Third, we need the light data. Let's start with dummy lights.</p>
+						
+						<pre translate="no" class="shader">	float oneMinusReflectivity = 1 - SpecularStrength(specularTint);
+
+	<ins>UnityLight light;</ins>
+	<ins>light.color = 0;</ins>
+	<ins>light.dir = 0;</ins>
+	<ins>UnityIndirect indirectLight;</ins>
+	<ins>indirectLight.diffuse = 0;</ins>
+	<ins>indirectLight.specular = 0;</ins></pre>
+						
+						<p>Finally, we can compute the contribution of the light for this fragment, using the BRDF function.</p>
+						
+						<pre translate="no" class="shader">	indirectLight.specular = 0;
+
+	<ins>float4 color = UNITY_BRDF_PBS(</ins>
+    	<ins>albedo, specularTint, oneMinusReflectivity, smoothness,</ins>
+    	<ins>normal, viewDir, light, indirectLight</ins>
+    <ins>);</ins>
+
+	return <ins>color</ins>;</pre>
+					</section>
+					
+					<section>
+						<h3>Configuring the Light</h3>
+						
+						<p>Indirect light is not applicable here, so it remains black. But the direct light has to be configured so it matches the light that's currently being rendered. For a directional light, we need a color and a direction. These are made available via the <code class="shader">_LightColor</code> and <code class="shader">_LightDir</code> variables.</p>
+						
+						<pre translate="no" class="shader"><ins>float4 _LightColor, _LightDir;</ins></pre>
+						
+						<p>Let's create a separate function to setup the light. Simply copy the variables into a light structure and return it.</p>
+						
+						<pre translate="no" class="shader"><ins>UnityLight CreateLight () {</ins>
+	<ins>UnityLight light;</ins>
+	<ins>light.dir = _LightDir;</ins>
+	<ins>light.color = _LightColor.rgb;</ins>
+	<ins>return light;</ins>
+<ins>}</ins></pre>
+						
+						<p>Use this function in the fragment program.</p>
+						
+						<pre translate="no" class="shader">	UnityLight light = <ins>CreateLight()</ins>;
+<del>//	light.color = 0;</del>
+<del>//	light.dir = 0;</del></pre>
+						
+						<figure>
+							<img src="part-15/directional-lights/wrong-direction.png" width="380" height="180">
+							<figcaption>Light from the wrong direction.</figcaption>
+						</figure>
+						
+						<p>We finally get lighting, but it appears to come from the wrong direction. This happens because <code class="shader">_LightDir</code> is set to the direction in which the light is traveling. For our calculations, we need the direction from the surface to the light, so the opposite.</p>
+						
+						<pre translate="no" class="shader">	light.dir = <ins>-_LightDir</ins>;</pre>
+						
+						<figure>
+							<img src="part-15/directional-lights/correct-direction.png" width="380" height="180">
+							<figcaption>Directional light, without shadows.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Shadows</h3>
+						
+						<p>In <em translate="no">My Lighting</em>, we relied on the macros from <em translate="no">AutoLight</em> to determine the light attenuation caused by shadows. Unfortunately, that file wasn't written with deferred lights in mind. So we'll do the shadow sampling ourselves. The shadow map can be accessed via the <code>_ShadowMapTexture</code> variable.</p>
+						
+						<pre translate="no" class="shader"><ins>sampler2D _ShadowMapTexture;</ins></pre>
+						
+						<p>However, we cannot indiscriminately declare this variable. It is already defined for point and spotlight shadows in <em translate="no">UnityShadowLibrary</em>, which we indirectly include. So we should not define it ourselves, except when working with shadows for directional lights.</p>
+						
+						<pre translate="no" class="shader"><ins>#if defined (SHADOWS_SCREEN)</ins>
+	sampler2D _ShadowMapTexture;
+<ins>#endif</ins></pre>
+						
+						<p>To apply directional shadows, we simply have to sample the shadow texture and use it to attenuate the light color. Doing this in <code class="shader">CreateLight</code> means that the UV coordinates have to be added to it as a parameter.</p>
+						
+						<pre translate="no" class="shader">UnityLight CreateLight (<ins>float2 uv</ins>) {
+	UnityLight light;
+	light.dir = -_LightDir;
+	<ins>float shadowAttenuation = tex2D(_ShadowMapTexture, uv).r;</ins>
+	light.color = _LightColor.rgb <ins>* shadowAttenuation</ins>;
+	return light;
+}</pre>
+						
+						<p>Pass the UV coordinates to it in the fragment program.</p>
+						
+						<pre translate="no" class="shader">	UnityLight light = CreateLight(<ins>uv</ins>);</pre>
+						
+						<figure>
+							<img src="part-15/directional-lights/shadows.png" width="380" height="180">
+							<figcaption>Directional light with shadows.</figcaption>
+						</figure>
+						
+						<p>Of course this is only valid when the directional light has shadows enabled. If not, the shadow attenuation is always 1.</p>
+						
+						<pre translate="no" class="shader">	float shadowAttenuation = <ins>1;</ins>
+	<ins>#if defined(SHADOWS_SCREEN)</ins>
+		<ins>shadowAttenuation =</ins> tex2D(_ShadowMapTexture, uv).r;
+	<ins>#endif</ins>
+	light.color = _LightColor.rgb * shadowAttenuation;</pre>
+					</section>
+					
+					<section>
+						<h3>Fading Shadows</h3>
+						
+						<p>The shadow map is finite. It cannot cover the entire world. The larger an area it covers, the lower the resolution of the shadows. Unity has a maximum distance up to which shadows are drawn. Beyond that, there are no real-time shadows. This distance can be adjust via <em translate="no">Edit / Project Settings / Quality</em>.</p>
+						
+						<figure>
+							<img src="part-15/directional-lights/shadow-distance.png" width="296" height="130">
+							<figcaption>Shadow distance quality setting.</figcaption>
+						</figure>
+						
+						<p>When shadows approach this distance, they fade out. At least, that's what Unity's shaders do. Because we're manually sampling the shadow map, our shadows get truncated when the edge of the map is reached. The result is that shadows get sharply cut off or are missing beyond the fade distance.</p>
+						
+						<figure>
+							<img alt="complete" src="part-15/directional-lights/complete-shadows.png" width="300" height="160">
+							<img alt="disappearing" src="part-15/directional-lights/disappearing-shadows.png" width="300" height="160">
+							<figcaption>Large and small shadow distance.</figcaption>
+						</figure>
+						
+						<p>To fade the shadows, we must first know the distance at which they should be completely gone. This distance depends on how the directional shadows are projected. In <em translate="no">Stable Fit</em> mode the fading is spherical, centered on the middle of the map. In <em translate="no">Close Fit</em> mode it's based on the view depth.</p>
+						
+						<p>The <code class="shader">UnityComputeShadowFadeDistance</code> function can figure out the correct metric for us. It has the world position and view depth as parameters. It will either return the distance from the shadow center, or the unmodified view depth.</p>
+						
+						<pre translate="no" class="shader">UnityLight CreateLight (float2 uv<ins>, float3 worldPos, float viewZ</ins>) {
+	UnityLight light;
+	light.dir = -_LightDir;
+	float shadowAttenuation = 1;
+	#if defined(SHADOWS_SCREEN)
+		shadowAttenuation = tex2D(_ShadowMapTexture, uv).r;
+
+		<ins>float shadowFadeDistance =</ins>
+			<ins>UnityComputeShadowFadeDistance(worldPos, viewZ);</ins>
+	#endif
+	light.color = _LightColor.rgb * shadowAttenuation;
+	return light;
+}</pre>
+						
+						<p>The shadows should begin to fade as they approach the fade distance, completely disappearing once they reach it. The <code class="shader">UnityComputeShadowFade</code> function calculates the appropriate fade factor.</p>
+						
+						<pre translate="no" class="shader">		float shadowFadeDistance =
+			UnityComputeShadowFadeDistance(worldPos, viewZ);
+		<ins>float shadowFade = UnityComputeShadowFade(shadowFadeDistance);</ins></pre>
+						
+						<aside>
+							<h3>What do these functions look like?</h3>
+							<div>
+								<p>They are defined in <em translate="no">UnityShadowLibrary</em>. The <code class="shader">unity_ShadowFadeCenterAndType</code> variable contains the shadow center and the shadow type. The <code class="shader">_LightShadowData</code> variable's Z and W components contain the scale and offset used for fading.</p>
+								
+								<pre translate="no" class="shader">float UnityComputeShadowFadeDistance (float3 wpos, float z) {
+    float sphereDist = distance(wpos, unity_ShadowFadeCenterAndType.xyz);
+    return lerp(z, sphereDist, unity_ShadowFadeCenterAndType.w);
+}
+
+half UnityComputeShadowFade(float fadeDist) {
+    return saturate(fadeDist * _LightShadowData.z + _LightShadowData.w);
+}</pre>
+							</div>
+						</aside>
+						
+						<p>The shadow fade factor is a value from 0 to 1, which indicates how much the shadows should fade away. The actual fading can be done by simply adding this value to the shadow attenuation, and clamping to 0&ndash;1.</p>
+						
+						<pre translate="no" class="shader">		float shadowFade = UnityComputeShadowFade(shadowFadeDistance);
+		<ins>shadowAttenuation = saturate(shadowAttenuation + shadowFade);</ins></pre>
+						
+						<p>To make this work, supply the world position and view depth to <code class="shader">CreateLight</code> in our fragment program. The view depth is the Z component of the fragment's position in view space.</p>
+						
+						<pre translate="no" class="shader">	UnityLight light = CreateLight(uv<ins>, worldPos, viewPos.z</ins>);</pre>
+						
+						<figure>
+							<img src="part-15/directional-lights/fading-shadows.png" width="300" height="160">
+							<figcaption>Fading shadows.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Light Cookies</h3>
+						
+						<p>Another thing that we have to support are light cookies. The cookie texture is made available via <code class="shader">_LightTexture0</code>. Besides that, we also have to convert from world to light space, so we can sample the texture. The transformation for that is made available via the <code class="shader">unity_WorldToLight</code> matrix variable.</p>
+						
+						
+						<pre translate="no" class="shader"><ins>sampler2D _LightTexture0;</ins>
+<ins>float4x4 unity_WorldToLight;</ins></pre>
+						
+						<p>In <code class="shader">CreateLight</code>, use the matrix to convert the world position to light-space coordinates. Then use those to sample the cookie texture. Let's use a separate <code class="shader">attenuation</code> variable to keep track of the cookie's attenuation.</p>
+						
+						<pre translate="no" class="shader">	light.dir = -_LightDir;
+	<ins>float attenuation = 1;</ins>
+	float shadowAttenuation = 1;
+	
+	<ins>#if defined(DIRECTIONAL_COOKIE)</ins>
+		<ins>float2 uvCookie = mul(unity_WorldToLight, float4(worldPos, 1)).xy;</ins>
+		<ins>attenuation *= tex2D(_LightTexture0, uvCookie).w;</ins>
+	<ins>#endif</ins>
+
+	&hellip;
+	
+	light.color = _LightColor.rgb * <ins>(attenuation *</ins> shadowAttenuation<ins>)</ins>;
+</pre>
+						
+						<figure>
+							<img src="part-15/directional-lights/cookie.png" width="380" height="180">
+							<figcaption>Directional light with cookie.</figcaption>
+						</figure>
+						
+						<p>The results appear good, except when you pay close attention to geometry edges.</p>
+						
+						<figure>
+							<img src="part-15/directional-lights/cookie-artifacts.png" width="400" height="200">
+							<figcaption>Artifacts along edges.</figcaption>
+						</figure>
+						
+						<p>These artifacts appear when there is a large difference between the cookie coordinates of adjacent fragments. In those cases, the GPU chooses a mipmap level that is too low for the closest surface. Aras Pranckevičius <a href="http://aras-p.info/blog/2010/01/07/screenspace-vs-mip-mapping/">figured this one out</a> for Unity. The solution Unity uses is to apply a bias when sampling mip maps, so we'll do that too.</p>
+						
+						<pre translate="no" class="shader">		attenuation *= <ins>tex2Dbias</ins>(_LightTexture0, <ins>float4(</ins>uvCookie<ins>, 0, -8)</ins>).w;</pre>
+						
+						<figure>
+							<img src="part-15/directional-lights/cookie-biased.png" width="400" height="200">
+							<figcaption>Biased cookie sampling.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Supporting LDR</h3>
+						
+						<p>By now we can correctly render directional lights, but only in HDR mode. It goes wrong for LDR.</p>
+						
+						<figure>
+							<img src="part-15/directional-lights/ldr-dark.png" width="380" height="180">
+							<figcaption>Incorrect LDR colors.</figcaption>
+						</figure>
+						
+						<p>First, the encoded LDR colors have to be multiplied into the light buffer, instead of added. We can do so by changing the blend mode of our shader to <code class="shader">Blend DstColor Zero</code>. However, if we do that then HDR rendering will go wrong. Instead, we'll have to make the blend mode variable. Unity uses <code class="shader">_SrcBlend</code> and <code class="shader">_DstBlend</code> for this.</p>
+						
+						<pre translate="no" class="shader">			Blend <ins>[_SrcBlend] [_DstBlend]</ins></pre>
+						
+						<figure>
+							<img src="part-15/directional-lights/ldr-bright.png" width="380" height="180">
+							<figcaption>Different, but still incorrect.</figcaption>
+						</figure>
+						
+						<p>We also have to apply the 2<sup>-C</sup> conversion at the end of our fragment program, when <code class="shader">UNITY_HDR_ON</code> is not defined.</p>
+						
+						<pre translate="no" class="shader">	float4 color = UNITY_BRDF_PBS(
+    	albedo, specularTint, oneMinusReflectivity, smoothness,
+    	normal, viewDir, light, indirectLight
+    );
+    <ins>#if !defined(UNITY_HDR_ON)</ins>
+		<ins>color = exp2(-color);</ins>
+	<ins>#endif</ins>
+	return color;</pre>
+					</section>
+					
+					<a href="part-15/directional-lights/directional-lights.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Spotlights</h2>
+					
+					<p>Because directional lights affect everything, they are drawn as full-screen quads. In contrast, spotlights affect only the part of the scene that lies inside their cone. It is usually unnecessary to calculate spotlight lighting for the entire image. Instead, a pyramid is rendered that matches the spotlight's area of influence.</p>
+					
+					<section>
+						<h3>Drawing a Pyramid</h3>
+						
+						<p>Disable the directional light and use a spotlight instead. Because our shader only works correctly for directional lights, the result will be wrong. But it allows you to see which parts of the pyramid get rendered.</p>
+						
+						<figure>
+							<img src="part-15/spotlights/pyramid.png" width="260" height="200">
+							<figcaption>Parts of a pyramid.</figcaption>
+						</figure>
+						
+						<p>It turns out that the pyramid is rendered as a regular 3D object. Its back faces are culled, so we see the pyramid's front side. And it's only drawn when there's nothing in front of it. Besides that, a pass is added which sets the stencil buffer to limit the drawing to fragments that lie inside the pyramid volume. You can verify these settings via the frame debugger.</p>
+						
+						<figure>
+							<img src="part-15/spotlights/pyramid-drawing.png" width="210" height="74">
+							<figcaption>How it is drawn.</figcaption>
+						</figure>
+						
+						<p>This means that the culling and z-test settings of our shader are overruled. So let's just remove them from our shader.</p>
+						
+						<pre translate="no" class="shader">			Blend [_SrcBlend] [_DstBlend]
+<del>//			Cull Off</del>
+<del>//			ZTest Always</del>
+			ZWrite Off</pre>
+						
+						<p>This approach works when the spotlight volume is sufficiently far away from the camera. However, it fails when the light gets too close to the camera. When that happens, the camera could end up inside the volume. It is even possible that part of the near plane lies inside it, while the rest lies outside of it. In these cases, the stencil buffer cannot be used to limit the rendering.</p>
+						
+						<p>The trick used to still render the light is to draw the inside surface of the pyramid, instead of its outside surface. This is done by rendering its back faces instead of its front faces. Also, these surfaces are only rendered when they end up behind what's already rendered. This approach also covers all fragments that lie inside the spotlight's volume. But it ends up rendering too many fragments, as normally hidden parts of the pyramid now also get rendered. So it's only done when necessary.</p>
+						
+						<figure>
+							<img alt="scene" src="part-15/spotlights/pyramid-backside.png" width="260" height="200">
+							<img alt="frame debugger" src="part-15/spotlights/pyramid-backside-drawing.png" width="210" height="74">
+							<figcaption>Drawing the backside when close to the camera.</figcaption>
+						</figure>
+						
+						<p>If you move the camera or spotlight around near each other, you'll see Unity switch between these two rendering methods as needed. Once our shader works correctly for spotlights, there will be no visual difference between both approaches.</p>
+					</section>
+					
+					<section>
+						<h3>Supporting Multiple Light Types</h3>
+						
+						<p>Currently, <code class="shader">CreateLight</code> only works for directional lights. Let's make sure that the code specific to directional lights is only used when appropriate.</p>
+						
+						<pre translate="no" class="shader">UnityLight CreateLight (float2 uv, float3 worldPos, float viewZ) {
+	UnityLight light;
+<del>//	light.dir = -_LightDir;</del>
+	float attenuation = 1;
+	float shadowAttenuation = 1;
+
+	<ins>#if defined(DIRECTIONAL) || defined(DIRECTIONAL_COOKIE)</ins>
+		<ins>light.dir = -_LightDir;</ins>
+
+		#if defined(DIRECTIONAL_COOKIE)
+			float2 uvCookie = mul(unity_WorldToLight, float4(worldPos, 1)).xy;
+			attenuation *= tex2Dbias(_LightTexture0, float4(uvCookie, 0, -8)).w;
+		#endif
+
+		#if defined(SHADOWS_SCREEN)
+			shadowed = true;
+			shadowAttenuation = tex2D(_ShadowMapTexture, uv).r;
+
+			float shadowFadeDistance =
+				UnityComputeShadowFadeDistance(worldPos, viewZ);
+			float shadowFade = UnityComputeShadowFade(shadowFadeDistance);
+			shadowAttenuation = saturate(shadowAttenuation + shadowFade);
+		#endif
+	<ins>#else</ins>
+		<ins>light.dir = 1;</ins>
+	<ins>#endif</ins>
+
+	light.color = _LightColor.rgb * (attenuation * shadowAttenuation);
+	return light;
+}</pre>
+						
+						<p>Although the shadow fading works based on the directional shadow map, the shadows of the other light types are faded too. This ensures that all shadows fade the same way, instead of only some shadows. Thus, the shadow fading code applies to all lights, as long as there are shadows. So let's move that code outside of the light-specific block.</p>
+						
+						<p>We can use a boolean to control whether the shadow-fading code is used. As the boolean is as a constant value, the code will be eliminated if it remains false.</p>
+						
+						<pre translate="no" class="shader">UnityLight CreateLight (float2 uv, float3 worldPos, float viewZ) {
+	UnityLight light;
+	float attenuation = 1;
+	float shadowAttenuation = 1;
+	<ins>bool shadowed = false;</ins>
+
+	#if defined(DIRECTIONAL) || defined(DIRECTIONAL_COOKIE)
+		&hellip;
+
+		#if defined(SHADOWS_SCREEN)
+			<ins>shadowed = true;</ins>
+			shadowAttenuation = tex2D(_ShadowMapTexture, uv).r;
+
+<del>//			float shadowFadeDistance =</del>
+<del>//				UnityComputeShadowFadeDistance(worldPos, viewZ);</del>
+<del>//			float shadowFade = UnityComputeShadowFade(shadowFadeDistance);</del>
+<del>//			shadowAttenuation = saturate(shadowAttenuation + shadowFade);</del>
+		#endif
+	#else
+		light.dir = 1;
+	#endif
+
+	<ins>if (shadowed) {</ins>
+		<ins>float shadowFadeDistance =</ins>
+			<ins>UnityComputeShadowFadeDistance(worldPos, viewZ);</ins>
+		<ins>float shadowFade = UnityComputeShadowFade(shadowFadeDistance);</ins>
+		<ins>shadowAttenuation = saturate(shadowAttenuation + shadowFade);</ins>
+	<ins>}</ins>
+
+	light.color = _LightColor.rgb * (attenuation * shadowAttenuation);
+	return light;
+}</pre>
+						
+						<p>Lights that aren't directional have a position. It is made available via <code class="shader">_LightPos</code>.</p>
+						
+						<pre translate="no" class="shader">float4 _LightColor, _LightDir<ins>, _LightPos;</ins></pre>
+						
+						<p>Now we can determine the light vector and light direction for spotlights.</p>
+						
+						<pre translate="no" class="shader">	#else
+		<ins>float3 lightVec = _LightPos.xyz - worldPos;</ins>
+		light.dir = <ins>normalize(lightVec)</ins>;
+	#endif</pre>
+					</section>
+					
+					<section>
+						<h3>World Position Again</h3>
+						
+						<p>The light direction doesn't appear to be correct, the result is black. This happens because the world position is computed incorrectly for spotlights. As we're rendering a pyramid somewhere in the scene, we don't have a convenient full-screen quad with rays stored in the normal channel. Instead, <code class="shader">MyVertexProgram</code> has to derive the rays from the vertex positions. This is done by converting the points to view space, for which we can use the <code class="shader">UnityObjectToViewPos</code> function.</p>
+						
+						<pre translate="no" class="shader">	i.ray = <ins>UnityObjectToViewPos(v.vertex)</ins>;</pre>
+						
+						<p>However, this produces rays with the wrong orientation. We have to negate their X and Y coordinates.</p>
+						
+						<pre translate="no" class="shader">	i.ray = UnityObjectToViewPos(v.vertex) <ins>* float3(-1, -1, 1)</ins>;</pre>
+						
+						<figure>
+							<img src="part-15/spotlights/light-direction.png" width="280" height="190">
+							<figcaption>Correct world position.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>How does <code class="shader">UnityObjectToViewPos</code> work?</h3>
+							<div>
+								<p>The function is defined in <em translate="no">UnityCG</em>. It first converts the point to world space, then uses the view matrix to convert it to camera space.</p>
+								
+								<pre translate="no" class="shader">inline float3 UnityObjectToViewPos (in float3 pos) {
+    return
+		mul(UNITY_MATRIX_V, mul(unity_ObjectToWorld, float4(pos, 1.0))).xyz;
+}</pre>
+							</div>
+						</aside>
+						
+						<p>This alternative approach works when light geometry is rendered in the scene. When a full-screen quad is used, we should just use the vertex normals. Unity tells us which case we're dealing with via the <code class="shader">_LightAsQuad</code> variable.</p>
+						
+						<pre translate="no" class="shader"><ins>float _LightAsQuad;</ins></pre>
+						
+						<p>If it's set to 1, we're dealing with a quad and can use the normals. Otherwise, we have to use <code class="shader">UnityObjectToViewPos</code>.</p>
+						
+						<pre translate="no" class="shader">	i.ray = <ins>lerp(</ins>
+		UnityObjectToViewPos(v.vertex) * float3(-1, -1, 1)<ins>,</ins>
+		<ins>v.normal,</ins>
+		<ins>_LightAsQuad</ins>
+	<ins>);</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Cookie Attenuation</h3>
+						
+						<p>The spotlight's conic attenuation is created via a cookie texture, whether it's the default circle or a custom cookie. We can begin by copying the cookie code of the directional light.</p>
+						
+						<pre translate="no" class="shader">		float3 lightVec = _LightPos.xyz - worldPos;
+		light.dir = normalize(lightVec);
+
+		<ins>float2 uvCookie = mul(unity_WorldToLight, float4(worldPos, 1)).xy;</ins>
+		<ins>attenuation *= tex2Dbias(_LightTexture0, float4(uvCookie, 0, -8)).w;</ins></pre>
+						
+						<p>However, spotlight cookies get larger the further away from the light's position you go. This is done with a perspective transformation. So the matrix multiplication produces 4D homogeneous coordinates. To end up with regular 2D coordinates, we have to divide X and Y by W.</p>
+						
+						<pre translate="no" class="shader">		<ins>float4</ins> uvCookie = mul(unity_WorldToLight, float4(worldPos, 1<ins>));</ins>
+		<ins>uvCookie.xy /= uvCookie.w;</ins>
+		attenuation *= tex2Dbias(_LightTexture0, float4(uvCookie<ins>.xy</ins>, 0, -8)).w;
+</pre>
+						
+						<figure>
+							<img src="part-15/spotlights/cookie-attenuation.png" width="280" height="210">
+							<figcaption>Cookie attenuation.</figcaption>
+						</figure>
+						
+						<p>This actually results in two light cones, one forward and one backward. The backward cone usually ends up outside of the rendered area, but this is not guaranteed. We only want the forward cone, which corresponds with a negative W coordinate.</p>
+						
+						<pre translate="no" class="shader">		attenuation *= tex2Dbias(_LightTexture0, float4(uvCookie.xy, 0, -8)).w;
+		<ins>attenuation *= uvCookie.w &lt; 0;</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Distance Attenuation</h3>
+						
+						<p>The light from a spotlight also attenuates based on distance. This attenuation is stored in a lookup texture, which is made available via <code class="shader">_LightTextureB0</code>.</p>
+						
+						<pre translate="no" class="shader">sampler2D _LightTexture0<ins>, _LightTextureB0</ins>;</pre>
+						
+						<p>The texture is designed so it has to be sampled with the squared light distance, scaled by the light's range. The range is stored in the fourth component of <code class="shader">_LightPos</code>. Which of the texture's channels should be used varies per platform and is defined by the <code class="shader">UNITY_ATTEN_CHANNEL</code> macro.</p>
+						
+						<pre translate="no" class="shader">		light.dir = normalize(lightVec);
+
+		<ins>attenuation *= tex2D(</ins>
+			<ins>_LightTextureB0,</ins>
+			<ins>(dot(lightVec, lightVec) * _LightPos.w).rr</ins>
+		<ins>).UNITY_ATTEN_CHANNEL;</ins>
+
+		float4 uvCookie = mul(unity_WorldToLight, float4(worldPos, 1));</pre>
+						
+						<figure>
+							<img src="part-15/spotlights/distance-attenuation.png" width="280" height="210">
+							<figcaption>Cookie and distance attenuation.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Shadows</h3>
+						
+						<p>When the spotlight has shadows, the <code class="shader">SHADOWS_DEPTH</code> keyword is defined.</p>
+						
+						<pre translate="no" class="shader">		float4 uvCookie = mul(unity_WorldToLight, float4(worldPos, 1));
+		uvCookie.xy /= uvCookie.w;
+		attenuation *= tex2Dbias(_LightTexture0, float4(uvCookie.xy, 0, -8)).w;
+
+		<ins>#if defined(SHADOWS_DEPTH)</ins>
+			<ins>shadowed = true;</ins>
+		<ins>#endif</ins></pre>
+						
+						<p>Spotlights and directional lights use the same variable to sample their shadow map. In the case of spotlights, we can use <code class="shader">UnitySampleShadowmap</code> to take care of the details of sampling hard or soft shadows. We have to supply it with the fragment position in shadow space. The first matrix in the <code class="shader">unity_WorldToShadow</code> array can be used to convert from world to shadow space.</p>
+						
+						<pre translate="no" class="shader">			shadowed = true;
+			<ins>shadowAttenuation = UnitySampleShadowmap(</ins>
+				<ins>mul(unity_WorldToShadow[0], float4(worldPos, 1))</ins>
+			<ins>);</ins></pre>
+						
+						<figure>
+							<img src="part-15/spotlights/shadows.png" width="280" height="210">
+							<figcaption>Spotlight with shadows.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="part-15/spotlights/spotlights.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Point Lights</h2>
+					
+					<p>Points lights use the same light vector, direction, and distance attenuation as spotlights. So they can share that code. The rest of the spotlight code should only be used when the <code class="shader">SPOT</code> keyword is defined.</p>
+					
+					<pre translate="no" class="shader">	#if defined(DIRECTIONAL) || defined(DIRECTIONAL_COOKIE)
+		&hellip;
+	#else
+		float3 lightVec = _LightPos.xyz - worldPos;
+		light.dir = normalize(lightVec);
+
+		attenuation *= tex2D(
+			_LightTextureB0,
+			(dot(lightVec, lightVec) * _LightPos.w).rr
+		).UNITY_ATTEN_CHANNEL;
+
+		<ins>#if defined(SPOT)</ins>
+			float4 uvCookie = mul(unity_WorldToLight, float4(worldPos, 1));
+			uvCookie.xy /= uvCookie.w;
+			attenuation *=
+				tex2Dbias(_LightTexture0, float4(uvCookie.xy, 0, -8)).w;
+			attenuation *= uvCookie.w &lt; 0;
+
+			#if defined(SHADOWS_DEPTH)
+				shadowed = true;
+				shadowAttenuation = UnitySampleShadowmap(
+					mul(unity_WorldToShadow[0], float4(worldPos, 1))
+				);
+			#endif
+		<ins>#endif</ins>
+	#endif</pre>
+					
+					<p>This is already enough to get point lights working. They are rendered the same as spotlights, except that an icosphere is used instead of a pyramid.</p>
+					
+					<figure>
+						<img src="part-15/point-lights/point-light.png" width="340" height="200">
+						<figcaption>High-intensity point light.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Shadows</h3>
+						
+						<p>The shadows of point lights are stored in a cube map. <code class="shader">UnitySampleShadowmap</code> takes care of the sampling for us. In this case, we have to provide it with a vector going from light to surface, to sample the cube map. This is the opposite of the light vector.</p>
+						
+						<pre translate="no" class="shader">		#if defined(SPOT)
+			&hellip;
+		#else
+			<ins>#if defined(SHADOWS_CUBE)</ins>
+				<ins>shadowed = true;</ins>
+				<ins>shadowAttenuation = UnitySampleShadowmap(-lightVec);</ins>
+			<ins>#endif</ins>
+		#endif</pre>
+						
+						<figure>
+							<img src="part-15/point-lights/shadowed.png" width="340" height="200">
+							<figcaption>Point light with shadows.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Cookies</h3>
+						
+						<p>Point light cookies are also made available via <code class="shader">_LightTexture0</code>. However, in this case we need a cube map instead of a regular texture.</p>
+						
+						<pre translate="no" class="shader"><del>//sampler2D _LightTexture0, _LightTextureB0;</del>
+<ins>#if defined(POINT_COOKIE)</ins>
+	<ins>samplerCUBE _LightTexture0;</ins>
+<ins>#else</ins>
+	<ins>sampler2D _LightTexture0;</ins>
+<ins>#endif</ins>
+
+<ins>sampler2D _LightTextureB0;</ins>
+float4x4 unity_WorldToLight;</pre>
+						
+						<p>To sample the cookie, convert the fragment's world position to light space and use that to sample the cube map.</p>
+						
+						<pre translate="no" class="shader">		#else
+			<ins>#if defined(POINT_COOKIE)</ins>
+				<ins>float3 uvCookie =</ins>
+					<ins>mul(unity_WorldToLight, float4(worldPos, 1)).xyz;</ins>
+				<ins>attenuation *=</ins>
+					<ins>texCUBEbias(_LightTexture0, float4(uvCookie, -8)).w;</ins>
+			<ins>#endif</ins>
+			
+			#if defined(SHADOWS_CUBE)
+				shadowed = true;
+				shadowAttenuation = UnitySampleShadowmap(-lightVec);
+			#endif
+		#endif</pre>
+						
+						<figure>
+							<img src="part-15/point-lights/cookie.png" width="340" height="200">
+							<figcaption>Point light with cookie.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>The point light cookie texture doesn't work?</h3>
+							<div>
+								<p>If you've originally imported the cookie's cube map texture with an older Unity version, it might have the wrong import settings. This only happens with cube maps. Make sure that its <em translate="no">Texture Type</em> is <em translate="no">Cookie</em>, <em translate="no">Mapping</em> is set to <em translate="no">Auto</em>, and <em translate="no">Light Type</em> is <em translate="no">Point</em>.</p>
+								
+								<figure>
+									<img src="part-15/point-lights/import-settings.png" width="320" height="160">
+									<figcaption>Point cookie texture import settings.</figcaption>
+								</figure>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Skipping Shadows</h3>
+						
+						<p>We are now able to render all dynamic lights with our own shader. While we don't pay much attention to optimizations at this point, there is one potentially large optimization worth considering.</p>
+						
+						<p>Fragments that end up beyond the shadow fade distance won't be shadowed. However, we're still sampling their shadows, which can be expensive. We can avoid this by branching based on the shadow fade factor. It it approaches 1, then we can skip the shadow attenuation completely.</p>
+						
+						<pre translate="no" class="shader">	if (shadowed) {
+		float shadowFadeDistance =
+			UnityComputeShadowFadeDistance(worldPos, viewZ);
+		float shadowFade = UnityComputeShadowFade(shadowFadeDistance);
+		shadowAttenuation = saturate(shadowAttenuation + shadowFade);
+
+		<ins>UNITY_BRANCH</ins>
+		<ins>if (shadowFade > 0.99) {</ins>
+			<ins>shadowAttenuation = 1;</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>However, branches are potentially expensive themselves. It's only an improvement because this is a coherent branch. Except near the edge of the shadow region, all fragments either fall inside or outside of it. But this only matters if the GPU can take advantage of this. <em translate="no">HLSLSupport</em> defines the <code class="shader">UNITY_FAST_COHERENT_DYNAMIC_BRANCHING</code> macro when this should be the case.</p>
+						
+						<pre translate="no" class="shader">		<ins>#if defined(UNITY_FAST_COHERENT_DYNAMIC_BRANCHING)</ins>
+			UNITY_BRANCH
+			if (shadowFade > 0.99) {
+				shadowAttenuation = 1;
+			}
+		<ins>#endif</ins></pre>
+						
+						<p>Even then, it is only really worth it when the shadows require multiple texture samples. This is the case for soft spotlight and point light shadows, which is indicated with the <code class="shader">SHADOWS_SOFT</code> keyword. Directional shadows always require a single texture sample, so that's cheap.</p>
+						
+						<pre translate="no" class="shader">		#if defined(UNITY_FAST_COHERENT_DYNAMIC_BRANCHING) <ins>&amp;&amp; defined(SHADOWS_SOFT)</ins>
+			UNITY_BRANCH
+			if (shadowFade > 0.99) {
+				shadowAttenuation = 1;
+			}
+		#endif</pre>
+						
+						<p>The next tutorial is <a href="part-16/index.html">Static Lighting</a>.</p>
+					</section>
+					
+					<a href="part-15/point-lights/point-lights.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="part-15/Rendering-15.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../tutorials.js"></script>
+	</body>
+</html>

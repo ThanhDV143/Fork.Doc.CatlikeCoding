@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/object-management/reusing-objects/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/object-management/reusing-objects/tutorial-image.jpg">
+		<meta property="og:title" content="Reusing Objects">
+		<meta property="og:description" content="A Unity Object Management tutorial covering the reuse of objects via pooling.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Reusing Objects</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/object-management/reusing-objects/#article",
+				"headline": "Reusing Objects",
+				"alternativeHeadline": "Object Pools",
+				"datePublished": "2018-06-21",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Object Management tutorial covering the reuse of objects via pooling.",
+				"image": "https://catlikecoding.com/unity/tutorials/object-management/reusing-objects/tutorial-image.jpg",
+				"dependencies": "Unity 2017.4.4f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/object-management/", "name": "Object Management" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				Game: 1,
+				GameDataReader: 1,
+				GameDataWriter: 1,
+				PersistableObject: 1,
+				PersistentStorage: 1,
+				Shape: 1,
+				ShapeFactory: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Object Management</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Reusing Objects</h1>
+					<p>Object Pools</p>
+					<ul>
+						<li>Destroy shapes.</li>
+						<li>Automate creation and destruction.</li>
+						<li>Build a simple GUI.</li>
+						<li>Track memory allocations with the profiler.</li>
+						<li>Use objects pools to recycle shapes.</li>
+					</ul>
+				</header>
+				
+				<p>This is the third tutorial in a series about <a href="../index.html">Object Management</a>. It adds the ability to destroy shapes, followed by a way to reuse them.
+				
+				<p>This tutorial is made with Unity 2017.4.4f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>An opportunity to recycle many shapes.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Destroying Objects</h2>
+					
+					<p>If we can only create shapes, then their numbers can only increase, until we begin a new game. But nearly always when something gets created in a game, it can also be destroyed. So let's make it possible to destroy shapes.</p>
+					
+					<section>
+						<h3>A Key for Destruction</h3>
+						
+						<p>There is already a key to create a shape, so it makes sense to also add a key to destroy one. Add a key variable for that to <code>Game</code>. While <em translate="no">D</em> might seem like a reasonable default, it's part of the common <em translate="no">WASD</em> key configuration for movement. Let's use <em translate="no">X</em> instead, which is a common symbol for cancellation or termination and sits next to <em translate="no">C</em> on most keyboards.</p>
+						
+						<pre translate="no">	public KeyCode createKey = KeyCode.C;
+	<ins>public KeyCode destroyKey = KeyCode.X;</ins></pre>
+						
+						<figure>
+							<img src="destroying-objects/destroy-key.png" width="320" height="38">
+							<figcaption>Create and destroy key configuration.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Destroying a Random Shape</h3>
+						
+						<p>Add a <code>DestroyShape</code> method to <code>Game</code> to take care of the destruction of a shape. Like we create random shapes, we also destroy random shapes. This is done by picking a random index for the shape list and destroying the corresponding object, by using the <code>Destroy</code> method.</p>
+						
+						<pre translate="no">	<ins>void DestroyShape () {</ins>
+		<ins>int index = Random.Range(0, shapes.Count);</ins>
+		<ins>Destroy(shapes[index]);</ins>
+	<ins>}</ins></pre>
+						
+						<p>But this is only valid if there currently are shapes. That might not be the case, either because none have been created or loaded yet, or all existing ones have already been destroyed. So we can only destroy a shape when the list contains at least one. If not, the destroy command will simply do nothing.</p>
+						
+						<pre translate="no">	void DestroyShape () {
+		<ins>if (shapes.Count > 0) {</ins>
+			int index = Random.Range(0, shapes.Count);
+			Destroy(shapes[index]);
+		<ins>}</ins>
+	}</pre>
+						
+						<p><code>Destroy</code> works on either a game object, a component, or an asset. To get rid of the entire shape object and not just its <code>Shape</code> component, we have to explicitly destroy the game object that the component is a part of. We can access it via the component's <code>gameObject</code> property.</p>
+						
+						<pre translate="no">		Destroy(shapes[index]<ins>.gameObject</ins>);</pre>
+						
+						<p>Now that our <code>DestroyShape</code> method is functional, invoke it in <code>Update</code> when the destroy key is pressed by the player.</p>
+						
+						<pre translate="no">	void Update () {
+		if (Input.GetKeyDown(createKey)) {
+			CreateShape();
+		}
+		<ins>else if (Input.GetKeyDown(destroyKey)) {</ins>
+			<ins>DestroyShape();</ins>
+		<ins>}</ins>
+		&hellip;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Keeping the List Correct</h3>
+						
+						<p>We're now able to both create and destroy objects. However, when trying to destroy multiple shapes you're likely to get an error. <em translate="no">MissingReferenceException: The object of type 'Shape' has been destroyed but you are still trying to access it.</em></p>
+						
+						<p>The error occurs because although we have destroyed a shape, we haven't removed it from the <code>shapes</code> list. Thus, the list still contains references to the components of the destroyed game objects. They still exist in memory, in a zombie-like state. When trying to destroy such an object a second time, Unity reports an error.</p>
+						
+						<p>The solution is to properly get rid of the references to the shape that we just destroyed. So after destroying a shape, remove it from the list. This can be done by invoking the list's <code>RemoveAt</code> method, with the index of the element to be removed as a parameter.</p>
+						
+						<pre translate="no">	void DestroyShape () {
+		if (shapes.Count > 0) {
+			int index = Random.Range(0, shapes.Count);
+			Destroy(shapes[index].gameObject);
+			<ins>shapes.RemoveAt(index);</ins>
+		}
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Efficient Removal</h3>
+						
+						<p>While this approach works, it is not the most efficient way to remove an element from the list. Because lists are ordered, removing one element leaves a gap in the list. Conceptually, this gap is easy to get rid of. The neighboring elements of the removed element simply become neighbors of each other.</p>
+						
+						<figure>
+							<img src="destroying-objects/list-conceptual.png" width="315" height="225">
+							<figcaption>Removing element D, conceptually.</figcaption>
+						</figure>
+						
+						<p>However, the <code>List</code> class is implemented with arrays, so the neighbor relationship cannot be manipulated directly. Instead, the gap is eliminated by shifting the next element into this gap, so it comes directly after the element before the one that was removed. This moves the gap one step towards the end of the list. This process is repeated until the gap falls off the end of the list.</p>
+						
+						<figure>
+							<img src="destroying-objects/list-with-order.png" width="315" height="320">
+							<figcaption>Slow removal, preserving order.</figcaption>
+						</figure>
+						
+						<p>But we don't care about the order of the shapes that we keep track of. So all this shifting of elements is not needed. While we cannot technically avoid it, we can skip nearly all the work by manually grabbing the last element and putting that in the place of the destroyed element, effectively teleporting the gap to the end of the list. Then we remove the last element.</p>
+						
+						<figure>
+							<img src="destroying-objects/list-without-order.png" width="315" height="165">
+							<figcaption>Quick removal, without preserving order.</figcaption>
+						</figure>
+						
+						<pre translate="no">	void DestroyShape () {
+		if (shapes.Count > 0) {
+			int index = Random.Range(0, shapes.Count);
+			Destroy(shapes[index].gameObject);
+			<ins>int lastIndex = shapes.Count - 1;</ins>
+			<ins>shapes[index] = shapes[lastIndex];</ins>
+			shapes.RemoveAt(<ins>lastIndex</ins>);
+		}
+	}</pre>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Continuous Creation and Destruction</h2>
+					
+					<p>Creating and destroying shapes one at a time isn't a quick way to populate or depopulate the game. What if we'd want to continuously create and destroy them? We could do that by rapidly pressing the keys again and again, but that will get tiresome quickly. So let's automate it.</p>
+					
+					<p>At what speed should shapes be created? We'll make that configurable. And this time we're not going to control that via the inspector. Instead, we'll make it part of the game itself, so the player can vary the speed as they like.</p>
+					
+					<section>
+						<h3>GUI</h3>
+						
+						<p>To control the creation speed, we'll add a graphical user interface&mdash;a GUI&mdash;to the scene. A GUI needs a canvas, which can be created via <em translate="no">GameObject / UI / Canvas</em>. That adds two new game objects to the scene. First the canvas itself, followed by an event system that makes it possible to interact with it.</p>
+						
+						<figure>
+							<img src="continuous-creation-and-destruction/canvas-event-system.png" width="227" height="118">
+							<figcaption>Canvas and event system objects.</figcaption>
+						</figure>
+						
+						<p>Both objects have multiple components, but we don't need to bother with their details. We can use them as they are, without changing anything. By default, the canvas act as an overlay, getting rendered on top of the scene in the game window, in screen space.</p>
+						
+						<p>Although the screen-space canvas logically doesn't exist in 3D space, it still shows up in the scene window. This allows us to edit it, but that's hard to do while the scene window is in 3D mode. The GUI isn't aligned with the scene camera, and its scale is one unit per pixel, so it ends up like an enormous plane somewhere in the scene. When editing the GUI, you typically switch the scene window to 2D mode, which you can toggle via the <em translate="no">2D</em> button on the left side of its toolbar.</p>
+						
+						<figure>
+							<img src="continuous-creation-and-destruction/scene-window-2d.png" width="260" height="36">
+							<figcaption>Scene window in 2D mode.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Creation Speed Label</h3>
+						
+						<p>Before adding controls for the creation speed, we'll add a label that tells the player what it's about. We do this by adding a text object, via <em translate="no">GameObject / UI / Text</em> and naming it <em translate="no">Creation Speed Label</em>. It automatically becomes a child of the canvas. In fact, if we didn't have a canvas, one would have been created automatically when we made the text object.</p>
+						
+						<figure>
+							<img src="continuous-creation-and-destruction/creation-speed-label-hierarchy.png" width="227" height="50">
+							<figcaption>Label object for creation speed.</figcaption>
+						</figure>
+						
+						<p>GUI objects function like all other game objects, except that they have a <em translate="no">Rect Transform</em> component, which extends the regular <em translate="no">Transform</em> component. It controls not only the object's position, rotation, and scale, but also its rectangular size, pivot point, and anchors.</p>
+						
+						<p>The anchors control how the GUI object is positioned relative to its parent container, and how it reacts to size changes of its parent. Let's put the label at the top left of the game window. To keep it there no matter what window size we end up with, set its anchors to top left. You can do this by clicking the <em translate="no">Anchor</em> square and selecting the appropriate option that pops up. Also change the displayed text to <em translate="no">Creation Speed</em>.</p>
+						
+						<figure>
+							<img src="continuous-creation-and-destruction/creation-speed-label-inspector.png" width="320" height="266">
+							<figcaption>Anchors set to top left.</figcaption>
+						</figure>
+						
+						<p>Position the label in the top left corner of the canvas, leaving a little margin between it and the edge of the game window.</p>
+						
+						<figure>
+							<img src="continuous-creation-and-destruction/creation-speed-label-scene.png" width="230" height="80">
+							<figcaption>Positioned at top left of canvas.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Creation Speed Slider</h3>
+						
+						<p>We'll use a slider to control the creation speed. Add one via <em translate="no">GameObject / UI / Slider</em>. This creates a hierarchy of multiple objects that together form a GUI slider widget. Name its local root object <em translate="no">Creation Speed Slider</em>.</p>
+						
+						<figure>
+							<img src="continuous-creation-and-destruction/creation-speed-slider-hierarchy.png" width="227" height="146">
+							<figcaption>Slider hierarchy for creation speed.</figcaption>
+						</figure>
+						
+						<p>Position the slider directly below the label. By default, they have the same width, and the label has plenty of empty space below the text. So you can drag the slider up to the label's bottom edge and it will snap adjacent to it.</p>
+						
+						<figure>
+							<img src="continuous-creation-and-destruction/creation-speed-slider-scene.png" width="230" height="96">
+							<figcaption>Positioned slider.</figcaption>
+						</figure>
+						
+						<p>The <code>Slider</code> component of the slider's local root object has a bunch of settings that we'll leave at their default values. The only thing that we'll change is its <em translate="no">Max Value</em>, which defines the maximum creation speed, expressed in shapes created per second. let's set it to 10.</p>
+						
+						<figure>
+							<img src="continuous-creation-and-destruction/creation-speed-slider-inspector.png" width="320" height="96">
+							<figcaption>Maximum set to 10.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Setting the Creation Speed</h3>
+						
+						<p>The slider already works, you can adjust it while in play mode. But it doesn't affect anything yet. We have to add a creation speed to <code>Game</code> first, so there's something to change. We'll give it a default public <code>CreationSpeed</code> property.</p>
+						
+						<pre translate="no">	<ins>public float CreationSpeed { get; set; }</ins></pre>
+						
+						<p>The slider's inspector has an <em translate="no">On Value Changed (Single)</em> box at its bottom. This represents a list of methods or properties that get invoked after the slider's value has changed. The <em translate="no">(Single)</em> behind <em translate="no">On Value Changed</em> indicates that the value that got changed is a float. Currently the list is empty. Change that by clicking the <em translate="no">+</em> button at the bottom of the box.</p>
+						
+						<figure>
+							<img src="continuous-creation-and-destruction/creation-speed-slider-not-connected.png" width="320" height="88">
+							<figcaption>Slider without connection.</figcaption>
+						</figure>
+						
+						<p>The event list now contains a single entry. It has three configuration options. The first setting controls when this entry should be activated. It's set to <em translate="no">Runtime Only</em> by default, which is what we want. Underneath that is a field to set the game object that should be targeted. Drag a reference to our <em translate="no">Game</em> object onto it. That allows us to select a method or property of a component attached to the targeted object. Now we can use the third dropdown list, select <em translate="no">Game</em>, then <em translate="no">CreationSpeed</em> at the top, under the <em translate="no">Dynamic float</em> header.</p>
+						
+						<figure>
+							<img src="continuous-creation-and-destruction/creation-speed-slider-connected.png" width="320" height="88">
+							<figcaption>Slider connected to property.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>I got an input field with zero as a fourth option?</h3>
+							<div>
+								<p>That happens when you picked <em translate="no">CreationSpeed</em> from the <em translate="no">Static Parameters</em> list. As its name implies, that allows you to configure a fixed value to use as the argument, instead of the dynamic slider value. You have to use the dynamic option instead.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Continuous Shape Creation</h3>
+						
+						<p>To make continuous creation possible, we have to keep track of the creation progress. Add a float field to <code>Game</code> for this. When this value reaches 1, a new shape should be created.</p>
+						
+						<pre translate="no">	<ins>float creationProgress;</ins></pre>
+						
+						<p>The progress is increased in <code>Update</code>, by adding the time that elapses since the last frame, which is available via <code>Time.deltaTime</code>. How quickly progress is made is controlled by multiplying the time delta by the creation speed.</p>
+						
+						<pre translate="no">	void Update () {
+		&hellip;
+
+		<ins>creationProgress += Time.deltaTime * CreationSpeed;</ins>
+	}</pre>
+						
+						<p>Each time <code>creationProgress</code> reaches 1, we must reset it to zero and create a shape.</p>
+						
+						<pre translate="no">		creationProgress += Time.deltaTime * CreationSpeed;
+		<ins>if (creationProgress == 1f) {</ins>
+			<ins>creationProgress = 0f;</ins>
+			<ins>CreateShape();</ins>
+		<ins>}</ins></pre>
+						
+						<p>But it is very unlikely that we end up with a progress value of exactly 1. Instead, we'll overshoot by some amount. So we should check whether we have at least 1 instead. Then we reduce the progress by 1, saving the extra progress. So the timing isn't exact, but we don't discard the extra progress.</p>
+						
+						<pre translate="no">		creationProgress += Time.deltaTime * CreationSpeed;
+		if (creationProgress <ins>>=</ins> 1f) {
+			creationProgress <ins>-= 1f</ins>;
+			CreateShape();
+		}</pre>
+						
+						<p>However, it might be possible that so much progress was made since the last frame that we end up with a value that's 2, 3, or even more. This could happen during a frame rate dip, in combination with a high creation speed. To make sure that we catch up as quickly as possible, change the <code>if</code> statement into a <code>while</code> statement.</p>
+						
+						<pre translate="no">		creationProgress += Time.deltaTime * CreationSpeed;
+		<ins>while</ins> (creationProgress >= 1f) {
+			creationProgress -= 1f;
+			CreateShape();
+		}</pre>
+						
+						<p>You can now have the game create a regular stream of new shapes, at a desired speed up to ten shapes per second. If you want to turn off the automatic creation process, simply set the slider back to zero.</p>
+					</section>
+					
+					<section>
+						<h3>Continuous Shape Destruction</h3>
+						
+						<p>Next, repeat all the work that we did for the creation slider, but now for a destruction slider. Create another label and slider, which is quickest to do by duplicating the existing ones, moving them down, and renaming them.</p>
+						
+						<figure>
+							<img src="continuous-creation-and-destruction/both-sliders.png" width="210" height="150">
+							<figcaption>Both creation and destruction sliders.</figcaption>
+						</figure>
+						
+						<p>Then add a <code>DestructionSpeed</code> property and connect the destruction slider to it. If you duplicated the creation slider, you only have to change which property it targets.</p>
+						
+						<pre translate="no">	<ins>public float DestructionSpeed { get; set; }</ins></pre>
+						
+						<figure>
+							<img src="continuous-creation-and-destruction/destruction-speed-slider-connected.png" width="320" height="88">
+							<figcaption>Destruction slider connected to property.</figcaption>
+						</figure>
+						
+						<p>Finally, add the code for keeping track of the destruction progress.</p>
+						
+						<pre translate="no">	float creationProgress<ins>, destructionProgress;</ins>
+
+	&hellip;
+
+	void Update () {
+		&hellip;
+
+		creationProgress += Time.deltaTime * CreationSpeed;
+		while (creationProgress >= 1f) {
+			creationProgress -= 1f;
+			CreateShape();
+		}
+
+		<ins>destructionProgress += Time.deltaTime * DestructionSpeed;</ins>
+		<ins>while (destructionProgress >= 1f) {</ins>
+			<ins>destructionProgress -= 1f;</ins>
+			<ins>DestroyShape();</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>The game is now able to both automatically create and destroy shapes at the same time. If both are set to the same speed, the amount of shapes remains roughly constant. To get creation and destruction synchronized in a pleasing way, you can tweak the speed of one a bit until their progress aligns or alternates.</p>
+						
+						<figure>
+							<video width="200" height="200" controls loop muted>
+								<source src="continuous-creation-and-destruction/creation-destruction.mp4" type="video/mp4">
+							</video>
+							<figcaption>Creation and destruction at maximum speed.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>How can I get rid of the canvas in the scene window?</h3>
+							<div>
+								<p>When not working on the GUI, it can be annoying to have the canvas show up in the scene window. You can hide it&mdash;or anything else on a specific layer&mdash;via the <em translate="no">Layers</em> menu at the top right of the editor. All GUI objects are on the <em translate="no">UI</em> layer by default, which you can make invisible by toggling its eye button. This affects the scene window, but not the game window.</p>
+								<figure>
+									<img src="continuous-creation-and-destruction/ui-layer-hidden.png" width="190" height="186">
+									<figcaption>Hiding the UI layer.</figcaption>
+								</figure>
+							</div>
+						</aside>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Object Pools</h2>
+					
+					<p>Each time an object gets instantiated, memory has to be allocated. And each time that an object gets destroyed, the memory that it used has to be reclaimed. But the reclamation doesn't happen immediately. There is a garbage collection process that occasionally runs to clean everything up. This is an expensive process, because it has to figure out which objects are truly no longer effectively alive, based on whether anything still holds a reference to it. So the amount of used memory grows for a while, until it is deemed to much, then the unreachable memory is identified and made available again. If there are many chunks of memory involved, this can cause a significant frame rate dip in the game.</p>
+					
+					<p>While reusing low-level memory is hard, it is much easier to reuse objects at a higher level. If we were to never destroy game objects, but instead recycle them, then the garbage collection process never needs to run.</p>
+					
+					<section>
+						<h3>Profiling</h3>
+						
+						<p>To get an idea of how much memory allocation happens and when, you can use Unity's profiler window, which you can open via <em translate="no">Window / Profiler</em> or <em translate="no">Window / Analysis / Profiler</em> depending on the Unity version. It can record a lot of information while in play mode, including CPU and memory usage.</p>
+						
+						<p>Let the game run for a while at maximum creation and destruction speed, after accumulating a few shapes. Then select a point on the profiler's data graph, which will pause the game. When the CPU section is selected, all high-level invocations of the selected frame are shown beneath the graphs. You can sort the invocations by memory allocation, which are shown in the <em translate="no">GC Alloc</em> column.</p>
+						
+						<p>In most frames, the total allocation is zero. But when a shape was instantiated during that frame, you'll see an entry at the top that allocates memory. You can expand that entry to see the invocation of <code>Game.Update</code> that is responsible for the instantiation.</p>
+						
+						<figure>
+							<img src="object-pools/allocation-editor.png" width="548" height="538">
+							<figcaption>Profiling data for the creation of a shape.</figcaption>
+						</figure>
+						
+						<p>How many bytes get allocated can vary in the editor between runs. The game isn't optimized like a standalone build would be, and the editor itself affects the profiling too. Better data can be obtained by creating a standalone development build, and having it automatically connect to the editor for profiling.</p>
+						
+						<figure>
+							<img src="object-pools/build-settings.png" width="350" height="150">
+							<figcaption>Build settings for a development build with profiling.</figcaption>
+						</figure>
+						
+						<p>Create the build, run it for a while, and then check the profiler data in the editor.</p>
+						
+						<figure>
+							<img src="object-pools/allocation-standalone.png" width="548" height="538">
+							<figcaption>Profiling a standalone build.</figcaption>
+						</figure>
+						
+						<p>This profiling data isn't affected by the editor, though we're still working with a development build that has to collect and send the profiling data.</p>
+					</section>
+					
+					<section>
+						<h3>Recycling</h3>
+						
+						<p>Because our shapes are simple game objects, they don't require much memory. Still, a constant stream of new instantiations will eventually trigger the garbage collection process. To prevent this, we have to reuse shapes instead of destroying them. So each time that the game would destroy a shape, instead we should return them to the factory for recycling.</p>
+						
+						<p>Recycling shapes is feasible because they don't get altered much while they are in use. They get a random transformation, material, and color. If more complex adjustments were made&mdash;like adding or removing components, or adding child objects&mdash;then recycling wouldn't be feasible. To support both situations, let's add a toggle to <code>ShapeFactory</code> to control whether it recycles or not. Recycling is possible for our current game, so enable it via the inspector.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>bool recycle;</ins></pre>
+						
+						<figure>
+							<img src="object-pools/recycle.png" width="320" height="80">
+							<figcaption>Factory with recycling enabled.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Pooling Shapes</h3>
+						
+						<p>When a shape is recycled, we put it in a reserve pool. Then when asked for a new shape, we can grab an existing one from this pool, instead of creating a new shape by default. Only when the pool is empty do we have to instantiate a new shape. We need a separate pool for each shape type that the factory can produce, so give it an array of shape lists.</p>
+						
+						<pre translate="no"><ins>using System.Collections.Generic;</ins>
+using UnityEngine;
+
+[CreateAssetMenu]
+public class ShapeFactory : ScriptableObject {
+
+	&hellip;
+
+	<ins>List&lt;Shape>[] pools;</ins>
+
+	&hellip;
+}</pre>
+						
+						<p>Add a method that creates the pools, simply one empty list for each entry in the <code>prefabs</code> array.</p>
+						
+						<pre translate="no">	<ins>void CreatePools () {</ins>
+		<ins>pools = new List&lt;Shape>[prefabs.Length];</ins>
+		<ins>for (int i = 0; i &lt; pools.Length; i++) {</ins>
+			<ins>pools[i] = new List&lt;Shape>();</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>At the start of the <code>Get</code> method, check whether recycling is enabled. If so, check whether the pools exist. If not, then create the pools at this point.</p>
+						
+						<pre translate="no">	public Shape Get (int shapeId = 0, int materialId = 0) {
+		<ins>if (recycle) {</ins>
+			<ins>if (pools == null) {</ins>
+				<ins>CreatePools();</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		Shape instance = Instantiate(prefabs[shapeId]);
+		instance.ShapeId = shapeId;
+		instance.SetMaterial(materials[materialId], materialId);
+		return instance;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Retrieving an Object from a Pool</h3>
+						
+						<p>The existing code that instantiates a shape and sets its ID should now only be used when we are not recycling. Otherwise, the instance should be retrieved from a pool. To make this possible, the <code>instance</code> variable must be declared before the decision how to get the instance.</p>
+						
+						<pre translate="no">		<ins>Shape instance;</ins>
+		if (recycle) {
+			if (pools == null) {
+				CreatePools();
+			}
+		}
+		<ins>else {</ins>
+			<ins>instance</ins> = Instantiate(prefabs[shapeId]);
+			instance.ShapeId = shapeId;
+		<ins>}</ins>
+		
+		instance.SetMaterial(materials[materialId], materialId);</pre>
+						
+						<p>When recycling is enabled, we have to extract an instance from the correct pool. We can use the shape ID as the pool index. Then grab an element from that pool, and activate it. This is done by invoking the <code>SetActive</code> method on its game object, with <code>true</code> as an argument. Then remove it from the pool. As we don't care about the order of the elements in the pool, we can just grab the last element, which is most efficient.</p>
+						
+						<pre translate="no">		Shape instance;
+		if (recycle) {
+			if (pools == null) {
+				CreatePools();
+			}
+			<ins>List&lt;Shape> pool = pools[shapeId];</ins>
+			<ins>int lastIndex = pool.Count - 1;</ins>
+			<ins>instance = pool[lastIndex];</ins>
+			<ins>instance.gameObject.SetActive(true);</ins>
+			<ins>pool.RemoveAt(lastIndex);</ins>
+		}
+		else {
+			instance = Instantiate(prefabs[shapeId]);
+		}</pre>
+						
+						<p>But this is only possible when there is something in the pool, so check for that.</p>
+						
+						<pre translate="no">			List&lt;Shape> pool = pools[shapeId];
+			int lastIndex = pool.Count - 1;
+			<ins>if (lastIndex >= 0) {</ins>
+				instance = pool[lastIndex];
+				instance.gameObject.SetActive(true);
+				pool.RemoveAt(lastIndex);
+			<ins>}</ins></pre>
+						
+						<p>If not, we have no choice but to create a new shape instance anyway.</p>
+						
+						<pre translate="no">			if (lastIndex >= 0) {
+				instance = pool[lastIndex];
+				instance.gameObject.SetActive(true);
+				pool.RemoveAt(lastIndex);
+			}
+			<ins>else {</ins>
+				<ins>instance = Instantiate(prefabs[shapeId]);</ins>
+				<ins>instance.ShapeId = shapeId;</ins>
+			<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Why use lists instead of stacks?</h3>
+							<div>
+								<p>Because lists survive recompilation in play mode, while stacks don't. Unity doesn't serialize stacks. You could use stacks instead, but lists work just fine.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Reclaiming an Object</h3>
+						
+						<p>To make use of the pools, there must be a way for the factory to reclaim shapes that are no longer needed. This is done by adding a public <code>Reclaim</code> method with a shape parameter. This method should also begin by checking whether recycling is enabled, and if so make sure that the pools exist before doing anything else.</p>
+						
+						<pre translate="no">	<ins>public void Reclaim (Shape shapeToRecycle) {</ins>
+		<ins>if (recycle) {</ins>
+			<ins>if (pools == null) {</ins>
+				<ins>CreatePools();</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Isn't it enough to create the pools in <code>Get</code>?</h3>
+							<div>
+								<p>If recycling is never toggled in play mode, then that would indeed be enough, because a shape must be retrieved before it can be reclaimed. By doing this in <code>Reclaim</code> as well it becomes possible to toggle recycling while in play mode, which makes it easier to experiment with it.</p>
+							</div>
+						</aside>
+						
+						<p>Now that we're sure that the pools exist, the recycled shape can be added to the correct pool, by using its shape ID as the pool index.</p>
+						
+						<pre translate="no">	public void Reclaim (Shape shapeToRecycle) {
+		if (recycle) {
+			if (pools == null) {
+				CreatePools();
+			}
+			<ins>pools[shapeToRecycle.ShapeId].Add(shapeToRecycle);</ins>
+		}
+	}</pre>
+						
+						<p>Also, the recycled shape has to be deactivated, which now represents destruction.</p>
+						
+						<pre translate="no">			pools[shapeToRecycle.ShapeId].Add(shapeToRecycle);
+			<ins>shapeToRecycle.gameObject.SetActive(false);</ins></pre>
+						
+						<p>But when recycling isn't enabled, the shape should be destroyed for real instead.</p>
+						
+						<pre translate="no">		if (recycle) {
+			&hellip;
+		}
+		<ins>else {</ins>
+			<ins>Destroy(shapeToRecycle.gameObject);</ins>
+		<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Recycling Instead of Destroying</h3>
+						
+						<p>The factory cannot enforce that shapes are returned to it. It's up to <code>Game</code> to make recycling possible, by invoking <code>Reclaim</code> instead of <code>Destroy</code> in <code>DestroyShape</code>.</p>
+						
+						<pre translate="no">	void DestroyShape () {
+		if (shapes.Count > 0) {
+			int index = Random.Range(0, shapes.Count);
+			<del>//Destroy(shapes[index].gameObject);</del>
+			<ins>shapeFactory.Reclaim(shapes[index]);</ins>
+			int lastIndex = shapes.Count - 1;
+			shapes[index] = shapes[lastIndex];
+			shapes.RemoveAt(lastIndex);
+		}
+	}</pre>
+						
+						<p>And also when beginning a new game.</p>
+						
+						<pre translate="no">	void BeginNewGame () {
+		for (int i = 0; i &lt; shapes.Count; i++) {
+			<del>//Destroy(shapes[i].gameObject);</del>
+			<ins>shapeFactory.Reclaim(shapes[i]);</ins>
+		}
+		shapes.Clear();
+	}</pre>
+						
+						<p>Make sure that <code>Game</code> plays nice and doesn't still destroy the shape after giving it back. That would lead to errors. So it is not a fool-proof technique, the programmer has to behave. Only shapes that are gotten from a factory should be returned to it, without significantly altering them. And while it is possible to destroy the shapes, that would make recycling impossible.</p>
+					</section>
+					
+					<section>
+						<h3>Recycling in Action</h3>
+						
+						<p>While the game still plays the same whether recycling is enabled or not, you can see the difference by observing the hierarchy window. When both creation and destruction is happening at the same speed, you'll see that shapes will become active and inactive instead of getting created and destroyed. The total amount of game objects will become stable after a while. Only when a specific shape type's pool is empty will a new instance get created. This happens less frequent the longer the game runs, unless the creation speed is higher than the destruction speed.</p>
+						
+						<figure>
+							<img src="object-pools/active-inactive-objects.png" width="227" height="240">
+							<figcaption>A mix of active and inactive objects.</figcaption>
+						</figure>
+						
+						<p>You can also use the profiler to verify that memory allocations happen far less frequently. They haven't been eliminated entirely, because sometimes new shapes still have to be created. Also, sometimes memory is allocated when an object is reclaimed. This can happen because of two reasons. First, the pool lists sometimes need to grow. Second, to deactivate an object we have to access the <code>gameObject</code> property. This allocates a little bit of memory the first time the property retrieves a reference to the game object. So that happens only the first time that each shape gets recycled.</p>
+						
+						<p>The next tutorial is <a href="../multiple-scenes/index.html">Multiple Scenes</a>.</p>
+					</section>
+					
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/object-management-03-reusing-objects" class="repository">repository</a>
+					<a href="Reusing-Objects.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/advanced-rendering/surface-displacement/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/advanced-rendering/surface-displacement/tutorial-image.jpg">
+		<meta property="og:title" content="Surface Displacement">
+		<meta property="og:description" content="A Unity Advanced Rendering tutorial about surface displacement, with tessellation and vertex movement.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Surface Displacement</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/advanced-rendering/surface-displacement/#article",
+				"headline": "Surface Displacement",
+				"alternativeHeadline": "Moving Vertices",
+				"datePublished": "2017-12-24",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Advanced Rendering tutorial about surface displacement, with tessellation and vertex movement.",
+				"image": "https://catlikecoding.com/unity/tutorials/advanced-rendering/surface-displacement/tutorial-image.jpg",
+				"dependencies": "Unity 2017.1.0",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/advanced-rendering/", "name": "Advanced Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				MyLightingShaderGUI: 1,
+				TessellationMode: 1
+			};
+			
+			var defaultCodeClass = 'shader';
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Advanced Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Surface Displacement</h1>
+					<p>Moving Vertices</p>
+					<ul>
+						<li>Adjust vertex positions on the GPU.</li>
+						<li>Tessellate shadow geometry.</li>
+						<li>Skip tessellating unseen triangles.</li>
+					</ul>
+				</header>
+				
+				<p>This tutorial follow <a href="../tessellation/index.html">Tessellation</a> and combines it with vertex displacement to add more detail to geometry, on top of normal mapping.</p>
+				
+				<p>This tutorial is made with Unity 2017.1.0.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Create surface details with tessellated triangles.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Repositioning Vertices</h2>
+					
+					<p>Meshes are usually made up of triangles, which are always flat. The illusion of curvature is added via vertex normals. Normal maps can be used to add the illusion of more surface irregularities, smaller than individual mesh triangles. Beyond that, parallax mapping makes it possible to fake surface displacement. But all these approaches are illusions. The most robust way to make a surface more complex is by simply using more smaller triangles. Smaller triangles means that we have more vertices, enough to describe all surface details that we want. Unfortunately, that would result in much larger meshes, requiring more storage space, CPU and GPU memory, and memory bandwidth. Tessellation is a way around this problem, because it allows us to generate more triangles on the GPU when needed. This means the GPU has to do more work, but we can limit that to when it's really needed.</p>
+					
+					<p>Cutting up existing triangles and interpolating the vertex data isn't enough to add more details. That just gives us more triangles that describe the same flat surface. We have to introduce new data, adjusting the triangle's vertices somehow.</p>
+					
+					<p>A straightforward way to add more detail is to adjust the vertices of a mesh via a displacement map. The map is used to move vertices up or down, like a height field can be used to turn a flat terrain mesh into an actual landscape. This tutorial will cover how to do that.</p>
+					
+					<section>
+						<h3>Hijacking Parallax Mapping</h3>
+						
+						<p>To displace vertices, we need a displacement map. Although our <em translate="no">Tessellation Shader</em> doesn't have a property for such a map, it does have a parallax map that we used in the <a href="../../rendering/part-20/index.html">Parallax</a> tutorial. The parallax map is really a displacement map, it's just that we used it to fake displacement. We can use the same map for actual displacement too.</p>
+						
+						<p>Let's say that a shader can decide to use true vertex displacement instead of parallax mapping, simply by defining <em translate="no">VERTEX_DISPLACEMENT_INSTEAD_OF_PARALLAX</em>. If that macro is defined and we have a parallax map, then we must make sure that the parallax code doesn't get included, replacing it with proper vertex displacement code. To do this, undefine <em translate="no">_PARALLAX_MAP</em> and define a convenient <em translate="no">VERTEX_DISPLACEMENT</em> macro in <em translate="no">My Lighting Input</em>, when we have a parallax map and should use vertex displacement.</p>
+						
+						<pre translate="no">#include "UnityPBSLighting.cginc"
+#include "AutoLight.cginc"
+
+<ins>#if defined(_PARALLAX_MAP) &amp;&amp; defined(VERTEX_DISPLACEMENT_INSTEAD_OF_PARALLAX)</ins>
+	<ins>#undef _PARALLAX_MAP</ins>
+	<ins>#define VERTEX_DISPLACEMENT 1</ins>
+<ins>#endif</ins></pre>
+						
+						<p>Let's also create macro aliases for the <code>_ParallaxMap</code> and <code>_ParallaxStrength</code> variables, so we can use <code>_DisplacementMap</code> and <code>_DisplacementStrength</code> instead. This makes it easier to get rid of the parallax code and switch to proper displacement properties, in case you like to do that later.</p>
+						
+						<pre translate="no">#if defined(_PARALLAX_MAP) &amp;&amp; defined(VERTEX_DISPLACEMENT_INSTEAD_OF_PARALLAX)
+	#undef _PARALLAX_MAP
+	#define VERTEX_DISPLACEMENT 1
+	<ins>#define _DisplacementMap _ParallaxMap</ins>
+	<ins>#define _DisplacementStrength _ParallaxStrength</ins>
+#endif</pre>
+						
+						<p>As we won't used both parallax mapping and tessellation at the same time, we can get rid of all definitions related to parallax in the <code>CGINCLUDE</code> block of <em translate="no">Tessellation Shader</em>. Instead, we only have to define <em translate="no">VERTEX_DISPLACEMENT_INSTEAD_OF_PARALLAX</em>.</p>
+						
+						<pre translate="no">	CGINCLUDE
+
+	#define BINORMAL_PER_FRAGMENT
+	#define FOG_DISTANCE
+
+<del>//	#define PARALLAX_BIAS 0</del>
+<del>//	#define PARALLAX_OFFSET_LIMITING</del>
+<del>//	#define PARALLAX_RAYMARCHING_STEPS 10</del>
+<del>//	#define PARALLAX_RAYMARCHING_INTERPOLATE</del>
+<del>//	#define PARALLAX_RAYMARCHING_SEARCH_STEPS 3</del>
+<del>//	#define PARALLAX_FUNCTION ParallaxRaymarching</del>
+<del>//	#define PARALLAX_SUPPORT_SCALED_DYNAMIC_BATCHING</del>
+
+	<ins>#define VERTEX_DISPLACEMENT_INSTEAD_OF_PARALLAX</ins>
+
+	ENDCG</pre>
+						
+						<p>We'll perform vertex displacement in object space. To allow for a decent amount of displacement, increase the maximum strength from 0.1 to 1.</p>
+						
+						<pre translate="no">		_ParallaxStrength ("Parallax Strength", Range(0, <ins>1</ins>)) = 0</pre>
+						
+						<figure>
+							<img src="repositioning-vertices/parallax-map.png" width="320" height="135">
+							<figcaption>Parallax map with strength set to 1.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Changing the Vertex Position</h3>
+						
+						<p>Displacing vertices has to be done in the vertex program of <em translate="no">My Lighting</em>, before we use the vertex position for anything else. This means that if we want to support scaling and offsetting the displacement map like all other maps, we have to transform the texture coordinates before this point. So let's move the <code>TRANSFORM_TEX</code> lines before the first time the vertex position is used.</p>
+						
+						<pre translate="no">InterpolatorsVertex MyVertexProgram (VertexData v) {
+	InterpolatorsVertex i;
+	UNITY_INITIALIZE_OUTPUT(InterpolatorsVertex, i);
+	UNITY_SETUP_INSTANCE_ID(v);
+	UNITY_TRANSFER_INSTANCE_ID(v, i);
+
+	<ins>i.uv.xy = TRANSFORM_TEX(v.uv, _MainTex);</ins>
+	<ins>i.uv.zw = TRANSFORM_TEX(v.uv, _DetailTex);</ins>
+
+	i.pos = UnityObjectToClipPos(v.vertex);
+	i.worldPos.xyz = mul(unity_ObjectToWorld, v.vertex);
+	#if FOG_DEPTH
+		i.worldPos.w = i.pos.z;
+	#endif
+	i.normal = UnityObjectToWorldNormal(v.normal);
+
+	#if defined(BINORMAL_PER_FRAGMENT)
+		i.tangent = float4(UnityObjectToWorldDir(v.tangent.xyz), v.tangent.w);
+	#else
+		i.tangent = UnityObjectToWorldDir(v.tangent.xyz);
+		i.binormal = CreateBinormal(i.normal, i.tangent, v.tangent.w);
+	#endif
+
+<del>//	i.uv.xy = TRANSFORM_TEX(v.uv, _MainTex);</del>
+<del>//	i.uv.zw = TRANSFORM_TEX(v.uv, _DetailTex);</del>
+
+	&hellip;
+}</pre>
+						
+						<p>Once we have the final texture coordinates, we can sample the displacement map. This works the same as sampling the map for parallax mapping, so we'll use its green texture channel. However, because we're not doing this in the fragment program, there are no screen-space derivatives available, so the GPU cannot determine which mipmap level to use. We cannot use <code>tex2D</code>, instead we have to use <code>tex2Dlod</code> to specify an explicit mipmap level. This is done by supplying two additional texture coordinates, the third being an unused 3D coordinate and the fourth specifying the mip level. We'll just use 0 for both, effectively using no mipmaps.</p>
+						
+						<pre translate="no">	i.uv.xy = TRANSFORM_TEX(v.uv, _MainTex);
+	i.uv.zw = TRANSFORM_TEX(v.uv, _DetailTex);
+
+	<ins>#if VERTEX_DISPLACEMENT</ins>
+		<ins>float displacement = tex2Dlod(_DisplacementMap, float4(i.uv.xy, 0, 0)).g;</ins>
+	<ins>#endif</ins></pre>
+						
+						<p>Like we do for parallax mapping, let's interpret the map so a value of 0.5 means no change, making it possible to move vertices both up and down. After that, factor in the displacement strength so we can control how much the vertices get moved in object space.</p>
+						
+						<pre translate="no">	#if VERTEX_DISPLACEMENT
+		float displacement = tex2Dlod(_DisplacementMap, float4(i.uv.xy, 0, 0)).g;
+		<ins>displacement = (displacement - 0.5) * _DisplacementStrength;</ins>
+	#endif</pre>
+						
+						<p>If we were working with a default height field, then we'd just have to add the displacement to the vertex Y position at this point.</p>
+						
+						<pre translate="no">		float displacement = tex2Dlod(_DisplacementMap, float4(i.uv.xy, 0, 0)).g;
+		displacement = (displacement - 0.5) * _DisplacementStrength;
+		<ins>v.vertex.y += displacement;</ins></pre>
+						
+						<figure>
+							<img src="repositioning-vertices/displacement-along-y.png" width="160" height="190">
+							<figcaption>Quad vertices displaced along Y.</figcaption>
+						</figure>
+						
+						<p>When applying this approach to a quad, the result will look like a mess of triangles that is still flat. That's because the quad is aligned with the XY plane in object space. If we want to perturb its otherwise flat surface, we have to adjust its Z coordinates instead. In general, a positive displacement should move vertices upward, from the point of view of the mesh. But not all meshes are planes. In the case of a sphere, it makes sense for displacement to move vertices outward. So in general it makes the most sense to displace along the vertex normal.</p>
+						
+						<pre translate="no"><del>//		v.vertex.y += displacement;</del>
+		<ins>v.vertex.xyz += v.normal * displacement;</ins></pre>
+						
+						<p>Because we're using tessellation, the normal vectors of new vertices have been created via interpolation. So they're only guaranteed to be of unit length when all the vertex normals have the same orientation. To guarantee that we get unit-length normal vectors in general, we should normalize them before using them for displacement.</p>
+						
+						<pre translate="no">		<ins>v.normal = normalize(v.normal);</ins>
+		v.vertex.xyz += v.normal * displacement;</pre>
+						
+						<figure>
+							<video width="234" height="234" controls loop muted>
+								<source src="repositioning-vertices/along-normal.mp4" type="video/mp4">
+							</video>
+							<figcaption>Displacement along normal vector.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Using Enough Triangles</h3>
+						
+						<p>How much triangles are needed to support the desired detail level? It depends. Our displacement map at full strength produces quite a large change, so we need quite some triangles to make it look good. But we don't want to use more triangles than we need, so we should use the <em translate="no">Edge</em> tessellation mode instead of the <em translate="no">Uniform</em> mode.</p>
+						
+						<figure>
+							<video width="305" height="200" controls loop muted>
+								<source src="repositioning-vertices/quad.mp4" type="video/mp4">
+							</video>
+							<figcaption>Variable tessellation of a quad.</figcaption>
+						</figure>
+						
+						<p>When in <em translate="no">Edge</em> mode, tessellation is controlled by both the <em translate="no">Edge Length</em> property and the view distance. So how many triangles get used can vary a lot. A quad by itself contains only two triangles. We'd need a significant amount of tessellation to get something better than a low-poly jagged plane. We can help tessellation a lot by using a base mesh that has more triangles. For example, Unity's default plane mesh consists of 10&times;10 quads. Using that instead of a quad prevents complete degeneration and can also produce much higher vertex resolution than a quad, if needed.</p>
+						
+						<figure>
+							<video width="360" height="210" controls loop muted>
+								<source src="repositioning-vertices/plane.mp4" type="video/mp4">
+							</video>
+							<figcaption>Variable tessellation of a plane.</figcaption>
+						</figure>
+						
+						<p>Using a plane instead of a quad allows for a more fine-tuned tessellation, which makes it easier to achieve a visually uniform triangle density from all view angles.</p>
+						
+						<figure>
+							<img src="repositioning-vertices/triangle-density.png" width="400" height="270">
+							<figcaption>Shallow view angle, uniform triangle density.</figcaption>
+						</figure>
+						
+						<p>However, this still does not guarantee that all triangles end up with the same visual size. The tessellated triangles are only about the same size before their vertices are displaced. If a triangle's vertices end up displaced by different amount, it will become stretched along the normal vectors. Usually, vertex displacement isn't as extreme as the example that we use in this tutorial. If you're using it for a terrain mesh, the regular mesh should have sufficient resolution to represent the large features of the terrain. If you use a flat mesh as the basis for your terrain, consider displacing the original vertices before determining the tessellation factors, so coarse elevation gets taken into account when tessellating.</p>
+					</section>
+					
+					<section>
+						<h3>Normal Shading</h3>
+						
+						<p>Up to this point we've been using the flat wireframe shading effect, to make it visually obvious how triangles get tessellated. But most of the time the goal is to enhance a mesh without tessellation being obvious. So let's revert to the default shading method. We do this by removing the geometry shader directive from the forward base, additive, and deferred passes of <em translate="no">Tessellation Shader</em>. We also have to replace the usage of the <em translate="no">MyFlatWireframe</em> include file with <em translate="no">My Lighting</em> in the same passes.</p>
+						
+						<pre translate="no"><del>//			#pragma geometry MyGeometryProgram</del>
+			
+			&hellip;
+			
+<del>//			#include "MyFlatWireframe.cginc"</del>
+			<ins>#include "My Lighting.cginc"</ins>
+			#include "MyTessellation.cginc"</pre>
+						
+						<p>With the flat wireframe effect removed, we no longer need the wireframe properties either.</p>
+						
+						<pre translate="no"><del>//		_WireframeColor ("Wireframe Color", Color) = (0, 0, 0)</del>
+<del>//		_WireframeSmoothing ("Wireframe Smoothing", Range(0, 10)) = 1</del>
+<del>//		_WireframeThickness ("Wireframe Thickness", Range(0, 10)) = 1</del></pre>
+						
+						<p>We are now back to normal shading, which ends up looking flat. That's because we displace vertex positions, but don't adjust the vertex normals to match. The exact end result depends on whether you're using the forward or deferred rendering path.</p>
+						
+						<figure>
+							<img alt="forward" src="repositioning-vertices/forward.png" width="400" height="170">
+							<img alt="deferred" src="repositioning-vertices/deferred.png" width="400" height="170">
+							<figcaption>Forward and deferred rendering.</figcaption>
+						</figure>
+						
+						<p>The visual difference between the rendering paths is due to shadows. We're not doing anything special for shadows yet, so we get the default shadow of a plane. In the case of forward rendering, both the depth pass used for screen-space shadows and the shadow casting is done with this plane. So our plane ends up not shadowing itself. In the case of deferred rendering, the tessellated geometry is used to fill the G-buffers, including the depth buffer. So the tessellated geometry that gets displaced downward ends up shadowed by the flat plane's shadow. We'll deal with shadows in the next section, so for now I'll use the forward rendering path.</p>
+						
+						<p>To get proper shading for our displaced surface, we have to use the correct normal vectors. Fortunately, we have a matching normal map for our parallax map, so we can just use that.</p>
+						
+						<figure>
+							<img src="repositioning-vertices/normal-map.png" width="400" height="170">
+							<figcaption>With normal map.</figcaption>
+						</figure>
+						
+						<p>This approach works for any mesh, but it is important that there are no texture seams. Any seams would result in discontinuities. If we only used normal maps, this would lead to artifacts in shading that suggest hard edges where there should be none. In the case of displacement, it leads to gaps in the mesh, which is far worse. To see a good example of this, apply our tessellation material to a default sphere and inspect its poles.</p>
+						
+						<figure>
+							<img src="repositioning-vertices/sphere-seams.png" width="260" height="220">
+							<figcaption>Displacing sphere vertices creates gaps.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>How could we make it work for spheres?</h3>
+							<div>
+								<p>You'd have to use a displacement mapping approach that doesn't have discontinuities. For example, you could use a cubemap instead of a longitude-latitude map.</p>
+							</div>
+						</aside>
+						
+						<p>At this point we have a displacement effect that's done via tessellation, replacing the parallax effect from an earlier tutorial. The big advantage of tessellation over parallax mapping is that it plays well with everything else, because it's just triangles. All techniques that work with regular triangles apply, and it intersects correctly with other geometry.</p>
+						
+						<figure>
+							<img src="repositioning-vertices/intersecting.png" width="400" height="170">
+							<figcaption>Tessellated geometry intersects correctly.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="repositioning-vertices/repositioning-vertices.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Shadows</h2>
+					
+					<p>Currently, shadows behave as if our plane were still flat. Only when using deferred rendering does the displaced geometry get used to receive shadows, but the cast shadow is still flat. We're now going to make sure that the shadows match the displaced surface.</p>
+					
+					<figure>
+						<img alt="forward" src="shadows/incorrect-forward.png" width="320" height="220">
+						<img alt="deferred" src="shadows/incorrect-deferred.png" width="320" height="220">
+						<figcaption>Incorrect shadows, forward and deferred.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Shadow Caster Pass with Tessellation</h3>
+						
+						<p>The first thing we have to do to makes shadows work, is to enabled tessellation for the shadow caster pass as well. This means that the shader target level of this pass has to be increased to 4.6.</p>
+						
+						<pre translate="no">			#pragma target <ins>4.6</ins></pre>
+						
+						<p>As our displacement approach uses the parallax map, we have to add the appropriate shader feature for it, and also a feature for the <em translate="no">Edge</em> tessellation mode.</p>
+						
+						<pre translate="no">			#pragma shader_feature _SMOOTHNESS_ALBEDO
+			<ins>#pragma shader_feature _PARALLAX_MAP</ins>
+			<ins>#pragma shader_feature _TESSELLATION_EDGE</ins></pre>
+						
+						<p>Then we have to replace our shadow's vertex program with the tessellation vertex program and add the required hull and domain programs.</p>
+						
+						<pre translate="no"><del>//			#pragma vertex MyShadowVertexProgram</del>
+			<ins>#pragma vertex MyTessellationVertexProgram</ins>
+			#pragma fragment MyShadowFragmentProgram
+			<ins>#pragma hull MyHullProgram</ins>
+			<ins>#pragma domain MyDomainProgram</ins></pre>
+						
+						<p>Those programs are defined in <em translate="no">MyTessellation</em>, so include it after <em translate="no">My Shadows</em>.</p>
+						
+						<pre translate="no">			#include "My Shadows.cginc"
+			<ins>#include "MyTessellation.cginc"</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Making Tessellated Shadows Work</h3>
+						
+						<p>At this point our shadow caster pass doesn't compile without errors. That's because <em translate="no">My Shadows</em> doesn't follow the exact same approach as <em translate="no">My Lighting</em> does. The first problem is that <em translate="no">MyTessellation</em> expects the vertex position field of <code>VertexData</code> to be named <code>vertex</code>, while it's known as <code>position</code> in <em translate="no">My Shadows</em>. Let's fix this by renaming it to <code>vertex</code> in <code>My Shadows</code>.</p>
+						
+						<pre translate="no">struct VertexData {
+	UNITY_VERTEX_INPUT_INSTANCE_ID
+<del>//	float4 position : POSITION;</del>
+	<ins>float4 vertex : POSITION;</ins>
+	float3 normal : NORMAL;
+	float2 uv : TEXCOORD0;
+};</pre>
+						
+						<p>The vertex position is used in two places in <code>MyShadowVertexProgram</code>, so change those references as well.</p>
+						
+						<pre translate="no">InterpolatorsVertex MyShadowVertexProgram (VertexData v) {
+	&hellip;
+	#if defined(SHADOWS_CUBE)
+		i.position = UnityObjectToClipPos(v.<ins>vertex</ins>);
+		i.lightVec =
+			mul(unity_ObjectToWorld, v.vertex).xyz - _LightPositionRange.xyz;
+	#else
+		i.position = UnityClipSpaceShadowCasterPos(v.<ins>vertex</ins>.xyz, v.normal);
+		i.position = UnityApplyLinearShadowBias(i.position);
+	#endif
+
+	&hellip;
+}</pre>
+						
+						<p>The next problem is that shadows use less vertex data than the other three passes. Specifically, they don't require tangent, uv1, and uv2 data. We could add this data anyway, but that would needlessly make shadows slower. Instead, let's adjust <code>MyTessellation</code> so it can support less vertex data. We can do this by only including tangent, uv1, and uv2 in the <code>TessellationControlPoint</code> struct if appropriate macros are defined.</p>
+						
+						<pre translate="no">struct TessellationControlPoint {
+	float4 vertex : INTERNALTESSPOS;
+	float3 normal : NORMAL;
+	<ins>#if TESSELLATION_TANGENT</ins>
+		float4 tangent : TANGENT;
+	<ins>#endif</ins>
+	float2 uv : TEXCOORD0;
+	<ins>#if TESSELLATION_UV1</ins>
+		float2 uv1 : TEXCOORD1;
+	<ins>#endif</ins>
+	<ins>#if TESSELLATION_UV2</ins>
+		float2 uv2 : TEXCOORD2;
+	<ins>#endif</ins>
+};</pre>
+						
+						<p>Using the same trick, we can control whether <code>MyTessellationVertexProgram</code> copies the relevant fields from the vertex data to the control point.</p>
+						
+						<pre translate="no">TessellationControlPoint MyTessellationVertexProgram (VertexData v) {
+	TessellationControlPoint p;
+	p.vertex = v.vertex;
+	p.normal = v.normal;
+	<ins>#if TESSELLATION_TANGENT</ins>
+		p.tangent = v.tangent;
+	<ins>#endif</ins>
+	p.uv = v.uv;
+	<ins>#if TESSELLATION_UV1</ins>
+		p.uv1 = v.uv1;
+	<ins>#endif</ins>
+	<ins>#if TESSELLATION_UV2</ins>
+		p.uv2 = v.uv2;
+	<ins>#endif</ins>
+	return p;
+}</pre>
+						
+						<p>And also whether <code>MyDomainProgram</code> interpolates the data.</p>
+						
+						<pre translate="no">[UNITY_domain("tri")]
+InterpolatorsVertex MyDomainProgram (
+	&hellip;
+) {
+	&hellip;
+
+	MY_DOMAIN_PROGRAM_INTERPOLATE(vertex)
+	MY_DOMAIN_PROGRAM_INTERPOLATE(normal)
+	<ins>#if TESSELLATION_TANGENT</ins>
+		MY_DOMAIN_PROGRAM_INTERPOLATE(tangent)
+	<ins>#endif</ins>
+	MY_DOMAIN_PROGRAM_INTERPOLATE(uv)
+	<ins>#if TESSELLATION_UV1</ins>
+		MY_DOMAIN_PROGRAM_INTERPOLATE(uv1)
+	<ins>#endif</ins>
+	<ins>#if TESSELLATION_UV2</ins>
+		MY_DOMAIN_PROGRAM_INTERPOLATE(uv2)
+	<ins>#endif</ins>
+
+	return MyVertexProgram(data);
+}</pre>
+						
+						<p>This approach allows us to fine-tune what mesh data gets included while tessellating. We don't need tangent, uv1, and uv2 for shadows, but the other three passes might need them all. So let's define the relevant macros at the top of <em translate="no">My Lighting Input</em>.</p>
+						
+						<pre translate="no"><ins>#define TESSELLATION_TANGENT 1</ins>
+<ins>#define TESSELLATION_UV1 1</ins>
+<ins>#define TESSELLATION_UV2 1</ins>
+
+#if defined(_PARALLAX_MAP) &amp;&amp; defined(VERTEX_DISPLACEMENT_INSTEAD_OF_PARALLAX)
+	&hellip;
+#endif</pre>
+						
+						<aside>
+							<h3>Do we always need all this data in the other passes?</h3>
+							<div>
+								<p>No, but we simply assumed that we do. You could fine-tune even further and only include UV1 and UV2 when they're really needed.</p>
+							</div>
+						</aside>
+						
+						<p>The last problem is that <em translate="no">My Lighting</em> relies on the existence of <code>MyVertexProgram</code>, but we've named the vertex program for our shadow caster pass <code>MyShadowVertexProgram</code>. The quick solution is to define a macro alias in <em translate="no">My Shadows</em>. This way <code>MyVertexProgram</code> also works for shadows, without breaking existing shaders.</p>
+						
+						<pre translate="no"><ins>#define MyVertexProgram MyShadowVertexProgram</ins>
+
+InterpolatorsVertex MyShadowVertexProgram (VertexData v) {
+	&hellip;
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Displacing Shadow Geometry</h3>
+						
+						<p>The shadows now get tessellated. The next step is to displace their vertices, for which we can use the same approach applied in <em translate="no">My Lighting</em>. First, copy the appropriate macro definitions to the top of <em translate="no">My Shadows</em>. The only difference is that we must also define <em translate="no">SHADOWS_NEED_UV</em>, if it wasn't already.</p>
+						
+						<pre translate="no">#if SHADOWS_SEMITRANSPARENT || defined(_RENDERING_CUTOUT)
+	#if !defined(_SMOOTHNESS_ALBEDO)
+		#define SHADOWS_NEED_UV 1
+	#endif
+#endif
+
+<ins>#if defined(_PARALLAX_MAP) &amp;&amp; defined(VERTEX_DISPLACEMENT_INSTEAD_OF_PARALLAX)</ins>
+	<ins>#undef _PARALLAX_MAP</ins>
+	<ins>#define VERTEX_DISPLACEMENT 1</ins>
+	<ins>#define _DisplacementMap _ParallaxMap</ins>
+	<ins>#define _DisplacementStrength _ParallaxStrength</ins>
+	<ins>#if !defined(SHADOWS_NEED_UV)</ins>
+		<ins>#define SHADOWS_NEED_UV 1</ins>
+	<ins>#endif</ins>
+<ins>#endif</ins></pre>
+						
+						<p>Shadows didn't use the parallax map, so we have to add the required variables now.</p>
+						
+						<pre translate="no"><ins>sampler2D _ParallaxMap;</ins>
+<ins>float _ParallaxStrength;</ins></pre>
+						
+						<p>In the shadow vertex program, move the transformation of the texture coordinates above the usage of the vertex position.</p>
+						
+						<pre translate="no">InterpolatorsVertex MyShadowVertexProgram (VertexData v) {
+	InterpolatorsVertex i;
+	UNITY_SETUP_INSTANCE_ID(v);
+	UNITY_TRANSFER_INSTANCE_ID(v, i);
+
+	<ins>#if SHADOWS_NEED_UV</ins>
+		<ins>i.uv = TRANSFORM_TEX(v.uv, _MainTex);</ins>
+	<ins>#endif</ins>
+
+	#if defined(SHADOWS_CUBE)
+		i.position = UnityObjectToClipPos(v.vertex);
+		i.lightVec =
+			mul(unity_ObjectToWorld, v.vertex).xyz - _LightPositionRange.xyz;
+	#else
+		i.position = UnityClipSpaceShadowCasterPos(v.vertex.xyz, v.normal);
+		i.position = UnityApplyLinearShadowBias(i.position);
+	#endif
+
+<del>//	#if SHADOWS_NEED_UV</del>
+<del>//		i.uv = TRANSFORM_TEX(v.uv, _MainTex);</del>
+<del>//	#endif</del>
+	return i;
+}</pre>
+						
+						<p>Then displace the vertex position.</p>
+						
+						<pre translate="no">	#if SHADOWS_NEED_UV
+		i.uv = TRANSFORM_TEX(v.uv, _MainTex);
+	#endif
+
+	<ins>#if VERTEX_DISPLACEMENT</ins>
+		<ins>float displacement = tex2Dlod(_DisplacementMap, float4(i.uv.xy, 0, 0)).g;</ins>
+		<ins>displacement = (displacement - 0.5) * _DisplacementStrength;</ins>
+		<ins>v.normal = normalize(v.normal);</ins>
+		<ins>v.vertex.xyz += v.normal * displacement;</ins>
+	<ins>#endif</ins></pre>
+						
+						<figure>
+							<img src="shadows/displaced-shadows.png" width="320" height="220">
+							<figcaption>Displaced shadows.</figcaption>
+						</figure>
+						
+						<p>We now get correctly displaced shadows. Both receiving and casting shadows is now correct, for both rendering paths.</p>
+						
+						<p>With shadows working, another advantage that tessellation has over parallax mapping is that we automatically get self-shadowing. It doesn't require any extra work.</p>
+						
+						<figure>
+							<img alt="with" src="shadows/self-shadowing.png" width="400" height="170">
+							<img alt="without" src="repositioning-vertices/normal-map.png" width="400" height="170">
+							<figcaption>With and without self-shadowing.</figcaption>
+						</figure>
+						
+						<p>Of course you have to keep the limitations of shadow mapping in mind. Also, when using <em translate="no">Edge</em> tessellation mode, the view distance for the shadow map is different than for the regular camera. This means that the tessellated shadow geometry doesn't exactly match the regular tessellated geometry, which can produce shadows artifacts. The finer the tessellation, the less of an issue this is.</p>
+						
+						<figure>
+							<video width="400" height="170" controls loop muted>
+								<source src="shadows/variable-shadows.mp4" type="video/mp4">
+							</video>
+							<figcaption>Varying tessellation with shadows.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="shadows/shadows.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Culling Triangles</h2>
+					
+					<p>Although tessellation is nice, it doesn't come cheap, especially when a high level of tessellation is desired. An important thing to realize is that every triangle of a mesh gets tessellated, regardless whether it ends up visible or not. However, it is possible to do something about that.</p>
+					
+					<p>Not everything in a scene gets rendered. Only objects that lie inside the camera's view frustum can be seen. Those objects are send to the GPU by Unity, everything else gets culled. But if even a small portion of an object's bounding box lies inside the frustum, its entire mesh will be processed by the GPU, and thus tessellated. Fortunately, there is a way to skip triangles while tessellating, effectively culling them before the tessellation stage.</p>
+					
+					<section>
+						<h3>Skipping Some Triangles</h3>
+						
+						<p>The amount of tessellation is controlled by the edge and inside tessellation factors. A factor of 1 corresponds with no triangles being added. A higher factor results in more triangles. But it is also possible to use the factor 0. When one of the tessellation factors is zero, the original triangle is discarded and doesn't get rendered at all.</p>
+						
+						<p>If we can figure out whether a triangle lies outside the view frustum, we can set its tessellation factors to 0, effectively performing frustum culling per triangle, on the GPU. Let's add a function to <code>MyTessellation</code> to figure this out. Place it above <code>MyPatchConstantFunction</code>, as that function will invoke it. We'll start with a very simple test. If all three vertices of a triangle have negative X coordinates, we'll consider it culled. We can use a boolean to communicate this.</p>
+						
+						<pre translate="no"><ins>bool TriangleIsCulled (float3 p0, float3 p1, float3 p2) {</ins>
+	<ins>return p0.x &lt; 0 &amp;&amp; p1.x &lt; 0 &amp;&amp; p2.x &lt; 0;</ins>
+<ins>}</ins></pre>
+						
+						<p>Use this function in <code>MyPatchConstantFunction</code> to check whether we can skip the triangle. If so, set all edge factors to zero. Otherwise, determine the factors are usual.</p>
+						
+						<pre translate="no">TessellationFactors MyPatchConstantFunction (
+	InputPatch&lt;TessellationControlPoint, 3> patch
+) {
+	float3 p0 = mul(unity_ObjectToWorld, patch[0].vertex).xyz;
+	float3 p1 = mul(unity_ObjectToWorld, patch[1].vertex).xyz;
+	float3 p2 = mul(unity_ObjectToWorld, patch[2].vertex).xyz;
+	TessellationFactors f;
+	<ins>if (TriangleIsCulled(p0, p1, p2)) {</ins>
+		<ins>f.edge[0] = f.edge[1] = f.edge[2] = f.inside = 0;</ins>
+	<ins>}</ins>
+	<ins>else {</ins>
+	    f.edge[0] = TessellationEdgeFactor(p1, p2);
+	    f.edge[1] = TessellationEdgeFactor(p2, p0);
+	    f.edge[2] = TessellationEdgeFactor(p0, p1);
+		f.inside =
+			(TessellationEdgeFactor(p1, p2) +
+			TessellationEdgeFactor(p2, p0) +
+			TessellationEdgeFactor(p0, p1)) * (1 / 3.0);
+	<ins>}</ins>
+	return f;
+}</pre>
+						
+						<figure>
+							<video width="324" height="150" controls loop muted>
+								<source src="culling-triangles/negative-x.mp4" type="video/mp4">
+							</video>
+							<figcaption>Culling triangles with only negative X coordinates.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Frustum Culling</h3>
+						
+						<p>To perform actual frustum culling, we have to verify whether a triangle lies inside the camera's view frustum or outside of it. A frustum is a pyramid with its top cut off by a plane parallel to its base. The base and the sides of the pyramid can also be defined by planes. These planes form a system where the space inside the frustum is considered to lie above all six clip planes. So we have to check for each plane whether a point lies above or below it. Let's create a boolean function to check a single plane, returning true by default. Invoke that function inside <code>TriangleIsCulled</code>, replacing our test code.</p>
+						
+						<pre translate="no"><ins>bool TriangleIsBelowClipPlane (float3 p0, float3 p1, float3 p2) {</ins>
+	<ins>return true;</ins>
+<ins>}</ins>
+
+bool TriangleIsCulled (float3 p0, float3 p1, float3 p2) {
+<del>//	return p0.x &lt; 0 &amp;&amp; p1.x &lt; 0 &amp;&amp; p2.x &lt; 0;</del>
+	<ins>return TriangleIsBelowClipPlane(p0, p1, p2);</ins>
+}</pre>
+						
+						<p>Because the camera could have any position and orientation, we cannot make any assumptions about its clip planes ahead of time. So we have to be able to work with planes of arbitrary orientation and position. In general, a plane can be defined by its normal vector that defines its local upward direction, plus an offset relative to the world origin. This data can be stored in a four-component vector, where the W component contains the offset. The plane vector corresponding to our previous test case of discarding triangles with negative X coordinates would thus be (1, 0, 0, 0). If we instead discarded triangles up to X coordinates of 2, the vector would be (1, 0, 0, 2) instead.</p>
+						
+						<p>To figure out whether a point lies above or below the plane, we can project the vector to that point onto the plane's normal vector, via a dot product. If the result is negative, then their angle is larger than 90&deg; and thus the point lies below the plane. The plane's offset must also be taken into account, by adding it into the calculation, for example by making it a dot product between (px, py, pz, 1) and the plane vector, where px, py, and pz and the point's coordinates. Adjust <code>TriangleIsBelowClipPlane</code> accordingly.</p>
+						
+						<pre translate="no">bool TriangleIsBelowClipPlane (float3 p0, float3 p1, float3 p2) {
+	<ins>float4 plane = float4(1, 0, 0, 0);</ins>
+	return
+		<ins>dot(float4(p0, 1), plane) &lt; 0 &amp;&amp;</ins>
+		<ins>dot(float4(p1, 1), plane) &lt; 0 &amp;&amp;</ins>
+		<ins>dot(float4(p2, 1), plane) &lt; 0</ins>;
+}</pre>
+						
+						<p>The actual clip planes of the camera are made available via the <code>unity_CameraWorldClipPlanes</code> array, defined in <em translate="no">UnityShaderVariables</em>. It contains six plane definitions, for the left, right, bottom, top, near, and far planes. So to use the camera's left plane, we'd have to use <code>unity_CameraWorldClipPlanes[0]</code>.</p>
+						
+						<pre translate="no"><del>//	float4 plane = float4(1, 0, 0, 0);</del>
+	<ins>float4 plane = unity_CameraWorldClipPlanes[0];</ins></pre>
+						
+						<p>To make <code>TriangleIsBelowClipPlane</code> work for any of the camera's clip planes, add the plane index as an additional parameter and use that to select the appropriate camera plane.</p>
+						
+						<pre translate="no">bool TriangleIsBelowClipPlane (
+	float3 p0, float3 p1, float3 p2<ins>, int planeIndex</ins>
+) {
+	float4 plane = unity_CameraWorldClipPlanes[<ins>planeIndex</ins>];
+	return
+		dot(float4(p0, 1), plane) &lt; 0 &amp;&amp;
+		dot(float4(p1, 1), plane) &lt; 0 &amp;&amp;
+		dot(float4(p2, 1), plane) &lt; 0;
+}</pre>
+						
+						<p>Now we can check all of the clip planes inside <code>TriangleIsCulled</code>. If the triangle ends up below any of them, then it cannot be visible and should be clipped. We have to check this for the left, right, bottom, and top planes. The near plane isn't really needed, because the view pyramid typically comes to a point only a short distance behind the camera. So it's not worth the extra effort to check the near plane. The far plane also isn't necessary, because at that distance tessellation would typically not happen anyway.</p>
+						
+						<pre translate="no">bool TriangleIsCulled (float3 p0, float3 p1, float3 p2) {
+	return
+		TriangleIsBelowClipPlane(p0, p1, p2<ins>, 0</ins>) <ins>||</ins>
+		<ins>TriangleIsBelowClipPlane(p0, p1, p2, 1) ||</ins>
+		<ins>TriangleIsBelowClipPlane(p0, p1, p2, 2) ||</ins>
+		<ins>TriangleIsBelowClipPlane(p0, p1, p2, 3)</ins>;
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Biased Culling</h3>
+						
+						<p>Because we're only clipping those triangles that we cannot see, we shouldn't be able to tell the difference between clipping and not clipping, aside from a possible difference in frame rate. However, this is only true if we don't displace any vertices. When vertices do get displaced, it is possible that displaced vertices end up inside the frustum, even though the original triangles lies outside of it. In the case of our displaced plane, you can verify this by looking at the plane at a shallow angle so some of its mesh triangles end up just below the bottom of the view. You'll quickly encounter holes as triangles suddenly vanish while they shouldn't.</p>
+						
+						<figure>
+							<img src="culling-triangles/incorrectly-culled.png" width="230" height="150">
+							<figcaption>Hole created by incorrect culling.</figcaption>
+						</figure>
+						
+						<p>The solution to this problem is to take the maximum displacement into consideration when determining whether a triangle lies below a clip plane or not. This can be done by adding a bias to <code>TriangleIsBelowClipPlane</code>. Instead of checking whether the dot product is less than zero, check whether it's below this bias.</p>
+						
+						<pre translate="no">bool TriangleIsBelowClipPlane (
+	float3 p0, float3 p1, float3 p2, int planeIndex<ins>, float bias</ins>
+) {
+	float4 plane = unity_CameraWorldClipPlanes[planeIndex];
+	return
+		dot(float4(p0, 1), plane) &lt; <ins>bias</ins> &amp;&amp;
+		dot(float4(p1, 1), plane) &lt; <ins>bias</ins> &amp;&amp;
+		dot(float4(p2, 1), plane) &lt; <ins>bias</ins>;
+}</pre>
+						
+						<p>We should use the same bias for all plane checks, so add it as a parameter to <code>TriangleIsCulled</code> as well.</p>
+						
+						<pre translate="no">bool TriangleIsCulled (float3 p0, float3 p1, float3 p2<ins>, float bias</ins>) {
+	return
+		TriangleIsBelowClipPlane(p0, p1, p2, 0<ins>, bias</ins>) ||
+		TriangleIsBelowClipPlane(p0, p1, p2, 1<ins>, bias</ins>) ||
+		TriangleIsBelowClipPlane(p0, p1, p2, 2<ins>, bias</ins>) ||
+		TriangleIsBelowClipPlane(p0, p1, p2, 3<ins>, bias</ins>);
+}</pre>
+						
+						<p>Let's use a bias of 1 in <code>MyPatchConstantFunction</code> and see what happens.</p>
+						
+						<pre translate="no">	<ins>float bias = 1;</ins>
+	if (TriangleIsCulled(p0, p1, p2<ins>, bias</ins>)) {
+		f.edge[0] = f.edge[1] = f.edge[2] = f.inside = 0;
+	}</pre>
+						
+						<figure>
+							<img src="culling-triangles/positive-bias.png" width="250" height="190">
+							<figcaption>Using a positive bias.</figcaption>
+						</figure>
+						
+						<p>A positive bias effectively pushes the clip planes upward, decreasing the size of the frustum. As a result, triangles get clipped too quickly, when they get near the edge of the view. A negative bias has the opposite effect, so triangles that lie outside of but still nearby the frustum don't get clipped. So we have to use a negative bias when using vertex displacement. As our maximum displacement in any dimension is equal to half the displacement strength, that's the negative bias that we need.</p>
+						
+						<pre translate="no">	float bias = <ins>0</ins>;
+	<ins>#if VERTEX_DISPLACEMENT</ins>
+		<ins>bias = -0.5 * _DisplacementStrength;</ins>
+	<ins>#endif</ins>
+
+	if (TriangleIsCulled(p0, p1, p2, bias)) {
+		f.edge[0] = f.edge[1] = f.edge[2] = f.inside = 0;
+	}</pre>
+						
+						<p>We're now clipping as many triangles as possible, while guaranteeing that no holes will ever appear. Of course determining whether we should clip a triangle requires work too, so it won't improve performance for meshes that are fully in view, it actually makes it  bit worse. But when you're rendering large meshes with a high amount of tessellation, and they often are only partially visible, then you can end up significantly improving your frame rate.</p>
+						
+						<p>This concludes the introduction of tessellation. Now you know how to tessellate triangles and how to add geometric details via displacement mapping. This isn't the only thing you can do with tessellation. For example, there's also PN triangles, phong tessellation, procedural displacement, and more. Have fun experimenting with those methods!</p>
+					</section>
+					
+					<a href="culling-triangles/culling-triangles.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Surface-Displacement.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

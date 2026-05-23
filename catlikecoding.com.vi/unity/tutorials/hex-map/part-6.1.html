@@ -1,0 +1,2091 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/hex-map/part-6/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/hex-map/part-6/tutorial-image.jpg">
+		<meta property="og:title" content="Hex Map 6">
+		<meta property="og:description" content="A Unity Hex Map tutorial about adding support for rivers. Part 6 of 27.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hex Map 6</title>
+		<link href="../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/hex-map/part-6/#article",
+				"headline": "Hex Map 6",
+				"alternativeHeadline": "Rivers",
+				"datePublished": "2016-06-21",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Hex Map tutorial about adding support for rivers. Part 6 of 27.",
+				"image": "https://catlikecoding.com/unity/tutorials/hex-map/part-6/tutorial-image.jpg",
+				"dependencies": "Unity 5.3.1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/hex-map/", "name": "Hex Map" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				EdgeVertices: 1,
+				HexCell: 1,
+				HexEdgeType: 1,
+				HexCoordinates: 1,
+				HexCoordinatesDrawer: 1,
+				HexDirection: 1,
+				HexDirectionExtensions: 1,
+				HexGrid: 1,
+				HexGridChunk: 1,
+				HexMapCamera: 1,
+				HexMapEditor: 1,
+				HexMesh: 1,
+				HexMetrics: 1,
+				ListPool: 1,
+				OptionalToggle: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../products/utilities/frame-rate-counter/index.html"><img src="../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../index.html">Unity</a></li>
+					<li><a href="../index.html">Tutorials</a></li>
+					<li><a href="index.html">Hex Map</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hex Map 6</h1>
+					<p>Rivers</p>
+					<ul>
+						<li>Add river data to cells.</li>
+						<li>Support dragging to draw rivers.</li>
+						<li>Create river channels.</li>
+						<li>Use more than one mesh per chunk.</li>
+						<li>Make a generic pool for lists.</li>
+						<li>Triangulate and animate flowing water.</li>
+					</ul>
+				</header>
+
+				<p>This tutorial is the sixth part of a series about <a href="index.html">hexagon maps</a>. The previous part was about supporting larger maps. Now that we can do that, we can start thinking about larger terrain features. In this case, rivers.</p>
+				
+				<figure>
+					<img src="part-6/tutorial-image.jpg" width="512" height="256">
+					<figcaption>Down the mountain the rivers flow.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Cells With Rivers</h2>
+					
+					<p>There are three ways to add rivers to a hex grid. The first approach is to let them flow from cell to cell. This is how Endless Legend does it. The second method is to let them flow in between cells, from edge to edge. This is how Civilization 5 does it. And the third way is to have no special river structures at all, but to use water cells to suggest them. This is how Age of Wonders 3 does it.</p>
+					
+					<p>In our case, cell edges are already occupied by slopes and cliffs. That leaves little room for rivers. So we're going to make them flow from cell to cell. This means that every cell either has no river, has a river flowing through it, or is either the begin or end point of a river. Of the cells that have a river passing through them, it either goes straight, makes a one-step turn, or makes a two-step turn.</p>
+					
+					<figure>
+						<img src="part-6/cells-with-rivers/river-configurations.png" width="370" height="225">
+						<figcaption>Five possible river configurations.</figcaption>
+					</figure>
+					
+					<p>We're not going to support forking or merging rivers. It would make things a lot more complex, especially water flow. We also won't concern ourselves with larger bodies of water yet. Those come in a later tutorial.</p>
+					
+					<section>
+						<h3>Keeping Track of Rivers</h3>
+						
+						<p>A cell that has a river flowing through it can be though of as having both an incoming and an outgoing river. If it contains the beginning of a river, it only has an outgoing river. And if it contains the end of a river, it only has an incoming river. We can store this information in <code>HexCell</code> with two booleans.</p>
+						
+						<pre translate="no">	<ins>bool hasIncomingRiver, hasOutgoingRiver;</ins></pre>
+						
+						<p>But this is not enough. We also need to know the direction of these rivers. In the case of an outgoing river, this indicates where it's going. And for an incoming river, this indicates where it's coming from.</p>
+						
+						<pre translate="no">	bool hasIncomingRiver, hasOutgoingRiver;
+	<ins>HexDirection incomingRiver, outgoingRiver;</ins></pre>
+						
+						<p>We're going to need this information when triangulating cells, so add getter properties to access it. We won't support directly setting them. We'll add a different method for that later.</p>
+						
+						<pre translate="no">	<ins>public bool HasIncomingRiver {</ins>
+		<ins>get {</ins>
+			<ins>return hasIncomingRiver;</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	<ins>public bool HasOutgoingRiver {</ins>
+		<ins>get {</ins>
+			<ins>return hasOutgoingRiver;</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	<ins>public HexDirection IncomingRiver {</ins>
+		<ins>get {</ins>
+			<ins>return incomingRiver;</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	<ins>public HexDirection OutgoingRiver {</ins>
+		<ins>get {</ins>
+			<ins>return outgoingRiver;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>A useful question is whether a cell has a river in it, regardless of the specifics. So let's add a property for that as well.</p>
+						
+						<pre translate="no">	<ins>public bool HasRiver {</ins>
+		<ins>get {</ins>
+			<ins>return hasIncomingRiver || hasOutgoingRiver;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Another typical question is whether we have a beginning or ending of a river. If the state of the incoming and outgoing river is different, then this is the case. So that becomes another property.</p>
+						
+						<pre translate="no">	<ins>public bool HasRiverBeginOrEnd {</ins>
+		<ins>get {</ins>
+			<ins>return hasIncomingRiver != hasOutgoingRiver;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>And finally, it is useful to know whether a river is flowing through a certain edge, regardless whether it's incoming or outgoing.</p>
+						
+						<pre translate="no">	<ins>public bool HasRiverThroughEdge (HexDirection direction) {</ins>
+		<ins>return</ins>
+			<ins>hasIncomingRiver &amp;&amp; incomingRiver == direction ||</ins>
+			<ins>hasOutgoingRiver &amp;&amp; outgoingRiver == direction;</ins>
+	<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Removing Rivers</h3>
+						
+						<p>Before worrying about how to add a river to a cell, let's first support removing them. First, a method for removing just the outgoing part of a river.</p>
+						
+						<p>If there isn't an outgoing river to begin with, then there's nothing to do. Otherwise, turn it off and refresh.</p>
+						
+						<pre translate="no">	<ins>public void RemoveOutgoingRiver () {</ins>
+		<ins>if (!hasOutgoingRiver) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+		<ins>hasOutgoingRiver = false;</ins>
+		<ins>Refresh();</ins>
+	<ins>}</ins></pre>
+						
+						<p>But that is not all. An outgoing river has to go somewhere. So there has to be a neighbor with an incoming river. We have to get rid of that one as well.</p>
+						
+						<pre translate="no">	public void RemoveOutgoingRiver () {
+		if (!hasOutgoingRiver) {
+			return;
+		}
+		hasOutgoingRiver = false;
+		Refresh();
+
+		<ins>HexCell neighbor = GetNeighbor(outgoingRiver);</ins>
+		<ins>neighbor.hasIncomingRiver = false;</ins>
+		<ins>neighbor.Refresh();</ins>
+	}</pre>
+						
+						<aside>
+							<h3>Can't river flow out of the map?</h3>
+							<div>
+								<p>While it's possible to support that, we won't. So we do not have to check whether the neighbor exists.</p>
+							</div>
+						</aside>
+						
+						<p>Removing the river from a cell only changes the appearance of that cell. Unlike when editing elevation or color, its neighbors are not affected. So we only have to refresh the cells itself, not its neighbors.</p>
+						
+						<pre translate="no">	public void RemoveOutgoingRiver () {
+		if (!hasOutgoingRiver) {
+			return;
+		}
+		hasOutgoingRiver = false;
+		<ins>RefreshSelfOnly</ins>();
+
+		HexCell neighbor = GetNeighbor(outgoingRiver);
+		neighbor.hasIncomingRiver = false;
+		neighbor.<ins>RefreshSelfOnly</ins>();
+	}</pre>
+						
+						<p>This <code>RefreshSelfOnly</code> method simply only refreshes the cell's chunk. As we're not changing rivers when initializing the grid, we don't have to worry about whether the chunk has been assigned yet.</p>
+						
+						<pre translate="no">	<ins>void RefreshSelfOnly () {</ins>
+		<ins>chunk.Refresh();</ins>
+	<ins>}</ins></pre>
+						
+						<p>Removing the incoming river works the same way.</p>
+						
+						<pre translate="no">	<ins>public void RemoveIncomingRiver () {</ins>
+		<ins>if (!hasIncomingRiver) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+		<ins>hasIncomingRiver = false;</ins>
+		<ins>RefreshSelfOnly();</ins>
+
+		<ins>HexCell neighbor = GetNeighbor(incomingRiver);</ins>
+		<ins>neighbor.hasOutgoingRiver = false;</ins>
+		<ins>neighbor.RefreshSelfOnly();</ins>
+	<ins>}</ins></pre>
+						
+						<p>And removing the entire river just means removing both the outgoing and incoming river parts.</p>
+						
+						<pre translate="no">	<ins>public void RemoveRiver () {</ins>
+		<ins>RemoveOutgoingRiver();</ins>
+		<ins>RemoveIncomingRiver();</ins>
+	<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Adding Rivers</h3>
+						
+						<p>To support the creation of rivers, all we need is a method to set the outgoing river of a cell. This should override any previous outgoing river, and set the corresponding incoming river.</p>
+						
+						<p>First, there's nothing to do when the river already exists.</p>
+						
+						<pre translate="no">	<ins>public void SetOutgoingRiver (HexDirection direction) {</ins>
+		<ins>if (hasOutgoingRiver &amp;&amp; outgoingRiver == direction) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Then, we have to ensure that there is a neighbor in the desired direction. Also, rivers cannot flow uphill. So we'll have to abort if the neighbor has a higher elevation.</p>
+						
+						<pre translate="no">		<ins>HexCell neighbor = GetNeighbor(direction);</ins>
+		<ins>if (!neighbor || elevation &lt; neighbor.elevation) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins></pre>
+						
+						<p>Next, we have to clear the previous outgoing river. And we also have to remove the incoming river, if it overlaps with our new outgoing river.</p>
+						
+						<pre translate="no">		<ins>RemoveOutgoingRiver();</ins>
+		<ins>if (hasIncomingRiver &amp;&amp; incomingRiver == direction) {</ins>
+			<ins>RemoveIncomingRiver();</ins>
+		<ins>}</ins></pre>
+						
+						<p>Now we can move on to setting the outgoing river.</p>
+						
+						<pre translate="no">		<ins>hasOutgoingRiver = true;</ins>
+		<ins>outgoingRiver = direction;</ins>
+		<ins>RefreshSelfOnly();</ins>
+</pre>
+						
+						<p>And don't forget to set the incoming river of the other cell, after removing its current incoming river, if any.</p>
+						
+						<pre translate="no">		<ins>neighbor.RemoveIncomingRiver();</ins>
+		<ins>neighbor.hasIncomingRiver = true;</ins>
+		<ins>neighbor.incomingRiver = direction.Opposite();</ins>
+		<ins>neighbor.RefreshSelfOnly();</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Preventing Uphill Rivers</h3>
+						
+						<p>While we have made sure that we can only add valid rivers, other actions can still result in invalid ones. When we change the elevation of a cell, we must once again enforce that rivers can only flow downhill. All illegal rivers have to be removed.</p>
+						
+						<pre translate="no">	public int Elevation {
+		get {
+			return elevation;
+		}
+		set {
+			&hellip;
+
+			<ins>if (</ins>
+				<ins>hasOutgoingRiver &amp;&amp;</ins>
+				<ins>elevation &lt; GetNeighbor(outgoingRiver).elevation</ins>
+			<ins>) {</ins>
+				<ins>RemoveOutgoingRiver();</ins>
+			<ins>}</ins>
+			<ins>if (</ins>
+				<ins>hasIncomingRiver &amp;&amp;</ins>
+				<ins>elevation > GetNeighbor(incomingRiver).elevation</ins>
+			<ins>) {</ins>
+				<ins>RemoveIncomingRiver();</ins>
+			<ins>}</ins>
+
+			Refresh();
+		}
+	}</pre>
+						
+					</section>
+					
+					<a href="part-6/cells-with-rivers/cells-with-rivers.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Editing Rivers</h2>
+					
+					<p>To support editing rivers, we have to add a river toggle to our UI. Actually, we need to support three edit modes. Either ignore rivers, add them, or remove them. We can use a simple optional toggle enumeration to keep track of this. Because we'll only use it inside the editor, you can define it right inside the <code>HexMapEditor</code> class, along with a river mode field.</p>
+					
+					<pre translate="no">	<ins>enum OptionalToggle {</ins>
+		<ins>Ignore, Yes, No</ins>
+	<ins>}</ins>
+	
+	<ins>OptionalToggle riverMode;</ins></pre>
+					
+					<p>And we need a method to adjust the river mode via the UI.</p>
+					
+					<pre translate="no">	<ins>public void SetRiverMode (int mode) {</ins>
+		<ins>riverMode = (OptionalToggle)mode;</ins>
+	<ins>}</ins></pre>
+					
+					<p>To control the river mode, add three toggles to the UI and combine them into a new toggle group, just like the colors. I adjusted the toggles so their labels are below the checkboxes. This makes them thin enough to put all three options in a single row.</p>
+
+					<figure>
+						<img src="part-6/editing-rivers/river-ui.png" width="108" height="318">
+						<figcaption>River UI.</figcaption>
+					</figure>
+					
+					<aside>
+						<h3>Why not use a dropdown list?</h3>
+						<div>
+							<p>You can use a dropdown if you like. Unfortunately, Unity's dropdown list cannot deal with recompiles while in play mode. The option list will be lost, which makes it useless after a recompile.</p>
+						</div>
+					</aside>
+					
+					<section>
+						<h3>Detecting Drags</h3>
+						
+						<p>To create a river, we need both a cell and a direction. Currently, <code>HexMapEditor</code> does not give us this information. So we have to add support for dragging from one cell to another.</p>
+						
+						<p>We need to know whether we have a valid drag, and its direction. And to detect a drag, we have to remember the previous cell as well.</p>
+						
+						<pre translate="no">	<ins>bool isDrag;</ins>
+	<ins>HexDirection dragDirection;</ins>
+	<ins>HexCell previousCell;</ins></pre>
+						
+						<p>Initally, when not dragging, there is no previous cell. So whenever there is no input, or we don't interact with the map, we have to set it to <code>null</code>.</p>
+						
+						<pre translate="no">	void Update () {
+		if (
+			Input.GetMouseButton(0) &amp;&amp;
+			!EventSystem.current.IsPointerOverGameObject()
+		) {
+			HandleInput();
+		}
+		<ins>else {</ins>
+			<ins>previousCell = null;</ins>
+		<ins>}</ins>
+	}
+
+	void HandleInput () {
+		Ray inputRay = Camera.main.ScreenPointToRay(Input.mousePosition);
+		RaycastHit hit;
+		if (Physics.Raycast(inputRay, out hit)) {
+			EditCells(hexGrid.GetCell(hit.point));
+		}
+		<ins>else {</ins>
+			<ins>previousCell = null;</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>The current cell is the one that we find based on the hit point. After we're done editing cells this update, that cell becomes the previous cell for the next update.</p>
+						
+						<pre translate="no">	void HandleInput () {
+		Ray inputRay = Camera.main.ScreenPointToRay(Input.mousePosition);
+		RaycastHit hit;
+		if (Physics.Raycast(inputRay, out hit)) {
+			<ins>HexCell currentCell =</ins> hexGrid.GetCell(hit.point)<ins>;</ins>
+			EditCells(<ins>currentCell</ins>);
+			<ins>previousCell = currentCell;</ins>
+		}
+		else {
+			previousCell = null;
+		}
+	}</pre>
+						
+						<p>After determining the current cell, we can compare it with the previous cell, if there is any. If we end up with two different cells, then we might have a valid drag and should check this. Otherwise, it certainly isn't a drag.</p>
+						
+						<pre translate="no">		if (Physics.Raycast(inputRay, out hit)) {
+			HexCell currentCell = hexGrid.GetCell(hit.point);
+			<ins>if (previousCell &amp;&amp; previousCell != currentCell) {</ins>
+				<ins>ValidateDrag(currentCell);</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>isDrag = false;</ins>
+			<ins>}</ins>
+			EditCells(currentCell);
+			previousCell = currentCell;
+		}</pre>
+						
+						<p>How do we validate a drag? By verifying that the current cell is a neighbor of the previous cell. We check this by looping through its neighbors. If we find a match, then we also immediately know the drag direction.</p>
+						
+						<pre translate="no">	<ins>void ValidateDrag (HexCell currentCell) {</ins>
+		<ins>for (</ins>
+			<ins>dragDirection = HexDirection.NE;</ins>
+			<ins>dragDirection &lt;= HexDirection.NW;</ins>
+			<ins>dragDirection++</ins>
+		<ins>) {</ins>
+			<ins>if (previousCell.GetNeighbor(dragDirection) == currentCell) {</ins>
+				<ins>isDrag = true;</ins>
+				<ins>return;</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>isDrag = false;</ins>
+	<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Doesn't this produce jittery drags?</h3>
+							<div>
+								<p>When you're moving the cursor along cell edges, you might end up quickly oscillating between those cells. This can indeed produce jittery drags, but it's not that bad.</p>
+								
+								<p>You could alleviate this by remembering the previous drag. Then prevent the next drag from immediately going in the opposite direction.</p>
+							</div>
+						</aside>
+						
+					</section>
+					
+					<section>
+						<h3>Adjusting Cells</h3>
+						
+						<p>Now that we can detect drags, we can set outgoing rivers. We can remove rivers as well, we didn't need drag support for that.</p>
+						
+						<pre translate="no">	void EditCell (HexCell cell) {
+		if (cell) {
+			if (applyColor) {
+				cell.Color = activeColor;
+			}
+			if (applyElevation) {
+				cell.Elevation = activeElevation;
+			}
+			<ins>if (riverMode == OptionalToggle.No) {</ins>
+				<ins>cell.RemoveRiver();</ins>
+			<ins>}</ins>
+			<ins>else if (isDrag &amp;&amp; riverMode == OptionalToggle.Yes) {</ins>
+				<ins>previousCell.SetOutgoingRiver(dragDirection);</ins>
+			<ins>}</ins>
+		}
+	}</pre>
+						
+						<p>This will draw a river from the previous cell to the current cell. But it ignores the brush size. That might make sense, but let's draw rivers for all cells covered by the brush anyway. This can be done by working relative to the cell that's being edited. In this case, we do have to make sure that the other cell does exist.</p>
+						
+						<pre translate="no">			else if (isDrag &amp;&amp; riverMode == OptionalToggle.Yes) {
+				<ins>HexCell otherCell = cell.GetNeighbor(dragDirection.Opposite());</ins>
+				<ins>if (otherCell) {</ins>
+					<ins>otherCell</ins>.SetOutgoingRiver(dragDirection);
+				<ins>}</ins>
+			}</pre>
+						
+						<p>We are now able to edit rivers, although cannot see them yet. You can verify that it works by inspecting the edited cells with the debug inspector.</p>
+						
+						<figure>
+							<img src="part-6/editing-rivers/cell-with-river-debug.png" width="320" height="256">
+							<figcaption>Cell with river, debug inspector.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What's the debug inspector?</h3>
+							<div>
+								<p>You can switch between the inspector's normal and debug mode via its tab menu. You can access it via the icon at the top right of the tab. While in debug mode, the inspector shows the raw object data.</p>
+							</div>
+						</aside>
+						
+					</section>
+					
+					<a href="part-6/editing-rivers/editing-rivers.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>River Channels Between Cells</h2>
+					
+					<p>When triangulating a river, we have to consider two parts. There's the river's channel, and the water that's flowing through it. We'll first create the channels and leave the water for later.</p>
+					
+					<p>The simplest part of a river is where it flows across the connection between cells. Currently, we triangulate this area with a strip of three quads. We could add a river channel to that by lowering the middle quad and adding two channel walls.</p>
+					
+					<figure>
+						<img src="part-6/river-channels-between-cells/edge-strip.png" width="175" height="205">
+						<figcaption>Adding a river to an edge strip.</figcaption>
+					</figure>
+					
+					<p>This would require two additional quads in case of a river, and produces a channel with vertical walls. An alternative approach is to always use four quads. Then we can lower the middle vertex to form a channel with slanted walls.</p>
+					
+					<figure>
+						<img src="part-6/river-channels-between-cells/edge-strip-four-quads.png" width="175" height="205">
+						<figcaption>Always four quads.</figcaption>
+					</figure>
+					
+					<p>Always using the same amount of quads is convenient, so let's go with that option.</p>
+					
+					<section>
+						<h3>Adding an Edge Vertex</h3>
+						
+						<p>Going from three to four quads per edge requires an additional edge vertex. Refactor <code>EdgeVertices</code> by first renaming <code>v4</code> to <code>v5</code> and then <code>v3</code> to <code>v4</code>. Doing it in this order ensures that all code keeps referencing the correct vertices. Use your editor's rename or refactor option for this, so the changes are applied everywhere. Otherwise, you'll have to manually go through all code and make the adjustments.</p>
+						
+						<pre translate="no">	public Vector3 v1, v2, <ins>v4</ins>, <ins>v5</ins>;</pre>
+						
+						<p>After everything has been renamed, add a new <code>v3</code>.</p>
+						
+						<pre translate="no">	public Vector3 v1, v2, <ins>v3,</ins> v4, v5;</pre>
+						
+						<p>Include the new vertex in the constructor. It sits halfway between the corner vertices. Also, the other vertices should now end up at &frac12; and &frac34;, instead of &frac13; and &frac23;.</p>
+						
+						<pre translate="no">	public EdgeVertices (Vector3 corner1, Vector3 corner2) {
+		v1 = corner1;
+		v2 = Vector3.Lerp(corner1, corner2, <ins>0.25f</ins>);
+		<ins>v3 = Vector3.Lerp(corner1, corner2, 0.5f);</ins>
+		v4 = Vector3.Lerp(corner1, corner2, <ins>0.75f</ins>);
+		v5 = corner2;
+	}</pre>
+						
+						<p>Add <code>v3</code> to <code>TerraceLerp</code> as well.</p>
+						
+						<pre translate="no">	public static EdgeVertices TerraceLerp (
+		EdgeVertices a, EdgeVertices b, int step)
+	{
+		EdgeVertices result;
+		result.v1 = HexMetrics.TerraceLerp(a.v1, b.v1, step);
+		result.v2 = HexMetrics.TerraceLerp(a.v2, b.v2, step);
+		<ins>result.v3 = HexMetrics.TerraceLerp(a.v3, b.v3, step);</ins>
+		result.v4 = HexMetrics.TerraceLerp(a.v4, b.v4, step);
+		result.v5 = HexMetrics.TerraceLerp(a.v5, b.v5, step);
+		return result;
+	}</pre>
+						
+						<p><code>HexMesh</code> now has to include the extra vertex in its triangle edge fans.</p>
+						
+						<pre translate="no">	void TriangulateEdgeFan (Vector3 center, EdgeVertices edge, Color color) {
+		AddTriangle(center, edge.v1, edge.v2);
+		AddTriangleColor(color);
+		AddTriangle(center, edge.v2, edge.<ins>v3</ins>);
+		AddTriangleColor(color);
+		<ins>AddTriangle(center, edge.v3, edge.v4);</ins>
+		<ins>AddTriangleColor(color);</ins>
+		AddTriangle(center, edge.v4, edge.v5);
+		AddTriangleColor(color);
+	}</pre>
+						
+						<p>And also in its quad strips.</p>
+						
+						<pre translate="no">	void TriangulateEdgeStrip (
+		EdgeVertices e1, Color c1,
+		EdgeVertices e2, Color c2
+	) {
+		AddQuad(e1.v1, e1.v2, e2.v1, e2.v2);
+		AddQuadColor(c1, c2);
+		AddQuad(e1.v2, e1.<ins>v3</ins>, e2.v2, e2.<ins>v3</ins>);
+		AddQuadColor(c1, c2);
+		<ins>AddQuad(e1.v3, e1.v4, e2.v3, e2.v4);</ins>
+		<ins>AddQuadColor(c1, c2);</ins>
+		AddQuad(e1.v4, e1.v5, e2.v4, e2.v5);
+		AddQuadColor(c1, c2);
+	}</pre>
+						
+						<figure>
+							<img alt="four" src="part-6/river-channels-between-cells/four-vertices.png" width="400" height="200">
+							<img alt="five" src="part-6/river-channels-between-cells/five-vertices.png" width="400" height="200">
+							<figcaption>Four vs. five vertices per edge.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Stream Bed Elevation</h3>
+						
+						<p>We create the channel by lowering the middle vertex of an edge. This defines the vertical position of the stream bed. Although the exact vertical position of each cell is perturbed, we should keep the stream bed constant across cells with the same elevation. This ensures that water doesn't have to flow upstream. Also, the stream bed should be low enough that it stays below even the most vertically perturbed cells, while still allowing room for water.</p>
+						
+						<p>Let's define this offset in <code>HexMetrics</code> and express it as an elevation. A one-level offset should be enough.</p>
+						
+						<pre translate="no">	<ins>public const float streamBedElevationOffset = -1f;</ins></pre>
+						
+						<p>We can use this metric to add a property to <code>HexCell</code>, to retrieve the vertical position of its stream bed.</p>
+						
+						<pre translate="no">	<ins>public float StreamBedY {</ins>
+		<ins>get {</ins>
+			<ins>return</ins>
+				<ins>(elevation + HexMetrics.streamBedElevationOffset) *</ins>
+				<ins>HexMetrics.elevationStep;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Creating the Channel</h3>
+						
+						<p>When <code>HexMesh</code> triangulates one of the six triangular parts of a cell, we can detect whether there is a river flowing through its edge. If so, we can now drop the middle edge vertex to the stream bed's height.</p>
+						
+						<pre translate="no">	void Triangulate (HexDirection direction, HexCell cell) {
+		Vector3 center = cell.Position;
+		EdgeVertices e = new EdgeVertices(
+			center + HexMetrics.GetFirstSolidCorner(direction),
+			center + HexMetrics.GetSecondSolidCorner(direction)
+		);
+
+		<ins>if (cell.HasRiverThroughEdge(direction)) {</ins>
+			<ins>e.v3.y = cell.StreamBedY;</ins>
+		<ins>}</ins>
+
+		TriangulateEdgeFan(center, e, cell.Color);
+
+		if (direction &lt;= HexDirection.SE) {
+			TriangulateConnection(direction, cell, e);
+		}
+	}</pre>
+						
+						<figure>
+							<img src="part-6/river-channels-between-cells/adjusting-one-edge.png" width="370" height="270">
+							<figcaption>Adjusting the middle edge vertex.</figcaption>
+						</figure>
+						
+						<p>We can see the first traces of rivers appear, but we also get holes in the terrain. To close them, we have to adjust the other edge as well, when triangulating a connection.</p>
+						
+						<pre translate="no">	void TriangulateConnection (
+		HexDirection direction, HexCell cell, EdgeVertices e1
+	) {
+		HexCell neighbor = cell.GetNeighbor(direction);
+		if (neighbor == null) {
+			return;
+		}
+
+		Vector3 bridge = HexMetrics.GetBridge(direction);
+		bridge.y = neighbor.Position.y - cell.Position.y;
+		EdgeVertices e2 = new EdgeVertices(
+			e1.v1 + bridge,
+			e1.v5 + bridge
+		);
+
+		<ins>if (cell.HasRiverThroughEdge(direction)) {</ins>
+			<ins>e2.v3.y = neighbor.StreamBedY;</ins>
+		<ins>}</ins>
+		
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="part-6/river-channels-between-cells/adjusting-both-edges.png" width="370" height="270">
+							<figcaption>Complete edge connection channels.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="part-6/river-channels-between-cells/river-channels-between-cells.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>River Channels Across Cells</h2>
+					
+					<p>We now have correct river channels between cells. But when a river flows through a cell, the channels always terminate at its center. Fixing this requires some work. Let's begin by considering the case when a river flows straight across a cell, from one side to its opposite.</p>
+					
+					<p>If there isn't a river, each cell part can be a simple triangle fan. But when a river flows straight through it, we have to insert a channel. Effectively, we have to stretch the center vertex into a line, thereby turning the middle two triangles into quads. The triangle fan then becomes a trapezoid.</p>
+					
+					<figure>
+						<img src="part-6/river-channels-across-cells/channel-across-triangle.png" width="275" height="125">
+						<figcaption>Forcing a channel into a triangle.</figcaption>
+					</figure>
+					
+					<p>These channels would be much longer than those running through cell connections. This will become obvious when perturbing the vertices. So let's split the trapezoid into two segments, by inserting another set of edge vertices halfway between the center and edge.</p>
+					
+					<figure>
+						<img src="part-6/river-channels-across-cells/triangulation.png" width="290" height="250">
+						<figcaption>Triangulating a channel.</figcaption>
+					</figure>
+					
+					<p>Because triangulating with a river will be so different than triangulating without one, let's create a dedicated method for it. If we have a river, we use that method, otherwise we keep using a triangle fan.</p>
+					
+					<pre translate="no">	void Triangulate (HexDirection direction, HexCell cell) {
+		Vector3 center = cell.Position;
+		EdgeVertices e = new EdgeVertices(
+			center + HexMetrics.GetFirstSolidCorner(direction),
+			center + HexMetrics.GetSecondSolidCorner(direction)
+		);
+
+		<ins>if (cell.HasRiver) {</ins>
+			if (cell.HasRiverThroughEdge(direction)) {
+				e.v3.y = cell.StreamBedY;
+				<ins>TriangulateWithRiver(direction, cell, center, e);</ins>
+			}
+		<ins>}</ins>
+		<ins>else {</ins>
+			TriangulateEdgeFan(center, e, cell.Color);
+		<ins>}</ins>
+
+		if (direction &lt;= HexDirection.SE) {
+			TriangulateConnection(direction, cell, e);
+		}
+	}
+	
+	<ins>void TriangulateWithRiver (</ins>
+		<ins>HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e</ins>
+	<ins>) {</ins>
+	
+	<ins>}</ins></pre>
+					
+					<figure>
+						<img src="part-6/river-channels-across-cells/holes.png" width="380" height="150">
+						<figcaption>Holes where rivers should be.</figcaption>
+					</figure>
+					
+					<p>To get a better view of what we're doing, disable cell perturbation for now.</p>
+					
+					<pre translate="no">	public const float cellPerturbStrength = <ins>0f; // 4f</ins>;</pre>
+					
+					<figure>
+						<img src="part-6/river-channels-across-cells/unperturbed.png" width="390" height="160">
+						<figcaption>Unperturbed vertices.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Triangulating Straight Across</h3>
+						
+						<p>To create a channel straight across the cell part, we have to stretch the center into a line. This line needs to have the same width as the channel. We can find the left vertex by moving &frac14; of the way from the center to the first corner of the previous part.</p>
+						
+						<pre translate="no">	void TriangulateWithRiver (
+		HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e
+	) {
+		<ins>Vector3 centerL = center +</ins>
+			<ins>HexMetrics.GetFirstSolidCorner(direction.Previous()) * 0.25f;</ins>
+	}</pre>
+						
+						<p>Likewise for the right vertex. In this case, we need the second corner of the next part.</p>
+						
+						<pre translate="no">		Vector3 centerL = center +
+			HexMetrics.GetFirstSolidCorner(direction.Previous()) * 0.25f;
+		<ins>Vector3 centerR = center +</ins>
+			<ins>HexMetrics.GetSecondSolidCorner(direction.Next()) * 0.25f;</ins>
+</pre>
+						
+						<p>The middle line can be found by creating edge vertices between the center and edge.</p>
+						
+						<pre translate="no">		<ins>EdgeVertices m = new EdgeVertices(</ins>
+			<ins>Vector3.Lerp(centerL, e.v1, 0.5f),</ins>
+			<ins>Vector3.Lerp(centerR, e.v5, 0.5f)</ins>
+		<ins>);</ins>
+</pre>
+						
+						<p>Next, adjust the middle vertex of the middle edge, as well as the center, so they become channel bottoms.</p>
+						
+						<pre translate="no">		<ins>m.v3.y = center.y = e.v3.y;</ins></pre>
+						
+						<p>Now we can use <code>TriangulateEdgeStrip</code> to fill the space between the middle and edge lines.</p>
+						
+						<pre translate="no">		<ins>TriangulateEdgeStrip(m, cell.Color, e, cell.Color);</ins></pre>
+						
+						<figure>
+							<img src="part-6/river-channels-across-cells/pinched-strip.png" width="390" height="160">
+							<figcaption>Pinched channels.</figcaption>
+						</figure>
+						
+						<p>Unfortunately, the channels appears to be pinched. This happens because the middle edge vertices are too close together. Why does this happen?</p>
+						
+						<p>If we consider the outer edge's length to be 1, then the center line's length is &frac12;. As the middle edge sits halfway between them, its length must be &frac34;.</p>
+						
+						<p>The channel's width is &frac12;, which should remain constant. As the middle edge length is &frac34;, there is only &frac14; left, &frac18; on either side of the channel.</p>
+						
+						<figure>
+							<img src="part-6/river-channels-across-cells/relative-lengths.png" width="250" height="235">
+							<figcaption>Relative lengths.</figcaption>
+						</figure>
+						
+						<p>Because the middle edge's length is &frac34;, the &frac18; become &frac16; relative to the middle edge's length. This means that its second and fourth vertex should be interpolated using sixths, instead of quarters.</p>
+						
+						
+						<p>We can support this alternative interpolation by adding another constructor to <code>EdgeVertices</code>. Instead of using fixed interpolations for <code>v2</code> and <code>v4</code>, let's use a parameter.</p>
+						
+						<pre translate="no">	<ins>public EdgeVertices (Vector3 corner1, Vector3 corner2, float outerStep) {</ins>
+		<ins>v1 = corner1;</ins>
+		<ins>v2 = Vector3.Lerp(corner1, corner2, outerStep);</ins>
+		<ins>v3 = Vector3.Lerp(corner1, corner2, 0.5f);</ins>
+		<ins>v4 = Vector3.Lerp(corner1, corner2, 1f - outerStep);</ins>
+		<ins>v5 = corner2;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can use that with &frac16; in <code>HexMesh.TriangulateWithRiver</code>.</p>
+						
+						<pre translate="no">		EdgeVertices m = new EdgeVertices(
+			Vector3.Lerp(centerL, e.v1, 0.5f),
+			Vector3.Lerp(centerR, e.v5, 0.5f)<ins>,</ins>
+			<ins>1f / 6f</ins>
+		);</pre>
+						
+						<figure>
+							<img src="part-6/river-channels-across-cells/straight-channels.png" width="390" height="160">
+							<figcaption>Straight channels.</figcaption>
+						</figure>
+						
+						<p>With the channel straightened out, we can move on to the second section of the trapezoid. We cannot use an edge strip in this case, we have to do it manually. Let's first create the triangles at the sides.</p>
+						
+						<pre translate="no">		<ins>AddTriangle(centerL, m.v1, m.v2);</ins>
+		<ins>AddTriangleColor(cell.Color);</ins>
+		<ins>AddTriangle(centerR, m.v4, m.v5);</ins>
+		<ins>AddTriangleColor(cell.Color);</ins></pre>
+						
+						<figure>
+							<img src="part-6/river-channels-across-cells/side-triangles.png" width="390" height="160">
+							<figcaption>Side triangles.</figcaption>
+						</figure>
+						
+						<p>That looks good, so fill the remaining space with two quads, forming the final part of the channel.</p>
+						
+						<pre translate="no">		AddTriangle(centerL, m.v1, m.v2);
+		AddTriangleColor(cell.Color);
+		<ins>AddQuad(centerL, center, m.v2, m.v3);</ins>
+		<ins>AddQuadColor(cell.Color);</ins>
+		<ins>AddQuad(center, centerR, m.v3, m.v4);</ins>
+		<ins>AddQuadColor(cell.Color);</ins>
+		AddTriangle(centerR, m.v4, m.v5);
+		AddTriangleColor(cell.Color);</pre>
+						
+						<p>Actually, we don't have an <code>AddQuadColor</code> alternative that requires only a single parameter. We didn't need one until now. So just create it.</p>
+						
+						<pre translate="no">	<ins>void AddQuadColor (Color color) {</ins>
+		<ins>colors.Add(color);</ins>
+		<ins>colors.Add(color);</ins>
+		<ins>colors.Add(color);</ins>
+		<ins>colors.Add(color);</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="part-6/river-channels-across-cells/complete-channels.png" width="390" height="160">
+							<figcaption>Complete straight channels.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Triangulating Begin and End</h3>
+						
+						<p>Triangulating a part that has only the beginning or end of a river is different enough that it warrants its own method. So check for it in <code>Triangulate</code> and invoke the appropriate method.</p>
+						
+						<pre translate="no">		if (cell.HasRiver) {
+			if (cell.HasRiverThroughEdge(direction)) {
+				e.v3.y = cell.StreamBedY;
+				<ins>if (cell.HasRiverBeginOrEnd) {</ins>
+					<ins>TriangulateWithRiverBeginOrEnd(direction, cell, center, e);</ins>
+				<ins>}</ins>
+				<ins>else {</ins>
+					TriangulateWithRiver(direction, cell, center, e);
+				<ins>}</ins>
+			}
+		}</pre>
+						
+						<p>In this case, we want to terminate the channel at the center, but still use two steps to get there. So again create a middle edge between the center and edge. Because we do want to terminate the channel, it is fine that it gets pinched.</p>
+						
+						<pre translate="no">	<ins>void TriangulateWithRiverBeginOrEnd (</ins>
+		<ins>HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e</ins>
+	<ins>) {</ins>
+		<ins>EdgeVertices m = new EdgeVertices(</ins>
+			<ins>Vector3.Lerp(center, e.v1, 0.5f),</ins>
+			<ins>Vector3.Lerp(center, e.v5, 0.5f)</ins>
+		<ins>);</ins>
+	<ins>}</ins></pre>
+						
+						<p>To make sure that the channel doesn't become too shallow too fast, we still set the middle vertex to the stream bed height. But the center should not be adjusted.</p>
+						
+						<pre translate="no">		<ins>m.v3.y = e.v3.y;</ins></pre>
+						
+						<p>We can triangulate with a single edge strip and a fan.</p>
+						
+						<pre translate="no">		<ins>TriangulateEdgeStrip(m, cell.Color, e, cell.Color);</ins>
+		<ins>TriangulateEdgeFan(center, m, cell.Color);</ins></pre>
+						
+						<figure>
+							<img src="part-6/river-channels-across-cells/begin-and-end.png" width="390" height="160">
+							<figcaption>Begin and end points.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>One-step Turns</h3>
+						
+						<p>Next, let's consider sharp turns, which zigzag across adjacent cells. We'll take care of these in <code>TriangulateWithRiver</code> as well. So we have to figure out which type of river we're working with.</p>
+						
+						<figure>
+							<img src="part-6/river-channels-across-cells/zigzag.png" width="280" height="140">
+							<figcaption>Zigzag river.</figcaption>
+						</figure>
+						
+						<p>If the cell has a river going through the opposite direction as well as the direction that we're working with, then it must be a straight river. In that case, we can keep the center line that we already figured out. Otherwise, let's revert back to a single point by collapsing the center line.</p>
+						
+						<pre translate="no">		<ins>Vector3 centerL, centerR;</ins>
+		<ins>if (cell.HasRiverThroughEdge(direction.Opposite())) {</ins>
+			centerL = center +
+				HexMetrics.GetFirstSolidCorner(direction.Previous()) * 0.25f;
+			centerR = center +
+				HexMetrics.GetSecondSolidCorner(direction.Next()) * 0.25f;
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>centerL = centerR = center;</ins>
+		<ins>}</ins></pre>
+						
+						<figure>
+							<img src="part-6/river-channels-across-cells/pinched-again.png" width="280" height="140">
+							<figcaption>Collapsed zigzag channels.</figcaption>
+						</figure>
+						
+						<p>We can detect sharp turns by checking whether the cell has a river going through the next or previous cell part. If so, we have to align the center line with the edge between this and the adjacent part. We can do that by placing the appropriate side of the line halfway between the center and the shared corner. The other side of the line then becomes the center.</p>
+						
+						<pre translate="no">		if (cell.HasRiverThroughEdge(direction.Opposite())) {
+			centerL = center +
+				HexMetrics.GetFirstSolidCorner(direction.Previous()) * 0.25f;
+			centerR = center +
+				HexMetrics.GetSecondSolidCorner(direction.Next()) * 0.25f;
+		}
+		<ins>else if (cell.HasRiverThroughEdge(direction.Next())) {</ins>
+			<ins>centerL = center;</ins>
+			<ins>centerR = Vector3.Lerp(center, e.v5, 0.5f);</ins>
+		<ins>}</ins>
+		<ins>else if (cell.HasRiverThroughEdge(direction.Previous())) {</ins>
+			<ins>centerL = Vector3.Lerp(center, e.v1, 0.5f);</ins>
+			<ins>centerR = center;</ins>
+		<ins>}</ins>
+		else {
+			centerL = centerR = center;
+		}</pre>
+						
+						<p>After deciding where the left and right points are, we can determine the final center by averaging them.</p>
+
+						<pre translate="no">		if (cell.HasRiverThroughEdge(direction.Opposite())) {
+			&hellip;
+		}		
+		<ins>center = Vector3.Lerp(centerL, centerR, 0.5f);</ins></pre>
+						
+						<figure>
+							<img src="part-6/river-channels-across-cells/twisted-center-edge.png" width="310" height="130">
+							<figcaption>Twisted center edge.</figcaption>
+						</figure>
+						
+						<p>Although the channel has the same width on both sides, it appears quite pinched. This is caused by the 60&deg; rotation of the center line. This can be alleviated by increasing the center line's width a bit. Instead of interpolating with &frac12;, use &frac23;.</p>
+						
+						<pre translate="no">		else if (cell.HasRiverThroughEdge(direction.Next())) {
+			centerL = center;
+			centerR = Vector3.Lerp(center, e.v5, <ins>2f / 3f</ins>);
+		}
+		else if (cell.HasRiverThroughEdge(direction.Previous())) {
+			centerL = Vector3.Lerp(center, e.v1, <ins>2f / 3f</ins>);
+			centerR = center;
+		}</pre>
+						
+						<figure>
+							<img src="part-6/river-channels-across-cells/zigzag-without-pinch.png" width="310" height="130">
+							<figcaption>Zigzag without pinch.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Two-step Turns</h3>
+						
+						<p>The remaining cases sit between the zigzag and straight rivers. They are the two-step rotations, producing gently curving rivers.</p>
+						
+						<figure>
+							<img src="part-6/river-channels-across-cells/curves.png" width="310" height="160">
+							<figcaption>Curving river.</figcaption>
+						</figure>
+						
+						<p>To distinguish between the two possible orientations, we'll have to use <code>direction.Next().Next()</code>. But let's make that a bit more convenient by adding <code>Next2</code> and <code>Previous2</code> extension methods to <code>HexDirection</code>.</p>
+						
+						<pre translate="no">	<ins>public static HexDirection Previous2 (this HexDirection direction) {</ins>
+		<ins>direction -= 2;</ins>
+		<ins>return direction >= HexDirection.NE ? direction : (direction + 6);</ins>
+	<ins>}</ins>
+
+	<ins>public static HexDirection Next2 (this HexDirection direction) {</ins>
+		<ins>direction += 2;</ins>
+		<ins>return direction &lt;= HexDirection.NW ? direction : (direction - 6);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Back to <code>HexMesh.TriangulateWithRiver</code>, we can now detect the direction of our curving river by using <code>direction.Next2()</code>.</p>
+						
+						<pre translate="no">		if (cell.HasRiverThroughEdge(direction.Opposite())) {
+			centerL = center +
+				HexMetrics.GetFirstSolidCorner(direction.Previous()) * 0.25f;
+			centerR = center +
+				HexMetrics.GetSecondSolidCorner(direction.Next()) * 0.25f;
+		}
+		else if (cell.HasRiverThroughEdge(direction.Next())) {
+			centerL = center;
+			centerR = Vector3.Lerp(center, e.v5, 2f / 3f);
+		}
+		else if (cell.HasRiverThroughEdge(direction.Previous())) {
+			centerL = Vector3.Lerp(center, e.v1, 2f / 3f);
+			centerR = center;
+		}
+		<ins>else if (cell.HasRiverThroughEdge(direction.Next2())) {</ins>
+			<ins>centerL = centerR = center;</ins>
+		<ins>}</ins>
+		else {
+			centerL = centerR = center;
+		}</pre>
+						
+						<p>In these last two cases, we have to push the center line into the cell part that sits on the inside of the curve. If we had a vector to the middle of a solid edge, we could use that to position the end point. Let's assume that we have a method for that.</p>
+						
+						<pre translate="no">		else if (cell.HasRiverThroughEdge(direction.Next2())) {
+			<ins>centerL = center;</ins>
+			<ins>centerR = center +</ins>
+				<ins>HexMetrics.GetSolidEdgeMiddle(direction.Next()) * 0.5f;</ins>
+		}
+		else {
+			<ins>centerL = center +</ins>
+				<ins>HexMetrics.GetSolidEdgeMiddle(direction.Previous()) * 0.5f;</ins>
+			<ins>centerR = center;</ins>
+		}</pre>
+						
+						<p>Of course now we have to add such a method to <code>HexMetrics</code>. It simply has to average two adjacent corner vectors and apply the solid factor.</p>
+						
+												<pre translate="no">	<ins>public static Vector3 GetSolidEdgeMiddle (HexDirection direction) {</ins>
+		<ins>return</ins>
+			<ins>(corners[(int)direction] + corners[(int)direction + 1]) *</ins>
+			<ins>(0.5f * solidFactor);</ins>
+	<ins>}</ins></pre>
+
+						
+						<figure>
+							<img src="part-6/river-channels-across-cells/pinched-curves.png" width="310" height="160">
+							<figcaption>Slightly-pinched curves.</figcaption>
+						</figure>
+						
+						<p>Our center lines are now correctly rotated 30&deg;. But they're not long enough, resulting in slightly pinched channels. This happens because an edge middle is closer to the center than an edge corner. Its distance is equal to the inner solid radius, instead of the outer solid radius. So we're working with the wrong scale.</p>
+						
+						<p>We're already performing a conversion from outer to inner radius in <code>HexMetrics</code>. What we need here is the inverse of that. So let's make both conversion factors available via <code>HexMetrics</code>.</p>
+						
+						<pre translate="no">	<ins>public const float outerToInner =</ins> 0.866025404f;
+	<ins>public const float innerToOuter = 1f / outerToInner;</ins>
+
+	public const float outerRadius = 10f;
+
+	public const float innerRadius = outerRadius * <ins>outerToInner</ins>;</pre>
+						
+						<p>Now we can convert to the right scale in <code>HexMesh.TriangulateWithRiver</code>. The channels will still get pinched somewhat due to their rotation, but far less extreme than with zigzags. So we don't have to compensate for that.</p>
+						
+						<pre translate="no">		else if (cell.HasRiverThroughEdge(direction.Next2())) {
+			centerL = center;
+			centerR = center +
+				HexMetrics.GetSolidEdgeMiddle(direction.Next()) *
+				<ins>(0.5f * HexMetrics.innerToOuter)</ins>;
+		}
+		else {
+			centerL = center +
+				HexMetrics.GetSolidEdgeMiddle(direction.Previous()) *
+				<ins>(0.5f * HexMetrics.innerToOuter)</ins>;
+			centerR = center;
+		}</pre>
+						<figure>
+							<img src="part-6/river-channels-across-cells/smooth-curves.png" width="310" height="160">
+							<figcaption>Smooth curves.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="part-6/river-channels-across-cells/river-channels-across-cells.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Triangulating Adjacent to Rivers</h2>
+					
+					<p>Our river channels are now complete. But we don't yet triangulate the other parts of cells that contain rivers. We're now going to plug those holes.</p>
+					
+					<figure>
+						<img src="part-6/triangulating-adjacent-to-rivers/holes-alongside-channels.png" width="360" height="210">
+						<figcaption>Holes next to channels.</figcaption>
+					</figure>
+					
+					<p>In <code>Triangulate</code>, invoke a new method when the cell has a river, but it doesn't flow through the current direction.</p>
+					
+					<pre translate="no">		if (cell.HasRiver) {
+			if (cell.HasRiverThroughEdge(direction)) {
+				e.v3.y = cell.StreamBedY;
+				if (cell.HasRiverBeginOrEnd) {
+					TriangulateWithRiverBeginOrEnd(direction, cell, center, e);
+				}
+				else {
+					TriangulateWithRiver(direction, cell, center, e);
+				}
+			}
+			<ins>else {</ins>
+				<ins>TriangulateAdjacentToRiver(direction, cell, center, e);</ins>
+			<ins>}</ins>
+		}
+		else {
+			TriangulateEdgeFan(center, e, cell.Color);
+		}</pre>
+					
+					<p>In this method, fill the cell triangle with a strip and a fan. We cannot suffice with a single fan, because we have to make sure that we match the middle edge of the parts that do contain a river.</p>
+					
+					<pre translate="no">	<ins>void TriangulateAdjacentToRiver (</ins>
+		<ins>HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e</ins>
+	<ins>) {</ins>
+		<ins>EdgeVertices m = new EdgeVertices(</ins>
+			<ins>Vector3.Lerp(center, e.v1, 0.5f),</ins>
+			<ins>Vector3.Lerp(center, e.v5, 0.5f)</ins>
+		<ins>);</ins>
+		
+		<ins>TriangulateEdgeStrip(m, cell.Color, e, cell.Color);</ins>
+		<ins>TriangulateEdgeFan(center, m, cell.Color);</ins>
+	<ins>}</ins></pre>
+					
+					<figure>
+						<img src="part-6/triangulating-adjacent-to-rivers/filled-holes.png" width="360" height="210">
+						<figcaption>Overlapping at curved and straight rivers.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Matching the Channel</h3>
+						
+						<p>Of course we have to make sure that the center that we're using matches the center line used by the river parts. Zigzags are fine, but curved and straight rivers need some work. So we have to determine both what kind or river we have, and its relative orientation.</p>
+						
+						<p>Let's start by checking whether we're on the inside of a curve. This is the case when both the previous and next direction contain a river. If so, we'll have to move the center towards the edge.</p>
+						
+						<pre translate="no">		<ins>if (cell.HasRiverThroughEdge(direction.Next())) {</ins>
+			<ins>if (cell.HasRiverThroughEdge(direction.Previous())) {</ins>
+				<ins>center += HexMetrics.GetSolidEdgeMiddle(direction) *</ins>
+					<ins>(HexMetrics.innerToOuter * 0.5f);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+
+		EdgeVertices m = new EdgeVertices(
+			Vector3.Lerp(center, e.v1, 0.5f),
+			Vector3.Lerp(center, e.v5, 0.5f)
+		);</pre>
+						<figure>
+							<img src="part-6/triangulating-adjacent-to-rivers/river-on-both-sides.png" width="360" height="210">
+							<figcaption>Fixed when the river flows on both sides.</figcaption>
+						</figure>
+						
+						<p>If we have a river in the next direction, but not the previous, then check whether it's a straight river. If so, we'll have to move the center towards our first solid corner.</p>
+						
+						<pre translate="no">		if (cell.HasRiverThroughEdge(direction.Next())) {
+			if (cell.HasRiverThroughEdge(direction.Previous())) {
+				center += HexMetrics.GetSolidEdgeMiddle(direction) *
+					(HexMetrics.innerToOuter * 0.5f);
+			}
+			<ins>else if (</ins>
+				<ins>cell.HasRiverThroughEdge(direction.Previous2())</ins>
+			<ins>) {</ins>
+				<ins>center += HexMetrics.GetFirstSolidCorner(direction) * 0.25f;</ins>
+			<ins>}</ins>
+		}</pre>
+						
+						<figure>
+							<img src="part-6/triangulating-adjacent-to-rivers/along-straight-river.png" width="360" height="210">
+							<figcaption>Fixed half of the overlap with a straight river.</figcaption>
+						</figure>
+						
+						<p>That took care of half of the parts adjacent to straight rivers. The final case is when we have a river in the previous direction, and it is a straight one. That requires moving the center towards the next solid corner.</p>
+						
+						<pre translate="no">		if (cell.HasRiverThroughEdge(direction.Next())) {
+			if (cell.HasRiverThroughEdge(direction.Previous())) {
+				center += HexMetrics.GetSolidEdgeMiddle(direction) *
+					(HexMetrics.innerToOuter * 0.5f);
+			}
+			else if (
+				cell.HasRiverThroughEdge(direction.Previous2())
+			) {
+				center += HexMetrics.GetFirstSolidCorner(direction) * 0.25f;
+			}
+		}
+		<ins>else if (</ins>
+			<ins>cell.HasRiverThroughEdge(direction.Previous()) &amp;&amp;</ins>
+			<ins>cell.HasRiverThroughEdge(direction.Next2())</ins>
+		<ins>) {</ins>
+			<ins>center += HexMetrics.GetSecondSolidCorner(direction) * 0.25f;</ins>
+		<ins>}</ins></pre>
+						
+						<figure>
+							<img src="part-6/triangulating-adjacent-to-rivers/no-more-mismatch.png" width="360" height="210">
+							<figcaption>No more overlap.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="part-6/triangulating-adjacent-to-rivers/triangulating-adjacent-to-rivers.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Generalizing HexMesh</h2>
+					
+					<p>The triangulation of our channels is complete! Now we can fill them with water. Because water is quite a bit different than land, we'll have to use a different mesh, with different vertex data, and a different material. It would be quite convenient if we could use <code>HexMesh</code> for both land and water. So let's generalize <code>HexMesh</code>, turning it into a class dedicated to mesh data, without caring what exactly it's used for. <code>HexGridChunk</code> will take over the responsibility of triangulating its cells.</p>
+					
+					<section>
+						<h3>Moving Perturb Method</h3>
+						
+						<p>Because the <code>Perturb</code> method is quite generic and will be used in multiple places, let's move it to <code>HexMetrics</code>. First, refactor its name to <code>HexMetrics.Perturb</code>. This is an invalid method name, but it refactors all code to correctly access it. If your editor has special functionality for moving methods, you can use that instead.</p>
+						
+						<p>Once the method is inside <code>HexMetrics</code>, make it public and static, and fix its name.</p>
+
+						<pre translate="no">	<ins>public static</ins> Vector3 Perturb (Vector3 position) {
+		Vector4 sample = <del>HexMetrics.</del>SampleNoise(position);
+		position.x += (sample.x * 2f - 1f) * <del>HexMetrics.</del>cellPerturbStrength;
+		position.z += (sample.z * 2f - 1f) * <del>HexMetrics.</del>cellPerturbStrength;
+		return position;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Moving Triangulation Methods</h3>
+						
+						<p>In <code>HexGridChunk</code>, replace the <code>hexMesh</code> variable with a public <code>terrain</code> variable.</p>
+						
+						<pre translate="no">	<ins>public HexMesh terrain;</ins>
+<del>//	HexMesh hexMesh;</del>
+
+	void Awake () {
+		gridCanvas = GetComponentInChildren&lt;Canvas>();
+<del>//		hexMesh = GetComponentInChildren&lt;HexMesh>();</del>
+
+		cells = new HexCell[HexMetrics.chunkSizeX * HexMetrics.chunkSizeZ];
+		ShowUI(false);
+	}</pre>
+						
+						<p>Next, refactor all <code>Add&hellip;</code> methods in <code>HexMesh</code> to <code>terrain.Add&hellip;</code>. Then move all <code>Triangulate&hellip;</code> methods to <code>HexGridChunk</code>. Once that's done, you can fix the <code>Add&hellip;</code> method names in <code>HexMesh</code> and make them public. The result is that all complex triangulation methods are now in <code>HexGridChunk</code>, while the simple methods for adding things to the mesh remain in <code>HexMesh</code>.</p>
+						
+						<p>We aren't done yet. <code>HexGridChunk.LateUpdate</code> now has to invoke its own <code>Triangulate</code> method. Also, it doesn't need to pass the cells as an argument anymore. So <code>Triangulate</code> can lose its parameter. And it should delegate clearing and applying the mesh data to <code>HexMesh</code>.</p>
+						
+						<pre translate="no">	void LateUpdate () {
+		<ins>Triangulate();</ins>
+<del>//		hexMesh.Triangulate(cells);</del>
+		enabled = false;
+	}
+	
+	public void Triangulate (<del>HexCell[] cells</del>) {
+		<ins>terrain.Clear();</ins>
+<del>//		hexMesh.Clear();</del>
+<del>//		vertices.Clear();</del>
+<del>//		colors.Clear();</del>
+<del>//		triangles.Clear();</del>
+		for (int i = 0; i &lt; cells.Length; i++) {
+			Triangulate(cells[i]);
+		}
+		<ins>terrain.Apply();</ins>
+<del>//		hexMesh.vertices = vertices.ToArray();</del>
+<del>//		hexMesh.colors = colors.ToArray();</del>
+<del>//		hexMesh.triangles = triangles.ToArray();</del>
+<del>//		hexMesh.RecalculateNormals();</del>
+<del>//		meshCollider.sharedMesh = hexMesh;</del>
+	}</pre>
+						<p>Add the required <code>Clear</code> and <code>Apply</code> methods to <code>HexMesh</code>.</p>
+						
+						<pre translate="no">	<ins>public void Clear () {</ins>
+		<ins>hexMesh.Clear();</ins>
+		<ins>vertices.Clear();</ins>
+		<ins>colors.Clear();</ins>
+		<ins>triangles.Clear();</ins>
+	<ins>}</ins>
+
+	<ins>public void Apply () {</ins>
+		<ins>hexMesh.SetVertices(vertices);</ins>
+		<ins>hexMesh.SetColors(colors);</ins>
+		<ins>hexMesh.SetTriangles(triangles, 0);</ins>
+		<ins>hexMesh.RecalculateNormals();</ins>
+		<ins>meshCollider.sharedMesh = hexMesh;</ins>
+	<ins>}</ins></pre>
+						
+						<aside>
+							<h3>What's up with <code>SetVertices</code>, <code>SetColors</code>, and <code>SetTriangles</code>?</h3>
+							<div>
+								<p>These methods are fairly recent additions to the <code>Mesh</code> class. They allow you to set mesh data directly with lists. This means that we no longer need to create temporary arrays when updating meshes.</p>
+								
+								<p>The <code>SetTriangles</code> method has a second integer parameter, which is a sub-mesh index. As we're not using sub-meshes, it's always zero.</p>
+							</div>
+						</aside>
+						
+						<p>Finally, manually hook up the mesh child object in the chunk prefab. We can no longer do this automatically, because we'll add a second mesh child soon. Also, rename it to <em translate="no">Terrain</em> to indicate its purpose.</p>
+						
+						<figure>
+							<img src="part-6/generalizing-hexmesh/assigning-terrain.png" width="320" height="58">
+							<figcaption>Assigning terrain.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Renaming the prefab's child object doesn't work?</h3>
+							<div>
+								<p>The project view won't update when changing the name of a prefab's child. You can get it to update by creating an instance of the prefab. Adjust the instance, then use the <em translate="no">Apply</em> button to push those changes to the prefab as well. This is currently the best way to adjust object hierarchies of prefabs.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Pooling Lists</h3>
+						
+						<p>Although we have moved quite some code, our map should still function as it did before. Adding another mesh per chunk shouldn't change that. But if we were to do that with the current <code>HexMesh</code>, it would go wrong.</p>
+						
+						<p>The problem is that we assumed that we're only ever working on one mesh at a time. That allowed us to use static lists to store the temporary mesh data. But once we add water, we'll be working with two meshes at the same time. So we can no longer use our static lists.</p>
+						
+						<p>However, we do not have to go back to a set of lists per <code>HexMesh</code> instance. Instead, we could use a static pool of lists. There's no such pooling available by default, so let's create a generic list pool class ourselves.</p>
+						
+						<pre translate="no"><ins>public static class ListPool&lt;T> {</ins>
+
+<ins>}</ins></pre>
+						
+						<aside>
+							<h3>How does <code>ListPool&lt;T></code> work?</h3>
+							<div>
+								<p>We've already been using generic lists quite a bit, like <code>List&lt;int></code> for a list of integers. By placing <code>&lt;T></code> after the declaration of the <code>ListPool</code> class, we indicate that it is a generic class. We could have used any name for the generic part, but it's typical to simply use <code>T</code>, for template.</p>
+							</div>
+						</aside>
+						
+						<p>We can use a stack to store a collection of pooled lists. I normally don't use stacks because Unity doesn't serialize them, but that doesn't matter in this case.</p>
+						
+						<pre translate="no"><ins>using System.Collections.Generic;</ins>
+
+public static class ListPool&lt;T> {
+
+	<ins>static Stack&lt;List&lt;T>> stack = new Stack&lt;List&lt;T>>();</ins>
+}</pre>
+						
+						<aside>
+							<h3>What does <code>Stack&lt;List&lt;T>></code> mean?</h3>
+							<div>
+								<p>This is a case of nested generic types. It means that we want a stack of lists. And what's in the lists depends on the pool.</p>
+							</div>
+						</aside>
+						
+						<p>Add a public static method to get a list out of the pool. If the stack isn't empty, we'll pop the top list off and return that one. Otherwise, we create a new list on the spot.</p>
+						
+						<pre translate="no">	<ins>public static List&lt;T> Get () {</ins>
+		<ins>if (stack.Count > 0) {</ins>
+			<ins>return stack.Pop();</ins>
+		<ins>}</ins>
+		<ins>return new List&lt;T>();</ins>
+	<ins>}</ins></pre>
+						
+						<p>To actually reuse lists, we have to add them to the pool once we're done with them. <code>ListPool</code> will take care of clearing the list, and then pushes it onto its stack.</p>
+						
+						<pre translate="no">	<ins>public static void Add (List&lt;T> list) {</ins>
+		<ins>list.Clear();</ins>
+		<ins>stack.Push(list);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can use our pools in <code>HexMesh</code>. Replace the static lists with non-static private references. Mark them as <code>NonSerialized</code> so Unity won't bother to save them during recompiles. Either write <code>System.NonSerialized</code> or add <code>using System;</code> at the top of the script.</p>
+						
+						<pre translate="no">	<ins>[NonSerialized] List&lt;Vector3> vertices;</ins>
+	<ins>[NonSerialized] List&lt;Color> colors;</ins>
+	<ins>[NonSerialized] List&lt;int> triangles;</ins>
+
+<del>//	static List&lt;Vector3> vertices = new List&lt;Vector3>();</del>
+<del>//	static List&lt;Color> colors = new List&lt;Color>();</del>
+<del>//	static List&lt;int> triangles = new List&lt;int>();</del></pre>
+						
+						<p>As the mesh is cleared right before adding new data to it, this is the place to grab lists from our pools.</p>
+						
+						<pre translate="no">	public void Clear () {
+		hexMesh.Clear();
+		vertices <ins>= ListPool&lt;Vector3>.Get();</ins>
+		colors <ins>= ListPool&lt;Color>.Get();</ins>
+		triangles <ins>= ListPool&lt;int>.Get();</ins>
+	}</pre>
+						
+						<p>And we no longer need them after applying the mesh data, so we can add them to the pools there.</p>
+						
+						<pre translate="no">	public void Apply () {
+		hexMesh.SetVertices(vertices);
+		<ins>ListPool&lt;Vector3>.Add(vertices);</ins>
+		hexMesh.SetColors(colors);
+		<ins>ListPool&lt;Color>.Add(colors);</ins>
+		hexMesh.SetTriangles(triangles, 0);
+		<ins>ListPool&lt;int>.Add(triangles);</ins>
+		hexMesh.RecalculateNormals();
+		meshCollider.sharedMesh = hexMesh;
+	}
+</pre>
+						
+						<p>This takes care of our list reuse, no matter how many meshes we're filling at the same time.</p>
+					</section>
+					
+					<section>
+						<h3>Optional Collider</h3>
+						
+						<p>While our terrain needs to have a collider, we don't really need one for our rivers. Raycasts will simply pass through the water and hit the channel underneath. So let's make it configurable whether <code>HexMesh</code> has a collider. Do this by adding a public <code>bool useCollider</code> field. Turn it on for the terrain.</p>
+						
+						<pre translate="no">	<ins>public bool useCollider;</ins></pre>
+						
+						<figure>
+							<img src="part-6/generalizing-hexmesh/use-collider.png" width="320" height="62">
+							<figcaption>Using a mesh collider.</figcaption>
+						</figure>
+						
+						<p>All we have to do is ensure that we only create and assign the collider when it is turned on.</p>
+						
+						<pre translate="no">	void Awake () {
+		GetComponent&lt;MeshFilter>().mesh = hexMesh = new Mesh();
+		<ins>if (useCollider) {</ins>
+			meshCollider = gameObject.AddComponent&lt;MeshCollider>();
+		<ins>}</ins>
+		hexMesh.name = "Hex Mesh";
+	}
+
+	public void Apply () {
+		&hellip;
+		<ins>if (useCollider) {</ins>
+			meshCollider.sharedMesh = hexMesh;
+		<ins>}</ins>
+
+		&hellip;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Optional Colors</h3>
+						
+						<p>Vertex colors can also be optional. We need them to show different terrain types, but water doesn't change color. We can make them optional in the same way that we made the collider optional.</p>
+						
+						<pre translate="no">	public bool useCollider<ins>, useColors</ins>;
+
+	public void Clear () {
+		hexMesh.Clear();
+		vertices = ListPool&lt;Vector3>.Get();
+		<ins>if (useColors) {</ins>
+			colors = ListPool&lt;Color>.Get();
+		<ins>}</ins>
+		triangles = ListPool&lt;int>.Get();
+	}
+
+	public void Apply () {
+		hexMesh.SetVertices(vertices);
+		ListPool&lt;Vector3>.Add(vertices);
+		<ins>if (useColors) {</ins>
+			hexMesh.SetColors(colors);
+			ListPool&lt;Color>.Add(colors);
+		<ins>}</ins>
+		&hellip;
+	}</pre>
+						
+						<p>Of course, the terrain does use vertex colors, so make sure to turn them on.</p>
+						
+						<figure>
+							<img src="part-6/generalizing-hexmesh/use-colors.png" width="320" height="80">
+							<figcaption>Using colors.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Optional UV</h3>
+						
+						<p>While we're at it, we can also add support for optional UV coordinates. While our terrain doesn't use them, we will need them for our water.</p>
+						
+						<pre translate="no">	public bool useCollider, useColors<ins>, useUVCoordinates</ins>;
+
+	<ins>[NonSerialized] List&lt;Vector2> uvs;</ins>
+
+	public void Clear () {
+		hexMesh.Clear();
+		vertices = ListPool&lt;Vector3>.Get();
+		if (useColors) {
+			colors = ListPool&lt;Color>.Get();
+		}
+		<ins>if (useUVCoordinates) {</ins>
+			<ins>uvs = ListPool&lt;Vector2>.Get();</ins>
+		<ins>}</ins>
+		triangles = ListPool&lt;int>.Get();
+	}
+
+	public void Apply () {
+		hexMesh.SetVertices(vertices);
+		ListPool&lt;Vector3>.Add(vertices);
+		if (useColors) {
+			hexMesh.SetColors(colors);
+			ListPool&lt;Color>.Add(colors);
+		}
+		<ins>if (useUVCoordinates) {</ins>
+			<ins>hexMesh.SetUVs(0, uvs);</ins>
+			<ins>ListPool&lt;Vector2>.Add(uvs);</ins>
+		<ins>}</ins>
+		&hellip;
+	}</pre>
+						<figure>
+							<img src="part-6/generalizing-hexmesh/not-using-uvs.png" width="320" height="98">
+							<figcaption>Not using UV coordinates.</figcaption>
+						</figure>
+						
+						<p>To make this useful, create methods to add UV coordinates for triangles and quads.</p>
+						
+						<pre translate="no">	<ins>public void AddTriangleUV (Vector2 uv1, Vector2 uv2, Vector2 uv3) {</ins>
+		<ins>uvs.Add(uv1);</ins>
+		<ins>uvs.Add(uv2);</ins>
+		<ins>uvs.Add(uv3);</ins>
+	<ins>}</ins>
+	
+	<ins>public void AddQuadUV (Vector2 uv1, Vector2 uv2, Vector2 uv3, Vector2 uv4) {</ins>
+		<ins>uvs.Add(uv1);</ins>
+		<ins>uvs.Add(uv2);</ins>
+		<ins>uvs.Add(uv3);</ins>
+		<ins>uvs.Add(uv4);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Let's add an additional <code>AddQuadUV</code> method for conveniently adding a rectangular UV area. This is a typical case when a quad and its texture are aligned, which will be the case for our river water.</p>
+						
+						<pre translate="no">	<ins>public void AddQuadUV (float uMin, float uMax, float vMin, float vMax) {</ins>
+		<ins>uvs.Add(new Vector2(uMin, vMin));</ins>
+		<ins>uvs.Add(new Vector2(uMax, vMin));</ins>
+		<ins>uvs.Add(new Vector2(uMin, vMax));</ins>
+		<ins>uvs.Add(new Vector2(uMax, vMax));</ins>
+	<ins>}</ins></pre>
+					</section>
+					
+					<a href="part-6/generalizing-hexmesh/generalizing-hexmesh.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Flowing Rivers</h2>
+					
+					<p>It is finally time to create some water! We'll do this with quads that represent the water's surface. And because we're working with rivers, the water has to flow. We'll use UV coordinates to indicate the river's orientation for that. To visualize this, we need a new shader. So create a new standard shader and name it <em translate="no">River</em>. Adjust it so the UV coordinates are put in the red and green albedo channels.</p>
+					
+					<pre translate="no" class="shader">Shader "Custom/<ins>River</ins>" {
+	&hellip;
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			fixed4 c = tex2D(_MainTex, IN.uv_MainTex) * _Color;
+			o.Albedo = c.rgb * IN.color;
+			o.Metallic = _Metallic;
+			o.Smoothness = _Glossiness;
+			o.Alpha = c.a;
+			<ins>o.Albedo.rg = IN.uv_MainTex;</ins>
+		}
+		ENDCG
+	}
+	FallBack "Diffuse"
+}</pre>
+					
+					<p>Add a public <code>HexMesh rivers</code> field to <code>HexGridChunk</code>. Clear and apply it just like the terrain.</p>
+					
+					<pre translate="no">	public HexMesh terrain<ins>, rivers</ins>;
+	
+	public void Triangulate () {
+		terrain.Clear();
+		<ins>rivers.Clear();</ins>
+		for (int i = 0; i &lt; cells.Length; i++) {
+			Triangulate(cells[i]);
+		}
+		terrain.Apply();
+		<ins>rivers.Apply();</ins>
+	}</pre>
+					
+					<aside>
+						<h3>Do we get additional draw calls, even if we don't have rivers?</h3>
+						<div>
+							<p>Unity is smart enough to not bother with drawing an empty mesh. So a rivers mesh is only drawn if there is something to see.</p>
+						</div>
+					</aside>
+					
+					<p>Adjust the prefab &ndash; via an instance &ndash; by duplicating its terrain object, renaming it to <em translate="no">Rivers</em>, and hooking it up.</p>
+					
+					<figure>
+						<img alt="prefab" src="part-6/flowing-rivers/prefab-project.png" width="142" height="66">
+						<img alt="component" src="part-6/flowing-rivers/prefab-inspector.png" width="320" height="76">
+						<figcaption>Chunk prefab with rivers.</figcaption>
+					</figure>
+					
+					<p>Create a <em translate="no">River</em> material that uses our new shader, and make sure that the <em translate="no">Rivers</em> object uses it. Also configure the object's hex mesh component so that it uses UV coordinates, but not vertex colors, nor a collider.</p>
+					
+					<figure>
+						<img src="part-6/flowing-rivers/rivers-object.png" width="320" height="142">
+						<figcaption>Rivers sub-object.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Triangulating Water</h3>
+						
+						<p>Before we can triangulate the water, we have to decide on its surface level. Let's make this an elevation offset in <code>HexMetrics</code>, just like for the stream bed. Because the vertical perturbation of a cell is set to half an elevation offset, let's use that as our river surface offset as well. This ensures that the water never ends up above the cell's terrain.</p>
+						
+						<pre translate="no">	<ins>public const float riverSurfaceElevationOffset = -0.5f;</ins></pre>
+						
+						<aside>
+							<h3>Shouldn't it be slightly lower?</h3>
+							<div>
+								<p>The random perturbation actually never quite reaches its maximum, so we're fine. Of course you can still lower the water surface a bit more, if you like.</p>
+							</div>
+						</aside>
+						
+						<p>Add a property to <code>HexCell</code> to retrieve the vertical position of its river's surface.</p>
+						
+						<pre translate="no">	<ins>public float RiverSurfaceY {</ins>
+		<ins>get {</ins>
+			<ins>return</ins>
+				<ins>(elevation + HexMetrics.riverSurfaceElevationOffset) *</ins>
+				<ins>HexMetrics.elevationStep;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can get to work in <code>HexGridChunk</code>! Because we're going to create multiple river quads, let's add a dedicated method for that. Give it four vertices plus a height as parameters. This allows it to conveniently set the vertical position of all four vertices at once, before adding the quad.</p>
+						
+						<pre translate="no">	<ins>void TriangulateRiverQuad (</ins>
+		<ins>Vector3 v1, Vector3 v2, Vector3 v3, Vector3 v4,</ins>
+		<ins>float y</ins>
+	<ins>) {</ins>
+		<ins>v1.y = v2.y = v3.y = v4.y = y;</ins>
+		<ins>rivers.AddQuad(v1, v2, v3, v4);</ins>
+	<ins>}</ins></pre>
+						
+						<p>We'll add the quad's UV coordinates here as well. We'll simply go left to right, bottom to top.</p>
+						
+						<pre translate="no">		rivers.AddQuad(v1, v2, v3, v4);
+		<ins>rivers.AddQuadUV(0f, 1f, 0f, 1f);</ins></pre>
+						
+						<p><code>TriangulateWithRiver</code> is the first method that we'll add river quads to. The first quad sits between the center and middle. The second sits between the middle and edge. We'll simply use the vertices that we already have. Because those vertices will be lowered, the water will end up partially below the slanted channel walls. So we don't have to worry about the exact position of the water's edge.</p>
+						
+						<pre translate="no">	void TriangulateWithRiver (
+		HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e
+	) {
+		&hellip;
+
+		<ins>TriangulateRiverQuad(centerL, centerR, m.v2, m.v4, cell.RiverSurfaceY);</ins>
+		<ins>TriangulateRiverQuad(m.v2, m.v4, e.v2, e.v4, cell.RiverSurfaceY);</ins>
+	}</pre>
+						
+						<figure>
+							<img src="part-6/flowing-rivers/first-water.png" width="350" height="170">
+							<figcaption>The first signs of water.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why does the water's width vary?</h3>
+							<div>
+								<p>This happens because the cell's height is perturbed, while its stream bed and river surface are not. A higher cell height results in steeper and higher channel walls. This narrows the river at the water surface.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Going with the Flow</h3>
+						
+						<p>Currently, the UV coordinates do not agree on the direction that the river is flowing. We have to be consistent here. Let's say that the U coordinate is 0 at the left of the river and 1 at the right, when looking downstream. And the V coordinate should go from 0 to 1 in the direction that the river is flowing.</p>
+						
+						<p>Using the above specification, our UV are correct when triangulating an outgoing river. They're wrong and have to be reversed when triangulating an incoming river. To facilitate this, add a <code>bool reversed</code> parameter to <code>TriangulateRiverQuad</code>. Use it to reverse the UV when needed.</p>
+						
+						<pre translate="no">	void TriangulateRiverQuad (
+		Vector3 v1, Vector3 v2, Vector3 v3, Vector3 v4,
+		float y<ins>, bool reversed</ins>
+	) {
+		v1.y = v2.y = v3.y = v4.y = y;
+		rivers.AddQuad(v1, v2, v3, v4);
+		<ins>if (reversed) {</ins>
+			<ins>rivers.AddQuadUV(1f, 0f, 1f, 0f);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			rivers.AddQuadUV(0f, 1f, 0f, 1f);
+		<ins>}</ins>
+	}</pre>
+						
+						<p>In <code>TriangulateWithRiver</code>, we know that we have to reverse the direction when we're dealing with an incoming river.</p>
+						
+						<pre translate="no">		<ins>bool reversed = cell.IncomingRiver == direction;</ins>
+		TriangulateRiverQuad(
+			centerL, centerR, m.v2, m.v4, cell.RiverSurfaceY<ins>, reversed</ins>
+		);
+		TriangulateRiverQuad(
+			m.v2, m.v4, e.v2, e.v4, cell.RiverSurfaceY<ins>, reversed</ins>
+		);</pre>
+						
+						<figure>
+							<img src="part-6/flowing-rivers/consistent-direction.png" width="350" height="170">
+							<figcaption>Consistent river direction.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>River Begin and End</h3>
+						
+						<p>Inside <code>TriangulateWithRiverBeginOrEnd</code>, we only have to check whether we have an incoming river, to determine the flow direction. Then we can insert another river quad between the middle and edge.</p>
+						
+						<pre translate="no">	void TriangulateWithRiverBeginOrEnd (
+		HexDirection direction, HexCell cell, Vector3 center, EdgeVertices e
+	) {
+		&hellip;
+
+		<ins>bool reversed = cell.HasIncomingRiver;</ins>
+		<ins>TriangulateRiverQuad(</ins>
+			<ins>m.v2, m.v4, e.v2, e.v4, cell.RiverSurfaceY, reversed</ins>
+		<ins>);</ins>
+	}</pre>
+						
+						<p>The part between the center and middle is a triangle, so we cannot use <code>TriangulateRiverQuad</code>. The only significant difference is that the center vertex sits in the middle of the river. So its U coordinate is always &frac12;.</p>
+						
+						<pre translate="no">		<ins>center.y = m.v2.y = m.v4.y = cell.RiverSurfaceY;</ins>
+		<ins>rivers.AddTriangle(center, m.v2, m.v4);</ins>
+		<ins>if (reversed) {</ins>
+			<ins>rivers.AddTriangleUV(</ins>
+				<ins>new Vector2(0.5f, 1f), new Vector2(1f, 0f), new Vector2(0f, 0f)</ins>
+			<ins>);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>rivers.AddTriangleUV(</ins>
+				<ins>new Vector2(0.5f, 0f), new Vector2(0f, 1f), new Vector2(1f, 1f)</ins>
+			<ins>);</ins>
+		<ins>}</ins></pre>
+						
+						<figure>
+							<img src="part-6/flowing-rivers/begin-and-end.png" width="350" height="170">
+							<figcaption>Water at the beginning and end.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Are there bits of water missing at the ends?</h3>
+							<div>
+								<p>Because quads are made from two triangles, their shape depends on their orientation, when the quad isn't flat. Due to this, the triangulation of the channel walls on either side of a river aren't symmetrical. This becomes more obvious where the water surface intersects the channel walls.</p>
+								
+								<p>You can get rid of this difference by mirroring the quads. However, it is only really obvious because we're not perturbing vertices right now. Once we do, the symmetry is broken anyway.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Flowing Between Cells</h3>
+						
+						<p>When adding water between cells, we have to be aware of elevation differences. To allow water to flow down slopes and cliffs, <code>TriangulateRiverQuad</code> has to support two height parameters. So let's add the second one.</p>
+						
+						<pre translate="no">	void TriangulateRiverQuad (
+		Vector3 v1, Vector3 v2, Vector3 v3, Vector3 v4,
+		float <ins>y1, float y2</ins>, bool reversed
+	) {
+		v1.y = v2.y = <ins>y1;</ins>
+		v3.y = v4.y = <ins>y2</ins>;
+		rivers.AddQuad(v1, v2, v3, v4);
+		if (reversed) {
+			rivers.AddQuadUV(1f, 0f, 1f, 0f);
+		}
+		else {
+			rivers.AddQuadUV(0f, 1f, 0f, 1f);
+		}
+	}</pre>
+						
+						<p>Let's also add a variant that still accept one height, for convenience. It simply invokes the other method.</p>
+						
+						<pre translate="no">	<ins>void TriangulateRiverQuad (</ins>
+		<ins>Vector3 v1, Vector3 v2, Vector3 v3, Vector3 v4,</ins>
+		<ins>float y, bool reversed</ins>
+	<ins>) {</ins>
+		<ins>TriangulateRiverQuad(v1, v2, v3, v4, y, y, reversed);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can add a river quad in <code>TriangulateConnection</code> as well. While in between cells, we do not immediately know what kind of river we're dealing with. To determine if we need to reverse, we have to check if we have an incoming river and if it's going in our direction.</p>
+						
+						<pre translate="no">		if (cell.HasRiverThroughEdge(direction)) {
+			e2.v3.y = neighbor.StreamBedY;
+			<ins>TriangulateRiverQuad(</ins>
+				<ins>e1.v2, e1.v4, e2.v2, e2.v4,</ins>
+				<ins>cell.RiverSurfaceY, neighbor.RiverSurfaceY,</ins>
+				<ins>cell.HasIncomingRiver &amp;&amp; cell.IncomingRiver == direction</ins>
+			<ins>);</ins>
+		}</pre>
+						
+						<figure>
+							<img src="part-6/flowing-rivers/complete-river.png" width="350" height="170">
+							<figcaption>Complete river.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Stretching V Coordinates</h3>
+						
+						<p>Currently, we have the V coordinates go from 0 to 1 across each river segment. So that's four times per cell. Five times, if we also include the connection between cells. Whatever we'll use to texture the river, it will repeat that many times.</p>
+						
+						<p>We can reduce this repetition by stretching the V coordinates so they go from 0 to 1 across an entire cell, plus one connection. This can be done by increasing the V coordinate by 0.2 each segment. If we put 0.4 at the center, it becomes 0.6 in the middle, and reaches 0.8 at the edge. Then the cell connection takes it to 1.</p>
+						
+						<p>If the river flows in the opposite direction, we still put 0.4 at the center, but it becomes 0.2 in the middle, and 0 at the edge. If we continued this into a cell connection, it would end at -0.2. That is fine, because that's equivalent to 0.8 for a texture with its filter mode set to repeat, just like 0 is equivalent to 1.</p>
+						
+						<figure>
+							<img src="part-6/flowing-rivers/v-flow.png" width="230" height="130">
+							<figcaption>Flow of V coordinates.</figcaption>
+						</figure>
+						
+						<p>To support this, we have to add yet another parameter to <code>TriangulateRiverQuad</code>.</p>
+						
+						<pre translate="no">	void TriangulateRiverQuad (
+		Vector3 v1, Vector3 v2, Vector3 v3, Vector3 v4,
+		float y, <ins>float v,</ins> bool reversed
+	) {
+		TriangulateRiverQuad(v1, v2, v3, v4, y, y, <ins>v,</ins> reversed);
+	}
+
+	void TriangulateRiverQuad (
+		Vector3 v1, Vector3 v2, Vector3 v3, Vector3 v4,
+		float y1, float y2, <ins>float v,</ins> bool reversed
+	) {
+		&hellip;
+	}</pre>
+						
+						<p>When the direction isn't reversed, we simply use the provided coordinate at the quad's bottom, and add 0.2 at its top.</p>
+						
+						<pre translate="no">		else {
+			rivers.AddQuadUV(0f, 1f, <ins>v</ins>, <ins>v + 0.2f</ins>);
+		}</pre>
+						
+						<p>We can deal with the revered direction by subtracting the coordinate from 0.8 and 0.6 instead.</p>
+						
+						<pre translate="no">		if (reversed) {
+			rivers.AddQuadUV(1f, 0f, <ins>0.8f - v</ins>, <ins>0.6f - v</ins>);
+		}
+</pre>
+						
+						<p>Now we have to provide the correct coordinates, as if we're dealing with an outgoing river. First in <code>TriangulateWithRiver</code>.</p>
+						
+						<pre translate="no">		TriangulateRiverQuad(
+			centerL, centerR, m.v2, m.v4, cell.RiverSurfaceY, <ins>0.4f,</ins> reversed
+		);
+		TriangulateRiverQuad(
+			m.v2, m.v4, e.v2, e.v4, cell.RiverSurfaceY, <ins>0.6f,</ins> reversed
+		);</pre>
+						
+						<p>Then in <code>TriangulateConnection</code>.</p>
+						
+						<pre translate="no">			TriangulateRiverQuad(
+				e1.v2, e1.v4, e2.v2, e2.v4,
+				cell.RiverSurfaceY, neighbor.RiverSurfaceY, <ins>0.8f,</ins>
+				cell.HasIncomingRiver &amp;&amp; cell.IncomingRiver == direction
+			);
+</pre>
+						
+						<p>And finally in <code>TriangulateWithRiverBeginOrEnd</code>.</p>
+						
+						<pre translate="no">		TriangulateRiverQuad(
+			m.v2, m.v4, e.v2, e.v4, cell.RiverSurfaceY, <ins>0.6f,</ins> reversed
+		);
+		center.y = m.v2.y = m.v4.y = cell.RiverSurfaceY;
+		rivers.AddTriangle(center, m.v2, m.v4);
+		if (reversed) {
+			rivers.AddTriangleUV(
+				new Vector2(0.5f, <ins>0.4f</ins>),
+				new Vector2(1f, <ins>0.2f</ins>), new Vector2(0f, <ins>0.2f</ins>)
+			);
+		}
+		else {
+			rivers.AddTriangleUV(
+				new Vector2(0.5f, <ins>0.4f</ins>),
+				new Vector2(0f, <ins>0.6f</ins>), new Vector2(1f, <ins>0.6f</ins>)
+			);
+		}</pre>
+						
+						<figure>
+							<img src="part-6/flowing-rivers/stretched-v.png" width="350" height="170">
+							<figcaption>Stretched V coordinates.</figcaption>
+						</figure>
+						
+						<p>To correctly see the V coordinates wrap, make sure it stays positive in the river shader.</p>
+						
+						<pre translate="no" class="shader">			<ins>if (IN.uv_MainTex.y &lt; 0) {</ins>
+				<ins>IN.uv_MainTex.y += 1;</ins>
+			<ins>}</ins>
+			o.Albedo.rg = IN.uv_MainTex;</pre>
+						
+						<figure>
+							<img src="part-6/flowing-rivers/v-wrap.png" width="350" height="170">
+							<figcaption>Wrapped V coordinates.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="part-6/flowing-rivers/flowing-rivers.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Animating Rivers</h2>
+					
+					<p>With the UV coordinates taken care of, we can move on to animating the rivers. The river shader will take care of this, so we don't have to continuously update the mesh.</p>
+					
+					<p>We won't create a fancy river shader in this tutorial, that comes later. For now, we'll make do with a simple effect to give you an idea of how the animation works.</p>
+					
+					<p>The animation is created by sliding the V coordinates based on the play time. Unity makes this available via the <code class="shader">_Time</code> variable. Its Y component contains the unmodified time, which we'll use. Its other components contain different time scales.</p>
+					
+					<p>Get rid of the V wrapping, as we no longer need it. Instead, subtract the current time from the V coordinate. This slides the coordinate downwards, which creates the illusion of the river flowing forwards.</p>
+					
+					<pre translate="no" class="shader"><del>//			if (IN.uv_MainTex.y &lt; 0) {</del>
+<del>//				IN.uv_MainTex.y += 1;</del>
+<del>//			}</del>
+			<ins>IN.uv_MainTex.y -= _Time.y;</ins>
+			o.Albedo.rg = IN.uv_MainTex;</pre>
+					
+					<p>After one second, the V coordinate will be below zero everywhere, so we'll no longer see a difference. Again, this is fine due to repeat texture filtering mode. But to see what's going on, we can take the fractional part of the V coordinate.</p>
+					
+					<pre translate="no" class="shader">			IN.uv_MainTex.y -= _Time.y;
+			<ins>IN.uv_MainTex.y = frac(IN.uv_MainTex.y);</ins>
+			o.Albedo.rg = IN.uv_MainTex;</pre>
+					
+					<figure>
+						<video width="320" height="207" controls loop muted>
+								<source src="part-6/animating-rivers/animated-v-coordinates.mp4" type="video/mp4">
+							</video>
+						<figcaption>Animated V coordinates.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Using Noise</h3>
+						
+						<p>Our river now animates, but there are harsh transitions in both direction and velocity. Our UV pattern makes this quite obvious, but it would be harder to detect when using a more water-like pattern. So let's sample a texture instead of showing the raw UV. We can use the noise texture that we already have. Sample it, and multiply the material's color by the first noise channel.</p>
+						
+						<pre translate="no" class="shader">		void surf (Input IN, inout SurfaceOutputStandard o) {
+			<ins>float2 uv = IN.uv_MainTex;</ins>
+			<ins>uv.y -= _Time.y;</ins>
+			<ins>float4 noise = tex2D(_MainTex, uv);</ins>
+			
+			<ins>fixed4 c = _Color * noise.r;</ins>
+			<ins>o.Albedo = c.rgb;</ins>
+			<ins>o.Metallic = _Metallic;</ins>
+			<ins>o.Smoothness = _Glossiness;</ins>
+			<ins>o.Alpha = c.a;</ins>
+		}</pre>
+						
+						<p>Assign the noise texture to the river material, and make sure that it has a white color.</p>
+						
+						<figure>
+							<img alt="inspector" src="part-6/animating-rivers/noise-inspector.png" width="320" height="134"><br>
+							<img alt="scene" src="part-6/animating-rivers/noise-sample.png" width="340" height="220">
+							<figcaption>Using the noise texture.</figcaption>
+						</figure>
+						
+						<p>Because the V coordinates are stretched so much, the noise texture gets stretched along the river as well. Unfortunately, this doesn't produce a nice flow. Let's try stretching it the other way, by greatly scaling down the U coordinates. One-sixteenth should do the trick. That means that we're only sampling a narrow strip of the noise texture.</p>
+						
+						<pre translate="no" class="shader">			float2 uv = IN.uv_MainTex;
+			<ins>uv.x *= 0.0625;</ins>
+			uv.y -= _Time.y;</pre>
+						
+						<figure>
+							<img src="part-6/animating-rivers/stretched-u.png" width="340" height="220">
+							<figcaption>Stretching the U coordinate.</figcaption>
+						</figure>
+						
+						<p>Let's also slow down the flow to a quarter per second, so it takes four seconds for the texture to complete a cycle.</p>
+						
+						<pre translate="no" class="shader">			uv.y -= _Time.y <ins>* 0.25</ins>;</pre>
+						
+						<figure>
+							<video width="320" height="207" controls loop muted>
+								<source src="part-6/animating-rivers/flowing-noise.mp4" type="video/mp4">
+							</video>
+							<figcaption>Flowing noise.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Mixing Noise</h3>
+						
+						<p>This already looks a lot better, but the pattern always stays the same. Water doesn't behave like that.</p>
+						
+						<p>As we're only using a small strip of the noise, we could vary the pattern by sliding the strip across the texture. This is done by adding time to the U coordinate. We have to make sure to change it slowly, otherwise the river will appear to flow sideways. Let's try a factor of 0.005. That means it will take 200 seconds for the pattern to loop.</p>
+						
+						<pre translate="no" class="shader">			uv.x <ins>= uv.x *</ins> 0.0625 <ins>+ _Time.y * 0.005</ins>;
+</pre>
+						
+						<figure>
+							<video width="320" height="207" controls loop muted>
+								<source src="part-6/animating-rivers/sliding-noise.mp4" type="video/mp4">
+							</video>
+							<figcaption>Sliding noise.</figcaption>
+						</figure>
+						
+						<p>Unfortunately, it doesn't look very good. The water still appears static and the sliding is obvious, even when very slow. We might be able to hide the sliding by combining two noise samples, sliding both in opposite directions. And if we use slightly different values to move the second sample, it will produce a subtle morphing animation.</p>
+						
+						<p>To make sure that we never end up overlapping the exact same noise pattern, use a different channel for the second sample.</p>
+						
+						<pre translate="no" class="shader">			float2 uv = IN.uv_MainTex;
+			uv.x = uv.x * 0.0625 + _Time.y * 0.005;
+			uv.y -= _Time.y * 0.25;
+			float4 noise = tex2D(_MainTex, uv);
+			
+			<ins>float2 uv2 = IN.uv_MainTex;</ins>
+			<ins>uv2.x = uv2.x * 0.0625 - _Time.y * 0.0052;</ins>
+			<ins>uv2.y -= _Time.y * 0.23;</ins>
+			<ins>float4 noise2 = tex2D(_MainTex, uv2);</ins>
+			
+			fixed4 c = _Color * <ins>(</ins>noise.r <ins>* noise2.a)</ins>;</pre>
+						
+						<figure>
+							<video width="320" height="207" controls loop muted>
+								<source src="part-6/animating-rivers/two-sliding.mp4" type="video/mp4">
+							</video>
+							<figcaption>Combining two sliding noise patterns.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Semitransparent Water</h3>
+						
+						<p>Our pattern looks dynamic enough. The next step is to make it semitransparent.</p>
+						
+						<p>First, make sure that the water doesn't cast shadows. You can turn them off via the renderer component of the <em translate="no">Rivers</em> object in the prefab.</p>
+						
+						<figure>
+							<img src="part-6/animating-rivers/no-shadow-casting.png" width="320" height="148">
+							<figcaption>No shadow casting.</figcaption>
+						</figure>
+						
+						<p>Next, switch the shader to transparent mode. We have to use shader tags to indicate this. Then add the <code class="shader">alpha</code> keyword to the <code class="shader">#pragma surface</code> line. While we're at it, we can remove the <code>fullforwardshadows</code> keyword, as we're not casting shadows anyway.</p>
+						
+						<pre translate="no" class="shader">		Tags { "RenderType"="<ins>Transparent</ins>" <ins>"Queue"="Transparent"</ins> }
+		LOD 200
+		
+		CGPROGRAM
+		#pragma surface surf Standard <ins>alpha</ins> <del>// fullforwardshadows</del>
+		#pragma target 3.0
+</pre>
+						
+						<p>Now we're going to change how we color the river. Instead of multiplying the noise with the color, add the noise to it instead. Then use the <code class="shader">saturate</code> function to clamp the result, so we don't exceed 1.</p>
+						
+						<pre translate="no" class="shader">			fixed4 c = <ins>saturate(</ins>_Color <ins>+ noise.r * noise2.a)</ins>;</pre>
+						
+						<p>This allows us to use the material's color as the base color. The noise will increase its brightness and opacity. Try using a blue color with a fairly low opacity. The result will be bluish semitransparent water, with white highlights.</p>
+						
+						<figure>
+							<img alt="inspector" src="part-6/animating-rivers/colored.png" width="320" height="136"><br>
+							<video width="320" height="207" controls loop muted>
+								<source src="part-6/animating-rivers/colored-semitransparent.mp4" type="video/mp4">
+							</video>
+							<figcaption>Colored and semitransparent water.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="part-6/animating-rivers/animating-rivers.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Tweaking</h2>
+					
+					<p>Now that everything appears to be working, it is time to perturb the vertices again. Besides deforming the cell edges, this will now also make our rivers irregular.</p>
+					
+					<pre translate="no">	public const float cellPerturbStrength = <ins>4f</ins>;</pre>
+					
+					<figure>
+						<img alt="unperturbed" src="part-6/tweaking/unperturbed.png" width="400" height="260">
+						<img alt="perturbed" src="part-6/tweaking/perturbed.png" width="400" height="260">
+						<figcaption>Unperturbed vs. perturbed.</figcaption>
+					</figure>
+					
+					<p>Inspect the terrain to see if the perturbations cause any problems. It turns out that they do! Check out some high waterfalls.</p>
+					
+					<figure>
+						<img src="part-6/tweaking/waterfall-problem.png" width="330" height="170">
+						<figcaption>Water clipped by cliffs.</figcaption>
+					</figure>
+					
+					<p>The water falling down a high waterfall can disappear behind a cliff. When this happens, it is very obvious, so we have to do something about it.</p>
+					
+					<p>Far less obvious is that the waterfalls can be slanted, instead of dropping straight down. While water doesn't work like that, it is not that noticeable. Your brain will come up with an interpretation that makes it look fine. So let's ignore this.</p>
+					
+					<p>The simplest way to prevent the water from disappearing is by making the channels deeper. This creates more space between the water surface and stream bed. It also makes the channel walls more vertical, so we don't want to go too far. Let's set <code>HexMetrics.streamBedElevationOffset</code> to -1.75. This solves most of the problem, without cutting too deep. Some water will still be clipped, but not entire waterfalls.</p>
+					
+					<pre translate="no">	public const float streamBedElevationOffset = <ins>-1.75f</ins>;</pre>
+					
+					<figure>
+						<img src="part-6/tweaking/deeper-channels.png" width="330" height="170">
+						<figcaption>Deeper channels.</figcaption>
+					</figure>
+					
+					<p>The next tutorial is <a href="part-7/index.html">Roads</a>.</p>
+					
+					<a href="part-6/tweaking/tweaking.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="part-6/Hex-Map-6.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../tutorials.js"></script>
+	</body>
+</html>

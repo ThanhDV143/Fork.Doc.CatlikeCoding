@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/procedural-meshes/modified-grid/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/procedural-meshes/modified-grid/tutorial-image.jpg">
+		<meta property="og:title" content="Modified Grid">
+		<meta property="og:description" content="A Unity C# Procedural Meshes tutorial about sharing all vertices of a grid and modifying it via a shader.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Modified Grid</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/procedural-meshes/modified-grid/#article",
+				"headline": "Modified Grid",
+				"alternativeHeadline": "Sharing and Shading",
+				"datePublished": "2021-12-07",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity C# Procedural Meshes tutorial about sharing all vertices of a grid and modifying it via a shader.",
+				"image": "https://catlikecoding.com/unity/tutorials/procedural-meshes/modified-grid/tutorial-image.jpg",
+				"dependencies": "Unity 2020.3.23f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/procedural-meshes/", "name": "Procedural Meshes" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				AdvancedMultiStreamProceduralMesh: 1,
+				AdvancedSingleStreamProceduralMesh: 1,
+				IMeshGenerator: 1,
+				IMeshStreams: 1,
+				G: 1,
+				MeshJob: 1,
+				MeshJobScheduleDelegate: 1,
+				MeshType: 1,
+				MultiStream: 1,
+				ProceduralMesh: 1,
+				S: 1,
+				SharedSquareGrid: 1,
+				SingleStream: 1,
+				SquareGrid: 1,
+				Stream0: 1,
+				TriangleUInt16: 1,
+				Vertex: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Procedural Meshes</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Modified Grid</h1>
+					<p>Sharing and Shading</p>
+					<ul>
+						<li>Create a grid variant with shared vertices.</li>
+						<li>Make a shader that modifies vertex data.</li>
+						<li>Apply a rippling animation to the grid.</li>
+					</ul>
+				</header>
+				
+				<p>This is the third tutorial in a series about <a href="../index.html">procedural meshes</a>. It introduces a second way to generate a square grid and a way to animate it via a shader.</p>
+				
+				<p>This tutorial is made with Unity 2020.3.23f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A rippling square grid with shared vertices.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Sharing All Vertices</h2>
+					
+					<p>The grid that we have generated in the <a href="../square-grid/index.html">previous tutorial</a> is made of independent quads. Each quad consists of two triangles that share two vertices, but adjacent quads do not share vertices. This allows each quad to have its own texture coordinates. In our case they all cover the full 0&ndash;1 range, but this need not be so. Each quad could have different texture coordinates, which could be used to for example show different parts of a texture, potentially with different scales and orientations as well.</p>
+					
+					<p>However, in many cases there is no need for independent quads. Typically a single texture gets applied to the entire grid. In such cases we can drastically reduce the vertex count and thus the size of the mesh by having quads share vertices with their neighbors.</p>
+					
+					<section>
+						<h3>Shared Grid Variant</h3>
+						
+						<p>We're going to support a vertex-sharing variant of <code>SquareGrid</code>. Begin by duplicating it and renaming the new version to <code>SharedSquareGrid</code>, leaving all other code the same for now.</p>
+						
+						<pre translate="no">	public struct <ins>SharedSquareGrid</ins> : IMeshGenerator { &hellip; }</pre>
+						
+						<p>To allow selection of the variants via the inspector we'll use the same approach that we used in the <a href="../../pseudorandom-noise/index.html">Pseudorandom Noise</a> series: an array of job-scheduling delegates. Define a <code>MeshJobScheduleDelegate</code> delegate type for this, matching the signature of <code>MeshJob.ScheduleParallel</code>. As it belongs with <code>MeshJob</code> let's put it in the same asset file, but outside the generic <code>MeshJob</code> type.</p>
+						
+						<pre translate="no">	public struct MeshJob&lt;G, S> : IJobFor
+		where G : struct, IMeshGenerator
+		where S : struct, IMeshStreams { &hellip; }
+
+	<ins>public delegate JobHandle MeshJobScheduleDelegate (</ins>
+		<ins>Mesh mesh, Mesh.MeshData meshData, int resolution, JobHandle dependency</ins>
+	<ins>);</ins></pre>
+						
+						<p>Now we can add a static jobs array to <code>ProceduralMesh</code> containing scheduling delegates for <code>SquareGrid</code> and <code>SharedSquareGrid</code> jobs, along with an enum type and field to select the mesh type that we want to generate via the inspector.</p>
+						
+						<pre translate="no">public class ProceduralMesh : MonoBehaviour {
+	
+	<ins>static MeshJobScheduleDelegate[] jobs = {</ins>
+		<ins>MeshJob&lt;SquareGrid, SingleStream>.ScheduleParallel,</ins>
+		<ins>MeshJob&lt;SharedSquareGrid, SingleStream>.ScheduleParallel</ins>
+	<ins>};</ins>
+
+	<ins>public enum MeshType {</ins>
+		<ins>SquareGrid€, SharedSquareGrid€</ins>
+	<ins>};</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>MeshType meshType;</ins>
+	
+	&hellip;
+}</pre>
+						
+						<p>Adjust <code>GenerateMesh</code> so it runs the desired job.</p>
+						
+						<pre translate="no">		<del>//MeshJob&lt;SquareGrid, SingleStream>.ScheduleParallel(</del>
+		<del>//	mesh, meshData, resolution, default</del>
+		<del>//).Complete();</del>
+		<ins>jobs[(int)meshType](mesh, meshData, resolution, default).Complete();</ins></pre>
+						
+						<figure>
+							<img src="sharing-all-vertices/mesh-type.png" width="320" height="64">
+							<figcaption>Mesh type set to shared square grid.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Rows of Vertices</h3>
+						
+						<p>Now we're going to adjust <code>SharedSquareGrid</code> so it indeed shares the vertices of the quads. This requires a change of approach, primarily focused on vertices instead of quads.</p>
+						
+						<figure>
+							<img src="sharing-all-vertices/vertex-primary.png" width="175" height="170">
+							<figcaption>Vertex-primary approach.</figcaption>
+						</figure>
+						
+						<p>Each row of vertices for a resolution R grid has R + 1 vertices. So the vertex count becomes that squared. Thus a resolution 4 shared grid would have 25 vertices, while a non-shared grid would require 64 vertices. Adjust the <code>VertexCount</code> property accordingly.</p>
+						
+						<pre translate="no">		public int VertexCount => <ins>(Resolution + 1) * (Resolution + 1)</ins>;</pre>
+						
+						<p>Also, our vertex-based approach will process rows of vertices instead of rows of quads, so <code>JobLength</code> has to increase by one.</p>
+						
+						<pre translate="no">		public int JobLength => Resolution <ins>+ 1</ins>;</pre>
+						
+						<p>Now remove the quad-based code from <code>Execute</code> and start fresh. The first step is to determine the index of the first vertex of the row, which is equal to the resolution plus one, multiplied with the row index.</p>
+						
+						<pre translate="no">		public void Execute&lt;S> (int z, S streams) where S : struct, IMeshStreams {
+			<ins>int vi = (Resolution + 1) * z;</ins>
+		}</pre>
+						
+						<p>Next, we initialize a vertex variable with the constant normal and tangent vectors.</p>
+						
+						<pre translate="no">			int vi = (Resolution + 1) * z;
+
+			<ins>var vertex = new Vertex();</ins>
+			<ins>vertex.normal.y = 1f;</ins>
+			<ins>vertex.tangent.xw = float2(1f, -1f);</ins></pre>
+						
+						<p>Then we set the first&mdash;the leftmost&mdash;vertex of the row. Its position's X coordinate is always &minus;0.5 and its Z coordinate is equal to the row's Z divided by the resolution, minus 0.5.</p>
+						
+						<pre translate="no">			vertex.tangent.xw = float2(1f, -1f);
+
+			<ins>vertex.position.x = -0.5f;</ins>
+			<ins>vertex.position.z = (float)z / Resolution - 0.5f;</ins>
+			<ins>streams.SetVertex(vi, vertex);</ins></pre>
+						
+						<p>Because all vertices are shared the texture coordinates have to be continuous across the entire grid. It makes the most sense to stretch the 0&mdash;1 domain across the entire grid, so we'll do that. Thus the texture U coordinate is zero for the first vertex and its V coordinate is equal to the row's Z divided by the resolution. So the texture coordinates are equal to the XZ position without the negative offset.</p>
+						
+						<pre translate="no">			vertex.position.z = (float)z / Resolution - 0.5f;
+			<ins>vertex.texCoord0.y = (float)z / Resolution;</ins>
+			streams.SetVertex(vi, vertex);</pre>
+						
+						<p>Once we have set the first vertex of the row we increment the vertex index and then follow with a loop over all other vertices of the row. This is done via a <code>for</code> loop that starts at 1 and continues until the resolution inclusive&mdash;as we have resolution plus one vertices per row&mdash;also incrementing the vertex index each iteration.</p>
+						
+						<pre translate="no">			streams.SetVertex(vi, vertex);
+			<ins>vi += 1;</ins>
+
+			<ins>for (int x = 1; x &lt;= Resolution; x++, vi++) {}</ins></pre>
+						
+						<p>Each iteration we only have to adjust the X position and U the texture coordinate and set the vertex. The Z positions and V texture coordinates are constant per row.</p>
+						
+						<pre translate="no">			for (int x = 1; x &lt;= Resolution; x++, vi++) {
+				<ins>vertex.position.x = (float)x / Resolution - 0.5f;</ins>
+				<ins>vertex.texCoord0.x = (float)x / Resolution;</ins>
+				<ins>streams.SetVertex(vi, vertex);</ins>
+			}</pre>
+					</section>
+					
+					<section>
+						<h3>Triangles</h3>
+						
+						<p>We also have to generate the triangles, again two per quad. We'll generate triangles for the vertices we've already set, so for the current vertex row and the one below it. This means that the first triangle index of a row is equal to the row index minus one, multiplied with double the resolution.</p>
+						
+						<pre translate="no">			int vi = (Resolution + 1) * z<ins>, ti = 2 * Resolution * (z - 1)</ins>;</pre>
+						
+						<p>Each iteration of the loop we have to set two triangles, just like for the non-shared grid. The difference is that in this case the triangle indices are shared and we make them relative to the top-right vertex index. So the vertex index offset for the top right vertex of the quad is zero, the top left is &minus;1, the bottom right is the negative resolution minus 1, and the bottom left is the negative resolution minus 2.</p>
+						
+						<figure>
+							<img src="sharing-all-vertices/relative-triangle-indices.png" width="135" height="105">
+							<figcaption>Relative triangle indices.</figcaption>
+						</figure>
+						
+						<pre translate="no">			for (int x = 1; x &lt;= Resolution; x++, vi++<ins>, ti += 2</ins>) {
+				&hellip;
+
+				<ins>streams.SetTriangle(</ins>
+					<ins>ti + 0, vi + int3€(-Resolution - 2, -1, -Resolution - 1)</ins>
+				<ins>);</ins>
+				<ins>streams.SetTriangle(</ins>
+					<ins>ti + 1, vi + int3€(-Resolution - 1, -1, 0)</ins>
+				<ins>);</ins>
+			}</pre>
+						
+						<p>But we must not generate quads for every vertex row, as there are no quads below the bottom one. Thus only do this if the row index is greater than zero.</p>
+						
+						<pre translate="no">				<ins>if (z > 0) {</ins>
+					streams.SetTriangle(
+						ti + 0, vi + int3€(-Resolution - 2, -1, -Resolution - 1)
+					);
+					streams.SetTriangle(
+						ti + 1, vi + int3€(-Resolution - 1, -1, 0)
+					);
+				<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Do we have to check the row index every iteration?</h3>
+							<div>
+								<p>Burst will detect that this check is constant per invocation of <code>Execute</code> and can hoist the check out of the loop. This means that Burst can significantly rewrite our code if deemed beneficial. It will be as if we wrote the loop twice, once with and once without settings triangles, with a single check to determine which loop to use. Thus we can write the simplest code, which is a single loop with a check inside it, and leave the optimization to Burst.</p>
+							</div>
+						</aside>
+						
+						<p>At this point we can generate a valid shared square grid.</p>
+						
+						<figure>
+							<img src="sharing-all-vertices/shared-grid.png" width="170" height="170" alt="scene">
+							<img src="sharing-all-vertices/shared-grid-inspector.png" width="320" height="170" alt="inspector">
+							<figcaption>3&times;3 shared square grid.</figcaption>
+						</figure>
+						
+					</section>
+				</section>
+				
+				<section>
+					<h2>Ripple Shader</h2>
+					
+					<p>Currently there is no visual difference between a resolution 1 and a resolution 10 shared square grid, both represent a flat plane. Without additional variety there is no reason to use a higher resolution. Grids like these are typically used to show uneven smooth surfaces, like terrain. The variety could be generated along with the mesh, but it can also be applied to a flat grid via a shader. As an example of this we'll make the grid ripple by letting the GPU adjust its vertices.</p>
+					
+					<section>
+						<h3>Shader Graph</h3>
+						
+						<p>We'll create a <em translate="no">Procedural Mesh</em> shader graph that we'll use to visualize our mesh. To still apply the base map and the normal map add texture properties for them to the shader graph's blackboard.</p>
+						
+						<figure>
+							<img src="ripple-shader/texture-properties.png" width="194" height="76">
+							<figcaption>Texture properties.</figcaption>
+						</figure>
+						
+						<p>The normal map's <em translate="no">Mode</em> must be set to <em translate="no">Bump</em> to make it correctly provide a normal map, even when none is set. This can be done via the graph inspector, with the property selected.</p>
+						
+						<figure>
+							<img src="ripple-shader/normal-map-settings.png" width="250" height="264">
+							<figcaption>Settings for normal map.</figcaption>
+						</figure>
+						
+						<p>Add the properties to the graph, along with two <em translate="no">Sample Texture 2D</em> nodes and connect them appropriately. The <em translate="no">Type</em> of the node that samples the normal map must be set to <em translate="no">Normal</em>.</p>
+						
+						<figure>
+							<img src="ripple-shader/texture-nodes.png" width="584" height="290">
+							<figcaption>Texture nodes.</figcaption>
+						</figure>
+						
+						<p>Adjust our material to use this shader graph instead of the default URP material.</p>
+						
+						<figure>
+							<img src="ripple-shader/material-with-textures.png" width="320" height="306">
+							<figcaption>Material with our shader and textures set.</figcaption>
+						</figure>
+						
+						<p>You can also add properties for other setting like base color and smoothness, but I keep the configuration at a minimum.</p>
+					</section>
+					
+					<section>
+						<h3>Ripple Function</h3>
+						
+						<p>We'll use a ripple function similar to but simpler than the one we used in the <a href="../../basics/mathematical-surfaces/index.html">Basics / Mathematical Surfaces</a> tutorial: `y=asin(2pip(d-st))` where `d` is the distance to the wave origin, `a` is the wave amplitude, `p` is its period, `s` is its speed, and `t` is the time.</p>
+						
+						<p>Although we could implement the function via shader graph nodes, it's easier to write code for it, so introcude a <em translate="no">ProceduralMesh.hlsl</em> asset file containing a <code>Ripple_float</code> function with the 3D input position, origin, period, speed, amplitude, and output position as parameters. Initially the output is simply the input position.</p>
+						
+						<pre class="shader" translate="no"><ins>void Ripple_float (</ins>
+	<ins>float3 PositionIn, float3 Origin,</ins>
+	<ins>float Period, float Speed, float Amplitude,</ins>
+	<ins>out float3 PositionOut</ins>
+<ins>) {</ins>
+	<ins>PositionOut = PositionIn;</ins>
+<ins>}</ins></pre>
+						
+						<p>Create a custom function node for it in the graph. We only bother to include a <code>float</code> version, omitting the <code>half</code> version, so set the node's <em translate="no">Precision</em> to <em translate="no">Single</em>, which matches the <code>float</code> type.</p>
+						
+						<figure>
+							<img src="ripple-shader/ripple-node-settings.png" width="230" height="400">
+							<figcaption>Ripple node settings.</figcaption>
+						</figure>
+						
+						<p>We evaluate the wave in object space, so it won't be affected by the object's transformation matrix. So feed the node the object-space position and use its output for the vertex position. Make sure that the <em translate="no">Position</em> node has its <em translate="no">Space</em> set to <em translate="no">Object</em>. Also add properties to the graph for the other inputs and connect them to the ripple node.</p>
+						
+						<figure>
+							<img src="ripple-shader/ripple-node.png" width="672" height="262">
+							<figcaption>Ripple node connected.</figcaption>
+						</figure>
+						
+						<p>The ripple origin is a 3D vector, which makes it possible to place the origin above or below the plane. This can make the visible center of the ripple smoother. The other input parameters are all sliders, with range 0.1&ndash;5 for the period, 0&ndash;1 for speed, and 0&ndash;0.5 for amplitude.</p>
+						
+						<figure>
+							<img src="ripple-shader/ripple-material.png" width="320" height="176">
+							<figcaption>Default ripple material settings.</figcaption>
+						</figure>
+						
+						<p>Now add the ripple function to the output Y position in <code class="shader">Ripple_float</code>. To make the code easier to follow I split it into multiple sub-functions: `y=asin(f)` with `f=2pip(d-st)` and `d=||p||` where `p` is the relative 3D position, so the position minus the origin. The current time can be accessed via <code class="shader">_Time.y</code>.</p>
+						
+						<pre class="shader" translate="no">	<ins>float3 p = PositionIn - Origin;</ins>
+	<ins>float d = length(p);</ins>
+	<ins>float f = 2.0 * PI * Period * (d - Speed * _Time.y);</ins>
+	
+	PositionOut = PositionIn <ins>+ float3(0.0, Amplitude * sin(f), 0.0)</ins>;</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="ripple-shader/ripple-resolution-10.mp4" type="video/mp4">
+							</video>
+							<figcaption>Resolution 10 ripple; speed 0.1.</figcaption>
+						</figure>
+						
+						<p>The higher the resolution of the grid, the smoother its surface will be and the better the ripple will look. Low resolutions will look like a mess and resolution 10 still doesn't look great. So let's increase the maximum resolution to 50 in <code>ProceduralMesh</code>.</p>
+						
+						<pre translate="no">	[SerializeField, Range(1, <ins>50</ins>)]
+	int resolution = 1;</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="ripple-shader/ripple-resolution-50.mp4" type="video/mp4">
+							</video>
+							<figcaption>Resolution 50 ripple.</figcaption>
+						</figure>
+						
+						<p>Note that although the vertices now have a vertical offset the mesh bounds are still flat. This isn't a problem for our demonstration, but in general you have to be aware of possible mismatches between a mesh's bounds and its visual size due to vertex displacement. It could cause unexpected culling when the bounds fall outside the camera frustum while some of its displaces vertices would be visible.</p>
+					</section>
+					
+					<section>
+						<h3>Rippling Normals</h3>
+						
+						<p>Although the grid now ripples the shader still treats it as flat when calculating lighting, because all normal vectors still point straight up. To apply lighting correctly the ripple function also has to provide appropriate vertex normal vectors that match the ripple.</p>
+						
+						<p>To find the normal vector we need to know the surface curvature at the vertex. We can do this by calculating the derivative of our ripple function. It is a two-dimensional function, so it has two derivatives, one per dimension, which are known as partial derivatives. In this case `y'=(2piapcos(f))/d[[x],[z]]`. Calculate them after the adjusted position.</p>
+						
+						<pre class="shader" translate="no">	PositionOut = PositionIn + float3(0.0, Amplitude * sin(f), 0.0);
+
+	<ins>float2 derivatives = (2.0 * PI * Amplitude * Period * cos(f) / d) * p.xz;</ins></pre>
+						
+						<aside>
+							<h3>How are those derivatives found?</h3>
+							<div>
+								<p>Let's first consider the partial derivative in the X dimension, so with only `x` variable and everything else constant.</p>
+								
+								<p>At the highest level we have `y=asin(f)` with `x` hidden somewhere inside `f`. The derivative of `sin(x)` is `cos(x)`, however we have a more complex sub-function `f`. We can solve this by applying the chain rule. Simply put, this rule states that we can treat `f` as if it were only `x`, if we multiply the result with the derivative of `f`. Thus we get `y'=acos(f)f'`.</p>
+								
+								<p>In general the chain rule states that `f(x)'=f'(x)x'`.</p>
+								
+								<p>The next step is to find the derivative of `f=2pip(d-st)` with `x` hidden somewhere inside `d`. By again applying the chain rule we get `f'=2pipd'`. So now we have `y'=2piapcos(f)d'`.</p>
+								
+								<p>Continuing, `d=||p||=sqrt(x^2+y^2+z^2)`. The derivative of `sqrt(x)=x^(1/2)` would be `1/2x^(-1/2)=1/(2sqrt(x)`. But we have `sqrt(x^2+y^2+z^2)` so by applying the chain rule yet again we get `d'=((x^2+y^2+z^2)')/(2d)=((x^2)')/(2d)=(2x)/(2d)=x/d`.</p>
+								
+								<p>Thus we arrive at `y'=(2piapcos(f))/d x`. The partial deriviative in the Z dimension is the same, only with `x` replaced by `z`.</p>
+								
+								<p>Note that we use the relative `x` here, but it also works with the global `x-o_x` where `o_x` is the origin in the X dimension. In the global case `d'=(((x-o_x)^2)')/(2d)=(2x-2o_x)/(2d)=(x-o_x)/d`.
+								
+							</div>
+						</aside>
+						
+						<p>If the origin lies on the plane then `d` can become zero. To avoid a division by zero enforce a tiny minimum value for the divisor.</p>
+						
+						<pre class="shader" translate="no">	float2 derivatives = (2.0 * PI * Amplitude * Period * cos(f) / <ins>max(</ins>d<ins>, 0.0001)</ins>) * p.xz;</pre>
+						
+						<p>The derivates tell how much much the Y coordinate varies per unit in the X and Z dimensions. We can use that to construct a normal vector. We start with the unit X and Z vectors and add the respective derivative to their Y components. These two vectors lie on the plane that matches the surface curvature at that point. Then we take the cross product of these vectors via the <code class="shader">cross</code> function, which produces a vector pointing straight away from the plane in which they lie, thus giving us the normal vector that we need. To make sure that it points up rather than down we have to calculate `ZxxX` and not `XxxZ`, where `xx` represents the cross product of two vectors. Assign the result to a new normal vector output parameter.</p>
+						
+						<pre class="shader" translate="no">void Ripple_float (
+	float3 PositionIn, float3 Origin,
+	float Period, float Speed, float Amplitude,
+	out float3 PositionOut<ins>, out float3 NormalOut</ins>
+) {
+	&hellip;
+
+	<ins>NormalOut = cross(float3(0.0, derivatives.y, 1.0), float3(1.0, derivatives.x, 0.0));</ins>
+}</pre>
+						
+						<p>Although normal vectors should be unit-length, this isn't the case for the vector that we calculate. However, this isn't a problem because the shader normalizes it after applying the object-to-world space transformation. So add the required output to the ripple node and directly connect it to the vertex normal.</p>
+						
+						<figure>
+							<img src="ripple-shader/ripple-node-normal.png" width="410" height="150">
+							<figcaption>Ripple node with normal output.</figcaption>
+						</figure>
+						
+						<p>Now the grid will have correct lighting applied to it.</p>
+						
+						<figure>
+							<img src="ripple-shader/normals-ripple.png" width="216" height="216" alt="ripple">
+							<img src="ripple-shader/normals-flat.png" width="216" height="216" alt="flat">
+							<figcaption>Rippling and flat normals.</figcaption>
+						</figure>
+						
+					</section>
+					
+					<section>
+						<h3>Rippling Tangents</h3>
+						
+						<p>The normal vectors are now correct, but the normal map isn't applied as correctly as could be. The tangent vectors should also match the rippling surface, but are still flat. We already calculate the required tangent vector, it's the X part of the cross product to find the normal vector. So make it available via an output parameter.</p>
+						
+						<pre class="shader" translate="no">void Ripple_float (
+	float3 PositionIn, float3 Origin,
+	float Period, float Speed, float Amplitude,
+	out float3 PositionOut, out float3 NormalOut<ins>, out float3 TangentOut</ins>
+) {
+	&hellip;
+
+	<ins>TangentOut = float3(1.0, derivatives.x, 0.0);</ins>
+	NormalOut = cross(float3(0.0, derivatives.y, 1.0), <ins>TangentOut</ins>);
+}</pre>
+						
+						<p>Also include it in the graph, just like we did for the vertex normal vector.</p>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="ripple-shader/ripple-normals-tangents.mp4" type="video/mp4">
+							</video>
+							<figcaption>Rippling normals and tangents.</figcaption>
+						</figure>
+						
+						<p>Note that the difference between correct and flat tangents isn't that obvious, which is why they're often kept flat. However, as we calculate them anyway it's free to use the correct tangent vectors.</p>
+						
+						<p>Also note that at this point we completely replace both the normal and the tangent vectors of the mesh, so we could use a specialized <code>IMeshStreams</code> implementation that omits them, significantly reducing the size of the mesh. We could even go a step further and omit the texture coordinates for the shader grid, as they're always equal to the position plus 0.5. However, I won't do this and instead will stick to a mesh format that works in all cases.</p>
+					</section>
+					
+					<section>
+						<h3>Optional Ripple</h3>
+						
+						<p>We wrap up this tutorial by making the ripple effect optional. We do this by adding a boolean keyword property to the graph.</p>
+						
+						<figure>
+							<img src="ripple-shader/ripple-keyword.png" width="202" height="238">
+							<figcaption>Ripple keyword.</figcaption>
+						</figure>
+						
+						<p>This adds a toggle option for the ripple to our material inspector.</p>
+						
+						<figure>
+							<img src="ripple-shader/ripple-toggle.png" width="320" height="118">
+							<figcaption>Ripple toggle enabled.</figcaption>
+						</figure>
+						
+						<p>When you drag the keyword from the blackboard onto the graph area you'll get a node that has two inputs, which allows you to provide variants for when the keyword is enabled and disabled. So when the keyword is enabled use the ripple for the position, otherwise the original position. The same goes for the normal and tangent vectors. Each has a dedicated node that provides the original mesh data. Make sure that everything is in object space.</p>
+						
+						<figure>
+							<img src="ripple-shader/optional-ripple.png" width="676" height="422">
+							<figcaption>Keyword-controlled ripple.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../triangle-grid/index.html">Triangle Grid</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/procedural-meshes-03-modified-grid/" class="repository">repository</a>
+					<a href="Modified-Grid.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

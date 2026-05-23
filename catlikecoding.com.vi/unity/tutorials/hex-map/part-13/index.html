@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/hex-map/part-13/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/hex-map/part-13/tutorial-image.jpg">
+		<meta property="og:title" content="Hex Map 13">
+		<meta property="og:description" content="A Unity Hex Map tutorial about managing multiple maps. Part 13 of 27.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hex Map 13</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/hex-map/part-13/#article",
+				"headline": "Hex Map 13",
+				"alternativeHeadline": "Managing Maps",
+				"datePublished": "2017-01-27",
+				"dateModified": "2020-08-24",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Hex Map tutorial about managing multiple maps. Part 13 of 27.",
+				"image": "https://catlikecoding.com/unity/tutorials/hex-map/part-13/tutorial-image.jpg",
+				"dependencies": "Unity 5.5.0",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/hex-map/", "name": "Hex Map" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				EdgeVertices: 1,
+				HexCell: 1,
+				HexEdgeType: 1,
+				HexCoordinates: 1,
+				HexCoordinatesDrawer: 1,
+				HexDirection: 1,
+				HexDirectionExtensions: 1,
+				HexFeatureCollection: 1,
+				HexFeatureManager: 1,
+				HexGrid: 1,
+				HexGridChunk: 1,
+				HexHash: 1,
+				HexMapCamera: 1,
+				HexMapEditor: 1,
+				HexMesh: 1,
+				HexMetrics: 1,
+				ListPool: 1,
+				NewMapMenu: 1,
+				OptionalToggle: 1,
+				SaveLoadItem: 1,
+				SaveLoadMenu: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Hex Map</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hex Map 13</h1>
+					<p>Managing Maps</p>
+					<ul>
+						<li>Create new maps in play mode.</li>
+						<li>Support multiple map sizes.</li>
+						<li>Add map size to save data.</li>
+						<li>Save and load arbitrary maps.</li>
+						<li>Show a list of maps.</li>
+					</ul>
+				</header>
+
+				<p>This is part 13 of a tutorial series about <a href="../index.html">hexagon maps</a>. The previous installment made it possible to save and load map data. This time, we'll add support for multiple map sizes, as well as saving to different files.</p>
+				
+				<p>From now on, this tutorial series is made with Unity 5.5.0.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>The <a href="large-island.map.html">beginning</a> of a map library.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Creating New Maps</h2>
+					
+					<p>Up to this point, the only time we create a hex grid is when the scene is loaded. Now we're going to make it possible to start a new map whenever we want. The new map will simply replace the current one.</p>
+					
+					<p>When <code>HexGrid</code> awakens, it initializes some metrics, then figures out the cell count and creates the required chunks and cells. By creating a new set of chunks and cells, we create a new map. So let's split <code>HexGrid.Awake</code> into two parts, the original initialization code, and a public <code>CreateMap</code> method.</p>
+					
+					<pre translate="no">	void Awake () {
+		HexMetrics.noiseSource = noiseSource;
+		HexMetrics.InitializeHashGrid(seed);
+		HexMetrics.colors = colors;
+		<ins>CreateMap();</ins>
+	<ins>}</ins>
+
+	<ins>public void CreateMap () {</ins>
+		cellCountX = chunkCountX * HexMetrics.chunkSizeX;
+		cellCountZ = chunkCountZ * HexMetrics.chunkSizeZ;
+		CreateChunks();
+		CreateCells();
+	}</pre>
+					
+					<p>Add a button to create a new map to our UI. I made it a big button and placed it underneath the save and load buttons.</p>
+					
+					<figure>
+						<img src="creating-new-maps/new-map-button.png" width="108" height="308">
+						<figcaption>New Map button.</figcaption>
+					</figure>
+					
+					<p>Connect the <em translate="no">On Click</em> event of this button to the <code>CreateMap</code> method of our <code>HexGrid</code> object. So we're not going through <em translate="no">Hex Map Editor</em>, we'll directly invoke a method of our <em translate="no">Hex Grid</em> object.</p>
+					
+					<figure>
+						<img src="creating-new-maps/on-click.png" width="320" height="86">
+						<figcaption>Create map on click.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Clearing Old Data</h3>
+						
+						<p>Clicking the <em translate="no">New Map</em> button will now create a new set of chunks and cells. However, the old ones aren't automatically removed. So we end up with multiple superimposed map meshes. To prevent this, we have to get rid of the old objects first. This can be done by destroying all the current chunks at the start of <code>CreateMap</code>.</p>
+						
+						<pre translate="no">	public void CreateMap () {
+		<ins>if (chunks != null) {</ins>
+			<ins>for (int i = 0; i &lt; chunks.Length; i++) {</ins>
+				<ins>Destroy(chunks[i].gameObject);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+
+		&hellip;
+	}</pre>
+						
+						<aside>
+							<h3>Can't we reuse the existing objects?</h3>
+							<div>
+								<p>That's possible, but starting with fresh chunks and cells is easiest. This is especially true once we support multiple map sizes. Also, creating a new map is a relatively rare action. Optimization isn't very important here.</p>
+							</div>
+						</aside>
+						
+						<aside>
+							<h3>Can we destroy the children in a loop like that?</h3>
+							<div>
+								<p>Sure. The actual destruction is delayed until after the current frame's update phase.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Cells instead of Chunks for Size</h3>
+						
+						<p>We currently set the size of our map via the <code>chunkCountX</code> and <code>chunkCountZ</code> fields of <code>HexGrid</code>. But it's much more convenient to specify map size in terms of cells. That way, we could even change the chunk size later, without affecting the sizes of maps. So let's swap the roles of the cell-count and chunk-count fields.</p>
+						
+						<pre translate="no"><del>//	public int chunkCountX = 4, chunkCountZ = 3;</del>
+	<ins>public int cellCountX = 20, cellCountZ = 15;</ins>
+
+	&hellip;
+
+<del>//	int cellCountX, cellCountZ;</del>
+	<ins>int chunkCountX, chunkCountZ;</ins>
+
+	&hellip;
+	
+	public void CreateMap () {
+		&hellip;
+
+<del>//		cellCountX = chunkCountX * HexMetrics.chunkSizeX;</del>
+<del>//		cellCountZ = chunkCountZ * HexMetrics.chunkSizeZ;</del>
+		<ins>chunkCountX = cellCountX / HexMetrics.chunkSizeX;</ins>
+		<ins>chunkCountZ = cellCountZ / HexMetrics.chunkSizeZ;</ins>
+		CreateChunks();
+		CreateCells();
+	}</pre>
+						
+						<p>This will lead to a compile error, because <code>HexMapCamera</code> uses the chunk sizes to clamp its position. Adjust <code>HexMapCamera.ClampPosition</code> so it directly uses the cell counts instead, which is what it needs anyway.</p>
+						
+						<pre translate="no">	Vector3 ClampPosition (Vector3 position) {
+		float xMax = (<ins>grid.cellCountX</ins> - 0.5f) * (2f * HexMetrics.innerRadius);
+		position.x = Mathf.Clamp(position.x, 0f, xMax);
+
+		float zMax = (<ins>grid.cellCountZ</ins> - 1) * (1.5f * HexMetrics.outerRadius);
+		position.z = Mathf.Clamp(position.z, 0f, zMax);
+
+		return position;
+	}</pre>
+						
+						<p>Our chunk size is 5 by 5 cells, and we used 4 by 3 chunks as our default map size. So to keep the map the same, we'll have to use 20 by 15 cells. Even though we assigned default values in code, our grid object won't automatically use those. That's because the fields already existed and used to have zero as default value.</p>
+						
+						<figure>
+							<img src="creating-new-maps/default-size.png" width="320" height="72">
+							<figcaption>Default map size set to 20 by 15.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Arbitrary Map Sizes</h3>
+						
+						<p>The next step is to support creating maps of any size, not just the default. To do so, add an X and Z parameter to <code>HexGrid.CreateMap</code>. Those will replace the existing cell counts. Inside <code>Awake</code>, simply invoke it with the current cell counts.</p>
+						
+						<pre translate="no">	void Awake () {
+		HexMetrics.noiseSource = noiseSource;
+		HexMetrics.InitializeHashGrid(seed);
+		HexMetrics.colors = colors;
+		CreateMap(<ins>cellCountX, cellCountZ</ins>);
+	}
+
+	public void CreateMap (<ins>int x, int z</ins>) {
+		&hellip;
+
+		<ins>cellCountX = x;</ins>
+		<ins>cellCountZ = z;</ins>
+		chunkCountX = cellCountX / HexMetrics.chunkSizeX;
+		chunkCountZ = cellCountZ / HexMetrics.chunkSizeZ;
+		CreateChunks();
+		CreateCells();
+	}</pre>
+						
+						<p>However, this will only work correctly with cell counts that are multiples of the chunk size. Otherwise, the integer divisions will produce too few chunks. While we could add support for chunks that are only partially filled with cells, let's simply disallow sizes that don't fit our chunks.</p>
+						
+						<p>We can use the <code>%</code> operator to compute the remainder of the cell count divided by the chunk count. If that isn't zero, there is a mismatch and we won't create a new map. While we're at it, let's also guard against zero and negative sizes.</p>
+						
+						<pre translate="no">	public void CreateMap (int x, int z) {
+		<ins>if (</ins>
+			<ins>x &lt;= 0 || x % HexMetrics.chunkSizeX != 0 ||</ins>
+			<ins>z &lt;= 0 || z % HexMetrics.chunkSizeZ != 0</ins>
+		<ins>) {</ins>
+			<ins>Debug.LogError("Unsupported map size.");</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+		
+		&hellip;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>New Map Menu</h3>
+						
+						<p>At this point, the <em translate="no">New Map</em> button no longer works. That's because the <code>HexGrid.CreateMap</code> method now has two parameters. We cannot directly connect Unity events with such methods. Also, to support multiple map sizes, we're going to need multiple buttons. Instead of adding all those buttons to our main UI, let's create a separate popup menu.</p>
+						
+						<p>Add a new canvas to the scene, via <em translate="no">GameObject / UI / Canvas</em>. Use the same settings as our already existing canvas, except that its <em translate="no">Sort Order</em> should be set to 1. That will ensure that it ends up on top of the main editor UI. I made both canvases and the event system children of a new UI object, to keep the scene hierarchy clean.</p>
+						
+						<figure>
+							<img alt="canvas" src="creating-new-maps/canvas.png" width="320" height="196">
+							<img alt="hierarchy" src="creating-new-maps/ui-hierarchy.png" width="120" height="112">
+							<figcaption>New Map Menu canvas.</figcaption>
+						</figure>
+						
+						<p>Add a panel to the <em translate="no">New Map Menu</em> that covers the entire screen. Its purpose is to darken the background and block the cursor from interacting with anything else when the menu is open. I gave it a uniform color by clearing its <em translate="no">Source Image</em> and set its <em translate="no">Color</em> to (0, 0, 0, 200).</p>
+						
+						<figure>
+							<img src="creating-new-maps/background.png" width="320" height="178">
+							<figcaption>Background image settings.</figcaption>
+						</figure>
+						
+						<p>Add a menu panel to the center of the canvas, like the panels of <em translate="no">Hex Map Editor</em>. Give it a descriptive label and buttons for a small, medium, and large map. Also give it a cancel button, in case you change your mind. Once you're done designing, deactivate the entire <em translate="no">New Map Menu</em>.</p>
+						
+						<figure>
+							<img alt="menu" src="creating-new-maps/menu.png" width="220" height="220">
+							<img alt="hierarchy" src="creating-new-maps/menu-hierarchy.png" width="144" height="180">
+							<figcaption>New Map menu.</figcaption>
+						</figure>
+						
+						<p>To control the menu, create a <code>NewMapMenu</code> component and add it to the <em translate="no">New Map Menu</em> canvas object. To create a new map, we need to access our <em translate="no">Hex Grid</em> object. So give it a public field for that and hook it up.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class NewMapMenu : MonoBehaviour {</ins>
+
+	<ins>public HexGrid hexGrid;</ins>
+<ins>}</ins></pre>
+						
+						<figure>
+							<img src="creating-new-maps/new-map-menu.png" width="320" height="56">
+							<figcaption>New Map Menu component.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Opening and Closing</h3>
+						
+						<p>We can open and close our popup menu simply by activating and deactivating the canvas object. Let's add two public methods to <code>NewMapMenu</code> to take care of this.</p>
+						
+						<pre translate="no">	<ins>public void Open () {</ins>
+		<ins>gameObject.SetActive(true);</ins>
+	<ins>}</ins>
+
+	<ins>public void Close () {</ins>
+		<ins>gameObject.SetActive(false);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now connect the <em translate="no">New Map</em> button of the editor UI to the <code>Open</code> method of our <em translate="no">New Map Menu</em> object.</p>
+						
+						<figure>
+							<img src="creating-new-maps/on-click-open-menu.png" width="320" height="86">
+							<figcaption>Open menu on click.</figcaption>
+						</figure>
+						
+						<p>Also, connect the <em translate="no">Cancel</em> button to the <code>Close</code> method. This allows us to both open and close our popup menu.</p>
+					</section>
+					
+					<section>
+						<h3>Creating New Maps</h3>
+						
+						<p>To actually create new maps, we need to invoked the <code>CreateMap</code> method of our <em translate="no">Hex Grid</em> object. Also, after doing that we should close the popup menu. Add a method to <code>NewMapMenu</code> to take care of this, given an arbitrary size.</p>
+						
+						<pre translate="no">	<ins>void CreateMap (int x, int z) {</ins>
+		<ins>hexGrid.CreateMap(x, z);</ins>
+		<ins>Close();</ins>
+	<ins>}</ins></pre>
+						
+						<p>This method needn't be public, because we cannot directly connect it with the button events anyway. Instead, create one method per button, which invokes <code>CreateMap</code> with a specific size. I used 20 by 15 for the small map, corresponding to the default map size. I chose double that &ndash; 40 by 30 &ndash; for the medium map, and again double that for the large map. Connect the buttons with their respective methods.</p>
+						
+						<pre translate="no">	<ins>public void CreateSmallMap () {</ins>
+		<ins>CreateMap(20, 15);</ins>
+	<ins>}</ins>
+
+	<ins>public void CreateMediumMap () {</ins>
+		<ins>CreateMap(40, 30);</ins>
+	<ins>}</ins>
+
+	<ins>public void CreateLargeMap () {</ins>
+		<ins>CreateMap(80, 60);</ins>
+	<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Locking the Camera</h3>
+						
+						<p>We can now use the popup menu to create new maps with three different sizes! It works fine, but there is one detail that we should take care of. When the <em translate="no">New Map Menu</em> is active, we can no longer interact with the editor UI, nor edit cells. However, we can still control the camera. Ideally, the camera should be locked while the menu is open.</p>
+						
+						<p>As we only have a single camera, the quick and pragmatic solution is to add a static <code>Locked</code> property to it. This is not a good general-purpose solution, but it suffices for our simple interface. This requires that we keep track of a static instance inside <code>HexMapCamera</code>, which we set when the camera awakens.</p>
+						
+						<pre translate="no">	<ins>static HexMapCamera instance;</ins>
+	
+	&hellip;
+	
+	<ins>void OnEnable () {</ins>
+		<ins>instance = this;</ins>
+	<ins>}</ins></pre>
+						
+						<p>The <code>Locked</code> property can be a simple setter-only static boolean property. All it does is disable the <code>HexMapCamera</code> instance when it gets locked, and enables it when it gets unlocked.</p>
+						
+						<pre translate="no">	<ins>public static bool Locked {</ins>
+		<ins>set {</ins>
+			<ins>instance.enabled = !value;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now <code>NewMapMenu.Open</code> can lock the camera, and <code>NewMapMenu.Close</code> can unlock it.</p>
+						
+						<pre translate="no">	public void Open () {
+		gameObject.SetActive(true);
+		<ins>HexMapCamera.Locked = true;</ins>
+	}
+
+	public void Close () {
+		gameObject.SetActive(false);
+		<ins>HexMapCamera.Locked = false;</ins>
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Keeping a Valid Camera Position</h3>
+						
+						<p>There is another potential problem with the camera. When creating a new map which is smaller than the current one, the camera can end up outside the map's bounds. It will stay that way, until you try to move the camera. Only then will it be constrained to the bounds of the new map.</p>
+						
+						<p>To solve this issue, we can add a static <code>ValidatePosition</code> method to <code>HexMapCamera</code>. Invoking the instance's <code>AdjustPosition</code> method with a zero offset will enforce the map bounds. If the camera was already inside the new map's bounds, it won't move.</p>
+						
+						<pre translate="no">	<ins>public static void ValidatePosition () {</ins>
+		<ins>instance.AdjustPosition(0f, 0f);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Invoke this method inside <code>NewMapMenu.CreateMap</code>, after the new map has been created.</p>
+						
+						<pre translate="no">	void CreateMap (int x, int z) {
+		hexGrid.CreateMap(x, z);
+		<ins>HexMapCamera.ValidatePosition();</ins>
+		Close();
+	}</pre>
+					</section>
+					
+					<a href="creating-new-maps/creating-new-maps.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Saving Map Size</h2>
+					
+					<p>While we can create maps of different sizes, we don't take size into consideration yet when saving or loading. This means that loading a map will lead to an error or an invalid map, unless the current map size happens to match the one that we're loading.</p>
+					
+					<p>To solve this problem, we have to create a new map with the appropriate size, before loading the cell data. Let's assume that we have a small map stored. In that case, creating a 20 by 15 map at the start of <code>HexGrid.Load</code> will ensure that everything will go all right.</p>
+					
+					<pre translate="no">	public void Load (BinaryReader reader) {
+		<ins>CreateMap(20, 15);</ins>
+
+		for (int i = 0; i &lt; cells.Length; i++) {
+			cells[i].Load(reader);
+		}
+		for (int i = 0; i &lt; chunks.Length; i++) {
+			chunks[i].Refresh();
+		}
+	}</pre>
+					
+					<section>
+						<h3>Storing Map Size</h3>
+						
+						<p>Of course we could have stored a map of any size. So the generic solution is to write the map size before the cell data, when saving.</p>
+						
+						<pre translate="no">	public void Save (BinaryWriter writer) {
+		<ins>writer.Write(cellCountX);</ins>
+		<ins>writer.Write(cellCountZ);</ins>
+		
+		for (int i = 0; i &lt; cells.Length; i++) {
+			cells[i].Save(writer);
+		}
+	}</pre>
+						
+						<p>Then we can retrieve the actual size and use that to create a map with the correct dimensions.</p>
+						
+						<pre translate="no">	public void Load (BinaryReader reader) {
+		CreateMap(<ins>reader.ReadInt32()</ins>, <ins>reader.ReadInt32()</ins>);
+
+		&hellip;
+	}
+</pre>
+						
+						<p>As we can now load maps with different sizes, we run into the camera position problem again. Solve this by validating its position after loading the map, in <code>HexMapEditor.Load</code>.</p>
+						
+						<pre translate="no">	public void Load () {
+		string path = Path.Combine(Application.persistentDataPath, "test.map");
+		using (BinaryReader reader = new BinaryReader(File.OpenRead(path))) {
+			int header = reader.ReadInt32();
+			if (header == 0) {
+				hexGrid.Load(reader, header);
+				<ins>HexMapCamera.ValidatePosition();</ins>
+			}
+			else {
+				Debug.LogWarning("Unknown map format " + header);
+			}
+		}
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>New File Format</h3>
+						
+						<p>While this approach works with maps that we save from now on, it doesn't work with older maps. Conversely, the previous tutorial wouldn't be able to correctly load the newer map files. To distinguish between the old and new format, we'll increase the header integer. The old save format without the map size was version 0. The new format with the map size is version 1. So when saving, <code>HexMapEditor.Save</code> should write a 1 instead of a 0.</p>
+						
+						<pre translate="no">	public void Save () {
+		string path = Path.Combine(Application.persistentDataPath, "test.map");
+		using (
+			BinaryWriter writer =
+				new BinaryWriter(File.Open(path, FileMode.Create))
+		) {
+			writer.Write(<ins>1</ins>);
+			hexGrid.Save(writer);
+		}
+	}</pre>
+						
+						<p>From this point, maps will be saved as version 1. If you'd try to open them in a build of the previous tutorial, it will refuse to load and complain about an unknown map format. In fact, that's what happens when we try to load such a map right now. We have to adjust the <code>HexMapEditor.Load</code> method so that it accepts the new version.</p>
+						
+						<pre translate="no">	public void Load () {
+		string path = Path.Combine(Application.persistentDataPath, "test.map");
+		using (BinaryReader reader = new BinaryReader(File.OpenRead(path))) {
+			int header = reader.ReadInt32();
+			if (header == <ins>1</ins>) {
+				hexGrid.Load(reader);
+				HexMapCamera.ValidatePosition();
+			}
+			else {
+				Debug.LogWarning("Unknown map format " + header);
+			}
+		}
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Backwards Compatibility</h3>
+						
+						<p>Actually, we could still load version 0 maps if we wanted to, assuming that they all have the same 20 by 15 size. So the header doesn't have to be exactly 1, it can be 0 as well. As each version requires a different approach, <code>HexMapEditor.Load</code> has to pass the header on to <code>HexGrid.Load</code>.</p>
+						
+						<pre translate="no">			if (header <ins>&lt;=</ins> 1) {
+				hexGrid.Load(reader<ins>, header</ins>);
+				HexMapCamera.ValidatePosition();
+			}</pre>
+						
+						<p>Add the header parameter to <code>HexGrid.Load</code>, then use it to decide what to do. If the header is at least 1, then the map size data should be read. Otherwise, use the old fixed 20 by 15 map size and skip reading the size data.</p>
+						
+						<pre translate="no">	public void Load (BinaryReader reader<ins>, int header</ins>) {
+		<ins>int x = 20, z = 15;</ins>
+		<ins>if (header >= 1) {</ins>
+			<ins>x = reader.ReadInt32();</ins>
+			<ins>z = reader.ReadInt32();</ins>
+		<ins>}</ins>
+		CreateMap(<ins>x</ins>, <ins>z</ins>);
+
+		&hellip;
+	}
+</pre>
+						
+						<a href="saving-map-size/test.map.html" download rel="nofollow">version 0 map file</a>
+					</section>
+					
+					<section>
+						<h3>Checking Map Size</h3>
+						
+						<p>Like when creating a new map, it is theoretically possible that we end up loading a map that isn't compatible with our chunk size. When that happens, we should abort loading the map. <code>HexGrid.CreateMap</code> already refuses to create the map and logs an error. To communicate this to whoever invokes this method, let it return a bool which indicates whether the map got created.</p>
+						
+						<pre translate="no">	public <ins>bool</ins> CreateMap (int x, int z) {
+		if (
+			x &lt;= 0 || x % HexMetrics.chunkSizeX != 0 ||
+			z &lt;= 0 || z % HexMetrics.chunkSizeZ != 0
+		) {
+			Debug.LogError("Unsupported map size.");
+			return <ins>false</ins>;
+		}
+
+		&hellip;
+		<ins>return true;</ins>
+	}</pre>
+						
+						<p>Now <code>HexGrid.Load</code> can abort as well, when the map creation failed.</p>
+						
+						<pre translate="no">	public void Load (BinaryReader reader, int header) {
+		int x = 20, z = 15;
+		if (header >= 1) {
+			x = reader.ReadInt32();
+			z = reader.ReadInt32();
+		}
+		<ins>if (!</ins>CreateMap(x, z)<ins>) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+
+		&hellip;
+	}</pre>
+						
+						<p>Because loading overwrites all the data of the existing cells, we actually don't have to create a new map if we end up loading one with the same size. So it's possible to skip this step.</p>
+						
+						<pre translate="no">		<ins>if (x != cellCountX || z != cellCountZ) {</ins>
+			if (!CreateMap(x, z)) {
+				return;
+			}
+		<ins>}</ins></pre>
+					</section>
+					
+					<a href="saving-map-size/saving-map-size.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>File Management</h2>
+					
+					<p>We can save and load maps of varying size, but we always end up writing to and reading from <em translate="no">test.map</em>. Now we're going to make it possible to use multiple files.</p>
+					
+					<p>Instead of directly saving or loading a map, we'll use another popup menu to allow more advanced file management. Create another canvas like <em translate="no">New Map Menu</em>, but this time name it <em translate="no">Save Load Menu</em>. This menu will take care of either saving or loading maps, depending on which button will be used to open it.</p>
+					
+					<p>We'll design the <em translate="no">Save Load Menu</em> as if it were a save menu. We'll dynamically turn it into a load menu later. It should get a background and a menu panel, a menu label, and a cancel button, like the other menu. Then add a scroll view to the menu via <em translate="no">GameObject / UI / Scroll View</em>, to show a file list. Below that, put an input field via <em translate="no">GameObject / UI / Input Field</em>, to specify new map names. We also needs an action button, to save the map. Finally, let's add a <em translate="no">Delete</em> button to get rid of maps that are no longer wanted.</p>
+					
+					<figure>
+						<img alt="menu" src="file-management/save-menu.png" width="310" height="310">
+						<img alt="hierarchy" src="file-management/save-menu-hierarchy.png" width="122" height="146">
+						<figcaption>Save Load Menu design.</figcaption>
+					</figure>
+					
+					<p>The default scroll view allows both horizontal and vertical scrolling, but we only need a vertically scrolling list. So disable <em translate="no">Horizontal</em> scrolling and disconnect the horizontal scrollbar. Also, I set the <em translate="no">Movement Type</em> to clamped and disabled <em translate="no">Inertia</em>. That gives us a list with a rigid feel to it.</p>
+					
+					<figure>
+						<img src="file-management/scroll-rect.png" width="320" height="226">
+						<figcaption>File List settings.</figcaption>
+					</figure>
+					
+					<p>Delete the <em translate="no">Scrollbar Horizontal</em> child of our <em translate="no">File List</em> object, as we don't need it. Then adjust the size of <em translate="no">Scrollbar Vertical</em> so it reaches the bottom of the list.</p>
+					
+					<p>You can adjust the placeholder text of the <em translate="no">Name Input</em> object, via its <em translate="no">Placeholder</em> child. I used a more descriptive text, but you could also leave it empty and get rid of the placeholder.</p>
+					
+					<figure>
+						<img src="file-management/configured-menu.png" width="310" height="310">
+						<figcaption>Tweaked menu design.</figcaption>
+					</figure>
+					
+					<p>As we're done with designing, deactivate the menu so it is hidden by default.</p>
+					
+					<section>
+						<h3>Controlling the Menu</h3>
+						
+						<p>To make the menu work, we need another script, in this case <code>SaveLoadMenu</code>. Like <code>NewMapMenu</code>, it needs a reference to the grid, and <code>Open</code> and <code>Close</code> methods.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class SaveLoadMenu : MonoBehaviour {</ins>
+
+	<ins>public HexGrid hexGrid;</ins>
+
+	<ins>public void Open () {</ins>
+		<ins>gameObject.SetActive(true);</ins>
+		<ins>HexMapCamera.Locked = true;</ins>
+	<ins>}</ins>
+
+	<ins>public void Close () {</ins>
+		<ins>gameObject.SetActive(false);</ins>
+		<ins>HexMapCamera.Locked = false;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Add this component to the <em translate="no">SaveLoadMenu</em> and give it a reference to our grid object.</p>
+						
+						<figure>
+							<img src="file-management/saveloadmenu-component.png" width="320" height="56">
+							<figcaption>SaveLoadMenu component.</figcaption>
+						</figure>
+						
+						<p>The menu will be opened either for saving or for loading. To facilitate this, add a boolean parameter to the <code>Open</code> method. This indicates whether the menu should be in save mode. Keep track of this mode in a field, so we know which action to perform later.</p>
+						
+						<pre translate="no">	<ins>bool saveMode;</ins>
+
+	public void Open (<ins>bool saveMode</ins>) {
+		<ins>this.saveMode = saveMode;</ins>
+		gameObject.SetActive(true);
+		HexMapCamera.Locked = true;
+	}</pre>
+						
+						<p>Now connect the <em translate="no">Save</em> and <em translate="no">Load</em> buttons of the <em translate="no">Hex Map Editor</em> to the <code>Open</code> method of the <em translate="no">Save Load Menu</em> object. Check the boolean parameter for the <em translate="no">Save</em> button only.</p>
+						
+						<figure>
+							<img src="file-management/editor-save-button.png" width="320" height="86">
+							<figcaption>Opening the menu in save mode.</figcaption>
+						</figure>
+						
+						<p>If you haven't done so already, hook the event of the <em translate="no">Cancel</em> button up with the <code>Close</code> method. Now the <em translate="no">Save Load Menu</em> can be opened and closed.</p>
+					</section>
+					
+					<section>
+						<h3>Changing Appearance</h3>
+						
+						<p>We designed the menu as if it were a save menu, but its mode is determined by which button is used to open it. We should change the menu's appearance depending on its mode. Specifically, we should change the menu label and the label of the action button. This means that we need references to these labels.</p>
+						
+						<pre translate="no">using UnityEngine;
+<ins>using UnityEngine.UI;</ins>
+
+public class SaveLoadMenu : MonoBehaviour {
+
+	<ins>public Text menuLabel, actionButtonLabel;</ins>
+	
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="file-management/labels.png" width="320" height="92">
+							<figcaption>Connecting with the labels.</figcaption>
+						</figure>
+						
+						<p>When the menu is opened in save mode, we'll use the existing labels, which are <em translate="no">Save Map</em> for the menu, and <em translate="no">Save</em> for the action button. Otherwise, we're in load mode and use <em translate="no">Load Map</em> and <em translate="no">Load</em>.</p>
+						
+						<pre translate="no">	public void Open (bool saveMode) {
+		this.saveMode = saveMode;
+		<ins>if (saveMode) {</ins>
+			<ins>menuLabel.text = "Save Map";</ins>
+			<ins>actionButtonLabel.text = "Save";</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>menuLabel.text = "Load Map";</ins>
+			<ins>actionButtonLabel.text = "Load";</ins>
+		<ins>}</ins>
+		gameObject.SetActive(true);
+		HexMapCamera.Locked = true;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Entering a Map Name</h3>
+						
+						<p>Ignoring the file list for now, the user can specify which file to save to or load from, by writing a map name in the input field. To retrieve this data, we need a reference to the <code>InputField</code> component of the <em translate="no">Name Input</em> object.</p>
+						
+						<pre translate="no">	<ins>public InputField nameInput;</ins></pre>
+						
+						<figure>
+							<img src="file-management/name-input.png" width="320" height="110">
+							<figcaption>Connecting with the input field.</figcaption>
+						</figure>
+						
+						<p>The user shouldn't be required to write the full path of a map file. Just the map name will do, without the <em translate="no">.map</em> extension. Let's add a method that takes the user input and constructs the correct path for it. This isn't possible when the input is empty, so we'll return <code>null</code> when that's the case.</p>
+						
+						<pre translate="no">using UnityEngine;
+using UnityEngine.UI;
+<ins>using System.IO;</ins>
+
+public class SaveLoadMenu : MonoBehaviour {
+
+	&hellip;
+
+	<ins>string GetSelectedPath () {</ins>
+		<ins>string mapName = nameInput.text;</ins>
+		<ins>if (mapName.Length == 0) {</ins>
+			<ins>return null;</ins>
+		<ins>}</ins>
+		<ins>return Path.Combine(Application.persistentDataPath, mapName + ".map");</ins>
+	<ins>}</ins>
+}</pre>
+						<aside>
+							<h3>What about when the user enters invalid characters?</h3>
+							<div>
+								<p>We could end up with an invalid path, if the user enters characters that the file system doesn't support. The user could also enter a path separator character, which allows them to save and load from uncontrolled locations.</p>
+								
+								<p>You can use the <em translate="no">Content Type</em> of input fields to control what kind of input is allowed. For example, you could restrict map names to alphanumeric characters only, although that is quite limiting. You could also use a custom content type to exactly specify what is and isn't allowed.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Saving and Loading</h3>
+						
+						<p>Saving and loading is now the responsibility of <code>SaveLoadMenu</code>. So move the <code>Save</code> and <code>Load</code> methods from <code>HexMapEditor</code> to <code>SaveLoadMenu</code>. They no longer need to be public, and will work with a path parameter instead of a fixed path.</p>
+						
+						<pre translate="no">	<ins>void Save (string path) {</ins>
+<del>//		string path = Path.Combine(Application.persistentDataPath, "test.map");</del>
+		using (
+			BinaryWriter writer =
+			new BinaryWriter(File.Open(path, FileMode.Create))
+		) {
+			writer.Write(1);
+			hexGrid.Save(writer);
+		}
+	}
+
+	<ins>void Load (string path) {</ins>
+<del>//		string path = Path.Combine(Application.persistentDataPath, "test.map");</del>
+		using (BinaryReader reader = new BinaryReader(File.OpenRead(path))) {
+			int header = reader.ReadInt32();
+			if (header &lt;= 1) {
+				hexGrid.Load(reader, header);
+				HexMapCamera.ValidatePosition();
+			}
+			else {
+				Debug.LogWarning("Unknown map format " + header);
+			}
+		}
+	}</pre>
+						
+						<p>Because we're now loading arbitrary files, it is a good idea to make sure that the file actually exists, before we attempt to read from it. If not, we'll log an error and abort.</p>
+						
+						<pre translate="no">	void Load (string path) {
+		<ins>if (!File.Exists(path)) {</ins>
+			<ins>Debug.LogError("File does not exist " + path);</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+		&hellip;
+	}</pre>
+						
+						<p>Now add a public <code>Action</code> method. It starts with retrieving the path that's selected by the user. If there's a path, either save to it or load from it, as appropriate. Then close the menu.</p>
+						
+						<pre translate="no">	<ins>public void Action () {</ins>
+		<ins>string path = GetSelectedPath();</ins>
+		<ins>if (path == null) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+		<ins>if (saveMode) {</ins>
+			<ins>Save(path);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>Load(path);</ins>
+		<ins>}</ins>
+		<ins>Close();</ins>
+	<ins>}</ins></pre>
+						
+						<p>After connecting the <em translate="no">Action Button</em> event to this method, we're able to save and load using arbitrary map names. Because we're not resetting the input field, the selected name will persist for the next save or load action. That's convenient when saving to or loading from the same file multiple times in a row, so we don't need to change that.</p>
+					</section>
+					
+					<section>
+						<h3>Map Items</h3>
+						
+						<p>Next up, we'll populate the file list with all the maps that are in the persistent data path. When one of the items in the list is clicked, it will be used to set the text of the <em translate="no">Name Input</em>. Add a public method to facilitate this to <code>SaveLoadMenu</code>.</p>
+						
+						<pre translate="no">	<ins>public void SelectItem (string name) {</ins>
+		<ins>nameInput.text = name;</ins>
+	<ins>}</ins></pre>
+						
+						<p>We need something to represent a list item. A simple button will do. Create one and reduce its height to 20 units, so it won't take up much vertical space. It shouldn't look like a button, so clear the <em translate="no">Source Image</em> reference of its <em translate="no">Image</em> component. That will make it solid white. Also, set its label to use left alignment, and make sure there's some space between the text and the left side of the button. Once done with the design, turn it into a prefab.</p>
+						
+						<figure>
+							<img src="file-management/save-load-item.png" width="180" height="44" alt="item">
+							<img src="file-management/item-inspector.png" width="320" height="297" alt="inspector">
+							<figcaption>An item button.</figcaption>
+						</figure>
+						
+						<p>We cannot directly connect the button event to <em translate="no">New Map Menu</em>, because it's a prefab and doesn't exist in the scene yet. So the item needs a reference to the menu, so it can invoke the <code>SelectItem</code> method when clicked. It also needs to keep track of the map name it represents, and set its text. Create a small <code>SaveLoadItem</code> component to take care of this.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+<ins>using UnityEngine.UI;</ins>
+
+<ins>public class SaveLoadItem : MonoBehaviour {</ins>
+
+	<ins>public SaveLoadMenu menu;</ins>
+	
+	<ins>public string MapName {</ins>
+		<ins>get {</ins>
+			<ins>return mapName;</ins>
+		<ins>}</ins>
+		<ins>set {</ins>
+			<ins>mapName = value;</ins>
+			<ins>transform.GetChild(0).GetComponent&lt;Text>().text = value;</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+	
+	<ins>string mapName;</ins>
+	
+	<ins>public void Select () {</ins>
+		<ins>menu.SelectItem(mapName);</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Add the component to our item, and have the button invoke its <code>Select</code> method.</p>
+						
+						<figure>
+							<img src="file-management/save-load-item-component.png" width="320" height="144">
+							<figcaption>Item component.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Filling the List</h3>
+						
+						<p>To fill the list, <code>SaveLoadMenu</code> needs a reference to the <em translate="no">Content</em> inside the <em translate="no">Viewport</em> of the <em translate="no">File List</em> object. It also needs a reference to the item prefab.</p>
+						
+						<pre translate="no">	<ins>public RectTransform listContent;</ins>
+	
+	<ins>public SaveLoadItem itemPrefab;</ins></pre>
+						
+						<figure>
+							<img src="file-management/list-content.png" width="320" height="146">
+							<figcaption>List content and prefab connections.</figcaption>
+						</figure>
+						
+						<p>We'll use a new method to fill this list. The first step is to figure out which map files exist. We can use the <code>Directory.GetFiles</code> method to get an array containing all the file paths inside a directory. This method has a second parameter which allows us to filter the files. In our case, we only want the files that match <em translate="no">*.map</em>.</p>
+						
+						<pre translate="no">	<ins>void FillList () {</ins>
+		<ins>string[] paths =</ins>
+			<ins>Directory.GetFiles(Application.persistentDataPath, "*.map");</ins>
+	<ins>}</ins></pre>
+						
+						<p>Unfortunately, the order of the files is not guaranteed. To display them in alphabetical order, we'll have to sort the array, using <code>System.Array.Sort</code>.</p>
+						
+						<pre translate="no">using UnityEngine;
+using UnityEngine.UI;
+<ins>using System;</ins>
+using System.IO;
+
+public class SaveLoadMenu : MonoBehaviour {
+
+	&hellip;
+
+	void FillList () {
+		string[] paths =
+			Directory.GetFiles(Application.persistentDataPath, "*.map");
+		<ins>Array.Sort(paths);</ins>
+	}
+
+	&hellip;
+}</pre>
+						
+						<p>Next, we create prefab instances for each item in the array. Link the item to the menu, set its map name, and make it a child of the list content.</p>
+						
+						<pre translate="no">		Array.Sort(paths);
+		<ins>for (int i = 0; i &lt; paths.Length; i++) {</ins>
+			<ins>SaveLoadItem item = Instantiate(itemPrefab);</ins>
+			<ins>item.menu = this;</ins>
+			<ins>item.MapName = paths[i];</ins>
+			<ins>item.transform.SetParent(listContent, false);</ins>
+		<ins>}</ins></pre>
+						
+						<p>As <code>Directory.GetFiles</code> returns the full paths of the files, we have to sanitize them. Fortunately, the convenient <code>Path.GetFileNameWithoutExtension</code> method does exactly what we need.</p>
+						
+						<pre translate="no">			item.MapName = <ins>Path.GetFileNameWithoutExtension(</ins>paths[i]<ins>)</ins>;</pre>
+						
+						<p>We have to fill the list before we show the menu. And because the files are likely to change, we should do this every time the menu is opened.</p>
+						
+						<pre translate="no">	public void Open (bool saveMode) {
+		&hellip;
+		<ins>FillList();</ins>
+		gameObject.SetActive(true);
+		HexMapCamera.Locked = true;
+	}</pre>
+						
+						<p>When filling the list multiple times, we have to make sure to remove all old items before adding new ones.</p>
+						
+						<pre translate="no">	void FillList () {
+		<ins>for (int i = 0; i &lt; listContent.childCount; i++) {</ins>
+			<ins>Destroy(listContent.GetChild(i).gameObject);</ins>
+		<ins>}</ins>
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="file-management/item-without-layout.png" width="310" height="200">
+							<figcaption>Items without layout.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Item Layout</h3>
+						
+						<p>Items will now be displayed in the list, but they end up overlapping and in a bad position. To have them form a vertical list, add a <em translate="no">Vertical Layout Group</em> component to the list's <em translate="no">Content</em> object, via <em translate="no">Component / Layout / Vertical Layout Group</em>.</p>
+						
+						<p>To make the layout work correctly, enable the <em translate="no">Width</em> of both <em translate="no">Child Control Size</em> and <em translate="no">Child Force Expand</em>. Both <em translate="no">Height</em> options should be disabled.</p>
+						
+						<figure>
+							<img src="file-management/vertical-layout-group.png" width="320" height="110">
+							<img src="file-management/items-layout.png" width="310" height="200">
+							<figcaption>Using a vertical layout group.</figcaption>
+						</figure>
+						
+						<p>We now get a nice list of items. However, the size of the list content doesn't adjust to fit the actual amount of items. Because of this, the scrollbar never changes size. We can make <em translate="no">Content</em> automatically adjust its size by adding a <em translate="no">Content Size Fitter</em> component to it, via <em translate="no">Component / Layout / Content Size Fitter</em>. Its <em translate="no">Vertical Fit</em> mode should be set to <em translate="no">Preferred Size</em>.</p>
+						
+						<figure>
+							<img src="file-management/content-size-fitter.png" width="320" height="75">
+							<img src="file-management/items-fit.png" width="310" height="200">
+							<figcaption>Using a content size fitter.</figcaption>
+						</figure>
+						
+						<p>Now the scrollbar will disappear when there are only a few items. And when there are too many items to fit in the viewport, the scrollbar will appear, appropriately sized.</p>
+						
+						<figure>
+							<img src="file-management/items-scrollbar.png" width="310" height="200">
+							<figcaption>A scrollbar appears.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Deleting Maps</h3>
+						
+						<p>It is now possible to conveniently work with many map files. However, at some point you might want to get rid of some of the maps. That's what the <em translate="no">Delete</em> button is for. Create a method for it and have the button invoke it. If there is a path selected, simply delete it using <code>File.Delete</code>.</p>
+						
+						<pre translate="no">	<ins>public void Delete () {</ins>
+		<ins>string path = GetSelectedPath();</ins>
+		<ins>if (path == null) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+		<ins>File.Delete(path);</ins>
+	<ins>}</ins></pre>
+						
+						<p>We should once again make sure that we're working with a file that actually exist. If not, we shouldn't attempt to delete it, but it doesn't warrant an error.</p>
+						
+						<pre translate="no">		<ins>if (File.Exists(path)) {</ins>
+			File.Delete(path);
+		<ins>}</ins></pre>
+						
+						<p>After deleting a map, we don't have to close the menu. This makes it easier to delete multiple files in a row, or just before saving or loading. We should clear <em translate="no">Name Input</em> after the deletion though, and also refresh the file list.</p>
+						
+						<pre translate="no">		if (File.Exists(path)) {
+			File.Delete(path);
+		}
+		<ins>nameInput.text = "";</ins>
+		<ins>FillList();</ins></pre>
+						
+						<p>The next tutorial is <a href="../part-14/index.html">Terrain Textures</a>.</p>
+					</section>
+					
+					<a href="file-management/file-management.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Hex-Map-13.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

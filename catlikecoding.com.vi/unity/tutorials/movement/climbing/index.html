@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/movement/climbing/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/movement/climbing/tutorial-image.jpg">
+		<meta property="og:title" content="Climbing">
+		<meta property="og:description" content="A Unity Movement tutorial about climbing vertical surfaces.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Climbing</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/movement/climbing/#article",
+				"headline": "Climbing",
+				"alternativeHeadline": "Sticking to Walls",
+				"datePublished": "2020-05-26",
+				"dateModified": "2020-07-16",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Movement tutorial about climbing vertical surfaces.",
+				"image": "https://catlikecoding.com/unity/tutorials/movement/climbing/tutorial-image.jpg",
+				"dependencies": "Unity 2019.2.21f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/movement/", "name": "Movement" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				CustomGravity: 1,
+				CustomGravityRigidbody: 1,
+				GravityBox: 1,
+				GravityPlane: 1,
+				GravitySource: 1,
+				GravitySphere: 1,
+				MovingSphere: 1,
+				OrbitCamera: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Movement</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Climbing</h1>
+					<p>Sticking to Walls</p>
+					<ul>
+						<li>Make surfaces climbable and detect them.</li>
+						<li>Stick to walls, even if they're moving.</li>
+						<li>Use wall-relative controls for climbing.</li>
+						<li>Climb around corners and overhangs.</li>
+						<li>Prevent sliding while standing on a slope.</li>
+					</ul>
+				</header>
+				
+				<p>This is the eighth installment of a tutorial series about controlling the <a href="../index.html">movement</a> of a character. It adds support for climbing vertical surfaces.</p>
+				
+				<p>This tutorial is made with Unity 2019.2.21f1. It also uses the ProBuilder package.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Sometimes you don't want to touch the ground.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Climbable Surfaces</h2>
+					
+					<p>Besides walking and running, climbing is often an option, though the degree of freedom varies from only on ladders to wherever you want. As our movement is based on physics we'll support climbing on all surfaces that we deem climbable. So the first step is to detect when we're in contact with such surfaces.</p>
+					
+					<section>
+						<h3>Max Climb Angle</h3>
+						
+						<p>The most important property of a surface in the context of climbing is its orientation. If a surface counts as ground then we can just walk on it so it shouldn't count as climbable. Steep surfaces are climbable, but that gets us only up to perfectly vertical walls. Going beyond that we get to overhangs, which are hard but still possible to climb, up to a point. In the most extreme case we end up hanging from the ceiling. Let's limit the climbing capabilities of <code>MovingSphere</code> with a configurable max climb angle, from 90&deg; to 170&deg; and a default of 140&deg;, just a bit beyond a 45&deg; overhang. We disallow climbing ceilings because that would represent hanging more than climbing.</p>
+						
+						<pre>	<ins>[SerializeField, Range(90, 180)]</ins>
+	<ins>float maxClimbAngle = 140f;</ins></pre>
+						
+						<figure>
+							<img src="climbable-surfaces/max-climb-angle.png" width="320" height="38">
+							<figcaption>Max climb angle.</figcaption>
+						</figure>
+						
+						<p>Precompute the min climb dot product like the other minimum dot products.</p>
+						
+						<pre>	float minGroundDotProduct, minStairsDotProduct<ins>, minClimbDotProduct</ins>;
+
+	&hellip;
+
+	void OnValidate () {
+		minGroundDotProduct = Mathf.Cos(maxGroundAngle * Mathf.Deg2Rad);
+		minStairsDotProduct = Mathf.Cos(maxStairsAngle * Mathf.Deg2Rad);
+		<ins>minClimbDotProduct = Mathf.Cos(maxClimbAngle * Mathf.Deg2Rad);</ins>
+	}</pre>
+						
+						<aside>
+							<h3>What if we do want to climb ceilings, like a spider?</h3>
+							<div>
+								<p>Climbing like a spider is more like walking everywhere regardless of orientation. It would be best modeled by using local gravity for movement, pulling to the contact surface. This tutorial deals with climbing walls as distinctly different from normal movement.</p>
+							</div>
+						</aside>
+						
+					</section>
+					
+					<section>
+						<h3>Detecting Climbable Surfaces</h3>
+						
+						<p>We'll detect climbable surfaces similar to how we recognize steep surfaces, but we'll keep track of a separate climb contact count and normal, which have to be reset in <code>ClearState</code> like the others.</p>
+						
+						<pre>	Vector3 contactNormal, steepNormal<ins>, climbNormal</ins>;
+
+	int groundContactCount, steepContactCount<ins>, climbContactCount</ins>;
+	
+	&hellip;
+	
+	void ClearState () {
+		groundContactCount = steepContactCount = <ins>climbContactCount =</ins> 0;
+		contactNormal = steepNormal = <ins>climbNormal =</ins> Vector3.zero;
+		connectionVelocity = Vector3.zero;
+		previousConnectedBody = connectedBody;
+		connectedBody = null;
+	}</pre>
+						
+						<p>Then in <code>EvaluateCollision</code>, if a contact doesn't count as ground, check for both a steep and a climb contact separately. Always use a climb contact's connected body so it will be possible for our sphere to climb surfaces that are in motion.</p>
+						
+						<pre>			if (upDot >= minDot) {
+				groundContactCount += 1;
+				contactNormal += normal;
+				connectedBody = collision.rigidbody;
+			}
+			<del>//else if (upDot > -0.01f) {</del>
+			<ins>else {</ins>
+				<ins>if (upDot > -0.01f) {</ins>
+					steepContactCount += 1;
+					steepNormal += normal;
+					if (groundContactCount == 0) {
+						connectedBody = collision.rigidbody;
+					}
+				}
+				<ins>if (upDot >= minClimbDotProduct) {</ins>
+					<ins>climbContactCount += 1;</ins>
+					<ins>climbNormal += normal;</ins>
+					<ins>connectedBody = collision.rigidbody;</ins>
+				<ins>}</ins>
+			<ins>}</ins></pre>
+						
+						<p>For now we'll assume that we're automatically climbing if able. To check for this add a <code>Climbing</code> getter property, which returns <code>true</code> if there are any climb contacts.</p>
+						
+						<pre>	<ins>bool Climbing => climbContactCount > 0;</ins></pre>
+						
+					</section>
+					
+					<section>
+						<h3>Unclimbable Surfaces</h3>
+						
+						<p>Being able to climb everything isn't always desirable. We can constrain what's climbable by limiting it with a layer mask. We could add a dedicated layer for climbable things or one for unclimbable things. As I prefer everything to be climbable by default I chose the latter approach and added an <em>Unclimbable</em> layer</p>
+						
+						<figure>
+							<img src="climbable-surfaces/lcm-unclimbable.png" width="230" height="230">
+							<figcaption>Layer collision mask with <em>Unclimbable</em> layer added.</figcaption>
+						</figure>
+						
+						<p>Add a climb mask configuration option. Configure it to be equal to <em>Probe Mask</em>, then add the <em>Unclimbable</em> layer to <em>Probe mask</em> for all spheres, by editing their prefab. Note that you'll also have to add the new layer to the orbit camera's <em>Obstruction Mask</em> otherwise it will ignore it.</p>
+						
+						<pre>	[SerializeField]
+	LayerMask probeMask = -1, stairsMask = -1<ins>, climbMask = -1</ins>;</pre>
+						
+						<figure>
+							<img src="climbable-surfaces/climb-mask.png" width="320" height="226">
+							<figcaption>Climb mask.</figcaption>
+						</figure>
+						
+						<p>We now need to check the collision's layer twice in <code>EvaluateCollision</code>, so store it in a variable.</p>
+						
+						<pre>		<ins>int layer = collision.gameObject.layer;</ins>
+		float minDot = GetMinDot(<ins>layer</ins>);</pre>
+						
+						<p>Then only including the climb contact if it isn't masked.</p>
+						
+						<pre>				if (
+					upDot >= minClimbDotProduct <ins>&amp;&amp;</ins>
+					<ins>(climbMask &amp; (1 &lt;&lt; layer)) != 0</ins>
+				) {
+					climbContactCount += 1;
+					climbNormal += normal;
+					connectedBody = collision.rigidbody;
+				}</pre>
+					</section>
+					
+					<section>
+						<h3>Climbing Material</h3>
+						
+						<p>Walking and climbing are very different physical activities. For example, if our avatar had a human shape then each movement mode would have different animations, making it clear which mode is in use. To make the modes visually distinct for our simple sphere we'll use different materials instead. Add configuration fields for a normal material and a climbing material. I use the current black material for the normal material and made a red alternative for the climbing material.</p>
+						
+						<pre>	<ins>[SerializeField]</ins>
+	<ins>Material normalMaterial = default, climbingMaterial = default;</ins></pre>
+						
+						<figure>
+							<img src="climbable-surfaces/sphere-materials.png" width="320" height="56">
+							<figcaption>Sphere materials.</figcaption>
+						</figure>
+						
+						<p>Get a reference to the sphere's <code>MeshRenderer</code> component in <code>Awake</code> and store it in a field.</p>
+						
+						<pre>	<ins>MeshRenderer meshRenderer;</ins>
+	
+	void Awake () {
+		body = GetComponent&lt;Rigidbody>();
+		body.useGravity = false;
+		<ins>meshRenderer = GetComponent&lt;MeshRenderer>();</ins>
+		OnValidate();
+	}</pre>
+						
+						<p>Then assign the appropriate material to it at the end of <code>Update</code>.</p>
+						
+						<pre>	void Update () {
+		&hellip;
+
+		<ins>meshRenderer.material = Climbing ? climbingMaterial : normalMaterial;</ins>
+	}</pre>
+						
+						<p>From now on our sphere will turn red whenever it touches a climbable surface.</p>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="climbable-surfaces/red-while-touching-climbable-surfaces.mp4" type="video/mp4">
+							</video>
+							<figcaption>Orange surfaces are unclimbable.</figcaption>
+						</figure>
+						
+					</section>
+					
+				</section>
+				
+				<section>
+					<h2>Moving along Walls</h2>
+					
+					<p>Now that we know when we're in contact with something climbable the next step is to switch to climbing mode, which requires sticking to the wall&mdash;or other kind of surface&mdash;and moving relative to it instead of the ground.</p>
+					
+					<section>
+						<h3>Wall Sticking</h3>
+						
+						<p>We begin by adding a <code>CheckClimbing</code> method that returns whether we're climbing and if so makes the ground contact count and normal equal to their climbing equivalents.</p>
+						
+						<pre>	<ins>bool CheckClimbing () {</ins>
+		<ins>if (Climbing) {</ins>
+			<ins>groundContactCount = climbContactCount;</ins>
+			<ins>contactNormal = climbNormal;</ins>
+			<ins>return true;</ins>
+		<ins>}</ins>
+		<ins>return false;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Invoke this method first in <code>UpdateState</code> when checking if we have a ground contact, so climbing overrules everything else.</p>
+						
+						<pre>		if (
+			<ins>CheckClimbing() ||</ins> OnGround || SnapToGround() || CheckSteepContacts()
+		) {
+			&hellip;
+		}</pre>
+						
+						<p>And to prevent falling only apply gravity in <code>FixedUpdate</code> if we're not climbing.</p>
+						
+						<pre>		<ins>if (!Climbing) {</ins>
+			velocity += gravity * Time.deltaTime;
+		<ins>}</ins></pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="moving-along-walls/sticking-to-wall.mp4" type="video/mp4">
+							</video>
+							<figcaption>Sticking to wall, with loss of control.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Wall-Relative Movement</h3>
+						
+						<p>As soon as we touch a wall gravity gets ignored and we stick to it as long as we remain on a flat area. But we also mostly lose control of the sphere, for the same reason that we did when we changed gravity without reorienting the camera. We don't want to change the camera's up vector in this case because it should always match gravity, otherwise it would get very disorienting. So what we'll do instead is make movement relative to the wall and gravity, ignoring the camera's orientation.</p>
+						
+						<p>In <code>AdjustVelocity</code>, begin by checking if we're climbing. If so, don't use the default right and forward input axes for X and Z before projection on the contact plane. Instead, use the up axis for Z and the cross product of the contact normal and up axis for X. Thus the orientation of the controls switches when touching a wall.</p>
+						
+						<pre>	void AdjustVelocity () {
+		<del>//Vector3 xAxis = ProjectDirectionOnPlane(rightAxis, contactNormal);</del>
+		<del>//Vector3 zAxis = ProjectDirectionOnPlane(forwardAxis, contactNormal);</del>
+		<ins>Vector3 xAxis, zAxis;</ins>
+		<ins>if (Climbing) {</ins>
+			<ins>xAxis = Vector3.Cross(contactNormal, upAxis);</ins>
+			<ins>zAxis = upAxis;</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>xAxis = rightAxis;</ins>
+			<ins>zAxis = forwardAxis;</ins>
+		<ins>}</ins>
+		<ins>xAxis = ProjectDirectionOnPlane(xAxis, contactNormal);</ins>
+		<ins>zAxis = ProjectDirectionOnPlane(zAxis, contactNormal);</ins>
+		
+		&hellip;
+	}</pre>
+						
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="moving-along-walls/moving-along-wall.mp4" type="video/mp4">
+							</video>
+							<figcaption>Moving along the wall.</figcaption>
+						</figure>
+						
+						<p>This works fine when looking straight at a wall, but gets less intuitive when viewing the wall at other angles because the control directions don't align perfectly. For example, when pressing right to walk straight to a wall, then right will visually become backward when touching the wall, while forward becomes up. The most extreme case is when looking away from the wall, in which case the left and right controls appear flipped. But that would be an awkward view angle to begin with. The idea is that the player would change to a better view angle as they get ready to climb. Alternatively, the camera could be programmed to do this automatically, but that is very hard to get right in arbitrary situations and often leads to player frustration. Advanced camera automation isn't part of this tutorial.</p>
+						
+						<aside>
+							<h3>Why do we immediately fall when moving to an unclimbable surface?</h3>
+							<div>
+								<p>Because we use physics for movement the sphere just goes where you direct it. It doesn't look ahead to maybe decide not to proceed if doing so would cause climbing to fail. So once you climb from a regular surface onto an unclimbable one the sphere will just fall. It's up to the player to stay on climbable surfaces, so it's important climbable and unclimbable areas are visually different.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Climb Speed and Acceleration</h3>
+						
+						<p>Climbing is typically much slower than running, and also require more precise control because a slight misstep can result in a fall, both in real life and for our sphere. Also, slowing down makes the sudden control orientation switch more manageable. So add max climb speed and max climb acceleration configuration options. We want a low speed and high acceleration for maximum control, so let's use 2 and 20 as their default values. You generally want to keep the speed low, but I'll use double the default for fast testing.</p>
+						
+						<pre>	[SerializeField, Range(0f, 100f)]
+	float maxSpeed = 10f<ins>, maxClimbSpeed = 2f</ins>;
+
+	[SerializeField, Range(0f, 100f)]
+	float
+		maxAcceleration = 10f,
+		maxAirAcceleration = 1f<ins>,</ins>
+		<ins>maxClimbAcceleration = 20f</ins>;</pre>
+						
+						<figure>
+							<img src="moving-along-walls/max-climb-speed-acceleration.png" width="320" height="92">
+							<figcaption>Max climb speed 4 and acceleration 40.</figcaption>
+						</figure>
+						
+						<p>Which max speed is appropriate can vary per physics step, which isn't in lockstep with the update loop, thus we can no longer suffice with determining the desired velocity in <code>Update</code>. So get rid of the <code>desiredVelocity</code> field and instead promote the <code>playerInput</code> variable to a field.</p>
+						
+						<pre>	<ins>Vector2 playerInput;</ins>
+
+	<del>//Vector3 velocity, desiredVelocity, connectionVelocity;</del>
+	<ins>Vector3 velocity, connectionVelocity;</ins>
+	
+	&hellip;
+	
+	void Update () {
+		<del>//Vector2 playerInput;</del>
+		playerInput.x = Input.GetAxis("Horizontal");
+		playerInput.y = Input.GetAxis("Vertical");
+		playerInput = Vector2.ClampMagnitude(playerInput, 1f);
+
+		&hellip;
+		<del>//desiredVelocity =</del>
+		<del>//	new Vector3(playerInput.x, 0f, playerInput.y) * maxSpeed;</del>
+		
+		desiredJump |= Input.GetButtonDown("Jump");
+
+		meshRenderer.material = Climbing ? climbingMaterial : normalMaterial;
+	}</pre>
+						
+						<p>Then select the appropriate acceleration and speed in <code>AdjustVelocity</code> and calculate the desired velocity components when needed.</p>
+						
+						<pre>	void AdjustVelocity () {
+		<ins>float acceleration, speed;</ins>
+		Vector3 xAxis, zAxis;
+		if (Climbing) {
+			<ins>acceleration = maxClimbAcceleration;</ins>
+			<ins>speed = maxClimbSpeed;</ins>
+			xAxis = Vector3.Cross(contactNormal, upAxis);
+			zAxis = upAxis;
+		}
+		else {
+			<ins>acceleration = OnGround ? maxAcceleration : maxAirAcceleration;</ins>
+			<ins>speed = maxSpeed;</ins>
+			xAxis = rightAxis;
+			zAxis = forwardAxis;
+		}
+		&hellip;
+
+		<del>//float acceleration = OnGround ? maxAcceleration : maxAirAcceleration;</del>
+		float maxSpeedChange = acceleration * Time.deltaTime;
+
+		float newX =
+			Mathf.MoveTowards(currentX, <ins>playerInput.x * speed</ins>, maxSpeedChange);
+		float newZ =
+			Mathf.MoveTowards(currentZ, <ins>playerInput.y * speed</ins>, maxSpeedChange);
+
+		velocity += xAxis * (newX - currentX) + zAxis * (newZ - currentZ);
+	}</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="moving-along-walls/climb-speed-and-acceleration.mp4" type="video/mp4">
+							</video>
+							<figcaption>Different climb speed and acceleration.</figcaption>
+						</figure>
+						
+					</section>
+					
+					<section>
+						<h3>Climbing around Corners</h3>
+						
+						<p>At this point it is already possible to climb around inner wall corners, where the climbable surface curves toward the sphere. But outer corners of any degree cannot be climbed as moving past them causes the sphere to lose contact with the wall and fall. We can get around this problem by always accelerating the sphere toward the surface it's climbing. This represents the climber's grip, for which we'll simply use the max climb acceleration. Do this in <code>FixedUpdate</code> while climbing, instead of applying gravity.</p>
+						
+						<pre>		<del>//if (!Climbing) {</del>
+		<ins>if (Climbing) {</ins>
+			<ins>velocity -= contactNormal * (maxClimbAcceleration * Time.deltaTime);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			velocity += gravity * Time.deltaTime;
+		}</pre>
+						
+						<p>That keeps us attached to the wall as long as we're not moving too fast&mdash;or the wall isn't moving too fast, if it's animated&mdash;but would cause us to get stuck in 90&deg; inner corners. We can avoid that by reducing the grip strength a bit, say to 90% of the max acceleration, which would only slow us down but no longer stop us in inner corners.</p>
+						
+						<pre>			velocity -=
+				contactNormal * (maxClimbAcceleration <ins>* 0.9f</ins> * Time.deltaTime);</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="moving-along-walls/climbing-around-corners.mp4" type="video/mp4">
+							</video>
+							<figcaption>Climbing around corners.</figcaption>
+						</figure>
+						
+						<p>Although this works, the grip acceleration slows down jumps away from the wall. To prevent that turn off climbing if we just jumped, like we turn off ground snapping. We can do that by having the <code>Climbing</code> property also check whether there's been more than two steps since the last jump.</p>
+						
+						<pre>	bool Climbing => climbContactCount > 0 <ins>&amp;&amp; stepsSinceLastJump > 2</ins>;</pre>
+						
+						<p>Note that a high max climb acceleration relative to the max climb speed is needed to reliably cling to surfaces. Besides that the speed cannot be too high otherwise the sphere can end up launching itself too far away from the wall in a single physics step.</p>
+						
+					</section>
+					
+					<section>
+						<h3>Optional Climbing</h3>
+						
+						<p>Now that climbing works let's make it optional. We control it via a <em>Climb</em> button, which you can configure by going to the <em>Input</em> project settings, duplicating the <em>Jump</em> entry via its context menu, renaming it to <em>Climb</em>, and assigning it to a different button.</p>
+						
+						<p>As long as the button is held down we want to climb if possible, so we check it via <code>Input.GetButton</code> instead of <code>Input.GetButtonDown</code> in <code>Update</code>.</p>
+						
+						<pre>	bool desiredJump<ins>, desiresClimbing</ins>;
+
+	&hellip;
+	
+	void Update () {
+		&hellip;
+		
+		desiredJump |= Input.GetButtonDown("Jump");
+		<ins>desiresClimbing = Input.GetButton("Climb");</ins>
+
+		meshRenderer.material = Climbing ? climbingMaterial : normalMaterial;
+	}</pre>
+						
+						<p>Now we should only check for a climbable surface in <code>EvaluateCollision</code> if climbing is desired.</p>
+						
+						<pre>				if (
+					<ins>desiresClimbing &amp;&amp;</ins> upDot >= minClimbDotProduct &amp;&amp;
+					(climbMask & (1 &lt;&lt; layer)) != 0
+				) {
+					climbContactCount += 1;
+					climbNormal += normal;
+					connectedBody = collision.rigidbody;
+				}</pre>
+					</section>
+					
+					<section>
+						<h3>Climb Desire Slows Movement</h3>
+						
+						<p>Another thing that we can do is slow down movement when still on the ground while desiring to climb. If we're approaching a wall this would be like slowing down to anticipate a climb. If we're reaching the top of a wall it would also prevent us from suddenly running away, thus improving control. It would also effectively make the climb button do double duty as a slow-movement button, which can be convenient if you're controlling the sphere with keys instead of a controller stick.</p>
+						
+						<p>We can do all that by using the max climb speed in <code>AdjustVelocity</code> even if we're not climbing, but we're on the ground and desiring to climb.</p>
+						
+						<pre>			acceleration = OnGround ? maxAcceleration : maxAirAcceleration;
+			speed = <ins>OnGround && desiresClimbing ? maxClimbSpeed :</ins> maxSpeed;</pre>
+						
+						<p>However, that's not enough to prevent the sphere from potentially launching itself after reaching the top of a wall. To do that we also have to apply the climb grip acceleration in <code>FixedUpdate</code> along with gravity, if we're not climbing but desire to and are on the ground.</p>
+						
+						<pre>		if (Climbing) {
+			velocity -=
+				contactNormal * (maxClimbAcceleration * 0.9f * Time.deltaTime);
+		}
+		<ins>else if (desiresClimbing &amp;&amp; OnGround) {</ins>
+			<ins>velocity +=</ins>
+				<ins>(gravity - contactNormal * (maxClimbAcceleration * 0.9f)) *</ins>
+				<ins>Time.deltaTime;</ins>
+		<ins>}</ins>
+		else {
+			velocity += gravity * Time.deltaTime;
+		}</pre>
+						
+						
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="moving-along-walls/climbing-up-down-walls.mp4" type="video/mp4">
+							</video>
+							<figcaption>Climbing up and down walls.</figcaption>
+						</figure>
+						
+						<p>Now that we can reliably move from the top to the side of a wall we can also reliable get in a situation where we're moving forward to start climbing down, only to then switch to climbing up again. This goes back and forth as long as we keep pressing forward. That's a downside of our control-switching approach. The best way to climb is with the camera facing the wall.</p>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="moving-along-walls/climbing-direction-flip.mp4" type="video/mp4">
+							</video>
+							<figcaption>Direction flip.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Standing Still on a Slope</h3>
+						
+						<p>We can use the same trick that gives us climbing grip to keep us in place when standing on a slope. Normally gravity should pull the sphere down so it slowly slides down slopes, but when standing still it makes sense to automatically apply force to counter gravity. We can simulate that by projecting gravity on the contact normal when we are on the ground and our velocity is very low, say less than 0.1, or 0.01 if squared. That eliminates the gravity component that causes the sliding, while still pulling the sphere to the surface.</p>
+						
+						<pre>		if (Climbing) {
+			velocity -=
+				contactNormal * (maxClimbAcceleration * 0.9f * Time.deltaTime);
+		}
+		<ins>else if (OnGround &amp;&amp; velocity.sqrMagnitude &lt; 0.01f) {</ins>
+			<ins>velocity +=</ins>
+				<ins>contactNormal *</ins>
+				<ins>(Vector3.Dot(gravity, contactNormal) * Time.deltaTime);</ins>
+		<ins>}</ins>
+		else if (desiresClimbing &amp;&amp; OnGround) {
+			velocity +=
+				(gravity - contactNormal * (maxClimbAcceleration * 0.9f)) *
+				Time.deltaTime;
+		}
+		else {
+			velocity += gravity * Time.deltaTime;
+		}</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Climbing out of Crevasses</h3>
+						
+						<p>Unfortunately our climbing approach doesn't work when the sphere is stuck in a crevasse, which is the case when steep contacts would get converted to ground contact. In that situation we end up on an effectively horizontal surface, which doesn't work with our climbing controls that assume a mostly-vertical surface. To get out of this situation we'll keep track of the last climb normal that we detected.</p>
+						
+						<pre>	Vector3 contactNormal, steepNormal, climbNormal<ins>, lastClimbNormal</ins>;</pre>
+						
+						<p>Set it each time we get a climb normal in <code>EvaluateCollision</code>, besides accumulating them.</p>
+						
+						<pre>					climbNormal += normal;
+					<ins>lastClimbNormal = normal;</ins></pre>
+						
+						<p>Then have <code>CheckClimbing</code> determine if there are multiple climb contacts. If so, have it normalize the climb normal and check whether the result counts as ground, which indicates that we have a crevasse situation. To get out of it just use the last climb normal instead of the aggregate. That way we end up climbing one of the walls instead of getting stuck.</p>
+						
+						<pre>	bool CheckClimbing () {
+		if (Climbing) {
+			<ins>if (climbContactCount > 1) {</ins>
+				<ins>climbNormal.Normalize();</ins>
+				<ins>float upDot = Vector3.Dot(upAxis, climbNormal);</ins>
+				<ins>if (upDot >= minGroundDotProduct) {</ins>
+					<ins>climbNormal = lastClimbNormal;</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+			groundContactCount = <ins>1</ins>;
+			contactNormal = climbNormal;
+			return true;
+		}
+		return false;
+	}</pre>
+						
+						<p>The next tutorial is <a href="../swimming/index.html">Swimming</a>.</p>
+						
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/movement-08-climbing/" class="repository">repository</a>
+					<a href="Climbing.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

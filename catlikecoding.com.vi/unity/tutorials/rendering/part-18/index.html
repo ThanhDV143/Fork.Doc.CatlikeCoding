@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/rendering/part-18/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/rendering/part-18/tutorial-image.jpg">
+		<meta property="og:title" content="Rendering 18">
+		<meta property="og:description" content="A Unity Rendering tutorial about realtime global illumination, probe volumes, and LOD groups. Part 18 of 20.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Rendering 18</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/rendering/part-18/#article",
+				"headline": "Rendering 18",
+				"alternativeHeadline": "Realtime GI, Probe Volumes, LOD Groups",
+				"datePublished": "2017-07-30",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Rendering tutorial about realtime global illumination, probe volumes, and LOD groups. Part 18 of 20.",
+				"image": "https://catlikecoding.com/unity/tutorials/rendering/part-18/tutorial-image.jpg",
+				"dependencies": "Unity 2017.1.0f3",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/rendering/", "name": "Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				DeferredFogEffect: 1,
+				EmissiveOscillator: 1,
+				MyLightingShaderGUI: 1,
+				RenderingMode: 1,
+				RenderingSettings: 1,
+				SmoothnessSource: 1,
+				TangentSpaceVisualizer: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Rendering 18</h1>
+					<p>Realtime GI, Probe Volumes, LOD Groups</p>
+					<ul>
+						<li>Support Realtime Global Illumination.</li>
+						<li>Animate emissive light contribution to GI.</li>
+						<li>Work with light probe proxy volumes.</li>
+						<li>Use LOD groups in combination with GI.</li>
+						<li>Cross-fade between LOD levels.</li>
+					</ul>
+				</header>
+
+				<p>This is part 18 of a tutorial series about rendering. After wrapping up baked global illumination in <a href="../part-17/index.html">part 17</a>, we move on to supporting realtime GI. After that, we'll also support light probe proxy volumes and cross-fading LOD groups.</p>
+				
+				<p>From now on, this tutorial series is made with Unity 2017.1.0f3. It won't work with older versions, because we'll end up using a new shader function.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A combination of static LOD groups and realtime GI.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Realtime Global Illumination</h2>
+					
+					<p>Baking light works very well for static geometry, and also pretty well for dynamic geometry thanks to light probes. However, it cannot deal with dynamic lights. Lights in mixed mode can get away with some realtime adjustments, but too much makes it obvious that the baked indirect light doesn't change. So when you have an outdoor scene, the sun has to be unchanging. It cannot travel across the sky like it does in real life, as it requires gradually changing GI. So the scene has to be frozen in time.</p>
+					
+					<p>To make indirect lighting work with something like a moving sun, Unity uses the Enlighten system to calculate realtime global illumination. It works like baked indirect lighting, except that the lightmaps and probes are computed at runtime.</p>
+					
+					<p>Figuring out indirect light requires knowledge of how light could bounce between static surfaces. The question is which surfaces are potentially affected by which other surfaces, and to what degree. Figuring out these relationships is a lot of work and cannot be done in realtime. So this data is processed by the editor and stored for use at runtime. Enlighten then uses it to compute the realtime lightmaps and probe data. Even then, it's only feasible with low resolution lightmaps.</p>
+					
+					<section>
+						<h3>Enabling Realtime GI</h3>
+						
+						<p>Realtime global illumination can be enabled independent of baked lighting. You can have none, one, or both active at the same time. It is enabled via the checkbox in the <em translate="no">Realtime Lighting</em> section of the <em translate="no">Lighting</em> window.</p>
+						
+						<figure>
+							<img src="realtime-global-illumination/realtime-gi-enabled.png" width="344" height="174">
+							<figcaption>Both realtime and baked GI enabled.</figcaption>
+						</figure>
+						
+						<p>To see realtime GI in action, set the mode of the main light in our test scene to realtime. As we have no other lights, this effectively turns off baked lighting, even when it is enabled.</p>
+
+						<figure>
+							<img src="realtime-global-illumination/realtime-light.png" width="320" height="126">
+							<figcaption>Realtime main light.</figcaption>
+						</figure>
+						
+						<p>Make sure that all objects in the scene use our white material. Like last time, the spheres are all dynamic and everything else is static geometry.</p>
+
+						<figure>
+							<img src="realtime-global-illumination/realtime-gi-dynamic-only.png" width="380" height="220">
+							<figcaption>Only dynamic objects receive realtime GI.</figcaption>
+						</figure>
+						
+						<p>It turns out that only the dynamic objects benefit from realtime GI. The static objects have become darker. That's because the light probes automatically incorporated the realtime GI. Static objects have to sample the realtime lightmaps, which are not the same as the baked lightmaps. Our shader doesn't do this yet.</p>
+					</section>
+					
+					<section>
+						<h3>Baking Realtime GI</h3>
+						
+						<p>Unity already generates the realtime lightmaps while in edit mode, so you can always see the realtime GI contribution. These maps are not retained when switching between edit and play mode, but they end up the same. You can inspect the realtime lightmaps via the <em translate="no">Object maps</em> tab of the <em translate="no">Lighting</em> window, with a lightmap-static object selected. Choose the <em translate="no">Realtime Intensity</em> visualization to see the realtime lightmap data.</p>
+						
+						<figure>
+							<img src="realtime-global-illumination/realtime-intensity.png" width="340" height="300">
+							<figcaption>Realtime lightmap, with roof selected.</figcaption>
+						</figure>
+						
+						<p>Although realtime lightmaps are already baked, and they might appear correct, our meta pass actually uses the wrong coordinates. Realtime GI has its own lightmap coordinates, which can end up being different than those for static lightmaps. Unity generates these coordinates automatically, based on the lightmap and object settings. They are stored in the third mesh UV channel. So add this data to <code class="shader">VertexData</code> in <em translate="no">My Lightmapping</em>.</p>
+						
+						<pre translate="no" class="shader">struct VertexData {
+	float4 vertex : POSITION;
+	float2 uv : TEXCOORD0;
+	float2 uv1 : TEXCOORD1;
+	<ins>float2 uv2 : TEXCOORD2;</ins>
+};</pre>
+						
+						<p>Now <code class="shader">MyLightmappingVertexProgram</code> has to use either the second or third UV set, together with either the static or dynamic lightmap's scale and offset. We can rely on the <code class="shader">UnityMetaVertexPosition</code> function to use the right data.</p>
+						
+						<pre translate="no" class="shader">Interpolators MyLightmappingVertexProgram (VertexData v) {
+	Interpolators i;
+<del>//	v.vertex.xy = v.uv1 * unity_LightmapST.xy + unity_LightmapST.zw;</del>
+<del>//	v.vertex.z = v.vertex.z > 0 ? 0.0001 : 0;</del>
+<del>//</del>
+<del>//	i.pos = UnityObjectToClipPos(v.vertex);</del>
+	<ins>i.pos = UnityMetaVertexPosition(</ins>
+		<ins>v.vertex, v.uv1, v.uv2, unity_LightmapST, unity_DynamicLightmapST</ins>
+	<ins>);</ins>
+
+	i.uv.xy = TRANSFORM_TEX(v.uv, _MainTex);
+	i.uv.zw = TRANSFORM_TEX(v.uv, _DetailTex);
+	return i;
+}</pre>
+						
+						<aside>
+							<h3>What does <code>UnityMetaVertexPosition</code> look like?</h3>
+							<div>
+								<p>It does what we used to do, except it uses flags made available via <code class="shader">unity_MetaVertexControl</code> to decide which coordinate sets and lightmaps to use.</p>
+								
+								<pre translate="no" class="shader">float4 UnityMetaVertexPosition (
+	float4 vertex, float2 uv1, float2 uv2,
+	float4 lightmapST, float4 dynlightmapST
+) {
+	if (unity_MetaVertexControl.x) {
+		vertex.xy = uv1 * lightmapST.xy + lightmapST.zw;
+		// OpenGL right now needs to actually use incoming vertex position,
+		// so use it in a very dummy way
+		vertex.z = vertex.z > 0 ? 1.0e-4f : 0.0f;
+	}
+	if (unity_MetaVertexControl.y) {
+		vertex.xy = uv2 * dynlightmapST.xy + dynlightmapST.zw;
+		// OpenGL right now needs to actually use incoming vertex position,
+		// so use it in a very dummy way
+		vertex.z = vertex.z > 0 ? 1.0e-4f : 0.0f;
+	}
+	return UnityObjectToClipPos(vertex);
+}</pre>
+							</div>
+						</aside>
+						
+						<p>Note that the meta pass is used for both baked and realtime lightmapping. So when realtime GI is used, it will also be included in builds.</p>
+					</section>
+					
+					<section>
+						<h3>Sampling Realtime Lightmaps</h3>
+						
+						<p>To actually sample the realtime lightmaps, we have to also add the third UV set to <code class="shader">VertexData</code> in <em translate="no">My Lighting</em>.</p>
+						
+						<pre translate="no" class="shader">struct VertexData {
+	float4 vertex : POSITION;
+	float3 normal : NORMAL;
+	float4 tangent : TANGENT;
+	float2 uv : TEXCOORD0;
+	float2 uv1 : TEXCOORD1;
+	<ins>float2 uv2 : TEXCOORD2;</ins>
+};</pre>
+						
+						<p>When a realtime lightmap is used, we have to add its lightmap coordinates to our interpolators. The standard shader combines both lightmap coordinate sets in a single interpolator &ndash; multiplexed with some other data &ndash; but we can get away with separate interpolators for both. We know that there is dynamic light data when the <em translate="no">DYNAMICLIGHTMAP_ON</em> keyword is defined. It's part of the keyword list of the <code class="shader">multi_compile_fwdbase</code> compiler directive.</p>
+						
+						<pre translate="no" class="shader">struct Interpolators {
+	&hellip;
+
+	<ins>#if defined(DYNAMICLIGHTMAP_ON)</ins>
+		<ins>float2 dynamicLightmapUV : TEXCOORD7;</ins>
+	<ins>#endif</ins>
+};</pre>
+						
+						<p>Fill the coordinates just like the static lightmap coordinates, except with the dynamic lightmap's scale and offset, made available via <code class="shader">unity_DynamicLightmapST</code>.</p>
+						
+						<pre translate="no" class="shader">Interpolators MyVertexProgram (VertexData v) {
+	&hellip;
+
+	#if defined(LIGHTMAP_ON) || ADDITIONAL_MASKED_DIRECTIONAL_SHADOWS
+		i.lightmapUV = v.uv1 * unity_LightmapST.xy + unity_LightmapST.zw;
+	#endif
+
+	<ins>#if defined(DYNAMICLIGHTMAP_ON)</ins>
+		<ins>i.dynamicLightmapUV =</ins>
+			<ins>v.uv2 * unity_DynamicLightmapST.xy + unity_DynamicLightmapST.zw;</ins>
+	<ins>#endif</ins>
+
+	&hellip;
+}</pre>
+						
+						<p>Sampling the realtime lightmap is done in our <code class="shader">CreateIndirectLight</code> function. Duplicate the <code class="shader">#if defined(LIGHTMAP_ON)</code> code block and make a few changes. First, the new block is based on the <em translate="no">DYNAMICLIGHTMAP_ON</em> keyword. Also, it should use <code class="shader">DecodeRealtimeLightmap</code> instead of <code class="shader">DecodeLightmap</code>, because the realtime maps use a different color format. Because this data might be added to baked lighting, don't immediately assign to <code class="shader">indirectLight.diffuse</code>, but use an intermediate variable which is added to it at the end. Finally, we should only sample spherical harmonics when neither a baked nor a realtime lightmap is used.</p>
+						
+						<pre translate="no" class="shader">		#if defined(LIGHTMAP_ON)
+			indirectLight.diffuse =
+				DecodeLightmap(UNITY_SAMPLE_TEX2D(unity_Lightmap, i.lightmapUV));
+			
+			#if defined(DIRLIGHTMAP_COMBINED)
+				float4 lightmapDirection = UNITY_SAMPLE_TEX2D_SAMPLER(
+					unity_LightmapInd, unity_Lightmap, i.lightmapUV
+				);
+				indirectLight.diffuse = DecodeDirectionalLightmap(
+					indirectLight.diffuse, lightmapDirection, i.normal
+				);
+			#endif
+
+			ApplySubtractiveLighting(i, indirectLight);
+<del>//		#else</del>
+<del>//			indirectLight.diffuse += max(0, ShadeSH9(float4(i.normal, 1)));</del>
+		#endif
+
+		<ins>#if defined(DYNAMICLIGHTMAP_ON)</ins>
+			<ins>float3 dynamicLightDiffuse = DecodeRealtimeLightmap(</ins>
+				<ins>UNITY_SAMPLE_TEX2D(unity_DynamicLightmap, i.dynamicLightmapUV)</ins>
+			<ins>);</ins>
+
+			<ins>#if defined(DIRLIGHTMAP_COMBINED)</ins>
+				<ins>float4 dynamicLightmapDirection = UNITY_SAMPLE_TEX2D_SAMPLER(</ins>
+					<ins>unity_DynamicDirectionality, unity_DynamicLightmap,</ins>
+					<ins>i.dynamicLightmapUV</ins>
+				<ins>);</ins>
+            	<ins>indirectLight.diffuse += DecodeDirectionalLightmap(</ins>
+            		<ins>dynamicLightDiffuse, dynamicLightmapDirection, i.normal</ins>
+            	<ins>);</ins>
+			<ins>#else</ins>
+				<ins>indirectLight.diffuse += dynamicLightDiffuse;</ins>
+			<ins>#endif</ins>
+		<ins>#endif</ins>
+
+		<ins>#if !defined(LIGHTMAP_ON) &amp;&amp; !defined(DYNAMICLIGHTMAP_ON)</ins>
+			indirectLight.diffuse += max(0, ShadeSH9(float4(i.normal, 1)));
+		<ins>#endif</ins></pre>
+						
+						<figure>
+							<img src="realtime-global-illumination/realtime-gi-everything.png" width="380" height="220">
+							<figcaption>Realtime GI applied to everything.</figcaption>
+						</figure>
+						
+						<p>Now realtime lightmaps are used by our shader. Initially, it might look the same as baked lighting with a mixed light, when using distance shadowmask mode. The difference becomes obvious when turning off the light while in play mode.</p>
+						
+						<figure>
+							<img src="realtime-global-illumination/mixed-light-runtime-disabled.png" width="380" height="220">
+							<figcaption>Indirect light remains after disabling mixed light.</figcaption>
+						</figure>
+						
+						<p>After disabling a mixed light, its indirect light will remain. In contrast, the indirect contribution of a realtime light disappears &ndash; and reappears &ndash; as it should. However, it might take a while before the new situation is fully baked. Enlighten incrementally adjust the lightmaps and probes. How quickly this happens depends on the complexity of the scene and the <em translate="no">Realtime Global Illumination CPU</em> quality tier setting.</p>
+						
+						<figure>
+							<video width="320" height="183" controls loop muted>
+								<source src="realtime-global-illumination/toggling.mp4" type="video/mp4">
+							</video>
+							<figcaption>Toggling realtime light with realtime GI.</figcaption>
+						</figure>
+						
+						<p>All realtime lights contribute to realtime GI. However, its typical use is with the main direction light only, representing the sun as it moves through the sky. It is fully functional for directional lights. Points lights and spotlights work too, but only unshadowed. So when using shadowed point lights or spotlights you can end up with incorrect indirect lighting.</p>
+						
+						<figure>
+							<img alt="inspector" src="realtime-global-illumination/spotlight-inspector.png" width="320" height="206">
+							<img alt="scene" src="realtime-global-illumination/realtime-gi-spotlight.png" width="380" height="220">
+							<figcaption>Realtime spotlight with unshadowed indirect light.</figcaption>
+						</figure>
+						
+						<p>If you want to exclude a realtime light from realtime GI, you can do so by settings its <em translate="no">Indirect Multiplier</em> for its light intensity to zero.</p>
+					</section>
+					
+					<section>
+						<h3>Emissive Light</h3>
+						
+						<p>Realtime GI can also be used for static objects that emit light. This makes it possible to vary their emission with matching realtime indirect light. Let's try this out. Add a static sphere to the scene and give it a material that uses our shader with a black albedo and white emission color. Initially, we can only see the indirect effects of the emitted light via the static lightmaps.</p>
+						
+						<figure>
+							<img src="realtime-global-illumination/baked-emissive.png" width="380" height="220">
+							<figcaption>Baked GI with emissive sphere.</figcaption>
+						</figure>
+						
+						<p>To bake emissive light into the static lightmap, we had to set the material's global illumination flags in our shader GUI. As we always set the flags to <code>BakedEmissive</code>, the light ends up in the baked lightmap. This is fine when the emissive light is constant, but doesn't allow us to animate it.</p>
+						
+						<p>To support both baked and realtime lighting for the emission, we have to make this configurable. We can do so by adding a choice for this to <code>MyLightingShaderGUI</code>, via the <code>MaterialEditor.LightmapEmissionProperty</code> method. Its single parameter is the property's indentation level.</p>
+						
+						<pre translate="no">	void DoEmission () {
+		MaterialProperty map = FindProperty("_EmissionMap");
+		Texture tex = map.textureValue;
+		EditorGUI.BeginChangeCheck();
+		editor.TexturePropertyWithHDRColor(
+			MakeLabel(map, "Emission (RGB)"), map, FindProperty("_Emission"),
+			emissionConfig, false
+		);
+		<ins>editor.LightmapEmissionProperty(2);</ins>
+		if (EditorGUI.EndChangeCheck()) {
+			if (tex != map.textureValue) {
+				SetKeyword("_EMISSION_MAP", map.textureValue);
+			}
+
+			foreach (Material m in editor.targets) {
+				m.globalIlluminationFlags =
+					MaterialGlobalIlluminationFlags.BakedEmissive;
+			}
+		}
+	}</pre>
+						
+						<p>We also have to stop overriding the flags each time an emission property has changed. Actually, it is a bit more complicated than that. One of the flag options is <code>EmissiveIsBlack</code>, which indicates that computation of the emission can be skipped. This flag is always set for new materials. To make indirect emission work, we have to guarantee that this flag is not set, regardless whether we choose realtime or baked. We can do this by always masking the <code>EmissiveIsBlack</code> bit of the flags value.</p>
+						
+						<pre translate="no">			foreach (Material m in editor.targets) {
+				m.globalIlluminationFlags <ins>&amp;=</ins>
+					<ins>~MaterialGlobalIlluminationFlags.EmissiveIsBlack</ins>;
+			}</pre>
+						
+						<figure>
+							<img alt="inspector" src="realtime-global-illumination/realtime-emissive-inspector.png" width="320" height="62">
+							<img alt="scene" src="realtime-global-illumination/realtime-emissive.png" width="380" height="220">
+							<figcaption>Realtime GI with emissive sphere.</figcaption>
+						</figure>
+						
+						<p>The visual difference between baked and realtime GI is that the realtime lightmap usually has a much lower resolution than the baked one. So when the emission doesn't change and you use baked GI anyway, make sure to take advantage of its higher resolution.</p>
+						
+						<aside>
+							<h3>What is the purpose of <code>EmissiveIsBlack</code>?</h3>
+							<div>
+								<p>It is an optimization, making it possible to skip part of the GI-baking process. However, it relies on the flag to be set only when the emission color is indeed black. As the flags are set by the shader GUI, this is determined when a material is edited via the inspector. At least, that is how Unity's standard shader does it. So if the emission color is later changed by a script or the animation system, the flag is not adjusted. This is the cause of many people not understanding why their animating emission doesn't affect realtime GI. The result is the general wisdom of not setting the emission color to pure black if you want to change it at runtime.</p>
+								
+								<p>Instead of using that approach, we use <code>LightmapEmissionProperty</code>, which also offers the option of turning off GI for emission entirely. So the choice is explicit for the user, without any hidden behavior. Don't use emissive light? Make sure its GI is set to <em translate="no">None</em>.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Animating Emission</h3>
+						
+						<p>Realtime GI for emission is only possible for static objects. While the objects are static, the emission properties of their materials can be animated and will be picked up by the global illumination system. Let's try this out with a simple component that oscillates between a white and black emission color.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class EmissiveOscillator : MonoBehaviour {</ins>
+
+	<ins>Material emissiveMaterial;</ins>
+
+	<ins>void Start () {</ins>
+		<ins>emissiveMaterial = GetComponent&lt;MeshRenderer>().material;</ins>
+	<ins>}</ins>
+	
+	<ins>void Update () {</ins>
+		<ins>Color c = Color.Lerp(</ins>
+			<ins>Color.white, Color.black,</ins>
+			<ins>Mathf.Sin(Time.time * Mathf.PI) * 0.5f + 0.5f</ins>
+		<ins>);</ins>
+		<ins>emissiveMaterial.SetColor("_Emission", c);</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Add this component to our emissive sphere. When in play mode, its emission will animate, but indirect light isn't affected yet. We have to notify the realtime GI system that it has work to do. This can be done by invoking the <code>Renderer.UpdateGIMaterials</code> method of the appropriate mesh renderer.</p>
+						
+						<pre translate="no">	<ins>MeshRenderer emissiveRenderer;</ins>
+	Material emissiveMaterial;
+
+	void Start () {
+		<ins>emissiveRenderer = GetComponent&lt;MeshRenderer>();</ins>
+		emissiveMaterial = <ins>emissiveRenderer</ins>.material;
+	}
+	
+	void Update () {
+		&hellip;
+		emissiveMaterial.SetColor("_Emission", c);
+		<ins>emissiveRenderer.UpdateGIMaterials();</ins>
+	}</pre>
+						
+						<figure>
+							<video width="320" height="197" controls loop muted>
+								<source src="realtime-global-illumination/animating-emissive-sphere.mp4" type="video/mp4">
+							</video>
+							<figcaption>Realtime GI with animating emissive sphere.</figcaption>
+						</figure>
+						
+						<p>Invoking <code>UpdateGIMaterials</code> triggers a complete update of the object's emission, rendering it using its meta pass. This is necessary when the emission is more complex than a solid color, for example if we used a texture. If a solid color is sufficient, we can get away with a shortcut by invoking <code>DynamicGI.SetEmissive</code> with the renderer and the emission color. This is quicker than rendering the object with the meta pass, so take advantage of it when able.</p>
+						
+						<pre translate="no"><del>//		emissiveRenderer.UpdateGIMaterials();</del>
+		<ins>DynamicGI.SetEmissive(emissiveRenderer, c);</ins></pre>
+					</section>
+					
+					<a href="realtime-global-illumination/realtime-global-illumination.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Light Probe Proxy Volumes</h2>
+					
+					<p>Both baked and realtime GI is applied to dynamic objects via light probes. An object's position is used to interpolate light probe data, which is then used to apply GI. This works for fairly small objects, but is too crude for larger ones.</p>
+					
+					<p>As an example, add long stretched cube to the test scene so that it is subject to varying lighting conditions. It should use our white material. As it is a dynamic cube, it ends up using a single point to determine its GI contribution. Positioning it so that this point ends up shadowed, the entire cube becomes dark, which is obviously wrong. To make it very obvious, use a baked main light, so all lighting comes from the baked and realtime GI data.</p>
+					
+					<figure>
+						<img src="light-probe-proxy-volumes/large-object.png" width="380" height="220">
+						<figcaption>Large dynamic object with bad lighting.</figcaption>
+					</figure>
+					
+					<p>To make light probes work for cases like this, we can use a light probe proxy volume, or LPPV for short. This works by feeding the shader a grid of interpolated probe values, instead of a single one. This requires a floating-point 3D texture with linear filtering, which limits it to modern graphics cards. Besides that, also make sure that LPPV support is enabled in the graphics tier settings.</p>
+					
+					<figure>
+							<img src="light-probe-proxy-volumes/support-lppv.png" width="288" height="236">
+							<figcaption>LPPV support enabled.</figcaption>
+						</figure>
+					
+					<section>
+						<h3>Adding an LPPV to an Object</h3>
+						
+						<p>An LPPV can be setup in various ways, the most straightforward is as a component of the object that will use it. You can add it via <em translate="no">Component / Rendering / Light Probe Proxy Volume</em>.</p>
+						
+						<figure>
+							<img src="light-probe-proxy-volumes/lppv-inspector.png" width="320" height="210">
+							<figcaption>LPPV component.</figcaption>
+						</figure>
+						
+						<p>LPPVs work by interpolating between light probes at runtime, as if they were a grid of regular dynamic objects. The interpolated values are cached, with the <em translate="no">Refresh Mode</em> controlling when they are updated. The default is <em translate="no">Automatic</em>, which means that updates happen when the dynamic GI changes and when the probe group moves. <em translate="no">Bounding Box Mode</em> controls how the volume is positioned. <em translate="no">Automatic Local</em> means that it fits the bounding box of the object it's attached to. These default settings work well for our cube, so we'll keep them.</p>
+						
+						<p>To have our cube actually use the LPPV, we have to set the <em translate="no">Light Probes</em> mode of its mesh renderer to <em translate="no">Use Proxy Volume</em>. The default behavior is to use the LPPV component of the object itself, but you could also force it to use another volume.</p>
+						
+						<figure>
+							<img src="light-probe-proxy-volumes/mesh-renderer-settings.png" width="320" height="90">
+							<figcaption>Using a proxy volume instead of regular probes.</figcaption>
+						</figure>
+						
+						<p>The automatic resolution mode doesn't work well for our stretched cube. So set the <em translate="no">Resolution Mode</em> to <em translate="no">Custom</em> and make sure that there are sample points at the cube corners and multiple along its long edges. You can see these sample points when you have the object selected.</p>
+						
+						<figure>
+							<img alt="inspector" src="light-probe-proxy-volumes/custom-resolution.png" width="320" height="92">
+							<img alt="scene" src="light-probe-proxy-volumes/lppv-gizmos.png" width="380" height="220">
+							<figcaption>Custom probe resolution to fit the stretched cube.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Sampling the Volume</h3>
+						
+						<p>The cube has become black, because our shader doesn't support LPPV sampling yet. To make it work, we have to adjust the spherical harmonics code inside our <code class="shader">CreateIndirectLight</code> function. When an LPPV is used, <em translate="no">UNITY_LIGHT_PROBE_PROXY_VOLUME</em> is defined as 1. Let's do nothing in that case and see what happens.</p>
+						
+						<pre translate="no" class="shader">		#if !defined(LIGHTMAP_ON) &amp;&amp; !defined(DYNAMICLIGHTMAP_ON)
+			<ins>#if UNITY_LIGHT_PROBE_PROXY_VOLUME</ins>
+			<ins>#else</ins>
+				indirectLight.diffuse += max(0, ShadeSH9(float4(i.normal, 1)));
+			<ins>#endif</ins>
+		#endif</pre>
+						
+						<figure>
+							<img src="light-probe-proxy-volumes/no-more-sh.png" width="320" height="90">
+							<figcaption>No more spherical harmonics.</figcaption>
+						</figure>
+						
+						<p>It turns out that all spherical harmonics are disabled, also for dynamic objects that don't use LPPVs. That's because <em translate="no">UNITY_LIGHT_PROBE_PROXY_VOLUME</em> is defined project-wide, not per object instance. Whether an individual object uses an LPPV is indicated by the X component of <code class="shader">unity_ProbeVolumeParams</code>, defined in <em translate="no">UnityShaderVariables</em>. If it is set to 1, then we have an LPPV, otherwise we should use regular spherical harmonics.</p>
+						
+						<pre translate="no" class="shader">			#if UNITY_LIGHT_PROBE_PROXY_VOLUME
+				<ins>if (unity_ProbeVolumeParams.x == 1) {</ins>
+				<ins>}</ins>
+				<ins>else {</ins>
+					<ins>indirectLight.diffuse +=</ins>
+						<ins>max(0, ShadeSH9(float4(i.normal, 1)));</ins>
+				<ins>}</ins>
+			#else
+				indirectLight.diffuse += max(0, ShadeSH9(float4(i.normal, 1)));
+			#endif</pre>
+						
+						<p>To sample the volume, we can use the <code class="shader">SHEvalLinearL0L1_SampleProbeVolume</code> function instead of <code class="shader">ShadeSH9</code>. This function is defined in <em translate="no">UnityCG</em> and requires the world position as an extra parameter.</p>
+						
+						<pre translate="no" class="shader">				if (unity_ProbeVolumeParams.x == 1) {
+					<ins>indirectLight.diffuse = SHEvalLinearL0L1_SampleProbeVolume(</ins>
+						<ins>float4(i.normal, 1), i.worldPos</ins>
+					<ins>);</ins>
+					<ins>indirectLight.diffuse = max(0, indirectLight.diffuse);</ins>
+				}</pre>
+						
+						<aside>
+							<h3>How does <code class="shader">SHEvalLinearL0L1_SampleProbeVolume</code> work?</h3>
+							<div>
+								<p>As its name implies, this function only includes the first two spherical harmonics bands, L0 and L1. Unity doesn't use the third band for LPPVs. So we get lower-quality approximations of the lighting, but we interpolate between multiple world-space samples instead of using a single point. Here is the code.</p>
+								
+								<pre translate="no" class="shader">half3 SHEvalLinearL0L1_SampleProbeVolume (half4 normal, float3 worldPos) {
+	const float transformToLocal = unity_ProbeVolumeParams.y;
+	const float texelSizeX = unity_ProbeVolumeParams.z;
+
+	//The SH coefficients textures and probe occlusion
+	// are packed into 1 atlas.
+	//-------------------------
+	//| ShR | ShG | ShB | Occ |
+	//-------------------------
+
+	float3 position = (transformToLocal == 1.0f) ?
+		mul(unity_ProbeVolumeWorldToObject, float4(worldPos, 1.0)).xyz :
+		worldPos;
+	float3 texCoord = (position - unity_ProbeVolumeMin.xyz) *
+		unity_ProbeVolumeSizeInv.xyz;
+	texCoord.x = texCoord.x * 0.25f;
+
+	// We need to compute proper X coordinate to sample. Clamp the
+	// coordinate otherwize we'll have leaking between RGB coefficients
+	float texCoordX =
+		clamp(texCoord.x, 0.5f * texelSizeX, 0.25f - 0.5f * texelSizeX);
+
+	// sampler state comes from SHr (all SH textures share the same sampler)
+	texCoord.x = texCoordX;
+	half4 SHAr = UNITY_SAMPLE_TEX3D_SAMPLER(
+		unity_ProbeVolumeSH, unity_ProbeVolumeSH, texCoord
+	);
+	texCoord.x = texCoordX + 0.25f;
+	half4 SHAg = UNITY_SAMPLE_TEX3D_SAMPLER(
+		unity_ProbeVolumeSH, unity_ProbeVolumeSH, texCoord
+	);
+	texCoord.x = texCoordX + 0.5f;
+	half4 SHAb = UNITY_SAMPLE_TEX3D_SAMPLER(
+		unity_ProbeVolumeSH, unity_ProbeVolumeSH, texCoord
+	);
+	// Linear + constant polynomial terms
+	half3 x1;
+	x1.r = dot(SHAr, normal);
+	x1.g = dot(SHAg, normal);
+	x1.b = dot(SHAb, normal);
+
+	return x1;
+}</pre>
+							</div>
+						</aside>
+						
+						<figure>
+							<img src="light-probe-proxy-volumes/lppv-too-dark.png" width="380" height="220">
+							<figcaption>Sampled LPPV, too dark in gamma space.</figcaption>
+						</figure>
+						
+						<p>Our shader now samples the LPPV when needed, but the result is too dark. At least, that is the case when working in gamma color space. That's because the spherical harmonics data is stored in linear space. So a color conversion might be required.</p>
+						
+						<pre translate="no" class="shader">				if (unity_ProbeVolumeParams.x == 1) {
+					indirectLight.diffuse = SHEvalLinearL0L1_SampleProbeVolume(
+						float4(i.normal, 1), i.worldPos
+					);
+					indirectLight.diffuse = max(0, indirectLight.diffuse);
+					<ins>#if defined(UNITY_COLORSPACE_GAMMA)</ins>
+			            <ins>indirectLight.diffuse =</ins>
+			            	<ins>LinearToGammaSpace(indirectLight.diffuse);</ins>
+			        <ins>#endif</ins>
+				}</pre>
+						
+						<figure>
+							<img src="light-probe-proxy-volumes/lppv-correct.png" width="380" height="220">
+							<figcaption>Sampled LPPV, with correct colors.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="light-probe-proxy-volumes/light-probe-proxy-volumes.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>LOD Groups</h2>
+					
+					<p>When an object ends up covering only a small portion of the app's window, you don't need a highly detailed mesh to render it. You can use different meshes depending on the view size of the object. This is known as level of detail, or LOD for short. Unity allows us to do this via the <em translate="no">LOD Group</em> component.</p>
+					
+					<section>
+						<h3>Creating a LOD Hierarchy</h3>
+						
+						<p>The idea is that you use multiple version of the same mesh at various detail levels. The highest level &ndash; LOD 0 &ndash; has the most vertices, sub-objects, animations, complex materials, and so on. Additional levels become progressively simpler and cheaper to render. Ideally, adjacent LOD levels are designed so that you can't easily tell the difference between them when Unity switches from one to the other. Otherwise the sudden change would be glaring. But while investigating this technique we'll use obviously different meshes.</p>
+						
+						<p>Create an empty game object and give it two children. The first is a standard sphere and the second is a standard cube with its scale set to 0.75 uniformly. The result looks like and overlapping sphere and cube, as expected.</p>
+						
+						<figure>
+							<img alt="scene" src="lod-groups/lod-object-scene.png" width="220" height="210">
+							<img alt="hierarchy" src="lod-groups/lod-object-hierarchy.png" width="90" height="50">
+							<figcaption>Sphere and cube as one object.</figcaption>
+						</figure>
+						
+						<p>Add a LOD group component to the parent object, via <em translate="no">Component / Rendering / LOD Group</em>. You'll get a LOD group with default settings, which has three LOD levels. The percentages refer to the vertical portion of the window covered by the object's bounding box. So the default is to switch to LOD 1 when the vertical size drops down to 60% of the window's height, and to LOD 2 when it is reduced to 30%. When it reaches 10% it isn't rendered at all. You can change these thresholds by dragging the edges of the LOD boxes.</p>
+						
+						<figure>
+							<img src="lod-groups/lod-component.png" width="320" height="182">
+							<figcaption>LOD Group component.</figcaption>
+						</figure>
+						
+						<p>The thresholds are modified by the <em translate="no">LOD Bias</em>, which is mentioned by the component's inspector. This is a quality settings with a default value of 2, which means that the thresholds are effectively halved. It is also possible to set a maximum LOD level, which results in the highest levels being skipped.</p>
+						
+						<p>To makes it work, you have to tell the component which objects to use per LOD level. This is done by selecting a LOD block and adding objects to its <em translate="no">Renderers</em> list. While you could add any object in the scene, by sure to add its child objects. Use the sphere for LOD 0 and the cube for LOD 1. We'll leave LOD 2 empty, so we effectively only have two LOD levels. If you want to, you can delete and insert LOD levels via the right-click context menu.</p>
+						
+						<figure>
+							<img src="lod-groups/lod-0-inspector.png" width="320" height="192">
+							<figcaption>Using the sphere child for LOD 0.</figcaption>
+						</figure>
+						
+						<p>Once the LOD levels are configured, you can see them in action by moving the camera. If the object ends up big enough, it'll use the sphere, otherwise it will use the cube or won't be rendered at all.</p>
+						
+						<figure>
+							<video width="320" height="215" controls loop muted>
+								<source src="lod-groups/transition.mp4" type="video/mp4">
+							</video>
+							<figcaption>LOD transitions in action.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Baked GI and LOD Groups</h3>
+						
+						<p>Because how a LOD group is rendered depends on its view size, they are naturally dynamic. However, you can still make them static. Do this for the entire object hierarchy, so both the root and its two children. Then set the main light to baked to see what happens.</p>
+						
+						<figure>
+							<img src="lod-groups/baked-lighting.png" width="350" height="220">
+							<figcaption>Using baked lighting.</figcaption>
+						</figure>
+						
+						<p>It looks like LOD 0 is used when baking static lightmaps. We end up always seeing the sphere's shadow and indirect light contribution, even when the LOD group switches to a cube or culls itself. But note that the cube uses the static lightmap as well. So it doesn't use light probes, right? Turn of the light probe group to find out.</p>
+						
+						<figure>
+							<img src="lod-groups/baked-lighting-without-probes.png" width="350" height="220">
+							<figcaption>Baked lighting without probes.</figcaption>
+						</figure>
+						
+						<p>Disabling the probe group made the cubes darker. This means that that they no longer receive indirect light. This happens because LOD 0 is used when determining indirect light during the baking process. To find the indirect light for the other LOD levels, the best Unity can do is rely on the baked light probes. So we need light probes to get indirect light baked for our cubes, even if we don't need light probes at runtime.</p>
+					</section>
+					
+					<section>
+						<h3>Realtime GI and LOD Groups</h3>
+						
+						<p>When only using realtime GI, the approach is similar, except that our cube now uses the light probes at runtime. You can verify this by selecting the sphere or the cube. When the cube is selected, you can see the gizmos that show which light probes are used. The sphere doesn't show them, because it uses the dynamic lightmap.</p>
+						
+						<figure>
+							<img src="lod-groups/realtime-gi-lod-1-probes.png" width="350" height="220">
+							<figcaption>LOD 1 uses probes for realtime GI.</figcaption>
+						</figure>
+						
+						<p>It gets more complicated when both baked and realtime GI are used at the same time. In that case, the cube should use lightmaps for the baked GI and light probes for the realtime GI. Unfortunately this is not possible, because lightmaps and spherical harmonics cannot be used at the same time. it's either one or the other. Because lightmap data is available for the cube, Unity ends up using that. Consequently, the cube isn't affected by realtime GI.</p>
+						
+						<figure>
+							<img src="lod-groups/lod-1-only-baked.png" width="350" height="230">
+							<figcaption>Only baked lighting for LOD 1, using a low-intensity main light.</figcaption>
+						</figure>
+						
+						<p>An important detail is that the baking and rendering of LOD levels is completely independent. They don't need to use the same settings. If realtime GI ends up more important than baked GI, you can force the cube to use light probes by making sure that it is not lightmap-static, while keeping the sphere static.</p>
+						
+						<figure>
+							<img src="lod-groups/lod-1-forced-probes.png" width="350" height="230">
+							<figcaption>LOD 1 forced to use light probes.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Cross-fading Between LOD Levels</h3>
+						
+						<p>A downside of LOD groups is that it can be visually obvious when the LOD level changes. Geometry suddenly pops into view, disappears, or changes shape. This can be mitigated by cross-fading between adjacent LOD levels, which is done by setting the group's <em translate="no">Fade Mode</em> to <em translate="no">Cross Fade</em>. There is also another fade mode, used by Unity for SpeedTree objects, which we won't use.</p>
+						
+						<p>When cross-fading is enabled, each LOD level shows a <em translate="no">Fade Transition Width</em> field that controls which portion of its block is used for fading. For example, when set to 0.5 half the LOD's range is used to fade to the next level. Alternatively, the fading can be animated, in which case it takes about half a second to transition between LOD levels.</p>
+						
+						<figure>
+							<img src="lod-groups/cross-fade-inspector.png" width="320" height="186">
+							<figcaption>Cross-fade with 0.5 transition width.</figcaption>
+						</figure>
+						
+						<p>When cross-fading is enabled, two LOD levels are rendered at the same time while the group is transitioning between them.</p>
+					</section>
+					
+					<section>
+						<h3>Supporting Cross-fading</h3>
+						
+						<p>Unity's standard shader doesn't support cross-fading by default. You'd have to copy the standard shader and add a multi-compile directive for the <em translate="no">LOD_FADE_CROSSFADE</em> keyword. We need to add that directive as well to support cross-fading with <em translate="no">My First Lighting Shader</em>. Add the directive to all passes except the meta pass.</p>
+						
+						<pre translate="no" class="shader">			<ins>#pragma multi_compile _ LOD_FADE_CROSSFADE</ins></pre>
+						
+						<p>We'll use dithering to transition between the LOD levels. That approach works with both forward and deferred rendering, and also with shadows.</p>
+						
+						<p>We've already used dithering, when creating <a href="../part-12.1.html">semitransparent shadows</a>. It required the fragment's screen-space coordinates, which forced us to use different interpolator structures for the vertex and fragment program. So let's duplicate the <code class="shader">Interpolators</code> structure in <em translate="no">My Lighting</em> as well, renaming one to <code class="shader">InterpolatorsVertex</code>.</p>
+						
+						<pre translate="no" class="shader"><ins>struct InterpolatorsVertex {</ins>
+	<ins>&hellip;</ins>
+<ins>};</ins>
+
+struct Interpolators {
+	&hellip;
+};
+
+&hellip;
+
+<ins>InterpolatorsVertex</ins> MyVertexProgram (VertexData v) {
+	<ins>InterpolatorsVertex</ins> i;
+	&hellip;
+}</pre>
+						
+						<p>The interpolators for the fragment program have to contain <code class="shader">vpos</code> when we have to cross-fade, otherwise we can keep the usual position.</p>
+						
+						<pre translate="no" class="shader">struct Interpolators {
+	<ins>#if defined(LOD_FADE_CROSSFADE)</ins>
+		<ins>UNITY_VPOS_TYPE vpos : VPOS;</ins>
+	<ins>#else</ins>
+		float4 pos : SV_POSITION;
+	<ins>#endif</ins>
+
+	&hellip;
+};</pre>
+						
+						<p>We can perform the cross-fading by using the <code class="shader">UnityApplyDitherCrossFade</code> function at the start of our fragment program.</p>
+						
+						<pre translate="no" class="shader">FragmentOutput MyFragmentProgram (Interpolators i) {
+	<ins>#if defined(LOD_FADE_CROSSFADE)</ins>
+		<ins>UnityApplyDitherCrossFade(i.vpos);</ins>
+	<ins>#endif</ins>
+
+	&hellip;
+}</pre>
+						
+						<aside>
+							<h3>How does <code class="shader">UnityApplyDitherCrossFade</code> work?</h3>
+							<div>
+								<p>The function is defined in <em translate="no">UnityCG</em>. Its approach is similar to the dithering that we used in <a href="../part-12.1.html">Rendering 12, Semitransparent Shadows</a>, except that the dither level is uniform for the entire object. So no blending between dither levels is required. It uses 16 dither levels stored in a 4&times;64 2D texture instead of in a 4&times;4&times;16 3D texture.</p>
+								
+								<pre translate="no" class="shader">sampler2D _DitherMaskLOD2D;
+
+void UnityApplyDitherCrossFade(float2 vpos) {
+	vpos /= 4; // the dither mask texture is 4x4
+	// quantized lod fade by 16 levels
+	vpos.y = frac(vpos.y) * 0.0625 /* 1/16 */ + unity_LODFade.y;
+	clip(tex2D(_DitherMaskLOD2D, vpos).a - 0.5);
+}</pre>
+								
+								The <code class="shader">unity_LODFade</code> variable is defined in <em translate="no">UnityShaderVariables</em>. Its Y component contains the fade amount for the object, in sixteen steps.
+							</div>
+						</aside>
+						
+						<figure>
+							<img src="lod-groups/dithering-geometry.png" width="350" height="220">
+							<figcaption>Cross-fading geometry via dithering.</figcaption>
+						</figure>
+						
+						<p>Crossfading now works for geometry. To make it work for shadows as well, we have to adjust <em translate="no">My Shadows</em>. First, <code class="shader">vpos</code> has to be used when we're cross-fading. Second, we also have to use <code class="shader">UnityApplyDitherCrossFade</code> at the start of the fragment program.</p>
+						
+						<pre translate="no" class="shader">struct Interpolators {
+	#if SHADOWS_SEMITRANSPARENT <ins>|| defined(LOD_FADE_CROSSFADE)</ins>
+		UNITY_VPOS_TYPE vpos : VPOS;
+	#else
+		float4 positions : SV_POSITION;
+	#endif
+
+	&hellip;
+};
+
+&hellip;
+
+float4 MyShadowFragmentProgram (Interpolators i) : SV_TARGET {
+	<ins>#if defined(LOD_FADE_CROSSFADE)</ins>
+		<ins>UnityApplyDitherCrossFade(i.vpos);</ins>
+	<ins>#endif</ins>
+
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="lod-groups/dithering-shadows.png" width="350" height="220" alt="scene"><br>
+							<video width="320" height="213" controls loop muted>
+								<source src="lod-groups/cross-fading.mp4" type="video/mp4">
+							</video>
+							<figcaption>Cross-fading both geometry and shadows.</figcaption>
+						</figure>
+						
+						<p>Because the cube and sphere intersect each other, we get some strange self-shadowing while cross-fading between them. This is handy to see that cross-fading between shadows works, but you have to watch out for such artifacts when creating LOD geometry for actual games.</p>
+						
+						<p>The next tutorial is <a href="../part-19/index.html">GPU Instancing</a>.</p>
+					</section>
+					
+					<a href="lod-groups/lod-groups.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Rendering-18.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

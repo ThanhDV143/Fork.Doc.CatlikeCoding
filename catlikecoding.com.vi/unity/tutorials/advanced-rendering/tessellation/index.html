@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/advanced-rendering/tessellation/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/advanced-rendering/tessellation/tutorial-image.jpg">
+		<meta property="og:title" content="Tessellation">
+		<meta property="og:description" content="A Unity Advanced Rendering tutorial about triangle tessellation, with a hull and domain shader.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Tessellation</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/advanced-rendering/tessellation/#article",
+				"headline": "Tessellation",
+				"alternativeHeadline": "Subdividing Triangles",
+				"datePublished": "2017-11-30",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Advanced Rendering tutorial about triangle tessellation, with a hull and domain shader.",
+				"image": "https://catlikecoding.com/unity/tutorials/advanced-rendering/tessellation/tutorial-image.jpg",
+				"dependencies": "Unity 2017.1.0",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/advanced-rendering/", "name": "Advanced Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				MyLightingShaderGUI: 1,
+				TessellationMode: 1
+			};
+			
+			var defaultCodeClass = 'shader';
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Advanced Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Tessellation</h1>
+					<p>Subdividing Triangles</p>
+					<ul>
+						<li>Create hull and domain shaders.</li>
+						<li>Subdivide triangles.</li>
+						<li>Control how things get tessellated.</li>
+					</ul>
+				</header>
+				
+				<p>This tutorial covers how to add support for tessellation to a custom shader. It uses the <a href="../flat-and-wireframe-shading/index.html">Flat and Wireframe Shading</a> tutorial as a basis.</p>
+				
+				<p>This tutorial is made with Unity 2017.1.0.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>If you don't have enough triangles, make some more.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Hulls and Domains</h2>
+					
+					<p>Tessellation is the art of cutting things into smaller parts. In our case, we're going to subdivide triangles so we end up with smaller triangles that cover the same space. This makes it possible to add more details to geometry, though in this tutorial we'll focus on the tessellation process itself.</p>
+					
+					<p>The GPU is capable of splitting up triangles fed to it for rendering. It does this for various reasons, for example when part of a triangle ends up clipped. We cannot control that, but there's also a tessellation stage that we are allowed to configure. This stage sits in between the vertex and the fragment shader stages. But it's not as simple as adding just one other program to our shader. We're going to need a hull program and domain program.</p>
+					
+					<figure>
+						<img src="hulls-and-domains/shader-programs.png" width="460" height="520">
+						<figcaption>Shading with tessellation.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Creating a Tessellation Shader</h3>
+						
+						<p>The first step is to create a shader that has tessellation enabled. Let's put the code that we'll need in its own file, <em translate="no">MyTessellation.cginc</em>, with its own include guard.</p>
+						
+						<pre translate="no">#if !defined(TESSELLATION_INCLUDED)
+#define TESSELLATION_INCLUDED
+
+#endif</pre>
+						
+						<p>To clearly see that triangles get subdivided, we'll make use of the <em translate="no">Flat Wireframe Shader</em>. Duplicate that shader, rename it to <em translate="no">Tessellation Shader</em> and adjust its menu name.</p>
+						
+						<pre translate="no">Shader <ins>"Custom/Tessellation"</ins> { &hellip; }</pre>
+						
+						<p>The minimum shader target level when using tessellation is 4.6. If we don't set this manually, Unity will issue a warning and automatically use that level. We're going to add tessellation stages to the forward base and additive passes, plus the deferred pass. Also include <em translate="no">MyTessellation</em> in those passes, after <em translate="no">MyFlatWireframe</em>.</p>
+
+						<pre translate="no">			#pragma target <ins>4.6</ins>
+						
+			&hellip;
+
+			#include "MyFlatWireframe.cginc"
+			<ins>#include "MyTessellation.cginc"</ins></pre>
+						
+						<aside>
+							<h3>What about the shadow pass?</h3>
+							<div>
+								<p>It is also possible to use tessellation when rendering shadows, but we won't do that in this tutorial.</p>
+							</div>
+						</aside>
+						
+						<p>Create a material that relies on this shader and add a quad to the scene that uses it. I made the material gray so it isn't too bright, like the <em translate="no">Flat Wireframe</em> material.</p>
+						
+						<figure>
+							<img src="hulls-and-domains/quad.png" width="190" height="190">
+							<figcaption>A quad.</figcaption>
+						</figure>
+						
+						<p>We'll use this quad to test our tessellation shader. Note that is consists of two isosceles right triangles. The short edges have length 1, while the long diagonal edges have length &radic;2.</p>
+					</section>
+					
+					<section>
+						<h3>Hull Shaders</h3>
+						
+						<p>Like geometry shaders, the tessellation stage is flexible and can work triangles, quads, or isolines. We have to tell it what surface it has to work with and feed it the necessary data. This is the job of the hull program. Add a program for this to <code>MyTessellation</code>, beginning with a void function that does nothing.</p>
+						
+						<pre translate="no"><ins>void MyHullProgram () {}</ins></pre>
+						
+						<p>The hull program operates on a surface patch, which is passed to it as an argument. We have to add an <code>InputPatch</code> parameter to make this possible.</p>
+						
+						<pre translate="no">void MyHullProgram (<ins>InputPatch patch</ins>) {}</pre>
+						
+						<p>A patch is a collection of mesh vertices. Like we did for the stream parameter of the geometry function, we have to specify the data format of the vertices. We'll use the <code>VertexData</code> struct for now.</p>
+						
+						<pre translate="no">void MyHullProgram (InputPatch<ins>&lt;VertexData></ins> patch) {}</pre>
+						
+						<aside>
+							<h3>Shouldn't it be <code>InputPatch&lt;InterpolatorsVertex></code>?</h3>
+							<div>
+								<p>As the hull stage comes after the vertex stage, logically the hull function's input type must match the vertex function's output type. This is true, but we'll ignore this fact for now.</p>
+							</div>
+						</aside>
+						
+						<p>As we're working with triangles, each patch will contain three vertices. This amount has to be specified as a second template parameter for <code>InputPatch</code>.</p>
+						
+						<pre translate="no">void MyHullProgram (InputPatch&lt;VertexData<ins>, 3</ins>> patch) {}</pre>
+						
+						<p>The job of the hull program is to pass the required vertex data to the tessellation stage. Although it is fed an entire patch, the function should output only a single vertex at a time. It will get invoked once per vertex in the patch, with an additional argument that specifies which control point (vertex) it should work with. The parameter is an unsigned integer with the <code>SV_OutputControlPointID</code> semantic.</p>
+						
+						<pre translate="no">void MyHullProgram (
+	InputPatch&lt;VertexData, 3> patch<ins>,</ins>
+	<ins>uint id : SV_OutputControlPointID</ins>
+) {}</pre>
+						
+						<p>Simply index the patch as if it were an array and return the desired element.</p>
+						
+						<pre translate="no"><ins>VertexData</ins> MyHullProgram (
+	InputPatch&lt;VertexData, 3> patch,
+	uint id : SV_OutputControlPointID
+) {
+	<ins>return patch[id];</ins>
+}</pre>
+						
+						<p>This looks like a functional program, so let's add a compiler directive to use it as a hull shader. Do this for all three shader passes that are involved.</p>
+						
+						<pre translate="no">			#pragma vertex MyVertexProgram
+			#pragma fragment MyFragmentProgram
+			<ins>#pragma hull MyHullProgram</ins>
+			#pragma geometry MyGeometryProgram</pre>
+						
+						<p>This will produce a few compiler errors, complaining that we haven't configured our hull shader correctly. Like the geometry function, it needs attributes to configure it. First, we have to explicitly tell it that it's working with triangles. That's done via the <code>UNITY_domain</code> attribute, with <em translate="no">tri</em> as an argument.</p>
+						
+						<pre translate="no"><ins>[UNITY_domain("tri")]</ins>
+VertexData MyHullProgram &hellip;</pre>
+						
+						<p>That's not enough. We also have to explicitly specify that we're outputting three control points per patch, one for each of the triangle's corners.</p>
+						
+						<pre translate="no">[UNITY_domain("tri")]
+<ins>[UNITY_outputcontrolpoints(3)]</ins>
+VertexData MyHullProgram &hellip;</pre>
+						
+						<p>When the GPU will create new triangles, it needs to know whether we want them defined clockwise or counterclockwise. Like all other triangles in Unity, they should be clockwise. This is controlled via the <code>UNITY_outputtopology</code> attribute. Its argument should be <em translate="no">triangle_cw</em>.</p>
+						
+						<pre translate="no">[UNITY_domain("tri")]
+[UNITY_outputcontrolpoints(3)]
+<ins>[UNITY_outputtopology("triangle_cw")]</ins>
+VertexData MyHullProgram &hellip;</pre>
+						
+						<p>The GPU also needs to be told how it should cut up the patch, via the <code>UNITY_partitioning</code> attribute. There are a few different partitioning methods, which we'll investigate later. For now, just use the <em translate="no">integer</em> mode.</p>
+						
+						<pre translate="no">[UNITY_domain("tri")]
+[UNITY_outputcontrolpoints(3)]
+[UNITY_outputtopology("triangle_cw")]
+<ins>[UNITY_partitioning("integer")]</ins>
+VertexData MyHullProgram &hellip;</pre>
+						
+						<p>Besides the partitioning method, the GPU also has to know into how many parts the patch should be cut. This isn't a constant value, it can vary per patch. We have to provide a function to evaluate this, known as a patch constant function. Let's just assume we have such a function, named <em translate="no">MyPatchConstantFunction</em>.</p>
+						
+						<pre translate="no">[UNITY_domain("tri")]
+[UNITY_outputcontrolpoints(3)]
+[UNITY_outputtopology("triangle_cw")]
+[UNITY_partitioning("integer")]
+<ins>[UNITY_patchconstantfunc("MyPatchConstantFunction")]</ins>
+VertexData MyHullProgram &hellip;</pre>
+					</section>
+					
+					<section>
+						<h3>Patch Constant Functions</h3>
+						
+						<p>How a patch is to be subdivided is a property of the patch. This means that the patch constant function is only invoked once per patch, not once per control point. That's why it's referred to as a constant function, being constant across the entire patch. Effectively, this function is a sub-stage operating in parallel with <code>MyHullProgram</code>.</p>
+						
+						<figure>
+							<img src="hulls-and-domains/hull-shader.png" width="340" height="195">
+							<figcaption>Inside a hull shader.</figcaption>
+						</figure>
+						
+						<p>To determine how to subdivide a triangle, the GPU uses four tessellation factors. Each edge of the triangle patch gets a factor. There's also a factor for the inside of the triangle. The three edge vectors have to be passed along as a float array with the <code>SV_TessFactor</code> semantic. The inside factor uses the <code>SV_InsideTessFactor</code> semantic. Let's create a struct for that.</p>
+						
+						<pre translate="no"><ins>struct TessellationFactors {</ins>
+    <ins>float edge[3] : SV_TessFactor;</ins>
+    <ins>float inside : SV_InsideTessFactor;</ins>
+<ins>}</ins>;</pre>
+						
+						<p>The patch constant function takes a patch as an input parameter and outputs the tessellation factors. Let's now create this missing function. Simply have it set all factors to 1. This will instruct the tessellation stage to not subdivide the patch.</p>
+						
+						<pre translate="no"><ins>TessellationFactors MyPatchConstantFunction (InputPatch&lt;VertexData, 3> patch) {</ins>
+	<ins>TessellationFactors f;</ins>
+    <ins>f.edge[0] = 1;</ins>
+    <ins>f.edge[1] = 1;</ins>
+    <ins>f.edge[2] = 1;</ins>
+	<ins>f.inside = 1;</ins>
+	<ins>return f;</ins>
+<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Domain Shaders</h3>
+						
+						<p>At this point, the shader compiler will complain that a shader cannot have a tessellation control shader without a tessellation evaluation shader. The hull shader is only part of what we need to get tessellation working. Once the tessellation stage has determined how the patch should be subdivided, it's up to the geometry shader to evaluate the result and generate the vertices of the final triangles. So let's create a function for our domain shader, again starting with a stub.</p>
+						
+						<pre translate="no"><ins>void MyDomainProgram () {}</ins></pre>
+						
+						<p>Both the hull and domain shader act on the same domain, which is a triangle. We signal this again via the <code>UNITY_domain</code> attribute.</p>
+						
+						<pre translate="no"><ins>[UNITY_domain("tri")]</ins>
+void MyDomainProgram () {}</pre>
+						
+						<p>The domain program is fed the tessellation factors that were used, as well as the original patch, which is of type <code>OutputPatch</code> in this case.</p>
+						
+						<pre translate="no">[UNITY_domain("tri")]
+void MyDomainProgram (
+	<ins>TessellationFactors factors,</ins>
+	<ins>OutputPatch&lt;VertexData, 3> patch</ins>
+) {}</pre>
+						
+						<p>While the tessellation stage determines how the patch should be subdivided, it doesn't generated any new vertices. Instead, it comes up with barycentric coordinates for those vertices. It's up to the domain shader to use those coordinates to derive the final vertices. To make this possible, the domain function is invoked once per vertex and is provided the barycentric coordinates for it. They have the <code>SV_DomainLocation</code> semantic.</p>
+						
+						<pre translate="no">[UNITY_domain("tri")]
+void MyDomainProgram (
+	TessellationFactors factors,
+	OutputPatch&lt;VertexData, 3> patch<ins>,</ins>
+	<ins>float3 barycentricCoordinates : SV_DomainLocation</ins>
+) {}</pre>
+						
+						<p>Inside the function, we have to generate the final vertex data.</p>
+						
+						<pre translate="no">[UNITY_domain("tri")]
+void MyDomainProgram (
+	TessellationFactors factors,
+	OutputPatch&lt;VertexData, 3> patch,
+	float3 barycentricCoordinates : SV_DomainLocation
+) {
+	<ins>VertexData data;</ins>
+}</pre>
+						
+						<p>To find the position of this vertex, we have to interpolate across the original triangle domain, using the barycentric coordinates. The X, Y, and Z coordinates determine the weights of the first, second, and third control points.</p>
+						
+						<pre translate="no">	VertexData data;
+	<ins>data.vertex =</ins>
+		patch[0].vertex * barycentricCoordinates.x <ins>+</ins>
+		<ins>patch[1].vertex * barycentricCoordinates.y +</ins>
+		<ins>patch[2].vertex * barycentricCoordinates.z</ins>;</pre>
+						
+						<p>We have to interpolate all vertex data in the same way. Let's define a convenient macro for that, which can be used for all vector sizes.</p>
+						
+						<pre translate="no"><del>//	data.vertex =</del>
+<del>//		patch[0].vertex * barycentricCoordinates.x +</del>
+<del>//		patch[1].vertex * barycentricCoordinates.y +</del>
+<del>//		patch[2].vertex * barycentricCoordinates.z;</del>
+	
+	<ins>#define MY_DOMAIN_PROGRAM_INTERPOLATE(fieldName) data.fieldName = \</ins>
+		<ins>patch[0].fieldName * barycentricCoordinates.x + \</ins>
+		<ins>patch[1].fieldName * barycentricCoordinates.y + \</ins>
+		<ins>patch[2].fieldName * barycentricCoordinates.z;</ins>
+
+	<ins>MY_DOMAIN_PROGRAM_INTERPOLATE(vertex)</ins></pre>
+						
+						<p>Besides the position, also interpolate the normal, tangent, and all UV coordinates.</p>
+						
+						<pre translate="no">	MY_DOMAIN_PROGRAM_INTERPOLATE(vertex)
+	<ins>MY_DOMAIN_PROGRAM_INTERPOLATE(normal)</ins>
+	<ins>MY_DOMAIN_PROGRAM_INTERPOLATE(tangent)</ins>
+	<ins>MY_DOMAIN_PROGRAM_INTERPOLATE(uv)</ins>
+	<ins>MY_DOMAIN_PROGRAM_INTERPOLATE(uv1)</ins>
+	<ins>MY_DOMAIN_PROGRAM_INTERPOLATE(uv2)</ins></pre>
+						
+						<p>The only thing that we do not interpolate are instance IDs. As Unity does not support GPU instancing and tessellation at the same time, there's no point in copying this ID. To prevent compiler errors, remove the multi-compile directives from the three shader passes. This wil also remove the instancing option from the shader's GUI.</p>
+						
+						<pre translate="no"><del>//			#pragma multi_compile_instancing</del>
+<del>//			#pragma instancing_options lodfade force_same_maxcount_for_gl</del></pre>
+						
+						<aside>
+							<h3>Is it possible to use instancing and tessellation together?</h3>
+							<div>
+								<p>At the moment, that's not the case. Keep in mind that GPU instancing is useful when rendering the same object many times. As tessellation is expensive and about adding details, they're usually not a good combination. If you want to have many instances of something that should use tessellation up close, you could use a LOD group. Have LOD 0 use a non-instanced tessellated material, while all other LOD levels use an instanced non-tessellated material.</p>
+							</div>
+						</aside>
+						
+						<p>We now have a new vertex, which will be send to either the geometry program or the interpolator after this stage. But these programs expect <code>InterpolatorsVertex</code> data, not <code>VertexData</code>. To solve this, we have the domain shader take over the responsibilities of the original vertex program. This is done by invoking <code>MyVertexProgram</code> inside it&mdash;like any other function&mdash;and return its result.</p>
+						
+						<pre translate="no">[UNITY_domain("tri")]
+<ins>InterpolatorsVertex</ins> MyDomainProgram (
+	TessellationFactors factors,
+	OutputPatch&lt;VertexData, 3> patch,
+	float3 barycentricCoordinates : SV_DomainLocation
+) {
+	&hellip;
+	
+	<ins>return MyVertexProgram(data);</ins>
+}</pre>
+						
+						<p>Now we can add the domain shader to our three shader passes, but we'll still get errors.</p>
+						
+						<pre translate="no">			#pragma hull MyHullProgram
+			<ins>#pragma domain MyDomainProgram</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Control Points</h3>
+						
+						<p><code>MyVertexProgram</code> only has to be invoked once, it's just that we changed where this happens. But we still have to specify a vertex program to be invoked during the vertex shader stage, which sits before the hull shader. We don't have to do anything at that point, so we can make do with a function that simply passes through the vertex data unmodified.</p>
+							
+						<pre translate="no"><ins>VertexData MyTessellationVertexProgram (VertexData v) {</ins>
+	<ins>return v;</ins>
+<ins>}</ins></pre>
+						
+						<p>Have our three shader passes use this function for its vertex program from now on.</p>
+
+						<pre translate="no">			#pragma vertex <ins>MyTessellationVertexProgram</ins></pre>
+						
+						<p>This will produce yet another compiler error, complaining about a reuse of the position semantic. To make this work, we have to use an alternative output struct for our vertex program, which uses the <code>INTERNALTESSPOS</code> semantic for the vertex position. The rest of the struct is the same as <code>VertexData</code>, except that it never has an instance ID. As this vertex data is used as control points for the tessellation process, let's name it <code>TessellationControlPoint</code>.</p>
+						
+						<pre translate="no"><ins>struct TessellationControlPoint {</ins>
+	<ins>float4 vertex : INTERNALTESSPOS;</ins>
+	<ins>float3 normal : NORMAL;</ins>
+	<ins>float4 tangent : TANGENT;</ins>
+	<ins>float2 uv : TEXCOORD0;</ins>
+	<ins>float2 uv1 : TEXCOORD1;</ins>
+	<ins>float2 uv2 : TEXCOORD2;</ins>
+<ins>};</ins></pre>
+						
+						<p>Change <code>MyTessellationVertexProgram</code> so it puts the vertex data into a control point struct and returns that.</p>
+						
+						<pre translate="no"><ins>TessellationControlPoint</ins> MyTessellationVertexProgram (VertexData v) {
+	<ins>TessellationControlPoint p;</ins>
+	<ins>p.vertex = v.vertex;</ins>
+	<ins>p.normal = v.normal;</ins>
+	<ins>p.tangent = v.tangent;</ins>
+	<ins>p.uv = v.uv;</ins>
+	<ins>p.uv1 = v.uv1;</ins>
+	<ins>p.uv2 = v.uv2;</ins>
+	return <ins>p</ins>;
+}</pre>
+						
+						<p>Next, <code>MyHullProgram</code> must also change so it works with <code>TessellationControlPoint</code> instead of <code>VertexData</code>. Only its parameter type needs to change.</p>
+						
+						<pre translate="no"><ins>TessellationControlPoint</ins> MyHullProgram (
+	InputPatch&lt;<ins>TessellationControlPoint</ins>, 3> patch,
+	uint id : SV_OutputControlPointID
+) {
+	return patch[id];
+}</pre>
+						
+						<p>The same goes for the patch constant function.</p>
+						
+						<pre translate="no">TessellationFactors MyPatchConstantFunction (
+	InputPatch&lt;<ins>TessellationControlPoint</ins>, 3> patch
+) {
+	&hellip;
+}</pre>
+						
+						<p>And the domain program's parameter type has to change as well.</p>
+						
+						<pre translate="no">InterpolatorsVertex MyDomainProgram (
+	TessellationFactors factors,
+	OutputPatch&lt;<ins>TessellationControlPoint</ins>, 3> patch,
+	float3 barycentricCoordinates : SV_DomainLocation
+) {
+	&hellip;
+}</pre>
+						
+						<p>At this point we finally have a correct tessellation shader. It should compile and render the quad as before. It isn't subdivided yet, because the tessellation factors are always 1.</p>
+					</section>
+					
+					<a href="hulls-and-domains/hulls-and-domains.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Subdividing Triangles</h2>
+					
+					<p>The point of the whole tessellation setup is that we can subdivide patches. This allows us to replace a single triangle with a collection of smaller triangles. We're going to do that now.</p>
+					
+					<section>
+						<h3>Tessellation Factors</h3>
+						
+						<p>How a triangle patch gets subdivided is controlled by its tessellation factors. We determine these factors in <code>MyPatchConstantFunction</code>. Currently, we have them all set to 1, which produces no visual change. The hull, tessellation, and domain shader stages are working, but they're passing though the original vertex data and generate nothing new. To change this, set all factors to 2.</p>
+						
+						<pre translate="no">TessellationFactors MyPatchConstantFunction (
+	InputPatch&lt;TessellationControlPoint, 3> patch
+) {
+	TessellationFactors f;
+    f.edge[0] = <ins>2</ins>;
+    f.edge[1] = <ins>2</ins>;
+    f.edge[2] = <ins>2</ins>;
+	f.inside = <ins>2</ins>;
+	return f;
+}</pre>
+						
+						<figure>
+							<img src="subdividing-triangles/factors-2.png" width="190" height="190">
+							<figcaption>Tessellation factors 2.</figcaption>
+						</figure>
+						
+						<p>The triangles now do get subdivided. All their edges have been split into two sub-edges each, leading to three new vertices per triangle. Also, yet another vertex has been added at the center of each triangle. This made it possible generate two triangles per original edge, so the original triangles have been replaced by six smaller triangles each. As the quad is made of two triangles, we're now getting twelve triangles in total.</p>
+						
+						<p>If you set all factors to 3 instead, each edge will be split into three sub-edges. In this case, there won't be a center vertex. Instead, three vertices are added inside the original triangle, forming a smaller inner triangle. The outer edges will be connected to this inner triangle with triangle strips.</p>
+						
+						<figure>
+							<img src="subdividing-triangles/factors-3.png" width="190" height="190">
+							<figcaption>Tessellation factors 3.</figcaption>
+						</figure>
+						
+						<p>When the tessellation factors are even, there will be a single center vertex. When they are odd, there will be a center triangle instead. If we use larger tessellation factors, we end up with multiple nested triangles. Each step towards the center, the amount by which the triangle gets subdivided decreases by two, until we end up with either one or zero sub-edges.</p>
+						
+						<figure>
+							<img alt="4" src="subdividing-triangles/factors-4.png" width="190" height="190">
+							<img alt="5" src="subdividing-triangles/factors-5.png" width="190" height="190"><br>
+							<img alt="6" src="subdividing-triangles/factors-6.png" width="190" height="190">
+							<img alt="7" src="subdividing-triangles/factors-7.png" width="190" height="190">
+							<figcaption>Tessellation factors 4&ndash;7.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Different Edge and Inside Factors</h3>
+						
+						<p>How the triangles get subdivided is controlled by the inside tessellation factor. The edge factors can be used to override the amount by which their respective edges are subdivided. This only affects the original patch edges, not the generated inner triangles. To clearly see this, set the inside factor to 7 while keeping the edge factors 1.</p>
+						
+						<pre translate="no">    f.edge[0] = <ins>1</ins>;
+    f.edge[1] = <ins>1</ins>;
+    f.edge[2] = <ins>1</ins>;
+	f.inside = <ins>7</ins>;</pre>
+						
+						<figure>
+							<img src="subdividing-triangles/factors-7-inside-1-outside.png" width="190" height="190">
+							<figcaption>Factor 7 inside, but 1 outside.</figcaption>
+						</figure>
+						
+						<p>Effectively, the triangle is tessellated using the factor 7, after which the outer ring of triangles is discarded. Each edge is then subdivided using its own factor, after which a triangle strip is generated to stitch the edge and inner triangle together.</p>
+						
+						<p>It is also possible for the edge factors to be greater than the inside factor. For example, set the edge factors to 7 while leaving the inside factor at 1.</p>
+						
+						<pre translate="no">    f.edge[0] = <ins>7</ins>;
+    f.edge[1] = <ins>7</ins>;
+    f.edge[2] = <ins>7</ins>;
+	f.inside = <ins>1</ins>;</pre>
+						
+						<figure>
+							<img src="subdividing-triangles/factors-1-inside-7-outside.png" width="190" height="190">
+							<figcaption>Factor 1 inside, but 7 outside.</figcaption>
+						</figure>
+						
+						<p>In this case, the inside factor is forced to act as if it were 2, because otherwise no new triangles could be generated.</p>
+						
+						<aside>
+							<h3>What about using different factors for each edge?</h3>
+							<div>
+								<p>This is possible, but the shader compiler doesn't like it when you do this with hard-coded values. You might end up with with shader compiler errors when you try that with some values. We'll see why different factors are useful later.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Variable Factors</h3>
+						
+						<p>Hard-coded tessellation factors aren't very useful. So let's make it configurable, starting with a single uniform factor.</p>
+						
+						<pre translate="no"><ins>float _TessellationUniform;</ins>
+
+&hellip;
+
+TessellationFactors MyPatchConstantFunction (
+	InputPatch&lt;TessellationControlPoint, 3> patch
+) {
+	TessellationFactors f;
+    f.edge[0] = <ins>_TessellationUniform</ins>;
+    f.edge[1] = <ins>_TessellationUniform</ins>;
+    f.edge[2] = <ins>_TessellationUniform</ins>;
+	f.inside = <ins>_TessellationUniform</ins>;
+	return f;
+}</pre>
+						
+						<p>Add a property for this to our shader. Set its range to 1&ndash;64. No matter how high a factor we'd like to use, the hardware has a limit of 64 subdivisions per patch.</p>
+						
+						<pre translate="no">		<ins>_TessellationUniform ("Tessellation Uniform", Range(1, 64)) = 1</ins></pre>
+						
+						<p>To be able to edit this factor, add a <code>DoTessellation</code> method to <code>MyLightingShaderGUI</code> to display it in its own section.</p>
+						
+						<pre translate="no" class="csharp">	<ins>void DoTessellation () {</ins>
+		<ins>GUILayout.Label("Tessellation", EditorStyles.boldLabel);</ins>
+		<ins>EditorGUI.indentLevel += 2;</ins>
+		<ins>editor.ShaderProperty(</ins>
+			<ins>FindProperty("_TessellationUniform"),</ins>
+			<ins>MakeLabel("Uniform")</ins>
+		<ins>);</ins>
+		<ins>EditorGUI.indentLevel -= 2;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Invoke this method inside <code>OnGUI</code>, between the rendering mode and the wireframe section. Only do this if the required property exists.</p>
+						
+						<pre translate="no">	public override void OnGUI (
+		MaterialEditor editor, MaterialProperty[] properties
+	) {
+		&hellip;
+		DoRenderingMode();
+		<ins>if (target.HasProperty("_TessellationUniform")) {</ins>
+			<ins>DoTessellation();</ins>
+		<ins>}</ins>
+		if (target.HasProperty("_WireframeColor")) {
+			DoWireframe();
+		}
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img alt="inspector" src="subdividing-triangles/uniform-inspector.png" width="320" height="84"><br>
+							<video width="190" height="190" controls loop muted>
+								<source src="subdividing-triangles/uniform.mp4" type="video/mp4">
+							</video>
+							<figcaption>Configurable uniform tessellation.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Fractional Factors</h3>
+						
+						<p>Even though we use a float to set the tessellation factors, we always end up with a whole number of equivalent subdivisions per edge. That's because we're using the <em translate="no">integer</em> partitioning mode. While it is a good mode to see how tessellation works, it prevents us from smoothly transitioning between subdivision levels. Fortunately, there are also fractional partitioning modes. Let's change the mode to <em translate="no">fractional_odd</em>.</p>
+						
+						<pre translate="no">[UNITY_domain("tri")]
+[UNITY_outputcontrolpoints(3)]
+[UNITY_outputtopology("triangle_cw")]
+[UNITY_partitioning(<ins>"fractional_odd"</ins>)]
+[UNITY_patchconstantfunc("MyPatchConstantFunction")]
+TessellationControlPoint MyHullProgram &hellip;</pre>
+						
+						<figure>
+							<video width="190" height="190" controls loop muted>
+								<source src="subdividing-triangles/odd-partitioning.mp4" type="video/mp4">
+							</video>
+							<figcaption>Fractional odd partitioning.</figcaption>
+						</figure>
+						
+						<p>When using a whole odd factor, the <em translate="no">fractional_odd</em> partitioning mode produces the same results as the <em translate="no">integer</em> mode. But when transitioning between odd factors, extra edge subdivisions will be split off and grow, or shrink and merge. This means edges are no longer always split in segments of equal length. The advantage of this approach is that transitions between subdivision levels are now smooth.</p>
+						
+						<p>It is also possible to use the <code>fractional_even</code> mode. It works the same way, except that it is based on even factors.</p>
+						
+						<figure>
+							<video width="190" height="190" controls loop muted>
+								<source src="subdividing-triangles/even-partitioning.mp4" type="video/mp4">
+							</video>
+							<figcaption>Fractional even partitioning.</figcaption>
+						</figure>
+						
+						<p>The <em translate="no">fractional_odd</em> mode is often used because it can deal with a factor of 1, while the <em translate="no">fractional_even</em> mode is forced to use a minimum level of 2.</p>
+					</section>
+					
+					<a href="subdividing-triangles/subdividing-triangles.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Tessellation Heuristics</h2>
+					
+					<p>What are the best tessellation factors? That is the main question that you have to ask yourself when working with tessellation. There isn't a single objective answer to this question. In general, the best you can do is come up with some metric that acts as a heuristic that produces good results. In this tutorial, we'll support two simple approaches.</p>
+					
+					<section>
+						<h3>Edge Factors</h3>
+						
+						<p>Although tessellation factors have to be provided per edge, you don't have to base the factors on the edges directly. For example, you could determine factors per vertex, then average them per edge. Maybe the factors are stored in a texture. In any case, it's handy to have a separate function to determine the factor, given the two control points of an edge. Create such a function, simply returning the uniform value for now.</p>
+						
+						<pre translate="no"><ins>float TessellationEdgeFactor (</ins>
+	<ins>TessellationControlPoint cp0, TessellationControlPoint cp1</ins>
+<ins>) {</ins>
+	<ins>return _TessellationUniform;</ins>
+<ins>}</ins></pre>
+						
+						<p>Use this function for the edge factors inside <code>MyPatchConstantFunction</code>.</p>
+						
+						<pre translate="no">TessellationFactors MyPatchConstantFunction (
+	InputPatch&lt;TessellationControlPoint, 3> patch
+) {
+	TessellationFactors f;
+    f.edge[0] = <ins>TessellationEdgeFactor(patch[1], patch[2])</ins>;
+    f.edge[1] = <ins>TessellationEdgeFactor(patch[2], patch[0])</ins>;
+    f.edge[2] = <ins>TessellationEdgeFactor(patch[0], patch[1])</ins>;
+	f.inside = _TessellationUniform;
+	return f;
+}</pre>
+						
+						<p>For the inside factor, we'll simply use the average of the edge factors.</p>
+						
+						<pre translate="no">	f.inside = <ins>(f.edge[0] + f.edge[1] + f.edge[2]) * (1 / 3.0)</ins>;</pre>
+					</section>
+					
+					<section>
+						<h3>Edge Length</h3>
+						
+						<p>As the edge tessellation factors control how much we subdivide the edges of the original triangle, it makes sense to base this factor on the length of those edges. For example, we could specify a desired triangle edge length. If we end up with triangle edges longer than that, we should subdivide them by the desired length. Add a variable for that.</p>
+						
+						<pre translate="no">float _TessellationUniform;
+<ins>float _TessellationEdgeLength;</ins></pre>
+						
+						<p>Add a property as well. Let's use a range from 0.1 to 1, with a default of 0.5. This is in world space units.</p>
+						
+						<pre translate="no">		_TessellationUniform ("Tessellation Uniform", Range(1, 64)) = 1
+		<ins>_TessellationEdgeLength ("Tessellation Edge Length", Range(0.1, 1)) = 0.5</ins></pre>
+						
+						<p>We need a shader feature to make it possible to switch between uniform and edge-based tessellation. Add the required directive to all our three passes, using the <em translate="no">_TESSELLATION_EDGE</em> keyword.</p>
+						
+						<pre translate="no">			<ins>#pragma shader_feature _TESSELLATION_EDGE</ins></pre>
+						
+						<p>Next, add an enum type to <code>MyLightingShaderGUI</code> to represent the tessellation modes.</p>
+						
+						<pre translate="no" class="csharp">	<ins>enum TessellationMode {</ins>
+		<ins>Uniform, Edge</ins>
+	<ins>}</ins></pre>
+						
+						<p>Then adjust <code>DoTessellation</code> so it can switch between both modes, using an enum popup. It works similar to how <code>DoSmoothness</code> controls the smoothness modes. In this case, uniform is the default mode, requiring no keyword.</p>
+						
+						<pre translate="no" class="csharp">	void DoTessellation () {
+		GUILayout.Label("Tessellation", EditorStyles.boldLabel);
+		EditorGUI.indentLevel += 2;
+
+		<ins>TessellationMode mode = TessellationMode.Uniform;</ins>
+		<ins>if (IsKeywordEnabled("_TESSELLATION_EDGE")) {</ins>
+			<ins>mode = TessellationMode.Edge;</ins>
+		<ins>}</ins>
+		<ins>EditorGUI.BeginChangeCheck();</ins>
+		<ins>mode = (TessellationMode)EditorGUILayout.EnumPopup(</ins>
+			<ins>MakeLabel("Mode"), mode</ins>
+		<ins>);</ins>
+		<ins>if (EditorGUI.EndChangeCheck()) {</ins>
+			<ins>RecordAction("Tessellation Mode");</ins>
+			<ins>SetKeyword("_TESSELLATION_EDGE", mode == TessellationMode.Edge);</ins>
+		<ins>}</ins>
+
+		<ins>if (mode == TessellationMode.Uniform) {</ins>
+			editor.ShaderProperty(
+				FindProperty("_TessellationUniform"),
+				MakeLabel("Uniform")
+			);
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>editor.ShaderProperty(</ins>
+				<ins>FindProperty("_TessellationEdgeLength"),</ins>
+				<ins>MakeLabel("Edge Length")</ins>
+			<ins>);</ins>
+		<ins>}</ins>
+		EditorGUI.indentLevel -= 2;
+	}</pre>
+						
+						<figure>
+							<img src="tessellation-heuristics/edge-mode-inspector.png" width="320" height="60">
+							<figcaption>Using edge mode.</figcaption>
+						</figure>
+						
+						<p>Now we have to adjust <code>TessellationEdgeFactor</code>. When <em translate="no">_TESSELLATION_UNIFORM</em> is defined, determine the world positions of both points, then compute the distance between them. This is the edge length in world space. The edge factor is equal to this length divided by the desired length.</p>
+						
+						<pre translate="no">float TessellationEdgeFactor (
+	TessellationControlPoint cp0, TessellationControlPoint cp1
+) {
+	<ins>#if defined(_TESSELLATION_EDGE)</ins>
+		<ins>float3 p0 = mul(unity_ObjectToWorld, float4(cp0.vertex.xyz, 1)).xyz;</ins>
+		<ins>float3 p1 = mul(unity_ObjectToWorld, float4(cp1.vertex.xyz, 1)).xyz;</ins>
+		<ins>float edgeLength = distance(p0, p1);</ins>
+		<ins>return edgeLength / _TessellationEdgeLength;</ins>
+	<ins>#else</ins>
+		return _TessellationUniform;
+	<ins>#endif</ins>
+}</pre>
+						
+						<figure>
+							<img src="tessellation-heuristics/different-scales.png" width="280" height="180">
+							<figcaption>Different quad scales, same desired edge length.</figcaption>
+						</figure>
+						
+						<p>Because we're now using the edge length to determine an edge's tessellation factor, we can end up with different factors per edge. You can see this happen for the quad, as the diagonal edges are longer than the other edges. It also becomes obvious when using a nonuniform scale for the quad, stretching it in one dimension.</p>
+						
+						<figure>
+							<img src="tessellation-heuristics/stretched-quad.png" width="370" height="140">
+							<figcaption>Stretched quad.</figcaption>
+						</figure>
+						
+						<p>To make this work, it is essential that patches that share an edge both end up using the same tessellation factor for that edge. Otherwise, the generated vertices won't match along that edge, which can produce visible gaps in the mesh. In our case, we're using the same logic for all edges. The only difference can be the order of the control point arguments. Because of floating-point limitations, this could technically produce different factors, but the difference will be so minuscule that it would be unnoticeable.</p>
+					</section>
+					
+					<section>
+						<h3>Edge Length in Screen Space</h3>
+						
+						<p>While we can now control the triangle edge length in world space, this does not correspond to how they appear in screen space. The point of tessellation is to add more triangles when they are needed. So we don't want to subdivide triangles that already appear small. So let's use the screen-space edge length instead.</p>
+						
+						<p>First, change the range of our edge length property. Instead of world units, we're going to use pixels, so a range like 5&ndash;100 makes more sense.</p>
+						
+						<pre translate="no">		_TessellationEdgeLength ("Tessellation Edge Length", Range(<ins>5</ins>, <ins>100</ins>)) = <ins>50</ins></pre>
+						
+						<p>Replace the world-space calculations with their screen-space equivalents. To do this, the points have to be converted to clip space instead of world space. Then their distance is determined in 2D, using their X and Y coordinates, divided by their W coordinates to project them onto the screen.</p>
+						
+						<pre translate="no"><del>//		float3 p0 = mul(unity_ObjectToWorld, float4(cp0.vertex.xyz, 1)).xyz;</del>
+<del>//		float3 p1 = mul(unity_ObjectToWorld, float4(cp1.vertex.xyz, 1)).xyz;</del>
+<del>//		float edgeLength = distance(p0, p1);</del>
+
+		<ins>float4 p0 = UnityObjectToClipPos(cp0.vertex);</ins>
+		<ins>float4 p1 = UnityObjectToClipPos(cp1.vertex);</ins>
+		<ins>float edgeLength = distance(p0.xy / p0.w, p1.xy / p1.w);</ins>
+		return edgeLength / _TessellationEdgeLength;</pre>
+						
+						<p>Now we have a result in clip space, which is a uniform cube with size 2 that fits the display. To convert to pixels, we have to scale by the display size in pixels. Actually, because the display is rarely square, to get the most exact result, we should scale the X and Y coordinates separately, before determining the distance. But let's suffice with simply scaling by the screen height, to see how it looks.</p>
+						
+						<pre translate="no">	return edgeLength <ins>* _ScreenParams.y</ins> / _TessellationEdgeLength;</pre>
+						
+						<figure>
+							<img src="tessellation-heuristics/screen-space.png" width="240" height="230">
+							<figcaption>Same world size, different screen size.</figcaption>
+						</figure>
+						
+						<p>Our triangle edges now get subdivided based on how large they are rendered. Position, rotation, and scale all influence this, relative to the camera. As a result, the amount of tessellation changes when things are in motion.</p>
+						
+						<aside>
+							<h3>Shouldn't we use half the screen height?</h3>
+							<div>
+								<p>As the clip space cube's range is &minus;1&ndash;1, two units correspond to the full height&mdash;and width&mdash;of the display. This means we end up with double the actual size, overestimating how large our edges are. The result is that we're effectively targeting half the edge length than expected. At least, that's the case for perfectly vertical edges, because we're not using the exact screen dimensions anyway. The main point of using the screen height is to make the tessellation dependent on the display resolution. Whether the edge lengths match the exact value of our slider doesn't really matter.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Using the View Distance</h3>
+						
+						<p>A downside of purely relying on the visual length of edges is that edges that are long in world space can end up very small in screen space. This could lead to these edges not being subdivided at all, while other edges are subdivided a lot. This is undesirable when tessellation is used to add details up close or to generate complex silhouettes.</p>
+						
+						<p>A different approach is to go back to using the world-space edge length, but adjust the factor based on the view distance. The further away something is, the smaller it should appear visually, thus the less tessellation it needs. So divide the edge length by the distance between the edge and the camera. We can use the midpoint of the edge to determine this distance.</p>
+						
+						<pre translate="no"><del>//		float4 p0 = UnityObjectToClipPos(cp0.vertex);</del>
+<del>//		float4 p1 = UnityObjectToClipPos(cp1.vertex);</del>
+<del>//		float edgeLength = distance(p0.xy / p0.w, p1.xy / p1.w);</del>
+<del>//		return edgeLength * _ScreenParams.y / _TessellationEdgeLength;</del>
+
+		<ins>float3 p0 = mul(unity_ObjectToWorld, float4(cp0.vertex.xyz, 1)).xyz;</ins>
+		<ins>float3 p1 = mul(unity_ObjectToWorld, float4(cp1.vertex.xyz, 1)).xyz;</ins>
+		<ins>float edgeLength = distance(p0, p1);</ins>
+
+		<ins>float3 edgeCenter = (p0 + p1) * 0.5;</ins>
+		<ins>float viewDistance = distance(edgeCenter, _WorldSpaceCameraPos);</ins>
+
+		<ins>return edgeLength / (_TessellationEdgeLength * viewDistance);</ins></pre>
+						
+						<p>We can still keep tessellation dependent on the display size, by simply factoring the screen height into it and keeping our 5&ndash;100 slider range. Note that these values no longer directly correspond to display pixels. This is very obvious when you change the field of view of the camera, which doesn't affect tessellation at all. So this simple approach won't work well for games that use a variable field of view, for example to zoom in and out.</p>
+						
+						<pre translate="no">		return edgeLength <ins>* _ScreenParams.y</ins> /
+			(_TessellationEdgeLength * viewDistance);</pre>
+						
+						<figure>
+							<img src="tessellation-heuristics/distance-based.png" width="240" height="230">
+							<figcaption>Based on edge length and view distance.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Using the Correct Inside Factor</h3>
+						
+						<p>Although tessellation might appear to work fine at this point, there is something weird going on with the inside tessellation factor. At least, this is the case when using OpenGL Core. It isn't that noticeable when using a uniform quad, but it becomes obvious when using a deformed cube.</p>
+						
+						<figure>
+							<img src="tessellation-heuristics/cube-incorrect.png" width="230" height="150">
+							<figcaption>Cube with incorrect inner factors.</figcaption>
+						</figure>
+						
+						<p>In the case of a cube, the two triangles that make up a face each get a very different inside tessellation factor. The only difference between a quad and a cube face is the order in which the triangle vertices are defined. Unity's default cube doesn't use a symmetrical triangle layout, while the quad does. This suggests that the order of the edges apparently influences the inside tessellation factor. However, we simply take the average of the edge factors, so their order shouldn't matter. Something else must be going wrong.</p>
+						
+						<p>Let's do something seemingly nonsensical and explicitly invoke the <code>TessellationEdgeFactors</code> function again, when calculating the inside factor. Logically, this shouldn't make a difference because we just end up performing the exact same calculations twice. The shader compiler will surely optimize that.</p>
+						
+						<pre translate="no"><del>//    f.inside = (f.edge[0] + f.edge[1] + f.edge[2]) * (1 / 3.0);</del>
+	<ins>f.inside =</ins>
+		<ins>(TessellationEdgeFactor(patch[1], patch[2]) +</ins>
+		<ins>TessellationEdgeFactor(patch[2], patch[0]) +</ins>
+		<ins>TessellationEdgeFactor(patch[0], patch[1])) * (1 / 3.0);</ins></pre>
+						
+						<figure>
+							<img src="tessellation-heuristics/cube-correct.png" width="230" height="150">
+							<figcaption>Cube with correct inner factors.</figcaption>
+						</figure>
+						
+						<p>Apparently, it does make a difference, because both face triangles now end up using nearly the same inside factor. What's going on here?</p>
+						
+						<p>The patch constant function is invoked in parallel with the rest of the hull shader. But it can actually get more complicated than that. The shader compiler is able to parallelize the calculations of the edge factors as well. The code inside <code>MyPatchConstantFunction</code> is ripped apart and partially duplicated, replaced with a forked process that calculates the three edge factors in parallel. Once all three processes are done, their results are combined and used to calculate the inside factor.</p>
+						
+						<p>Whether the compiler decides to fork processes or not shouldn't affect the results of our shader, only its performance. Unfortunately, there is a bug in the generated code for OpenGL Core. Instead of using the three edge factors when calculating the inside factor, only the third edge factor gets used. The data is there, it's just accessing index 2 three times, instead of index 0, 1, and 2. So we always end up with an inside factor equal to the third edge factor.</p>
+						
+						<p>In the case of the patch constant function, the shader compiler prioritizes parallelization. It splits the processes as soon as possible, after which it can no longer optimize away the duplicate invocations of <code>TessellationEdgeFactor</code>. We end up with three processes that each compute the world positions of two points, the distances, and the final factors. Then there is also the process that calculates the inner factor, which now also has to compute the world positions of three points, plus all the distances and factors involved. As we're doing all that work for the inner factor now, it doesn't make sense to also do part of the same work separately for the edge factors.</p>
+						
+						<p>It turns out that if we calculate the world positions of the points first, followed by separate invocations of <code>TessellationEdgeFactor</code> for the edge and the inner factors, the shader compiler decides not to fork separate processes for each edge factor. We end up with a single process that computes it all. In this case, the shader compiler does optimize away the duplicate invocations of <code>TessellationEdgeFactor</code>.</p>
+						
+						<pre translate="no">float TessellationEdgeFactor (<ins>float3</ins> p0, <ins>float3</ins> p1) {
+	#if defined(_TESSELLATION_EDGE)
+<del>//		float3 p0 = mul(unity_ObjectToWorld, cp0.vertex).xyz;</del>
+<del>//		float3 p1 = mul(unity_ObjectToWorld, cp1.vertex).xyz;</del>
+		&hellip;
+	#else
+		return _TessellationUniform;
+	#endif
+}
+
+TessellationFactors MyPatchConstantFunction (
+	InputPatch&lt;TessellationControlPoint, 3> patch
+) {
+	<ins>float3 p0 = mul(unity_ObjectToWorld, patch[0].vertex).xyz;</ins>
+	<ins>float3 p1 = mul(unity_ObjectToWorld, patch[1].vertex).xyz;</ins>
+	<ins>float3 p2 = mul(unity_ObjectToWorld, patch[2].vertex).xyz;</ins>
+	TessellationFactors f;
+    f.edge[0] = TessellationEdgeFactor(<ins>p1</ins>, <ins>p2</ins>);
+    f.edge[1] = TessellationEdgeFactor(<ins>p2</ins>, <ins>p0</ins>);
+    f.edge[2] = TessellationEdgeFactor(<ins>p0</ins>, <ins>p1</ins>);
+	f.inside =
+		(TessellationEdgeFactor(<ins>p1</ins>, <ins>p2</ins>) +
+		TessellationEdgeFactor(<ins>p2</ins>, <ins>p0</ins>) +
+		TessellationEdgeFactor(<ins>p0</ins>, <ins>p1</ins>)) * (1 / 3.0);
+	return f;
+}</pre>
+						
+						
+						
+						
+						<p>At this point we can subdivide triangles, but we're not doing anything with that ability yet. The <a href="../surface-displacement/index.html">Surface Displacement</a> demonstrates how tessellation can be used to deform surfaces.</p>
+					</section>
+					
+					<a href="tessellation-heuristics/tessellatino-heuristics.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Tessellation.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

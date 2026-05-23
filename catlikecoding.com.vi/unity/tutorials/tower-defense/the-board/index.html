@@ -1,0 +1,1427 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/tower-defense/the-board/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/tower-defense/the-board/tutorial-image.jpg">
+		<meta property="og:title" content="The Board">
+		<meta property="og:description" content="A Unity Tower Defense tutorial about creating a tiled board with destinations, walls, and pathfinding.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>The Board</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/tower-defense/the-board/#article",
+				"headline": "The Board",
+				"alternativeHeadline": "Creating a Maze",
+				"datePublished": "2019-04-25",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Tower Defense tutorial about creating a tiled board with destinations, walls, and pathfinding.",
+				"image": "https://catlikecoding.com/unity/tutorials/tower-defense/the-board/tutorial-image.jpg",
+				"dependencies": "Unity 2018.3.0f2",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/tower-defense/", "name": "Tower Defense" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				Game: 1,
+				GameBoard: 1,
+				GameTile: 1,
+				GameTileContent: 1,
+				GameTileContentFactory: 1,
+				GameTileContentType: 1,
+				T: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Tower Defense</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>The Board</h1>
+					<p>Building a Maze</p>
+					<ul>
+						<li>Create a tiled board.</li>
+						<li>Find paths with breadth-first search.</li>
+						<li>Support empty, destination, and wall tiles.</li>
+						<li>Edit tile content in play mode.</li>
+						<li>Optionally show grid and path visualizations.</li>
+					</ul>
+				</header>
+				
+				<p>This is the first installment of a tutorial series about creating a simple <a href="../index.html">tower defense</a> game. It covers the creation of the game board, pathfinding, and placement of destinations and walls.</p>
+				
+				<p>This tutorial is made with Unity 2018.3.0f2.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A board ready for a tile-based tower-defense game.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>A Tower Defense Game</h2>
+					
+					<p>Tower defense is a game genre where the goal is to destroy hordes of enemies before they reach their destination. This is done by building towers that attack those enemies. There are many variations of the genre. We'll create a game with a tiled board. Enemies will move across the board toward their destination, while the player places obstacles to hinder them.</p>
+					
+					<p>This series assumes that you've gone through the <a href="../../object-management/index.html">Object Management</a> series first.</p>
+					
+					<section>
+						<h3>The Board</h3>
+						
+						<p>The game board is the most important part of the game, so we'll create it first in this tutorial. It's going to be a game object with a custom <code>GameBoard</code> component that can be initialized with a 2D size, for which we can use a <code>Vector2Int</code> value. The board should work with any size, but we'll decide which to use somewhere else, so we'll provide a public <code>Initialize</code> method for that.</p>
+						
+						<p>Besides that, we'll visualize the board with a single quad that represents the ground. We won't make the board object a quad itself, instead we'll give it a quad child object. When initializing, we make the ground's XY scale equal to the board's size. So each tile is one square unit.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class GameBoard : MonoBehaviour {</ins>
+	
+	<ins>[SerializeField]</ins>
+	<ins>Transform ground = default;</ins>
+	
+	<ins>Vector2Int size;</ins>
+
+	<ins>public void Initialize (Vector2Int size) {</ins>
+		<ins>this.size = size;</ins>
+		<ins>ground.localScale = new Vector3(size.x, size.y, 1f);</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Why explicitly set <code>ground</code> to its default value?</h3>
+							<div>
+								<p>The idea is that everything that we configure via the Unity editor is exposed via serialized private fields. These fields should only be changed via an inspector. Unfortunately, the Unity editor will always show a compiler warning complaining that the value is never assigned to. We can suppress this warning by explicitly assigning a default value to the field. We could assign <code>null</code>, but I make it explicit that we just use the default value, which doesn't represent a valid ground reference, so use <code>default</code> instead.</p>
+							</div>
+						</aside>
+						
+						<p>Create the board object in a new scene and give it the required quad child, with a material that makes it look like ground. As we're creating a simple prototype-like game, a uniform green material will do. Also rotate the quad 90&deg; around its X axis so it lies flat in the XZ plane.</p>
+						
+						<figure>
+							<img src="a-tower-defense-game/board-inspector.png" width="320" height="178" alt="board">
+							<img src="a-tower-defense-game/ground-inspector.png" width="320" height="226" alt="ground"><br>
+							<img src="a-tower-defense-game/game-hierarchy.png" width="225" height="84" alt="hierarchy">
+							<figcaption>Game board.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why not put the game in the XY plane?</h3>
+							<div>
+								<p>Although the game plays in 2D, we're going to render it in 3D, with 3D enemies and a camera that could be moved around at some point. The XZ plane is more convenient for that and matches the default skybox orientation used for environmental lighting.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>The Game</h3>
+						
+						<p>Next, create a <code>Game</code> component that is in charge of the entire game. At this point that means initializing the board. We'll simply make the size configurable via its inspector and have it initialize the board when it awakens. Let's use 11&times;11 as the default size.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class Game : MonoBehaviour {</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>Vector2Int boardSize = new Vector2Int(11, 11);</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>GameBoard board = default;</ins>
+
+	<ins>void Awake () {</ins>
+		<ins>board.Initialize(boardSize);</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Board sizes can only be positive, and it doesn't make much sense to have a board with only a single tile. So let's enforce 2&times;2 as the minimum. We can do that by adding an <code>OnValidate</code> method that enforces the minimum.</p>
+						
+						<pre translate="no">	<ins>void OnValidate () {</ins>
+		<ins>if (boardSize.x &lt; 2) {</ins>
+			<ins>boardSize.x = 2;</ins>
+		<ins>}</ins>
+		<ins>if (boardSize.y &lt; 2) {</ins>
+			<ins>boardSize.y = 2;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<aside>
+							<h3>When does <code>Onvalidate</code> get invoked?</h3>
+							<div>
+								<p>If it exists, the Unity editor invokes it on components after they might have changed. This includes when they're added to a game object, after a scene is loaded, after a recompilation, after an edit via the inspector, after an undo/redo, and after a component reset.</p>
+								
+								<p><code>OnValidate</code> is the only place in our code where we should ever assign values to component configuration fields.</p>
+							</div>
+						</aside>
+												
+						<figure>
+							<img src="a-tower-defense-game/game.png" width="320" height="154">
+							<figcaption>The game object.</figcaption>
+						</figure>
+						
+						<p>Now we get a properly-sized board after entering play mode. While playing, position the camera so the entire board is clearly visible, copy its transformation component, exit play mode, and paste the component values. For an 11&times;11 board at the origin, you get a nice top-down view by placing the camera at (0,10,0) and rotating it 90&deg; around the X axis. We'll keep the camera at this fixed orientation, but might make it move in the future.</p>
+						
+						<figure>
+							<img src="a-tower-defense-game/camera-above-board.png" width="230" height="230">
+							<figcaption>Camera above board.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>How do you copy and paste component values?</h3>
+							<div>
+								<p>Via the dropdown menu accessible via the gear button at the top right corner of the component.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Tile Prefab</h3>
+						
+						<p>The board is made up of square tiles. Enemies will be able to walk from tile to tile, across edges but not diagonally. Movement will always be toward the nearest destination. Let's visualize the movement direction per tile, with an arrow. <a href="a-tower-defense-game/arrow.png">Here</a> is an arrow texture for that.</p>
+						
+						<figure>
+							<img src="a-tower-defense-game/arrow.png" width="128" height="128" style="background:black">
+							<figcaption>Arrow, on black background.</figcaption>
+						</figure>
+						
+						<p>Put the arrow texture in your project and enable its <em translate="no">Alpha As Transparency</em> option. Then create a material for the arrow, which can be a default material set to cutout mode, with the arrow as its main texture.</p>
+						
+						<figure>
+							<img src="a-tower-defense-game/arrow-material.png" width="320" height="130">
+							<figcaption>Arrow material.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why use cutout rendering mode?</h3>
+							<div>
+								<p>That makes it possible for the arrow to be shadowed when using Unity's default render pipeline.</p>
+							</div>
+						</aside>
+						
+						<p>We'll use a game object to represent each tile in the game. Each will have its own quad with the arrow material, just like the board has its ground quad. We'll also give tiles a custom <code>GameTile</code> component, with a reference to their arrow.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class GameTile : MonoBehaviour {</ins>
+	
+	<ins>[SerializeField]</ins>
+	<ins>Transform arrow = default;</ins>
+<ins>}</ins></pre>
+						
+						 <p>Construct a tile object and turn it into a prefab. The tiles will be aligned with the ground, so move the arrow up a bit to prevent depth issues during rendering. Also, scale the arrow down a bit so there's some space between adjacent arrows. An Y offset of 0.001 and a uniform scale of 0.8 will do.</p>
+						
+						<figure>
+							<img src="a-tower-defense-game/tile-inspector.png" width="320" height="178" alt="tile">
+							<img src="a-tower-defense-game/arrow-inspector.png" width="320" height="208" alt="arrow"><br>
+							<img src="a-tower-defense-game/prefab-hierarchy.png" width="225" height="60" alt="prefab">
+							<figcaption>Tile prefab.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Where is the tile prefab hierarchy?</h3>
+							<div>
+								<p>You can open prefab-editing mode by double-clicking the prefab asset or by selecting the prefab and clicking the <em translate="no">Open Prefab</em> button in its inspector. You can exit the prefab-editing mode via the arrow button at the top left of its hierarchy header.</p>
+							</div>
+						</aside>
+						
+						<p>Note that the tiles themselves don't really need to be game objects. They're purely for keeping track of the board state. We could've used the same approach as for behavior in the <a href="../../object-management/index.html">Object Management</a> series. But game objects work just fine for the early stages of simple or prototype games. We might change this in the future.</p>
+						
+					</section>
+					
+					<section>
+						<h3>Laying Tiles</h3>
+						
+						<p>To create tiles <code>GameBoard</code> needs to have a reference to the tile prefab.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>GameTile tilePrefab = default;</ins></pre>
+						
+						<figure>
+							<img src="a-tower-defense-game/tile-prefab-reference.png" width="320" height="76">
+							<figcaption>Linked to tile prefab.</figcaption>
+						</figure>
+						
+						<p>Then it can instantiate them in <code>Initialize</code> with a double loop over the two dimensions of the grid. Although the size is expressed in X and Y, we place the tiles in the XZ plane, just like the board itself. As the board is centered on the origin, we have to subtract the relevant size minus one, divided by two, from the tile position's components. Note that this must be a floating-point division, otherwise it won't work for even sizes.</p>
+						
+						<pre translate="no">	public void Initialize (Vector2Int size) {
+		this.size = size;
+		ground.localScale = new Vector3(size.x, size.y, 1f);
+
+		<ins>Vector2 offset = new Vector2(</ins>
+			<ins>(size.x - 1) * 0.5f, (size.y - 1) * 0.5f</ins>
+		<ins>);</ins>
+		<ins>for (int y = 0; y &lt; size.y; y++) {</ins>
+			<ins>for (int x = 0; x &lt; size.x; x++) {</ins>
+				<ins>GameTile tile = Instantiate(tilePrefab);</ins>
+				<ins>tile.transform.SetParent(transform, false);</ins>
+				<ins>tile.transform.localPosition = new Vector3(</ins>
+					<ins>x - offset.x, 0f, y - offset.y</ins>
+				<ins>);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<img src="a-tower-defense-game/tiles.png" width="230" height="230">
+							<figcaption>Instantiated tiles.</figcaption>
+						</figure>
+						
+						<p>We'll need to access the tiles later, so keep track of them with an array. We don't need to use a list because we won't change the board size once initialized.
+						
+						<pre translate="no">	<ins>GameTile[] tiles;</ins>
+
+	public void Initialize (Vector2Int size) {
+		&hellip;
+		<ins>tiles = new GameTile[size.x * size.y];</ins>
+		for (int <ins>i = 0,</ins> y = 0; y &lt; size.y; y++) {
+			for (int x = 0; x &lt; size.x; x++<ins>, i++</ins>) {
+				GameTile tile = <ins>tiles[i] =</ins> Instantiate(tilePrefab);
+				&hellip;
+			}
+		}
+	}</pre>
+						
+						<aside>
+							<h3>How does that assignment work?</h3>
+							<div>
+								<p>It is a chained assignment. In this case, it means that we assign a reference to the instantiated tile to both the array element and the local variable. It does the exact same thing as the below code.</p>
+								
+								<pre translate="no">GameTile t = Instantiate(tilePrefab);
+tiles[i] = t;
+GameTile tile = t;</pre>
+							</div>
+						</aside>
+						
+					</section>
+				</section>
+				
+				<section>
+					<h2>Pathfinding</h2>
+					
+					<p>At this point each tile has an arrow, but they're all pointing in the positive Z direction, which we'll interpret as north. The next step is to figure out the correct direction per tile. We do that by finding the paths that the enemies will follow to get to their destination.</p>
+					
+					<section>
+						<h3>Tile Neighbors</h3>
+						
+						<p>Paths go from tile to tile, in either north, east, south, or west direction. To make searching easy, have <code>GameTile</code> keep track of references to its four neighbors.</p>
+						
+						<pre translate="no">	<ins>GameTile north, east, south, west;</ins></pre>
+						
+						<p>The neighbor relationship is symmetrical. If a tile is the eastern neighbor of a second tile, then the second tile is the western neighbor of the first tile. Add a public static method to <code>GameTile</code> to establish that relationship between two tiles.</p>
+						
+						<pre translate="no">	<ins>public static void MakeEastWestNeighbors (GameTile east, GameTile west) {</ins>
+		<ins>west.east = east;</ins>
+		<ins>east.west = west;</ins>
+	<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Why make it a static method?</h3>
+							<div>
+								<p>We could make it an instance method with a single parameter as well, in which case we could invoke it as <code>eastTile.MakeEastWestNeighbors(westTile)</code> or something like that. But in cases where it isn't clear which of the tiles the method should be invoked on a static method is a good approach. Examples are the <code>Distance</code> and <code>Dot</code> methods of <code>Vector3</code>.</p>
+							</div>
+						</aside>
+						
+						<p>Once that relationship has been established it should never be changed. If that does happen we made a programming mistake. We can verify this by checking whether both references are <code>null</code> before assigning them and log an error if that's not the case. We can use the <code>Debug.Assert</code> method for that.</p>
+						
+						<pre translate="no">	public static void MakeEastWestNeighbors (GameTile east, GameTile west) {
+		<ins>Debug.Assert(</ins>
+			<ins>west.east == null && east.west == null, "Redefined neighbors!"</ins>
+		<ins>);</ins>
+		west.east = east;
+		east.west = west;
+	}</pre>
+						
+						<aside>
+							<h3>What does <code>Debug.Assert</code> do?</h3>
+							<div>
+								<p>If the first argument is <code>false</code>, it logs an assertion error, using the second argument message if provided. This invocation is only included in development builds, not in release builds. So it's a good way to add checks during development that won't affect the final release.</p>
+							</div>
+						</aside>
+						
+						<p>Add a similar method to create a north-south neighbor relationship.</p>
+						
+						<pre translate="no">	<ins>public static void MakeNorthSouthNeighbors (GameTile north, GameTile south) {</ins>
+		<ins>Debug.Assert(</ins>
+			<ins>south.north == null && north.south == null, "Redefined neighbors!"</ins>
+		<ins>);</ins>
+		<ins>south.north = north;</ins>
+		<ins>north.south = south;</ins>
+	<ins>}</ins></pre>
+						
+						<p>We can establish these relationships when the tiles are created in <code>GameBoard.Initialize</code>. If the X coordinate is larger than zero then we can make an east-west relationship between the current tile and the previous one. If the Y coordinate is larger than zero then we can make a north-south relationship between the current tile and the one from a row earlier.</p>
+						
+						<pre translate="no">		for (int i = 0, y = 0; y &lt; size.y; y++) {
+			for (int x = 0; x &lt; size.x; x++, i++) {
+				&hellip;
+
+				<ins>if (x > 0) {</ins>
+					<ins>GameTile.MakeEastWestNeighbors(tile, tiles[i - 1]);</ins>
+				<ins>}</ins>
+				<ins>if (y > 0) {</ins>
+					<ins>GameTile.MakeNorthSouthNeighbors(tile, tiles[i - size.x]);</ins>
+				<ins>}</ins>
+			}
+		}</pre>
+						
+						<p>Note that the tiles on the edge of the board have fewer than four neighbors. Either one or two or their neighbor references remain <code>null</code>.</p> 
+					</section>
+					
+					<section>
+						<h3>Distance and Direction</h3>
+						
+						<p>We're not going to have all enemies search for a path all the time. We only have to do it once per tile. Then enemies can then query the tile they're in for where to go next. We store that information in <code>GameTile</code> by adding a reference to the next tile on the path. Besides that, we'll also store the distance to the destination, expressed as the amount of tiles that still have to be entered before reaching the destination. That's not useful information for enemies, but we'll use it when finding the shortest paths.</p>
+						
+						<pre translate="no">	GameTile north, east, south, west<ins>, nextOnPath</ins>;
+
+	<ins>int distance;</ins></pre>
+						
+						<p>Each time we decide to find the paths, we must initialize the path data. Before a path is found, there isn't a next tile yet and the distance can be considered infinite. We can represent that with the largest possible integer value, <code>int.MaxValue</code>. Add a public <code>ClearPath</code> method to reset <code>GameTile</code> to this state.</p>
+						
+						<pre translate="no">	<ins>public void ClearPath () {</ins>
+		<ins>distance = int.MaxValue;</ins>
+		<ins>nextOnPath = null;</ins>
+	<ins>}</ins></pre>
+						
+						<p>It is only possible to find any paths if there is a destination. That means that a tile has to become the destination. Such a tile has a distance of zero and there is not next tile as the path ends here. Add a public method to turn the tile into a destination.</p>
+						
+						<pre translate="no">	<ins>public void BecomeDestination () {</ins>
+		<ins>distance = 0;</ins>
+		<ins>nextOnPath = null;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Eventually, all tiles should have a path, so their distance is no longer equal to <code>int.MaxValue</code>. Add a convenient getter property to check whether a tile currently has a path.</p>
+						
+						<pre translate="no">	<ins>public bool HasPath => distance != int.MaxValue;</ins></pre>
+						
+						<aside>
+							<h3>How does that property work?</h3>
+							<div>
+								<p>It's a shorthand to define a getter property that contains only a single expression. It does the exact the same thing as the below code.</p>
+								
+								<pre translate="no">	public bool HasPath {
+		get {
+			return distance != int.MaxValue;
+		}
+	}</pre>
+								
+								<p>The <code>=></code> arrow operator can also be used for the getter and setter parts of a property separately, for method bodies, constructors, and in some other places.</p>
+							</div>
+						</aside>
+						
+					</section>
+					
+					<section>
+						<h3>Growing the Path</h3>
+						
+						<p>If we have a tile with a path, we can let it grow the path toward one of its neighbors. Initially the only tile with a path is the destination, so we start at distance zero and increase it from there, going in the opposite direction that the enemies will move. So all direct neighbors of the destination will have distance 1, and all other neighbors of those tiles will have distance 2, and so on.</p>
+						
+						<p>Give <code>GameTile</code> a private method to grow the path to one of its neighbors, defined via a parameter. The neighbor's distance becomes one longer than its own, and the neighbor's path points toward this tile. The method should only be invoked on tiles that already have a path, so assert that.</p>
+						
+						<pre translate="no">	<ins>void GrowPathTo (GameTile neighbor) {</ins>
+		<ins>Debug.Assert(HasPath, "No path!");</ins>
+		<ins>neighbor.distance = distance + 1;</ins>
+		<ins>neighbor.nextOnPath = this;</ins>
+	<ins>}</ins></pre>
+						
+						<p>The idea is that we invoke this method once for each of the four neighbors of the tile. As some of those references will be <code>null</code>, check for that and abort if so. Also, if a neighbor already has a path then we have nothing to do and can abort as well.</p>
+						
+						<pre translate="no">	void GrowPathTo (GameTile neighbor) {
+		Debug.Assert(HasPath, "No path!");
+		<ins>if (neighbor == null || neighbor.HasPath) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+		neighbor.distance = distance + 1;
+		neighbor.nextOnPath = this;
+	}</pre>
+						
+						<p>How <code>GameTile</code> keeps track of its neighbors is unknown to other code. That's why <code>GrowPathTo</code> is private. Instead, we'll add public methods that instruct a tile to grow its path in a specific direction, indirectly invoking <code>GrowPathTo</code>. But the code that takes care of searching the entire board must keep track of which tiles have been visited. So have it return the neighbor, or <code>null</code> if we aborted.</p>
+						
+						<pre translate="no">	<ins>GameTile</ins> GrowPathTo (GameTile neighbor) {
+		if (!HasPath || neighbor == null || neighbor.HasPath) {
+			return <ins>null</ins>;
+		}
+		neighbor.distance = distance + 1;
+		neighbor.nextOnPath = this;
+		<ins>return neighbor;</ins>
+	}</pre>
+						
+						<p>Now add the methods to grow the path in specific directions.</p>
+						
+						<pre translate="no">	<ins>public GameTile GrowPathNorth () => GrowPathTo(north);</ins>
+
+	<ins>public GameTile GrowPathEast () => GrowPathTo(east);</ins>
+
+	<ins>public GameTile GrowPathSouth () => GrowPathTo(south);</ins>
+
+	<ins>public GameTile GrowPathWest () => GrowPathTo(west);</ins></pre>
+						
+					</section>
+					
+					<section>
+						<h3>Breadth-First Search</h3>
+						
+						<p>It is the responsibility of <code>GameBoard</code> to make sure all its tiles contain valid path data. We'll implement this by performing a breadth-first search. We start with a destination tile, then grow the path to its neighbors, then to the neighbors of those tiles, and so on. Each step the distance increases by one, and paths are never grown toward tiles that already have a path. This guarantees that all tiles end up pointing along the shortest path to the destination.</p>
+						
+						<aside>
+							<h3>What about A<sup>*</sup> pathfinding?</h3>
+							<div>
+								<p>A<sup>*</sup> is an evolution of breadth-first search. It is useful when you're searching for a single shortest path. But we need all shortest paths, so A<sup>*</sup> provides no benefit. See the <a href="../../index.html">Hex Map</a> series for examples of both breadth-first search and A<sup>*</sup> applied to a hex grid, with animations.</p>
+							</div>
+						</aside>
+						
+						<p>To perform the search, we have to keep track of the tiles that we've added to the path, but haven't grown the path out from yet. That collection of tiles is often known as the search frontier. It is important that tiles are processed in the same order that they're added to the frontier, so let's use a <code>Queue</code>. We'll end up searching more than once later, so define it as a field in <code>GameBoard</code>.</p>
+						
+						<pre translate="no">using UnityEngine;
+<ins>using System.Collections.Generic;</ins>
+
+public class GameBoard : MonoBehaviour {
+
+	&hellip;
+
+	<ins>Queue&lt;GameTile> searchFrontier = new Queue&lt;GameTile>();</ins>
+
+	&hellip;
+}</pre>
+						
+						<p>To always keep the board state valid, we should find the paths at the end of <code>Initialize</code>, but put the code in a separate <code>FindPaths</code> method. The first step is to clear the path of all tiles, then make one tile the destination and add it to the frontier. Let's just pick the first tile. As <code>tiles</code> is an array we can use a <code>foreach</code> loop without worrying about memory pollution. If we switch to a list later, we should also replace the <code>foreach</code> loops with <code>for</code> loops.</p>
+						
+						<pre translate="no">	public void Initialize (Vector2Int size) {
+		&hellip;
+
+		<ins>FindPaths();</ins>
+	}
+
+	<ins>void FindPaths () {</ins>
+		<ins>foreach (GameTile tile in tiles) {</ins>
+			<ins>tile.ClearPath();</ins>
+		<ins>}</ins>
+		<ins>tiles[0].BecomeDestination();</ins>
+		<ins>searchFrontier.Enqueue(tiles[0]);</ins>
+	<ins>}</ins></pre>
+						
+						<p>The next step is to take the single tile out of the frontier and grow the path to its neighbors, adding them all to the frontier. First go north, then east, then south, and finally west.</p>
+						
+						<pre translate="no">	public void FindPaths () {
+		foreach (GameTile tile in tiles) {
+			tile.ClearPath();
+		}
+		tiles[0].BecomeDestination();
+		searchFrontier.Enqueue(tiles[0]);
+
+		<ins>GameTile tile = searchFrontier.Dequeue();</ins>
+		<ins>searchFrontier.Enqueue(tile.GrowPathNorth());</ins>
+		<ins>searchFrontier.Enqueue(tile.GrowPathEast());</ins>
+		<ins>searchFrontier.Enqueue(tile.GrowPathSouth());</ins>
+		<ins>searchFrontier.Enqueue(tile.GrowPathWest());</ins>
+	}</pre>
+						
+						<p>Repeat this step as long as there are tiles in the frontier.</p>
+						
+						<pre translate="no">		<ins>while (searchFrontier.Count > 0) {</ins>
+			GameTile tile = searchFrontier.Dequeue();
+			searchFrontier.Enqueue(tile.GrowPathNorth());
+			searchFrontier.Enqueue(tile.GrowPathEast());
+			searchFrontier.Enqueue(tile.GrowPathSouth());
+			searchFrontier.Enqueue(tile.GrowPathWest());
+		<ins>}</ins></pre>
+						
+						<p>Growing the path doesn't always yield a new tile. We could check whether we got <code>null</code> before enqueueing, but we can also delay the <code>null</code> check until after we dequeue.</p>
+						
+						<pre translate="no">			GameTile tile = searchFrontier.Dequeue();
+			<ins>if (tile != null) {</ins>
+				searchFrontier.Enqueue(tile.GrowPathNorth());
+				searchFrontier.Enqueue(tile.GrowPathEast());
+				searchFrontier.Enqueue(tile.GrowPathSouth());
+				searchFrontier.Enqueue(tile.GrowPathWest());
+			<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Showing the Paths</h3>
+						
+						<p>We now end up with a board containing valid paths, but we don't see this yet. We have to adjust the arrows so they point along the path through their tile. We can do that by rotating them. As these rotations are always the same, add static <code>Quaternion</code> fields to <code>GameTile</code>, one per direction.
+						
+						<pre translate="no">	<ins>static Quaternion</ins>
+		<ins>northRotation = Quaternion.Euler(90f, 0f, 0f),</ins>
+		<ins>eastRotation = Quaternion.Euler(90f, 90f, 0f),</ins>
+		<ins>southRotation = Quaternion.Euler(90f, 180f, 0f),</ins>
+		<ins>westRotation = Quaternion.Euler(90f, 270f, 0f);</ins></pre>
+						
+						<p>Add a public <code>ShowPath</code> method as well. If the distance is zero then the tile is a destination and it has nowhere to point to, so deactivate its arrow. Otherwise, active the arrow and set its rotation. The correct rotation can be found by comparing <code>nextOnPath</code> with its neighbors.</p>
+						
+						<pre translate="no">	<ins>public void ShowPath () {</ins>
+		<ins>if (distance == 0) {</ins>
+			<ins>arrow.gameObject.SetActive(false);</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+		<ins>arrow.gameObject.SetActive(true);</ins>
+		<ins>arrow.localRotation =</ins>
+			<ins>nextOnPath == north ? northRotation :</ins>
+			<ins>nextOnPath == east ? eastRotation :</ins>
+			<ins>nextOnPath == south ? southRotation :</ins>
+			<ins>westRotation;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Invoke this method on all tiles at the end of <code>GameBoard.FindPaths</code>.</p>
+						
+						<pre translate="no">	public void FindPaths () {
+		&hellip;
+
+		<ins>foreach (GameTile tile in tiles) {</ins>
+			<ins>tile.ShowPath();</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<img src="pathfinding/found-paths.png" width="230" height="230">
+							<figcaption>Found paths.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why not rotate the arrow directly in <code>GrowPathTo</code>?</h3>
+							<div>
+								<p>To keep search logic and visualization separate. Later on, we'll make the visualization optional. If arrows aren't shown, then we don't need to rotate them every time we invoke <code>FindPaths</code>.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Alternating Search Priority</h3>
+						
+						<p>It turns out that when the southwest corner tile is the destination all paths go straight west until they reach the edge of the board and then go south. This is valid, as indeed there are no shorter paths to the destination. That's because there is no diagonal movement. However, there are many other shortest paths possible, which might look better.</p>
+						
+						<p>To get a better idea of why these paths were found, move the destination to the center of the map. That's simply the tile in the middle of the array, when using an odd board size.</p>
+						
+						<pre translate="no">		tiles[<ins>tiles.Length / 2</ins>].BecomeDestination();
+		searchFrontier.Enqueue(tiles[<ins>tiles.Length / 2</ins>]);</pre>
+						
+						<figure>
+							<img src="pathfinding/center-destination.png" width="230" height="230">
+							<figcaption>Center destination.</figcaption>
+						</figure>
+						
+						<p>The result makes sense if you keep in mind how the search works. As we add neighbors in north-east-south-west order, north has the highest priority. As we search backwards, that means south is the last traveled direction. That's why there are only a few arrows pointing south, and so many pointing east.</p>
+						
+						<p>We can change the result by adjusting the direction priorities. Let's swap east and south. That should result in north-south and east-west symmetry.</p>
+						
+						<pre translate="no">				searchFrontier.Enqueue(tile.GrowPathNorth());
+				searchFrontier.Enqueue(tile.<ins>GrowPathSouth</ins>());
+				searchFrontier.Enqueue(tile.<ins>GrowPathEast</ins>());
+				searchFrontier.Enqueue(tile.GrowPathWest())</pre>
+						
+						<figure>
+							<img src="pathfinding/nsew-priorities.png" width="230" height="230">
+							<figcaption>North-south-east-west search order.</figcaption>
+						</figure>
+						
+						<p>That looks better, but it would be best if the paths alternate direction to approximate diagonal movement where it appears natural. We can do that by reversing the search priorities of adjacent tiles, in a checkerboard pattern.</p>
+						
+						<p>Instead of figuring out which kind of tile we have while searching, we'll add a public property to <code>GameTile</code> to indicate whether it is an alternative tile.</p>
+						
+						<pre translate="no">	<ins>public bool IsAlternative { get; set; }</ins></pre>
+						
+						<p>Set this property in <code>GameBoard.Initialize</code>. First, mark tiles as alternative if their X coordinate is an even number.</p>
+						
+						<pre translate="no">		for (int i = 0, y = 0; y &lt; size.y; y++) {
+			for (int x = 0; x &lt; size.x; x++, i++) {
+				&hellip;
+
+				<ins>tile.IsAlternative = (x &amp; 1) == 0;</ins>
+			}
+		}</pre>
+						
+						<aside>
+							<h3>What does <code>(x &amp; 1) == 0</code> do?</h3>
+							<div>
+								<p>A single ampersand is the binary AND operator. It performs the logical AND operation on each individual pair of bits of its operands. So both bits of a pair need to be 1 for the resulting bit to be 1. For example, 10101010 and 00001111 produce 00001010.</p>
+								
+								<p>Internally, numbers are binary. They only use 0s and 1s. In binary, the sequence 1, 2, 3, 4 is written as 1, 10, 11, 100. As you can see, the least significant digit of even numbers is zero.</p>
+								
+								<p>We use the binary AND as a mask, ignoring everything except the least significant bit. If the result is zero, then we have an even number.</p>
+							</div>
+						</aside>
+						
+						<p>Second, negate the result if their Y coordinate is even. That produces a checkerboard pattern.</p>
+						
+						<pre translate="no">				tile.IsAlternative = (x &amp; 1) == 0;
+				<ins>if ((y &amp; 1) == 0) {</ins>
+					<ins>tile.IsAlternative = !tile.IsAlternative;</ins>
+				<ins>}</ins></pre>
+						
+						<p>In <code>FindPaths</code>, keep the same search order for alternative tiles, but reverse it for all other tiles. That will make paths home in on diagonals and zigzag along them.</p>
+						
+						<pre translate="no">			if (tile != null) {
+				<ins>if (tile.IsAlternative) {</ins>
+					searchFrontier.Enqueue(tile.GrowPathNorth());
+					searchFrontier.Enqueue(tile.GrowPathSouth());
+					searchFrontier.Enqueue(tile.GrowPathEast());
+					searchFrontier.Enqueue(tile.GrowPathWest());
+				<ins>}</ins>
+				<ins>else {</ins>
+					<ins>searchFrontier.Enqueue(tile.GrowPathWest());</ins>
+					<ins>searchFrontier.Enqueue(tile.GrowPathEast());</ins>
+					<ins>searchFrontier.Enqueue(tile.GrowPathSouth());</ins>
+					<ins>searchFrontier.Enqueue(tile.GrowPathNorth());</ins>
+				<ins>}</ins>
+			}</pre>
+						
+						<figure>
+							<img src="pathfinding/alternating-search-order.png" width="230" height="230">
+							<figcaption>Alternating search order.</figcaption>
+						</figure>
+						
+					</section>
+				</section>
+				
+				<section>
+					<h2>Changing Tiles</h2>
+					
+					<p>At this point all the tiles are empty. One tile is used as the destination, but besides not having a visible arrow it look the same as all other tiles. We're going to make it possible to change the tiles, by putting things in them.</p>
+					
+					<section>
+						<h3>Tile Content</h3>
+						
+						<p>The tile objects themselves are just a means to keep track of tile information. We don't change these objects directly. Instead, we'll introduce separate content and place that on the board. Right now we only distinguish between tiles that are empty and the destination tile. Create a <code>GameTileContentType</code> enum type to identify these cases.</p>
+						
+						<pre translate="no"><ins>public enum GameTileContentType {</ins>
+	<ins>Empty, Destination</ins>
+<ins>}</ins></pre>
+						
+						<p>Next, create a <code>GameTileContent</code> component type that allows its content type to be set via its inspector and is accessible via a public getter property.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class GameTileContent : MonoBehaviour {</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>GameTileContentType type = default;</ins>
+
+	<ins>public GameTileContentType Type => type;</ins>
+<ins>}</ins></pre>
+						
+						<p>Then create prefabs for the two content types, each with a <code>GameTileContent</code> component with their type set correctly. Let's use a blue flattened cube to visualize destination tiles. Because it's almost flat it doesn't need to have a collider. Use an otherwise empty game object for the empty content prefab.</p>
+						
+						<figure>
+							<img src="changing-tiles/destination-prefab.png" width="320" height="262" alt="destination">
+							<img src="changing-tiles/empty-prefab.png" width="320" height="176" alt="empty">
+							<figcaption>Destination and empty prefabs.</figcaption>
+						</figure>
+						
+						<p>We'll give empty tiles a content object because then all tiles will always have content, which means that we won't have to check for <code>null</code> content references.</p>
+					</section>
+					
+					<section>
+						<h3>Content Factory</h3>
+						
+						<p>We'll make content editable, so we'll also create a factory for it, using the same approach that we used in the <a href="../../object-management/index.html">Object Management</a> series. This means that <code>GameTileContent</code> should keep track of its origin factory, which should only be set once, and send itself back to the factory in a <code>Recycle</code> method.</p>
+						
+						<pre translate="no">	<ins>GameTileContentFactory originFactory;</ins>
+
+	&hellip;
+
+	<ins>public GameTileContentFactory OriginFactory {</ins>
+		<ins>get => originFactory;</ins>
+		<ins>set {</ins>
+			<ins>Debug.Assert(originFactory == null, "Redefined origin factory!");</ins>
+			<ins>originFactory = value;</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	<ins>public void Recycle () {</ins>
+		<ins>originFactory.Reclaim(this);</ins>
+	<ins>}</ins></pre>
+						
+						<p>That assumes the existence of a <code>GameTileContentFactory</code>, so create a scriptable object type for it with the required <code>Recycle</code> method. We won't actually bother with a fully functional factory that recycles content at this point, so just have it destroy the content. Object reuse can be added to the factory later without changing any other code.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+<ins>using UnityEngine.SceneManagement;</ins>
+
+<ins>[CreateAssetMenu]</ins>
+<ins>public class GameTileContentFactory : ScriptableObject {</ins>
+
+	<ins>public void Reclaim (GameTileContent content) {</ins>
+		<ins>Debug.Assert(content.OriginFactory == this, "Wrong factory reclaimed!");</ins>
+		<ins>Destroy(content.gameObject);</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Give the factory a private <code>Get</code> method with a prefab parameter. Again, we'll skip object reuse. It instantiates the prefab, sets its origin factory, moves it to the factory scene, and returns it.</p>
+						
+						<pre translate="no">	<ins>GameTileContent Get (GameTileContent prefab) {</ins>
+		<ins>GameTileContent instance = Instantiate(prefab);</ins>
+		<ins>instance.OriginFactory = this;</ins>
+		<ins>MoveToFactoryScene(instance.gameObject);</ins>
+		<ins>return instance;</ins>
+	<ins>}</ins></pre>
+						
+						<p>The instance is moved to the content scene of the factory, which can be created on demand. If we're in the editor, first check whether the scene does exist before creating it, in case we lost track of it during a hot reload.</p>
+						
+						<pre translate="no">	<ins>Scene contentScene;</ins>
+	
+	&hellip;
+	
+	<ins>void MoveToFactoryScene (GameObject o) {</ins>
+		<ins>if (!contentScene.isLoaded) {</ins>
+			<ins>if (Application.isEditor) {</ins>
+				<ins>contentScene = SceneManager.GetSceneByName(name);</ins>
+				<ins>if (!contentScene.isLoaded) {</ins>
+					<ins>contentScene = SceneManager.CreateScene(name);</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>contentScene = SceneManager.CreateScene(name);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>SceneManager.MoveGameObjectToScene(o, contentScene);</ins>
+	<ins>}</ins></pre>
+						
+						<p>We only have two content types, so simply add two prefab configuration fields for them.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>GameTileContent destinationPrefab = default;</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>GameTileContent emptyPrefab = default;</ins></pre>
+						
+						<p>The last step to make the factory functional is to provide a public <code>Get</code> method with a <code>GameTileContentType</code> parameter, which gets an instance of the corresponding prefab.</p>
+						
+						<pre translate="no">	<ins>public GameTileContent Get (GameTileContentType type) {</ins>
+		<ins>switch (type) {</ins>
+			<ins>case GameTileContentType.Destination: return Get(destinationPrefab);</ins>
+			<ins>case GameTileContentType.Empty: return Get(emptyPrefab);</ins>
+		<ins>}</ins>
+		<ins>Debug.Assert(false, "Unsupported type: " + type);</ins>
+		<ins>return null;</ins>
+	<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Do we need to give each tile its own empty content instance?</h3>
+							<div>
+								<p>Because the empty content doesn't visualize anything, we could get away with instantiating a single empty content object and reusing it for all tiles. But that's an optimization that we don't need to bother with at this point. Also, it's possible to still add some visualization to empty tiles, like stones, grass, flowers, or something else appropriate. It's even possible to mix different visualizations, having the factory return a random one each time. That's currently not the case, but we could make that change later by only adjusting the factory.</p>
+							</div>
+						</aside>
+						
+						<p>Create the factory asset and configure its prefab references.</p>
+						
+						<figure>
+							<img src="changing-tiles/content-factory.png" width="320" height="106">
+							<figcaption>Content factory.</figcaption>
+						</figure>
+						
+						<p>Then give <code>Game</code> a reference to the factory.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>GameTileContentFactory tileContentFactory = default;</ins></pre>
+						
+						<figure>
+							<img src="changing-tiles/game-with-factory.png" width="320" height="110">
+							<figcaption>Game with factory.</figcaption>
+						</figure>
+					</section>
+					
+					
+					<section>
+						<h3>Touching a Tile</h3>
+						
+						<p>To edit the board it must be possible to select a tile. We'll make this possible in play mode, by casting a ray in the scene when the game window is clicked. If the ray hits a tile, it is touched by the player, which indicates that it must be changed. <code>Game</code> will handle player input, but we'll make it the responsibility of <code>GameBoard</code> to figure out which tile was touched, given a ray.</p>
+						
+						<p>Not all rays will hit a tile, so it's possible that we end up with nothing. So add a <code>GetTile</code> method to <code>GameBoard</code> that initially always returns <code>null</code>, indicating that no tile was found.</p>
+						
+						<pre translate="no">	<ins>public GameTile GetTile (Ray ray) {</ins>
+		<ins>return null;</ins>
+	<ins>}</ins></pre>
+						
+						<p>To determine whether a tile was hit we have to invoke <code>Physics.Raycast</code> with the ray as an argument. It returns whether something was hit. If so, we might be able to return a tile, though we don't yet know which, so return <code>null</code> right now.</p>
+							
+						<pre translate="no">	public GameTile GetTile (Ray ray) {
+		<ins>if (Physics.Raycast(ray) {</ins>
+			<ins>return null;</ins>
+		<ins>}</ins>
+		return null;
+	}</pre>
+						
+						<p>To find out whether we hit a tile we need more information about the hit. <code>Physics.Raycast</code> can provide this information via a second <code>RaycastHit</code> struct parameter. This is an output parameter, which is indicated by writing <code>out</code> in front of it. This means that the method invocation will set the value of the variable that we pass to it.</p>
+						
+						
+						<pre translate="no">		<ins>RaycastHit hit;</ins>
+		if (Physics.Raycast(ray<ins>, out hit</ins>) {
+			return null;
+		}</pre>
+						
+						<p>It's possible to inline the declaration of variables used for output parameters, so let's do that.</p>
+						
+						<pre translate="no">		<del>//RaycastHit hit;</del>
+		if (Physics.Raycast(ray, out <ins>RaycastHit</ins> hit) {
+			return null;
+		}</pre>
+						
+						<p>We don't care about what collider got hit, we'll simply use the XZ position of the hit point to determine the tile. We get the tile coordinates by adding half the relevant board size to the hit point's coordinates, then casting the results integers. The final tile index is then its X coordinate, plus its Y coordinate times the board width.</p>
+						
+						<pre translate="no">		if (Physics.Raycast(ray, out RaycastHit hit)) {
+			<ins>int x = (int)(hit.point.x + size.x * 0.5f);</ins>
+			<ins>int y = (int)(hit.point.z + size.y * 0.5f);</ins>
+			<ins>return tiles[x + y * size.x];</ins>
+		}</pre>
+						
+						<p>But this is only valid when the tile coordinates lie within the board's bounds, so make sure of that. If not, don't return a tile.</p>
+						
+						<pre translate="no">			int x = (int)(hit.point.x + size.x * 0.5f);
+			int y = (int)(hit.point.z + size.y * 0.5f);
+			<ins>if (x >= 0 &amp;&amp; x &lt; size.x &amp;&amp; y >= 0 &amp;&amp; y &lt; size.y) {</ins>
+				return tiles[x + y * size.x];
+			<ins>}</ins></pre>
+						
+					</section>
+					
+					<section>
+						<h3>Changing Content</h3>
+						
+						<p>To make it possible to change the content of a tile, add a public <code>Content</code> property to <code>GameTile</code>. Its getter simply returns the content, while its setter also recycles its previous content, if any, and positions the new content.</p>
+						
+						<pre translate="no">	<ins>GameTileContent content;</ins>
+
+	<ins>public GameTileContent Content {</ins>
+		<ins>get => content;</ins>
+		<ins>set {</ins>
+			<ins>if (content != null) {</ins>
+				<ins>content.Recycle();</ins>
+			<ins>}</ins>
+			<ins>content = value;</ins>
+			<ins>content.transform.localPosition = transform.localPosition;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>This is the only place where we have to check whether the content is <code>null</code>, because tiles initially have no content. To be sure, assert that the setter isn't invoked with <code>null</code>.</p>
+						
+						<pre translate="no">		set {
+			<ins>Debug.Assert(value != null, "Null assigned to content!");</ins>
+			&hellip;
+		}</pre>
+						
+						<p>The last thing that we need is player input. Converting a click to a ray can be done by invoking <code>ScreenPointToRay</code> with <code>Input.mousePosition</code> as its argument on the main camera, which we can access via <code>Camera.main</code>. Add a convenient property for that to <code>Game</code>.</p>
+						
+						<pre translate="no">		<ins>Ray TouchRay => Camera.main.ScreenPointToRay(Input.mousePosition);</ins></pre>
+						
+						<p>Then add an <code>Update</code> method that checks whether the primary mouse button was pressed per update, by invoking <code>Input.GetMouseButtonDown</code> with zero as an argument. If so, handle the player's touch, which means getting a tile from the board, and if we got one setting its content to a destination, by getting one from the factory.</p>
+						
+						<pre translate="no">	<ins>void Update () {</ins>
+		<ins>if (Input.GetMouseButtonDown(0)) {</ins>
+			<ins>HandleTouch();</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	<ins>void HandleTouch () {</ins>
+		<ins>GameTile tile = board.GetTile(TouchRay);</ins>
+		<ins>if (tile != null) {</ins>
+			<ins>tile.Content =</ins>
+				<ins>tileContentFactory.Get(GameTileContentType.Destination);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>It is now possible to turn any tile into a destination, with a primary cursor click.</p>
+						
+						<figure>
+							<img src="changing-tiles/destinations.png" width="230" height="230">
+							<figcaption>Multiple destinations.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Keeping a Valid Board</h3>
+						
+						<p>Although we can turn tiles into destinations, this doesn't yet affect the paths. Also, we haven't set the empty content of tiles yet. Keeping the board consistent and valid is the responsibility of <code>GameBoard</code>, so let's move the responsibility of setting tile content to it as well. To make this possible, give it a reference to the content factory, provided via its <code>Intialize</code> method, and use it to give all tiles an empty content instance.</p>
+						
+						<pre translate="no">	<ins>GameTileContentFactory contentFactory;</ins>
+	
+	public void Initialize (
+		Vector2Int size<ins>, GameTileContentFactory contentFactory</ins>
+	) {
+		this.size = size;
+		<ins>this.contentFactory = contentFactory;</ins>
+		ground.localScale = new Vector3(size.x, size.y, 1f);
+
+		tiles = new GameTile[size.x * size.y];
+		for (int i = 0, y = 0; y &lt; size.y; y++) {
+			for (int x = 0; x &lt; size.x; x++, i++) {
+				&hellip;
+				
+				<ins>tile.Content = contentFactory.Get(GameTileContentType.Empty);</ins>
+			}
+		}
+
+		FindPaths();
+	}</pre>
+						
+						<p><code>Game</code> must now pass its factory to the board.</p>
+						
+						<pre translate="no">	void Awake () {
+		board.Initialize(boardSize<ins>, tileContentFactory</ins>);
+	}</pre>
+						
+						<aside>
+							<h3>Why not add a factory configuration field to <code>GameBoard</code>?</h3>
+							<div>
+								<p>The board needs a factory, but doesn't need to know where it came from. We can end up with multiple factories at some point, used to change the appearance of the board content.</p>
+							</div>
+						</aside>
+						
+						<p>As we can now have multiple destinations, adjust <code>GameBoard.FindPaths</code> so it invokes <code>BecomeDestination</code> on each and adds them all to the frontier. That's all we need to do to support multiple destinations. All other tiles are simply cleared, as usual. Then remove the hard-coded central destination.</p>
+												
+						<pre translate="no">	void FindPaths () {
+		foreach (GameTile tile in tiles) {
+			<ins>if (tile.Content.Type == GameTileContentType.Destination) {</ins>
+				<ins>tile.BecomeDestination();</ins>
+				<ins>searchFrontier.Enqueue(tile);</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				tile.ClearPath();
+			<ins>}</ins>
+		}
+		
+		<del>//tiles[tiles.Length / 2].BecomeDestination();</del>
+		<del>//searchFrontier.Enqueue(tiles[tiles.Length / 2]);</del>
+
+		&hellip;
+	}</pre>
+						
+						<p>But if we can turn tiles into destinations, it should also be possible to do the reverse, turning destinations into empty tiles. But then we could end up with a board with no destination at all. In that case <code>FindPaths</code> cannot do its job. That's the case when the frontier is empty after initializing the paths for all cells. Indicate this invalid board state by returning <code>false</code> and abort, otherwise return <code>true</code> at the end.</p>
+						
+						<pre translate="no">	<ins>bool</ins> FindPaths () {
+		foreach (GameTile tile in tiles) {
+			&hellip;
+		}
+		<ins>if (searchFrontier.Count == 0) {</ins>
+			<ins>return false;</ins>
+		<ins>}</ins>
+		
+		&hellip;
+		<ins>return true;</ins>
+	}</pre>
+						
+						<p>The simplest way to support clearing destinations is to make it a toggle operation. Clicking an empty tiles makes it a destination, while clicking a destination removes it. But content changes are now the responsibility of <code>GameBoard</code>, so give it a public <code>ToggleDestination</code> method with a tile parameter. If the tile is a destination, then make it empty and invoke <code>FindPaths</code>. Otherwise, make it a destination and also invoke <code>FindPaths</code>.</p>
+						
+						<pre translate="no">	<ins>public void ToggleDestination (GameTile tile) {</ins>
+		<ins>if (tile.Content.Type == GameTileContentType.Destination) {</ins>
+			<ins>tile.Content = contentFactory.Get(GameTileContentType.Empty);</ins>
+			<ins>FindPaths();</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>tile.Content = contentFactory.Get(GameTileContentType.Destination);</ins>
+			<ins>FindPaths();</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Adding a destination can never result in a valid board state, but removing a destination can. So check whether <code>FindPaths</code> failed after making a tile empty. If so, undo the change by again turning the tile into a destination and invoke <code>FindPaths</code> once more to return to the previous valid state.</p>
+						
+						<pre translate="no">		if (tile.Content.Type == GameTileContentType.Destination) {
+			tile.Content = contentFactory.Get(GameTileContentType.Empty);
+			<ins>if (!</ins>FindPaths()<ins>) {</ins>
+				<ins>tile.Content =</ins>
+					<ins>contentFactory.Get(GameTileContentType.Destination);</ins>
+				<ins>FindPaths();</ins>
+			<ins>}</ins>
+		}</pre>
+						
+						<aside>
+							<h3>Can we make that validity check more efficient?</h3>
+							<div>
+								<p>You could keep track of how many destinations there are, with an additional field. However, it only matters when the player tries to clear the last destination, which will seldom happen. Also, there will be other ways in which the board state can become invalid. We'll simply always rely on <code>FindPaths</code> to determine validity, which is very fast anyway.</p>
+							</div>
+						</aside>
+						
+						<p>We can now invoke <code>ToggleDestination</code> with the center tile at the end of <code>Initialize</code> instead of explicitly invoking <code>FindPaths</code>. This is the only time that we start with an invalid board state, but we're guaranteed to end up with a correct state.</p>
+						
+						<pre translate="no">	public void Initialize (
+		Vector2Int size, GameTileContentFactory contentFactory
+	) {
+		&hellip;
+
+		<del>//FindPaths();</del>
+		ToggleDestination(tiles[tiles.Length / 2]);
+	}</pre>
+						
+						<p>Finally, have <code>Game</code> invoke <code>ToggleDestination</code> instead of setting the tile content itself.</p>
+						
+						<pre translate="no">	void HandleTouch () {
+		GameTile tile = board.GetTile(TouchRay);
+		if (tile != null) {
+			<del>//tile.Content =</del>
+				<del>//tileContentFactory.Get(GameTileContentType.Destination);</del>
+			<ins>board.ToggleDestination(tile);</ins>
+		}
+	}</pre>
+						
+						<figure>
+							<img src="changing-tiles/multiple-valid-destinations.png" width="230" height="230">
+							<figcaption>Multiple destinations with valid paths.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Shouldn't we make it impossible for <code>Game</code> to set tile content directly?</h3>
+							<div>
+								<p>Ideally, yes. We could make tiles private to the board. But we won't bother with that at this point, because <code>Game</code> and other code might need to access tiles for other purposes later. Once that's clear, we can come up with a better solution.</p>
+							</div>
+						</aside>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Walls</h2>
+					
+					<p>The point of a tower defense game is to make sure that enemies don't reach a destination. That's done in two ways. First, by killing them, and second by slowing them down so you have more time to kill them. On a tiled board, the primary way to give yourself more time is by increasing the distance that enemies have to travel. That's done by placing obstacles on the board, typically towers that also kill enemies, but in this tutorial we'll limit ourselves to walls.</p>
+					
+					<section>
+						<h3>Content</h3>
+						
+						<p>Walls are another type of content, so add an entry for them to <code>GameTileContentType</code>.</p>
+						
+						<pre translate="no">public enum GameTileContentType {
+	Empty, Destination<ins>, Wall</ins>
+}</pre>
+						
+						<p>Then create a wall prefab. This time, create a tile content game object and give it a cube child that's positioned so it sits on top of the board and fill the entire tile. Make it half a unit high and keep its collider, because walls can visually obstruct part of the tiles behind them. So when the player touches a wall it will affect the corresponding tile.</p>
+						
+						<figure>
+							<img src="walls/wall-root.png" width="320" height="176" alt="root">
+							<img src="walls/wall-cube.png" width="320" height="226" alt="cube">
+							<img src="walls/wall-prefab-hierarchy.png" width="225" height="60" alt="prefab">
+							<figcaption>Wall prefab.</figcaption>
+						</figure>
+						
+						<p>Add the wall prefab to the factory, both in code and the inspector.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>GameTileContent wallPrefab = default;</ins>
+
+	&hellip;
+
+	public GameTileContent Get (GameTileContentType type) {
+		switch (type) {
+			case GameTileContentType.Destination: return Get(destinationPrefab);
+			case GameTileContentType.Empty: return Get(emptyPrefab);
+			<ins>case GameTileContentType.Wall: return Get(wallPrefab);</ins>
+		}
+		Debug.Assert(false, "Unsupported type: " + type);
+		return null;
+	}</pre>
+						
+						<figure>
+							<img src="walls/factory.png" width="320" height="80">
+							<figcaption>Factory with wall prefab.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Toggling Walls</h3>
+						
+						<p>Add a toggle method for a wall to <code>GameBoard</code>, just like for a destination, initially without checking for an invalid board state.</p>
+						
+						<pre translate="no">	<ins>public void ToggleWall (GameTile tile) {</ins>
+		<ins>if (tile.Content.Type == GameTileContentType.Wall) {</ins>
+			<ins>tile.Content = contentFactory.Get(GameTileContentType.Empty);</ins>
+			<ins>FindPaths();</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>tile.Content = contentFactory.Get(GameTileContentType.Wall);</ins>
+			<ins>FindPaths();</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>We're only going to support toggling between empty and wall tiles, not allowing walls to directly replace destinations. So only make a wall when the tile is empty. Also, the idea is that walls will block pathfinding. But every tile must have a path to a destination, otherwise enemies can get stuck. Once again, we'll have <code>FindPaths</code> check for this, and undo the change if we created an invalid board state.</p>
+						
+						<pre translate="no">		else <ins>if (tile.Content.Type == GameTileContentType.Empty)</ins> {
+			tile.Content = contentFactory.Get(GameTileContentType.Wall);
+			<ins>if (!</ins>FindPaths()<ins>) {</ins>
+				<ins>tile.Content = contentFactory.Get(GameTileContentType.Empty);</ins>
+				<ins>FindPaths();</ins>
+			<ins>}</ins>
+		}</pre>
+						
+						<p>Toggling walls will be much more common than toggling destinations, so have <code>Game</code> toggle a wall with the primary touch. Destinations can be toggled with the alternative touch&mdash;usually a right mouse click&mdash;which we can detect by passing 1 to <code>Input.GetMouseButtonDown</code>.</p>
+						
+						<pre translate="no">	void Update () {
+		if (Input.GetMouseButtonDown(0)) {
+			HandleTouch();
+		}
+		<ins>else if (Input.GetMouseButtonDown(1)) {</ins>
+			<ins>HandleAlternativeTouch();</ins>
+		<ins>}</ins>
+	}
+
+	<ins>void HandleAlternativeTouch () {</ins>
+		<ins>GameTile tile = board.GetTile(TouchRay);</ins>
+		<ins>if (tile != null) {</ins>
+			<ins>board.ToggleDestination(tile);</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	void HandleTouch () {
+		GameTile tile = board.GetTile(TouchRay);
+		if (tile != null) {
+			board.<ins>ToggleWall</ins>(tile);
+		}
+	}</pre>
+						
+						<figure>
+							<img src="walls/walls.png" width="230" height="230">
+							<figcaption>Now with walls.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why do I get large gaps between shadows of diagonally adjacent walls?</h3>
+							<div>
+								<p>That happens because the wall cubes barely touch along diagonals and the shadows are biased to avoid shadows artifacts. The gaps can be reduced by decreasing the shadow bias of the light, decreasing the camera's far clipping plane, and increasing the shadow map resolution. For example, I've reduces the far plane to 20 and set the light's normal bias to zero. Also, MSAA produces artifacts if combined with the default directional shadows, so I turned it off.</p>
+							</div>
+						</aside>
+						
+						<p>Let's also make it impossible for destinations to directly replace walls.</p>
+						
+						<pre translate="no">	public void ToggleDestination (GameTile tile) {
+		if (tile.Content.Type == GameTileContentType.Destination) {
+			&hellip;
+		}
+		else <ins>if (tile.Content.Type == GameTileContentType.Empty)</ins> {
+			tile.Content = contentFactory.Get(GameTileContentType.Destination);
+			FindPaths();
+		}
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Blocking Pathfinding</h3>
+						
+						<p>To have walls block pathfinding, all we have to do is not add tiles with walls to the search frontier. We can do that by having <code>GameTile.GrowPathTo</code> not return tiles with a wall. But the path should still grown into the wall, to ensure that all tiles on the board have a path. That's needed because it might be possible that a tile with enemies in it suddenly becomes a wall.</p>
+						
+						<pre translate="no">	GameTile GrowPathTo (GameTile neighbor) {
+		if (!HasPath || neighbor == null || neighbor.HasPath) {
+			return null;
+		}
+		neighbor.distance = distance + 1;
+		neighbor.nextOnPath = this;
+		return
+			<ins>neighbor.Content.Type != GameTileContentType.Wall ?</ins> neighbor <ins>: null</ins>;
+	}</pre>
+						
+						<p>To ensure that all tiles indeed have a path, <code>GameBoard.FindPaths</code> must check this after completing the search. If this is not the case, the board state is invalid and <code>false</code> must be returned. It is not needed to update the path visualization for invalid states, because the board will be reverted to the previous state.</p>
+						
+						<pre translate="no">	bool FindPaths () {
+		&hellip;
+
+		<ins>foreach (GameTile tile in tiles) {</ins>
+			<ins>if (!tile.HasPath) {</ins>
+				<ins>return false;</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		
+		foreach (GameTile tile in tiles) {
+			tile.ShowPath();
+		}
+		return true;
+	}</pre>
+						
+						<figure>
+							<img src="walls/walls-valid-paths.png" width="230" height="230">
+							<figcaption>Walls affecting paths.</figcaption>
+						</figure>
+						
+						<p>To verify that walls indeed have valid paths as well, you can make the cubes semitransparent.</p>
+						
+						<figure>
+							<img src="walls/transparent-walls.png" width="230" height="230">
+							<figcaption>Transparent walls.</figcaption>
+						</figure>
+						
+						<p>Note that the requirement that all paths are valid makes it impossible to wall off a section of the board without a destination in it. You can split the map, but only if each part has at least one destination. Also, each wall must be adjacent to an empty tile or a destination, otherwise it cannot have a path itself. For example, you cannot make a solid 3&times;3 block of walls.</p>
+					</section>
+					
+					<section>
+						<h3>Hiding the Paths</h3>
+						
+						<p>The path visualization allows us to see how pathfinding works and verify that it is indeed correct, but it's not intended to be shown to the player, at least not always. So let's make it possible to hide the arrows. We can do that by adding a public <code>HidePath</code> method to <code>GameTile</code> that simply deactivates its arrow.</p>
+						
+						<pre translate="no">	<ins>public void HidePath () {</ins>
+		<ins>arrow.gameObject.SetActive(false);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Whether the paths are shown is part of the board state. Give <code>GameBoard</code> a boolean field&mdash;set to <code>false</code> by default&mdash;to keep track of its state along with a public property to get and set it. The setter should either show or hide the paths of all tiles.</p>
+						
+						<pre translate="no">	<ins>bool showPaths;</ins>
+
+	<ins>public bool ShowPaths {</ins>
+		<ins>get => showPaths;</ins>
+		<ins>set {</ins>
+			<ins>showPaths = value;</ins>
+			<ins>if (showPaths) {</ins>
+				<ins>foreach (GameTile tile in tiles) {</ins>
+					<ins>tile.ShowPath();</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>foreach (GameTile tile in tiles) {</ins>
+					<ins>tile.HidePath();</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now <code>FindPaths</code> only has to show the updated paths if the visualization is enabled.</p>
+						
+						<pre translate="no">	bool FindPaths () {
+		&hellip;
+
+		<ins>if (showPaths) {</ins>
+			foreach (GameTile tile in tiles) {
+				tile.ShowPath();
+			}
+		<ins>}</ins>
+		return true;
+	}</pre>
+						
+						<p>The path visualization is disabled by default. Disable the arrow of the tile prefab as well.</p>
+						
+						<figure>
+							<img src="board-visualization/inactive-arrow.png" width="320" height="44">
+							<figcaption>Prefab arrow inactive by default.</figcaption>
+						</figure>
+						
+						<p>Make <code>Game</code> toggle the visualization with a key press. The P key is an obvious choice, but that interferes with the default keyboard shortcut to enter and exit play mode in the Unity editor. The result would be that the visualization toggles when the shortcut is used to exit play mode, which doesn't look nice. So let's use the V key instead, for visualization or verbose.</p>
+						
+						<pre translate="no">	void Update () {
+		&hellip;
+
+		<ins>if (Input.GetKeyDown(KeyCode.V)) {</ins>
+			<ins>board.ShowPaths = !board.ShowPaths;</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<img src="board-visualization/without-arrows.png" width="230" height="230">
+							<figcaption>Without arrows.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Showing the Grid</h3>
+						
+						<p>When the arrows are hidden it become difficult to see the location of each tile. Let's add grid lines to make this easier. <a href="board-visualization/grid.png">Here</a> is a grid texture with a square border that can be used to outline a single tile.</p>
+						
+						<figure>
+							<img src="board-visualization/grid.png" width="128" height="128">
+							<figcaption>Grid texture.</figcaption>
+						</figure>
+						
+						<p>We won't add this texture to each tile individually, instead we'll apply it to the ground. But we'll make the grid optional, just like the path visualization. So add a <code>Texture2D</code> configuration field to <code>GameBoard</code> and set it to the grid texture.
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>Texture2D gridTexture = default;</ins></pre>
+						
+						<figure>
+							<img src="board-visualization/board-with-grid-texture.png" width="320" height="94">
+							<figcaption>Board with grid texture.</figcaption>
+						</figure>
+						
+						<p>Add another boolean field and property to control the grid visualization state. In this case the setter has to get hold of the ground's material, which it can do by invoking <code>GetComponent&lt;MeshRenderer></code> on the ground and accessing the <code>material</code> property of the result. If the grid should be shown, assign the grid texture to the material's <code>mainTexture</code> property. Otherwise, assign <code>null</code> to it. Note that changing the material's texture will create a duplicate material instance, so it becomes independent of the material asset.</p>
+						
+						<pre translate="no">	bool <ins>showGrid,</ins> showPaths;
+
+	<ins>public bool ShowGrid {</ins>
+		<ins>get => showGrid;</ins>
+		<ins>set {</ins>
+			<ins>showGrid = value;</ins>
+			<ins>Material m = ground.GetComponent&lt;MeshRenderer>().material;</ins>
+			<ins>if (showGrid) {</ins>
+				<ins>m.mainTexture = gridTexture;</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>m.mainTexture = null;</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Make <code>Game</code> toggle the grid visualization with the G key.</p>
+						
+						<pre translate="no">	void Update () {
+		&hellip;
+		<ins>if (Input.GetKeyDown(KeyCode.G)) {</ins>
+			<ins>board.ShowGrid = !board.ShowGrid;</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>Also, let's enable the grid visualization by default, in <code>Awake</code>.</p>
+						
+						<pre translate="no">	void Awake () {
+		board.Initialize(boardSize, tileContentFactory);
+		<ins>board.ShowGrid = true;</ins>
+	}</pre>
+						
+						<figure>
+							<img src="board-visualization/unscaled-grid.png" width="230" height="230">
+							<figcaption>Unscaled grid.</figcaption>
+						</figure>
+						
+						<p>At this point we end up with a border around the entire board. That matches the texture, but is not what we want. We have to scale the material's main texture so it matches the grid size. We can do that by invoking the material's <code>SetTextureScale</code> method with the texture property name&mdash;which is <em translate="no">_MainTex</em>&mdash; and a 2D size. We can directly use the board size, which gets implicitly converted to a <code>Vector2</code> value.</p>
+						
+						<pre translate="no">			if (showGrid) {
+				m.mainTexture = gridTexture;
+				<ins>m.SetTextureScale("_MainTex", size);</ins>
+			}</pre>
+						
+						<figure>
+							<img src="board-visualization/scaled-grid.png" width="230" height="230" alt="without">
+							<img src="board-visualization/scaled-grid-paths.png" width="230" height="230" alt="with">
+							<figcaption>Scaled grid, without and with path visualization.</figcaption>
+						</figure>
+						
+						<p>At this point we have a functional board for our grid-based tower defense game. The next tutorial is <a href="../enemies/index.html">Enemies</a>.</p>
+					</section>
+					
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/tower-defense-01-the-board/" class="repository">repository</a>
+					<a href="The-Board.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

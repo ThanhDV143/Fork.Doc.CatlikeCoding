@@ -1,0 +1,1753 @@
+<!DOCTYPE html>
+<html>
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/curves-and-splines/">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/curves-and-splines/tutorial-image.png">
+		<meta property="og:image:width" content="1200">
+		<meta property="og:image:height" content="750">
+		<meta property="og:description" content="A Unity C# scripting tutorial in which you will create your own curves and splines.">
+		<meta name="description" content="A Unity C# scripting tutorial in which you will create your own curves and splines.">
+		<meta property="og:title" content="Curves and Splines, a Unity C# Tutorial">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<title>Curves and Splines, a Unity C# Tutorial</title>
+		<link href="../../default.css" rel="stylesheet">
+		<script>
+			var customTypes = {
+				Bezier: 1,
+				BezierControlPointMode: 1,
+				BezierCurve: 1,
+				BezierCurveInspector: 1,
+				BezierSpline: 1,
+				BezierSplineInspector: 1,
+				Line: 1,
+				LineInspector: 1,
+				SplineDecorator: 1,
+				SplineWalker: 1,
+				SplineWalkerMode: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header data-type="tutorial"></header>
+
+		<article class="tutorial" itemscope="" itemtype="http://schema.org/TechArticle">
+			<h1 itemprop="name headline">Curves and Splines<span>, making your own path</span></h1>
+
+			<div class="instructions">
+				<span itemprop="about description">This tutorial will take you from creating a simple line all the way to editing your own B&eacute;zier splines.</span>
+				You'll learn to
+				<ul>
+					<li>Create a custom editor;</li>
+					<li>Draw in the scene view;</li>
+					<li>Support editing via the scene view;</li>
+					<li>Create B&eacute;zier curves and understand the math behind them;</li>
+					<li>Draw curves and their direction of movement.</li>
+					<li>Build B&eacute;zier splines by combining curves;</li>
+					<li>Support free, aligned, and mirrored control points;</li>
+					<li>Support looping splines;</li>
+					<li>Move and place objects along a spline.</li>
+				</ul>
+				<p><span itemprop="dependencies">This tutorial builds on the foundation laid by previous tutorials. If you completed the <a href="../maze/index.html">Maze</a> tutorial then you're good to go.</span></p>
+				<p>This tutorial was made with Unity 4.5.2. It might not work for older versions.</p>
+				
+				<p><em>Unity now has its own spline system. See their <a href="https://forum.unity.com/threads/unity-splines.1345052/">Unity Splines</a> forum topic.</em></p>
+			</div>
+			
+			<aside class="share"></aside>
+
+			<figure>
+				<img src="tutorial-image.jpg" width="600" height="375" itemprop="image">
+				<figcaption>Fun with splines.</figcaption>
+			</figure>
+			
+			<h2>Lines</h2>
+
+			<div class="instructions">
+				<p>Let's start simple by creating a line component. It needs two points &ndash; <code>p0</code> and <code>p1</code> &ndash; which define a line segment that goes from the first to the second.</p>
+			</div>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+
+<mark>public class Line : MonoBehaviour {</mark>
+
+	<mark>public Vector3 p0, p1;</mark>
+<mark>}</mark></pre>
+
+			<figure>
+				<img src="01-a-simple-line.png" width="786" height="222">
+				<figcaption>A simple line.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>While we can now create game objects with line components and adjust the points, we don't see anything in the scene. Let's provide some useful visual information when our line is selected. We can do this by creating a custom inspector for our component.</p>
+				<p>Editor-related code needs to be placed inside an <i>Editor</i> folder, so create one and put a new <i>LineInspector</i> script in it.</p>
+				<p>The inspector needs to extend <code>UnityEditor.Editor</code>. We also have to give it the <code>UnityEditor.CustomEditor</code> attribute. This lets Unity know that it should use our class instead of the default editor for <code>Line</code> components.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-typeof" id="q-typeof">What does <code>typeof</code> do?</a></li>
+					<li><a href="index.html#a-editor" id="q-editor">Is the Editor folder required?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no"><mark>using UnityEditor;</mark>
+<mark>using UnityEngine;</mark>
+
+<mark>[CustomEditor(typeof(Line))]</mark>
+<mark>public class LineInspector : Editor {</mark>
+<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>An empty editor does not change anything. We need to add an <code>OnSceneGUI</code> method, which is a special Unity event method. We can use it to draw stuff in the scene view for our component.</p>
+				<p>The <code>Editor</code> class has a <code>target</code> variable, which is set to the object to be drawn when <code>OnSceneGUI</code> is called. We can cast this variable to a line and then use the <code>Handles</code> utility class to draw a line between our points.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private void OnSceneGUI () {</mark>
+		<mark>Line line = target as Line;</mark>
+
+		<mark>Handles.color = Color.white;</mark>
+		<mark>Handles.DrawLine(line.p0, line.p1);</mark>
+	<mark>}</mark></pre>
+
+			
+			<figure>
+				<img alt="line" src="01-draw-line.png" width="220" height="170">
+				<img alt="editor" src="01-editor.png" width="232" height="88">
+				<figcaption>Showing a line.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We now see the line, but it doesn't take its transform's settings into account. Moving, rotating, and scaling does not affect them at all. This is because <code>Handles</code> operates in world space while the points are in the local space of the line. We have to explicitly convert the points into world space points.</p>
+			</div>
+			
+			<pre translate="no">	private void OnSceneGUI () {
+		Line line = target as Line;
+		<mark>Transform handleTransform = line.transform;</mark>
+		<mark>Vector3 p0 = handleTransform.TransformPoint(line.p0);</mark>
+		<mark>Vector3 p1 = handleTransform.TransformPoint(line.p1);</mark>
+
+		Handles.color = Color.white;
+		Handles.DrawLine(<mark>p0</mark>, <mark>p1</mark>);
+	}</pre>
+			
+			<figure>
+				<img alt="untransformed" src="01-untransformed.png" width="180" height="160">
+				<img alt="transformed" src="01-transformed.png" width="180" height="160">
+				<figcaption>Untransformed vs. transformed.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Besides showing the line, we can also show position handles for our two points. To do this, we also need our transform's rotation so we can align them correctly.</p>
+			</div>
+			
+			<pre translate="no">	private void OnSceneGUI () {
+		Line line = target as Line;
+		Transform handleTransform = line.transform;
+		<mark>Quaternion handleRotation = handleTransform.rotation;</mark>
+		Vector3 p0 = handleTransform.TransformPoint(line.p0);
+		Vector3 p1 = handleTransform.TransformPoint(line.p1);
+
+		Handles.color = Color.white;
+		Handles.DrawLine(p0, p1);
+		<mark>Handles.DoPositionHandle(p0, handleRotation);</mark>
+		<mark>Handles.DoPositionHandle(p1, handleRotation);</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>Although we now get handles, they do not honor Unity's pivot rotation mode. Fortunately, we can use <code>Tools.pivotRotation</code> to determine the current mode and set our rotation accordingly.</p>
+			</div>
+			
+			<pre translate="no">		Quaternion handleRotation = <mark>Tools.pivotRotation == PivotRotation.Local ?</mark>
+			handleTransform.rotation <mark>: Quaternion.identity</mark>;</pre>
+			
+			<figure><img alt="local handles" src="01-local-rotation.png" width="260" height="180"> <img alt="global handles" src="01-global-rotation.png" width="260" height="180"><br><img alt="local mode" src="01-local-mode.png" width="140" height="30"> <img alt="global mode" src="01-global-mode.png" width="140" height="30">
+				<figcaption>Local vs. global pivot rotation.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>To make the handles actually work, we need to assign their results back to the line. However, as the handle values are in world space we need to convert them back into the line's local space with the <code>InverseTransformPoint</code> method. Also, we only need to do this when a point has changed. We can use <code>EditorGUI.BeginChangeCheck</code> and <code>EditorGUI.EndChangeCheck</code> for this. The second method tells us whether a change happened after calling the first method.</p>
+			</div>
+			
+			<pre translate="no">		<mark>EditorGUI.BeginChangeCheck();</mark>
+		<mark>p0 =</mark> Handles.DoPositionHandle(p0, handleRotation);
+		<mark>if (EditorGUI.EndChangeCheck()) {</mark>
+			<mark>line.p0 = handleTransform.InverseTransformPoint(p0);</mark>
+		<mark>}</mark>
+		<mark>EditorGUI.BeginChangeCheck();</mark>
+		<mark>p1 =</mark> Handles.DoPositionHandle(p1, handleRotation);
+		<mark>if (EditorGUI.EndChangeCheck()) {</mark>
+			<mark>line.p1 = handleTransform.InverseTransformPoint(p1);</mark>
+		<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now we can drag our points in the scene view!</p>
+				<p>There are two additional issues that need attention. First, we cannot undo the drag operations. This is fixed by adding a call to <code>Undo.RecordObject</code> before we make any changes. Second, Unity does not know that a change was made, so for example won't ask the user to save when quitting. This is remedied with a call to <code>EditorUtility.SetDirty</code>.</p>
+			</div>
+			
+			<pre translate="no">		EditorGUI.BeginChangeCheck();
+		p0 = Handles.DoPositionHandle(p0, handleRotation);
+		if (EditorGUI.EndChangeCheck()) {
+			<mark>Undo.RecordObject(line, "Move Point");</mark>
+			<mark>EditorUtility.SetDirty(line);</mark>
+			line.p0 = handleTransform.InverseTransformPoint(p0);
+		}
+		EditorGUI.BeginChangeCheck();
+		p1 = Handles.DoPositionHandle(p1, handleRotation);
+		if (EditorGUI.EndChangeCheck()) {
+			<mark>Undo.RecordObject(line, "Move Point");</mark>
+			<mark>EditorUtility.SetDirty(line);</mark>
+			line.p1 = handleTransform.InverseTransformPoint(p1);
+		}</pre>
+			
+			<h2>Curves</h2>
+			
+			<div class="instructions">
+				<p>It is time to upgrade to curves. A curve is like a line, but it doesn't need to be straight. Specifically, we'll create a B&eacute;zier curve.</p>
+				<p>A B&eacute;zier curve is defined by a sequence of points. It starts at the first point and ends at the last point, but does not need to go through the intermediate points. Instead, those points pull the curve away from being a straight line.</p>
+				<p>Create a new <code>BezierCurve</code> component and give it an array of points. Also give it a <code>Reset</code> method that initializes it with three points. This method also functions as a special Unity method, which is called by the editor when the component is created or reset.</p>
+			</div>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+
+<mark>public class BezierCurve : MonoBehaviour {</mark>
+
+	<mark>public Vector3[] points;</mark>
+
+	<mark>public void Reset () {</mark>
+		<mark>points = new Vector3[] {</mark>
+			<mark>new Vector3(1f, 0f, 0f),</mark>
+			<mark>new Vector3(2f, 0f, 0f),</mark>
+			<mark>new Vector3(3f, 0f, 0f)</mark>
+		<mark>};</mark>
+	<mark>}</mark>
+<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>We also create an inspector for the curve, based on <code>LineInspector</code>. To reduce code repetition, we move the code that shows a point to a separate <code>ShowPoint</code> method that we can call with an index. We also turn <code>curve</code>, <code>handleTransform</code>, and <code>handleRotation</code> into class variables so we don't need to pass then to <code>ShowPoint</code>.</p>
+				<p>While it is a new script, I've marked the differences as if we modified <code>LineInspector</code>.</p>
+			</div>
+			
+			<pre translate="no">using UnityEditor;
+using UnityEngine;
+
+[CustomEditor(typeof(<mark>BezierCurve</mark>))]
+public class <mark>BezierCurveInspector</mark> : Editor {
+
+	<mark>private BezierCurve curve;</mark>
+	<mark>private Transform handleTransform;</mark>
+	<mark>private Quaternion handleRotation;</mark>
+
+	private void OnSceneGUI () {
+		<mark>curve</mark> = target as <mark>BezierCurve</mark>;
+		<mark>handleTransform</mark> = curve.transform;
+		<mark>handleRotation</mark> = Tools.pivotRotation == PivotRotation.Local ?
+			handleTransform.rotation : Quaternion.identity;
+
+		Vector3 p0 = <mark>ShowPoint(0);</mark>
+		Vector3 p1 = <mark>ShowPoint(1);</mark>
+		<mark>Vector3 p2 = ShowPoint(2);</mark>
+
+		Handles.color = Color.white;
+		Handles.DrawLine(p0, p1);
+		<mark>Handles.DrawLine(p1, p2);</mark>
+	}
+
+	<mark>private Vector3 ShowPoint (int index) {</mark>
+		<mark>Vector3 point =</mark> handleTransform.TransformPoint(<mark>curve.points[index]</mark>);
+		EditorGUI.BeginChangeCheck();
+		<mark>point</mark> = Handles.DoPositionHandle(<mark>point</mark>, handleRotation);
+		if (EditorGUI.EndChangeCheck()) {
+			Undo.RecordObject(<mark>curve</mark>, "Move Point");
+			EditorUtility.SetDirty(<mark>curve</mark>);
+			<mark>curve.points[index]</mark> = handleTransform.InverseTransformPoint(point);
+		}
+		<mark>return point;</mark>
+	<mark>}</mark>
+}</pre>
+
+			<figure>
+				<img alt="project" src="02-curve.png" width="786" height="236">
+				<img alt="scene" src="02-straight.png" width="350" height="220">
+				<figcaption>A 3-point curve.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>The idea of B&eacute;zier curves is that they are parametric. If you give it a value &ndash; typically named <i>t</i> &ndash; between zero and one, you get a point on the curve. As <i>t</i> increases from zero to one, you move from the first point of the curve to the last point.</p>
+				<p>To show our curve in the scene, we can approximate it by drawing straight lines between successive steps on the curve. We can do this with a simple loop, assuming our curve has a <code>GetPoint</code> method. We also keep drawing the straight lines between the points, but change their color to gray.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private const int lineSteps = 10;</mark>
+			
+	private void OnSceneGUI () {
+		curve = target as BezierCurve;
+		handleTransform = curve.transform;
+		handleRotation = Tools.pivotRotation == PivotRotation.Local ?
+			handleTransform.rotation : Quaternion.identity;
+
+		Vector3 p0 = ShowPoint(0);
+		Vector3 p1 = ShowPoint(1);
+		Vector3 p2 = ShowPoint(2);
+
+		Handles.color = Color.<mark>gray;</mark>
+		Handles.DrawLine(p0, p1);
+		Handles.DrawLine(p1, p2);
+
+		<mark>Handles.color = Color.white;</mark>
+		<mark>Vector3 lineStart = curve.GetPoint(0f);</mark>
+		<mark>for (int i = 1; i &lt;= lineSteps; i++) {</mark>
+			<mark>Vector3 lineEnd = curve.GetPoint(i / (float)lineSteps);</mark>
+			<mark>Handles.DrawLine(lineStart, lineEnd);</mark>
+			<mark>lineStart = lineEnd;</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>Now we have to add the <code>GetPoint</code> method to <code>BezierCurve</code> otherwise it won't compile. Here we again make an assumption, this time that there's a utility B&eacute;zier class that does the calculation for any sequence of points. We feed it our points and transform the result to world space.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public Vector3 GetPoint (float t) {</mark>
+		<mark>return transform.TransformPoint(Bezier.GetPoint(points[0], points[1], points[2], t));</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>So we add a static <code>Bezier</code> class with the required method. For now, let's ignore the middle point and simply linearly interpolate between the first and last point.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-lerp" id="q-lerp">How does <code>Vector3.Lerp</code> work?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+
+<mark>public static class Bezier {</mark>
+
+	<mark>public static Vector3 GetPoint (Vector3 p0, Vector3 p1, Vector3 p2, float t) {</mark>
+		<mark>return Vector3.Lerp(p0, p2, t);</mark>
+	<mark>}</mark>
+<mark>}</mark></pre>
+			
+			<figure>
+				<img alt="bezier" src="02-bezier.png" width="230" height="102">
+				<img alt="linear" src="02-linear.png" width="346" height="230">
+				<figcaption>B&eacute;zier library and linear interpolation.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Of course, linear interpolation between the end points totally ignores the middle point. So how do we incorporate the middle point? The answer is to interpolate more than once. First, linearly interpolate between the first and middle point, and also between the middle and last point. That gives us two new points. Linearly interpolating between those two gives us the final point on the curve.</p>
+			</div>
+			
+			<pre translate="no">	public static Vector3 GetPoint (Vector3 p0, Vector3 p1, Vector3 p2, float t) {
+		return Vector3.Lerp(<mark>Vector3.Lerp(p0, p1, t)</mark>, <mark>Vector3.Lerp(p1, p2, t)</mark>, t);
+	}</pre>
+			
+			<figure>
+				<img src="02-quadratic.png" width="340" height="220">
+				<figcaption>A quadratic B&eacute;zier curve.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>This kind of curve is known as a quadratic B&eacute;zier curve, because of the polynomial math involved.</p>
+				<p>The linear curve can be written as <strong>B(<i>t</i>) = (1 - <i>t</i>) P<sub>0</sub> + <i>t</i> P<sub>1</sub></strong>.</p>
+				<p>One step deeper you get <strong>B(<i>t</i>) = (1 - <i>t</i>) ((1 - <i>t</i>) P<sub>0</sub> + <i>t</i> P<sub>1</sub>) + <i>t</i> ((1 - <i>t</i>) P<sub>1</sub> + <i>t</i> P<sub>2</sub>).</strong> This is really just the linear curve with P<sub>0</sub> and P<sub>1</sub> replaced by two new linear curves. It can also be rewritten into the more compact form <strong>B(<i>t</i>) = (1 - <i>t</i>)<sup>2</sup> P<sub>0</sub> + 2 (1 - <i>t</i>) <i>t</i> P<sub>1</sub> + <i>t</i><sup>2</sup> P<sub>2</sub></strong>.</p>
+				<p>So we could use the quadratic formula instead of three calls to <code>Vector3.Lerp</code>.</p>
+			</div>
+			
+			<pre translate="no">	public static Vector3 GetPoint (Vector3 p0, Vector3 p1, Vector3 p2, float t) {
+		<mark>t = Mathf.Clamp01(t);</mark>
+		<mark>float oneMinusT = 1f - t;</mark>
+		return
+			<mark>oneMinusT * oneMinusT * p0 +</mark>
+			<mark>2f * oneMinusT * t * p1 +</mark>
+			<mark>t * t * p2</mark>;
+	}</pre>
+			
+			<div class="instructions">
+				<p>Now that we have a polynomial function, we can also describe its derivatives. The first derivative of our quadratic B&eacute;zier curve is <strong>B'(<i>t</i>) = 2 (1 - <i>t</i>) (P<sub>1</sub> - P<sub>0</sub>) + 2 <i>t</i> (P<sub>2</sub> - P<sub>1</sub>)</strong>. Let's add it.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-derivative" id="q-derivative">What's a derivative?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>public static Vector3 GetFirstDerivative (Vector3 p0, Vector3 p1, Vector3 p2, float t) {</mark>
+		<mark>return</mark>
+			<mark>2f * (1f - t) * (p1 - p0) +</mark>
+			<mark>2f * t * (p2 - p1);</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>This function produces lines tangent to the curve, which can be interpreted as the speed with which we move along the curve. So now we can add a <code>GetVelocity</code> method to <code>BezierCurve</code>.</p>
+				<p>Because it produces a velocity vector and not a point, it should not be affected by the position of the curve, so we subtract that after transforming.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-second-derivative" id="q-second-derivative">What about the second derivative?</a></li>
+					<li><a href="index.html#a-transform-direction" id="q-transform-direction">Why not use <code>TransformDirection</code>?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>public Vector3 GetVelocity (float t) {</mark>
+		<mark>return transform.TransformPoint(Bezier.GetFirstDerivative(points[0], points[1], points[2], t)) -</mark>
+			<mark>transform.position;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now we can visualize the speed along the curve in <code>BezierCurveInspector</code>'s <code>OnSceneGUI</code> method.</p>
+			</div>
+			
+			<pre translate="no">		Vector3 lineStart = curve.GetPoint(0f);
+		<mark>Handles.color = Color.green;</mark>
+		<mark>Handles.DrawLine(lineStart, lineStart + curve.GetVelocity(0f));</mark>
+		for (int i = 1; i &lt;= lineSteps; i++) {
+			Vector3 lineEnd = curve.GetPoint(i / (float)lineSteps);
+			<mark>Handles.color = Color.white;</mark>
+			Handles.DrawLine(lineStart, lineEnd);
+			<mark>Handles.color = Color.green;</mark>
+			<mark>Handles.DrawLine(lineEnd, lineEnd + curve.GetVelocity(i / (float)lineSteps));</mark>
+			lineStart = lineEnd;
+		}</pre>
+			
+			<figure>
+				<img src="02-velocity.png" width="340" height="250">
+				<figcaption>Showing velocity.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>We can clearly see how the velocity changes along the curve, but those long lines are cluttering the view. Instead of showing the velocity, we can suffice with showing the direction of movement.</p>
+			</div>
+			
+			<pre translate="no">		Vector3 lineStart = curve.GetPoint(0f);
+		Handles.color = Color.green;
+		Handles.DrawLine(lineStart, lineStart + curve.<mark>GetDirection</mark>(0f));
+		for (int i = 1; i &lt;= lineSteps; i++) {
+			Vector3 lineEnd = curve.GetPoint(i / (float)lineSteps);
+			Handles.color = Color.white;
+			Handles.DrawLine(lineStart, lineEnd);
+			Handles.color = Color.green;
+			Handles.DrawLine(lineEnd, lineEnd + curve.<mark>GetDirection</mark>(i / (float)lineSteps));
+			lineStart = lineEnd;
+		}</pre>
+			
+			<div class="instructions">
+				<p>Which requires that we add <code>GetDirection</code> to <code>BezierCurve</code>, which simply normalizes the velocity.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public Vector3 GetDirection (float t) {</mark>
+		<mark>return GetVelocity(t).normalized;</mark>
+	<mark>}</mark></pre>
+			
+			<figure>
+				<img src="02-direction.png" width="334" height="204">
+				<figcaption>Showing direction.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Let's go a step further and add new methods to <code>Bezier</code> for cubic curves as well! It works just like the quadratic version, except that it needs a fourth point and its formula goes another step deeper, resulting in a combination of six linear interpolations. The consolidated function of that becomes <strong>B(<i>t</i>) = (1 - <i>t</i>)<sup>3</sup> P<sub>0</sub> + 3 (1 - <i>t</i>)<sup>2</sup> t P<sub>1</sub> + 3 (1 - <i>t</i>) t<sup>2</sup> P<sub>2</sub> + <i>t</i><sup>3</sup> P<sub>3</sub></strong> which has as its first derivative <strong>B'(<i>t</i>) = 3 (1 - <i>t</i>)<sup>2</sup> (P<sub>1</sub> - P<sub>0</sub>) + 6 (1 - <i>t</i>) <i>t</i> (P<sub>2</sub> - P<sub>1</sub>) + 3 <i>t</i><sup>2</sup> (P<sub>3</sub> - P<sub>2</sub>)</strong>.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public static Vector3 GetPoint (Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t) {</mark>
+		<mark>t = Mathf.Clamp01(t);</mark>
+		<mark>float oneMinusT = 1f - t;</mark>
+		<mark>return</mark>
+			<mark>oneMinusT * oneMinusT * oneMinusT * p0 +</mark>
+			<mark>3f * oneMinusT * oneMinusT * t * p1 +</mark>
+			<mark>3f * oneMinusT * t * t * p2 +</mark>
+			<mark>t * t * t * p3;</mark>
+	<mark>}</mark>
+	
+	<mark>public static Vector3 GetFirstDerivative (Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t) {</mark>
+		<mark>t = Mathf.Clamp01(t);</mark>
+		<mark>float oneMinusT = 1f - t;</mark>
+		<mark>return</mark>
+			<mark>3f * oneMinusT * oneMinusT * (p1 - p0) +</mark>
+			<mark>6f * oneMinusT * t * (p2 - p1) +</mark>
+			<mark>3f * t * t * (p3 - p2);</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>With that, we can upgrade <code>BezierCurve</code> from quadratic to cubic by taking an additional point into consideration. Be sure to add the fourth point to its array either manually or by resetting the component.</p>
+			</div>
+			
+			<pre translate="no">	public Vector3 GetPoint (float t) {
+		return transform.TransformPoint(Bezier.GetPoint(points[0], points[1], points[2], <mark>points[3],</mark> t));
+	}
+	
+	public Vector3 GetVelocity (float t) {
+		return transform.TransformPoint(
+			Bezier.GetFirstDerivative(points[0], points[1], points[2], <mark>points[3],</mark> t)) - transform.position;
+	}
+	
+	public void Reset () {
+		points = new Vector3[] {
+			new Vector3(1f, 0f, 0f),
+			new Vector3(2f, 0f, 0f),
+			new Vector3(3f, 0f, 0f)<mark>,</mark>
+			<mark>new Vector3(4f, 0f, 0f)</mark>
+		};
+	}</pre>
+			
+			<div class="instructions">
+				<p><code>BezierCurveInspector</code> now needs to be updated so it shows the fourth point as well.</p>
+			</div>
+			
+			<pre translate="no">		Vector3 p0 = ShowPoint(0);
+		Vector3 p1 = ShowPoint(1);
+		Vector3 p2 = ShowPoint(2);
+		<mark>Vector3 p3 = ShowPoint(3);</mark>
+		
+		Handles.color = Color.gray;
+		Handles.DrawLine(p0, p1);
+		Handles.DrawLine(<mark>p2</mark>, <mark>p3</mark>);</pre>
+			
+			<figure>
+				<img src="02-cubic.png" width="390" height="310">
+				<figcaption>A cubic B&eacute;zier curve.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>It is probably visually obvious by now that we draw our curve using straight line segments. We could increase the number of steps to improve the visual quality. We could also use an iterative approach to get accurate down to pixel level. But we can also use Unity's <code>Handles.DrawBezier</code> method, which takes care of drawing nice cubic B&eacute;zier curves for us.</p>
+				<p>Let's also show the directions in their own method and scale them to take up less space.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-draw-bezier" id="q-draw-bezier">How does <code>DrawBezier</code> work?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>private const float directionScale = 0.5f;</mark>
+	
+	private void OnSceneGUI () {
+		curve = target as BezierCurve;
+		handleTransform = curve.transform;
+		handleRotation = Tools.pivotRotation == PivotRotation.Local ?
+			handleTransform.rotation : Quaternion.identity;
+		
+		Vector3 p0 = ShowPoint(0);
+		Vector3 p1 = ShowPoint(1);
+		Vector3 p2 = ShowPoint(2);
+		Vector3 p3 = ShowPoint(3);
+		
+		Handles.color = Color.gray;
+		Handles.DrawLine(p0, p1);
+		Handles.DrawLine(p2, p3);
+		
+		<mark>ShowDirections();</mark>
+		<mark>Handles.DrawBezier(p0, p3, p1, p2, Color.white, null, 2f);</mark>
+	}
+
+	<mark>private void ShowDirections () {</mark>
+		<mark>Handles.color = Color.green;</mark>
+		Vector3 <mark>point</mark> = curve.GetPoint(0f);
+		Handles.DrawLine(<mark>point</mark>, <mark>point + curve.GetDirection(0f) * directionScale</mark>);
+		for (int i = 1; i &lt;= lineSteps; i++) {
+			<mark>point</mark> = curve.GetPoint(i / (float)lineSteps);
+			Handles.DrawLine(<mark>point</mark>, <mark>point</mark> + curve.GetDirection(i / (float)lineSteps) <mark>* directionScale</mark>);
+		}
+	}</pre>
+			
+			<figure>
+				<img src="02-draw-bezier.png" width="412" height="320">
+				<figcaption>Using Handles.DrawBezier and scaled direction lines.</figcaption>
+			</figure>
+			
+			<h2>Splines</h2>
+			
+			<div class="instructions">
+				<p>Having a single curve is nice, but to create complex paths we would need to concatenate multiple curves. Such a construct is known as a spline. Let's create one by copying the <code>BezierCurve</code> code, changing the type to <code>BezierSpline</code>.</p>
+			</div>
+			
+			<pre translate="no">using UnityEngine;
+
+public class <mark>BezierSpline</mark> : MonoBehaviour {
+
+	public Vector3[] points;
+	
+	public Vector3 GetPoint (float t) {
+		return transform.TransformPoint(Bezier.GetPoint(points[0], points[1], points[2], points[3], t));
+	}
+	
+	public Vector3 GetVelocity (float t) {
+		return transform.TransformPoint(
+			Bezier.GetFirstDerivative(points[0], points[1], points[2], points[3], t)) - transform.position;
+	}
+	
+	public Vector3 GetDirection (float t) {
+		return GetVelocity(t).normalized;
+	}
+	
+	public void Reset () {
+		points = new Vector3[] {
+			new Vector3(1f, 0f, 0f),
+			new Vector3(2f, 0f, 0f),
+			new Vector3(3f, 0f, 0f),
+			new Vector3(4f, 0f, 0f)
+		};
+	}
+}</pre>
+			
+			<div class="instructions">
+				<p>We also create an editor for it, by copying and tweaking the code from <code>BezierCurveInspector</code>. We can then create a spline object and edit it, just like a curve.</p>
+			</div>
+			
+			<pre translate="no">using UnityEditor;
+using UnityEngine;
+
+[CustomEditor(typeof(<mark>BezierSpline</mark>))]
+public class BezierSplineInspector : Editor {
+
+	private const int lineSteps = 10;
+	private const float directionScale = 0.5f;
+
+	private <mark>BezierSpline spline</mark>;
+	private Transform handleTransform;
+	private Quaternion handleRotation;
+
+	private void OnSceneGUI () {
+		<mark>spline</mark> = target as <mark>BezierSpline</mark>;
+		handleTransform = <mark>spline</mark>.transform;
+		handleRotation = Tools.pivotRotation == PivotRotation.Local ?
+			handleTransform.rotation : Quaternion.identity;
+		
+		Vector3 p0 = ShowPoint(0);
+		Vector3 p1 = ShowPoint(1);
+		Vector3 p2 = ShowPoint(2);
+		Vector3 p3 = ShowPoint(3);
+		
+		Handles.color = Color.gray;
+		Handles.DrawLine(p0, p1);
+		Handles.DrawLine(p2, p3);
+		
+		ShowDirections();
+		Handles.DrawBezier(p0, p3, p1, p2, Color.white, null, 2f);
+	}
+
+	private void ShowDirections () {
+		Handles.color = Color.green;
+		Vector3 point = <mark>spline</mark>.GetPoint(0f);
+		Handles.DrawLine(point, point + <mark>spline</mark>.GetDirection(0f) * directionScale);
+		for (int i = 1; i &lt;= lineSteps; i++) {
+			point = <mark>spline</mark>.GetPoint(i / (float)lineSteps);
+			Handles.DrawLine(point, point + <mark>spline</mark>.GetDirection(i / (float)lineSteps) * directionScale);
+		}
+	}
+
+	private Vector3 ShowPoint (int index) {
+		Vector3 point = handleTransform.TransformPoint(<mark>spline</mark>.points[index]);
+		EditorGUI.BeginChangeCheck();
+		point = Handles.DoPositionHandle(point, handleRotation);
+		if (EditorGUI.EndChangeCheck()) {
+			Undo.RecordObject(spline, "Move Point");
+			EditorUtility.SetDirty(<mark>spline</mark>);
+			<mark>spline</mark>.points[index] = handleTransform.InverseTransformPoint(point);
+		}
+		return point;
+	}
+}</pre>
+			
+			<figure>
+				<img src="03-spline.png" width="786" height="271">
+				<figcaption>A new spline type.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Let's add a method to <code>BezierSpline</code> to add another curve to the spline. Because we want the spline to be continuous, the last point of the previous curve is the same as the first point of the next curve. So each extra curve adds three more points.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-ref" id="q-second-derivative">What's <code>ref</code>?</a></li>
+					<li><a href="index.html#a-array-resize" id="q-array-resize">How does <code>Array.Resize</code> work?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>public void AddCurve () {</mark>
+		<mark>Vector3 point = points[points.Length - 1];</mark>
+		<mark>Array.Resize(ref points, points.Length + 3);</mark>
+		<mark>point.x += 1f;</mark>
+		<mark>points[points.Length - 3] = point;</mark>
+		<mark>point.x += 1f;</mark>
+		<mark>points[points.Length - 2] = point;</mark>
+		<mark>point.x += 1f;</mark>
+		<mark>points[points.Length - 1] = point;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>We're using the <code>Array.Resize</code> method to create a larger array to hold the new points. It's inside the <code>System</code> namespace, so we should declare that we're using it at the top of our script.</p>
+			</div>
+			
+			<pre translate="no">using UnityEngine;
+<mark>using System;</mark></pre>
+			
+			<div class="instructions">
+				<p>To actually be able to add a curve, we have to add a button to our spline's inspector. We can customize the inspector that Unity uses for our component by overriding the <code>OnInspectorGUI</code> method of <code>BezierSplineInspector</code>. Note that this is not a special Unity method, it relies on inheritance.</p>
+				<p>To keep drawing the default inspector, we call the <code>DrawDefaultInspector</code> method. Then we use <code>GUILayout</code> to draw a button, which when clicked adds a curve.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-guilayout-button" id="q-guilayout-button">How does <code>GUILayout.Button</code> work?</a></li>
+					<li><a href="index.html#a-assign-spline" id="q-assign-spline">Why assign <code>spline</code> in both methods?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>public override void OnInspectorGUI () {</mark>
+		<mark>DrawDefaultInspector();</mark>
+		<mark>spline = target as BezierSpline;</mark>
+		<mark>if (GUILayout.Button("Add Curve")) {</mark>
+			<mark>Undo.RecordObject(spline, "Add Curve");</mark>
+			<mark>spline.AddCurve();</mark>
+			<mark>EditorUtility.SetDirty(spline);</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<figure>
+				<img src="03-adding-a-curve.png" width="320" height="336">
+				<figcaption>Adding a curve.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Of course we still only see the first curve. So we adjust <code>BezierSplineInspector</code> so it loops over all the curves.</p>
+			</div>
+			
+			<pre translate="no">	private void OnSceneGUI () {
+		spline = target as BezierSpline;
+		handleTransform = spline.transform;
+		handleRotation = Tools.pivotRotation == PivotRotation.Local ?
+			handleTransform.rotation : Quaternion.identity;
+		
+		Vector3 p0 = ShowPoint(0);
+		<mark>for (int i = 1; i &lt; spline.points.Length; i += 3) {</mark>
+			Vector3 p1 = ShowPoint(<mark>i</mark>);
+			Vector3 p2 = ShowPoint(<mark>i + 1</mark>);
+			Vector3 p3 = ShowPoint(<mark>i + 2</mark>);
+			
+			Handles.color = Color.gray;
+			Handles.DrawLine(p0, p1);
+			Handles.DrawLine(p2, p3);
+			
+			Handles.DrawBezier(p0, p3, p1, p2, Color.white, null, 2f);
+			<mark>p0 = p3;</mark>
+		<mark>}</mark>
+		ShowDirections();
+	}</pre>
+			
+			<figure>
+				<img src="03-showing-spline.png" width="426" height="260">
+				<figcaption>The whole spline.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Now we can see all the curves, but the direction lines are only added to the first one. This is because <code>BezierSpline</code>'s method also still only work with the first curve. It's time to change that.</p>
+				<p>To cover the entire spline with a <code>t</code> going from zero to one, we first need to figure out which curve we're on. We can get the curve's index by multiplying <code>t</code> by the number of curves and then discarding the fraction. Let's add a <code>CurveCount</code> property to make that easy.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public int CurveCount {</mark>
+		<mark>get {</mark>
+			<mark>return (points.Length - 1) / 3;</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>After that we can reduce <code>t</code> to just the fractional part to get the interpolation value for our curve. To get to the actual points, we have to multiply the curve index by three.</p>
+				<p>However, this would fail when then original <code>t</code> equals one. In this case we can just set it to the last curve.</p>
+			</div>
+			
+			<pre translate="no">	public Vector3 GetPoint (float t) {
+		<mark>int i;</mark>
+		<mark>if (t >= 1f) {</mark>
+			<mark>t = 1f;</mark>
+			<mark>i = points.Length - 4;</mark>
+		<mark>}</mark>
+		<mark>else {</mark>
+			<mark>t = Mathf.Clamp01(t) * CurveCount;</mark>
+			<mark>i = (int)t;</mark>
+			<mark>t -= i;</mark>
+			<mark>i *= 3;</mark>
+		<mark>}</mark>
+		return transform.TransformPoint(Bezier.GetPoint(
+			points[<mark>i</mark>], points[<mark>i +</mark> 1], points[<mark>i +</mark> 2], points[<mark>i +</mark> 3], t));
+	}
+	
+	public Vector3 GetVelocity (float t) {
+		<mark>int i;</mark>
+		<mark>if (t >= 1f) {</mark>
+			<mark>t = 1f;</mark>
+			<mark>i = points.Length - 4;</mark>
+		<mark>}</mark>
+		<mark>else {</mark>
+			<mark>t = Mathf.Clamp01(t) * CurveCount;</mark>
+			<mark>i = (int)t;</mark>
+			<mark>t -= i;</mark>
+			<mark>i *= 3;</mark>
+		<mark>}</mark>
+		return transform.TransformPoint(Bezier.GetFirstDerivative(
+			points[<mark>i</mark>], points[<mark>i +</mark> 1], points[<mark>i +</mark> 2], points[<mark>i +</mark> 3], t)) - transform.position;
+	}</pre>
+			
+			<div class="instructions">
+				<p>We now see direction lines across the entire spline, but we can improve the visualization by making sure that each curve segment gets the same amount of lines. Fortunately, it is easy to change <code>BezierSplineInspector.ShowDirections</code> so it uses <code>BezierSpline.CurveCount</code> to determine how many lines to draw.</p>
+			</div>
+			
+			<pre translate="no">	private const int <mark>stepsPerCurve</mark> = 10;
+	
+	private void ShowDirections () {
+		Handles.color = Color.green;
+		Vector3 point = spline.GetPoint(0f);
+		Handles.DrawLine(point, point + spline.GetDirection(0f) * directionScale);
+		<mark>int steps = stepsPerCurve * spline.CurveCount;</mark>
+		for (int i = 1; i &lt;= <mark>steps</mark>; i++) {
+			point = spline.GetPoint(i / (float)<mark>steps</mark>);
+			Handles.DrawLine(point, point + spline.GetDirection(i / (float)<mark>steps</mark>) * directionScale);
+		}
+	}</pre>
+			
+			<figure>
+				<img src="03-directions.png" width="402" height="272">
+				<figcaption>Directions along the entire spline.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>It's rather crowded with all those transform handles. We could only show a handle for the active point. Then then other points can suffice with dots.</p>
+				<p>Let's update <code>ShowPoint</code> so it shows a button instead of a position handle. This button will look like a white dot, which when clicked will turn into the active point. Then we only show the position handle if the point's index matches the selected index, which we initialize at -1 so nothing is selected by default.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-handles-button" id="q-handles-button">How does <code>Handles.Button</code> work?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>private const float handleSize = 0.04f;</mark>
+	<mark>private const float pickSize = 0.06f;</mark>
+	
+	<mark>private int selectedIndex = -1;</mark>
+	
+	private Vector3 ShowPoint (int index) {
+		Vector3 point = handleTransform.TransformPoint(spline.points[index]);
+		<mark>Handles.color = Color.white;</mark>
+		<mark>if (Handles.Button(point, handleRotation, handleSize, pickSize, Handles.DotCap)) {</mark>
+			<mark>selectedIndex = index;</mark>
+		<mark>}</mark>
+		<mark>if (selectedIndex == index) {</mark>
+			EditorGUI.BeginChangeCheck();
+			point = Handles.DoPositionHandle(point, handleRotation);
+			if (EditorGUI.EndChangeCheck()) {
+				Undo.RecordObject(spline, "Move Point");
+				EditorUtility.SetDirty(spline);
+				spline.points[index] = handleTransform.InverseTransformPoint(point);
+			}
+		<mark>}</mark>
+		return point;
+	}</pre>
+			
+			<figure>
+				<img src="03-point-dots.png" width="388" height="226">
+				<figcaption>Showing dots.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>This works, but it is tough to get a good size for the dots. Depending on the scale you're working at, they could end up either too large or too small. It would be nice if we could keep the screen size of the dots fixed, just like the position handles always have the same screen size. We can do this by factoring in <code>HandleUtility.GetHandleSize</code>. This method gives us a fixed screen size for any point in world space.</p>
+			</div>
+			
+			<pre translate="no">		<mark>float size = HandleUtility.GetHandleSize(point);</mark>
+		Handles.color = Color.white;
+		if (Handles.Button(point, handleRotation, <mark>size *</mark> handleSize, <mark>size *</mark> pickSize, Handles.DotCap)) {
+			selectedIndex = index;
+		}</pre>
+			
+			<figure>
+				<img src="03-fixed-size-dots.png" width="410" height="240">
+				<figcaption>Dots with fixed size.</figcaption>
+			</figure>
+			
+			<h2>Constraining Control Points</h2>
+			
+			<div class="instructions">
+				<p>Although our spline is continuous, it sharply changes direction in between curve sections. These sudden changes in direction and speed are possible because the shared control point between two curves has two different velocities associated with it, one for each curve.</p>
+				<p>If we want the velocities to be equal, we must ensure that the two control points that define them &ndash; the third of the previous curve and the second of the next curve &ndash; mirror each other around the shared point. This ensures that the combined first and second derivatives are continuous.</p>
+				<p>Alternatively, we could align them but let their distance from the shared point differ. That will result in an abrubt change in velocity, while still keeping the direction continuous. In this case the combined first derivative is continuous, but the second is not.</p>
+				<p>The most flexible approach is to decide per curve boundary which contraints should apply, so we'll do that. Of course, once we have these constraints we can't just let anyone directly edit <code>BezierSpline</code>'s points. So let's make our array private and provide indirect access to it. Make sure to let Unity know that we still want to serialize our points, otherwise they won't be saved.</p>
+			</div>
+			
+			<pre translate="no">	<mark>[SerializeField]</mark>
+	<mark>private</mark> Vector3[] points;
+
+	<mark>public int ControlPointCount {</mark>
+		<mark>get {</mark>
+			<mark>return points.Length;</mark>
+		<mark>}</mark>
+	<mark>}</mark>
+
+	<mark>public Vector3 GetControlPoint (int index) {</mark>
+		<mark>return points[index];</mark>
+	<mark>}</mark>
+
+	<mark>public void SetControlPoint (int index, Vector3 point) {</mark>
+		<mark>points[index] = point;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now <code>BezierSplineInspector</code> must use the new methods and property instead of directly accessing the points array.</p>
+			</div>
+			
+			<pre translate="no">	private void OnSceneGUI () {
+		spline = target as BezierSpline;
+		handleTransform = spline.transform;
+		handleRotation = Tools.pivotRotation == PivotRotation.Local ?
+			handleTransform.rotation : Quaternion.identity;
+		
+		Vector3 p0 = ShowPoint(0);
+		for (int i = 1; i &lt; spline.<mark>ControlPointCount</mark>; i += 3) {
+			Vector3 p1 = ShowPoint(i);
+			Vector3 p2 = ShowPoint(i + 1);
+			Vector3 p3 = ShowPoint(i + 2);
+			
+			Handles.color = Color.gray;
+			Handles.DrawLine(p0, p1);
+			Handles.DrawLine(p2, p3);
+			
+			Handles.DrawBezier(p0, p3, p1, p2, Color.white, null, 2f);
+			p0 = p3;
+		}
+		ShowDirections();
+	}
+	
+	private Vector3 ShowPoint (int index) {
+		Vector3 point = handleTransform.TransformPoint(spline.<mark>GetControlPoint(</mark>index<mark>)</mark>);
+		float size = HandleUtility.GetHandleSize(point);
+		Handles.color = Color.white;
+		if (Handles.Button(point, handleRotation, size * handleSize, size * pickSize, Handles.DotCap)) {
+			selectedIndex = index;
+		}
+		if (selectedIndex == index) {
+			EditorGUI.BeginChangeCheck();
+			point = Handles.DoPositionHandle(point, handleRotation);
+			if (EditorGUI.EndChangeCheck()) {
+				Undo.RecordObject(spline, "Move Point");
+				EditorUtility.SetDirty(spline);
+				spline.<mark>SetControlPoint(</mark>index<mark>,</mark> handleTransform.InverseTransformPoint(point)<mark>)</mark>;
+			}
+		}
+		return point;
+	}</pre>
+			
+			<div class="instructions">
+				<p>While we're at it, we also no longer want to allow direct access to the array in the inspector, so remove the call to <code>DrawDefaultInspector</code>. To still allow changes via typing, let's show a vector field for the selected point.</p>
+			</div>
+			
+			<pre translate="no">	public override void OnInspectorGUI () {
+		spline = target as BezierSpline;
+		<mark>if (selectedIndex >= 0 &amp;&amp; selectedIndex &lt; spline.ControlPointCount) {</mark>
+			<mark>DrawSelectedPointInspector();</mark>
+		<mark>}</mark>
+		if (GUILayout.Button("Add Curve")) {
+			Undo.RecordObject(spline, "Add Curve");
+			spline.AddCurve();
+			EditorUtility.SetDirty(spline);
+		}
+	}
+
+	<mark>private void DrawSelectedPointInspector() {</mark>
+		<mark>GUILayout.Label("Selected Point");</mark>
+		<mark>EditorGUI.BeginChangeCheck();</mark>
+		<mark>Vector3 point = EditorGUILayout.Vector3Field("Position", spline.GetControlPoint(selectedIndex));</mark>
+		<mark>if (EditorGUI.EndChangeCheck()) {</mark>
+			<mark>Undo.RecordObject(spline, "Move Point");</mark>
+			<mark>EditorUtility.SetDirty(spline);</mark>
+			<mark>spline.SetControlPoint(selectedIndex, point);</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Unfortunately, it turns out that the inspector doesn't refresh itself when we select a point in the scene view. We could fix this by calling <code>SetDirty</code> for the spline, but that's not right because the spline didn't change. Fortunately, we can issue a repaint request instead.</p>
+			</div>
+			
+			<pre translate="no">	private Vector3 ShowPoint (int index) {
+		Vector3 point = handleTransform.TransformPoint(spline.GetControlPoint(index));
+		float size = HandleUtility.GetHandleSize(point);
+		Handles.color = Color.white;
+		if (Handles.Button(point, handleRotation, size * handleSize, size * pickSize, Handles.DotCap)) {
+			selectedIndex = index;
+			<mark>Repaint();</mark>
+		}
+		if (selectedIndex == index) {
+			EditorGUI.BeginChangeCheck();
+			point = Handles.DoPositionHandle(point, handleRotation);
+			if (EditorGUI.EndChangeCheck()) {
+				Undo.RecordObject(spline, "Move Point");
+				EditorUtility.SetDirty(spline);
+				spline.SetControlPoint(index, handleTransform.InverseTransformPoint(point));
+			}
+		}
+		return point;
+	}</pre>
+			
+			<figure>
+				<img src="04-selected-point.png" width="320" height="96">
+				<figcaption>Selected point only.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Let's define an enumeration type to describe our three modes. Create a new script, remove the default code, and define an <code>enum</code> with the three options.</p>
+			</div>
+			
+			<pre translate="no"><mark>public enum BezierControlPointMode {</mark>
+	<mark>Free,</mark>
+	<mark>Aligned,</mark>
+	<mark>Mirrored</mark>
+<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now we can add these modes to <code>BezierSpline</code>. We only need to store the mode in between curves, so let's put them in an array with a length equal to the number of curves plus one. You'll need to reset your spline or create a new one to make sure you have an array of the right size.</p>
+			</div>
+			
+			<pre translate="no">	<mark>[SerializeField]</mark>
+	<mark>private BezierControlPointMode[] modes;</mark>
+	
+	public void AddCurve () {
+		Vector3 point = points[points.Length - 1];
+		Array.Resize(ref points, points.Length + 3);
+		point.x += 1f;
+		points[points.Length - 3] = point;
+		point.x += 1f;
+		points[points.Length - 2] = point;
+		point.x += 1f;
+		points[points.Length - 1] = point;
+
+		<mark>Array.Resize(ref modes, modes.Length + 1);</mark>
+		<mark>modes[modes.Length - 1] = modes[modes.Length - 2];</mark>
+	}
+	
+	public void Reset () {
+		points = new Vector3[] {
+			new Vector3(1f, 0f, 0f),
+			new Vector3(2f, 0f, 0f),
+			new Vector3(3f, 0f, 0f),
+			new Vector3(4f, 0f, 0f)
+		};
+		<mark>modes = new BezierControlPointMode[] {</mark>
+			<mark>BezierControlPointMode.Free,</mark>
+			<mark>BezierControlPointMode.Free</mark>
+		<mark>};</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>While we store the modes in between curves, it is convenient if we could get and set modes per control point. So we need to convert a point index into a mode index because in reality points share modes. As an example, the point index sequence 0, 1, 2, 3, 4, 5, 6 corresponds to the mode index sequence 0, 0, 1, 1, 1, 2, 2. So we need to add one and then divide by three.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public BezierControlPointMode GetControlPointMode (int index) {</mark>
+		<mark>return modes[(index + 1) / 3];</mark>
+	<mark>}</mark>
+
+	<mark>public void SetControlPointMode (int index, BezierControlPointMode mode) {</mark>
+		<mark>modes[(index + 1) / 3] = mode;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now <code>BezierSplineInspector</code> can allow us to change the mode of the selected point. You will notice that changing the mode of one point also appears to change the mode of the points that are linked to it.</p>
+			</div>
+			
+			<pre translate="no">	private void DrawSelectedPointInspector() {
+		GUILayout.Label("Selected Point");
+		EditorGUI.BeginChangeCheck();
+		Vector3 point = EditorGUILayout.Vector3Field("Position", spline.GetControlPoint(selectedIndex));
+		if (EditorGUI.EndChangeCheck()) {
+			Undo.RecordObject(spline, "Move Point");
+			EditorUtility.SetDirty(spline);
+			spline.SetControlPoint(selectedIndex, point);
+		}
+		<mark>EditorGUI.BeginChangeCheck();</mark>
+		<mark>BezierControlPointMode mode = (BezierControlPointMode)</mark>
+			<mark>EditorGUILayout.EnumPopup("Mode", spline.GetControlPointMode(selectedIndex));</mark>
+		<mark>if (EditorGUI.EndChangeCheck()) {</mark>
+			<mark>Undo.RecordObject(spline, "Change Point Mode");</mark>
+			<mark>spline.SetControlPointMode(selectedIndex, mode);</mark>
+			<mark>EditorUtility.SetDirty(spline);</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<figure>
+				<img src="04-mode.png" width="554" height="173">
+				<figcaption>Now with adjustable control point mode.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>It would be useful if we also got some visual feedback about our node types in the scene view. We can easily add this by coloring the dots. I'll use white for free, yellow for aligned, and cyan for mirrored.</p>
+			</div>
+			
+			<pre translate="no">	<mark>private static Color[] modeColors = {</mark>
+		<mark>Color.white,</mark>
+		<mark>Color.yellow,</mark>
+		<mark>Color.cyan</mark>
+	<mark>};</mark>
+	
+	private Vector3 ShowPoint (int index) {
+		Vector3 point = handleTransform.TransformPoint(spline.GetControlPoint(index));
+		float size = HandleUtility.GetHandleSize(point);
+		Handles.color = <mark>modeColors[(int)spline.GetControlPointMode(index)]</mark>;
+		if (Handles.Button(point, handleRotation, size * handleSize, size * pickSize, Handles.DotCap)) {
+			selectedIndex = index;
+			Repaint();
+		}
+		if (selectedIndex == index) {
+			EditorGUI.BeginChangeCheck();
+			point = Handles.DoPositionHandle(point, handleRotation);
+			if (EditorGUI.EndChangeCheck()) {
+				Undo.RecordObject(spline, "Move Point");
+				EditorUtility.SetDirty(spline);
+				spline.SetControlPoint(index, handleTransform.InverseTransformPoint(point));
+			}
+		}
+		return point;
+	}</pre>
+			
+			<figure>
+				<img src="04-colored-points.png" width="374" height="250">
+				<figcaption>Now with color-coded points.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>So far we're just coloring points. It's time to enforce the constraints. We add a new method to <code>BezierSpline</code> to do so and call it when a point is moved or a mode is changed. It takes a point index and begins by retrieving the relevant mode.</p>
+			</div>
+			
+			<pre translate="no">	public void SetControlPoint (int index, Vector3 point) {
+		points[index] = point;
+		<mark>EnforceMode(index);</mark>
+	}
+	
+	public void SetControlPointMode (int index, BezierControlPointMode mode) {
+		modes[(index + 1) / 3] = mode;
+		<mark>EnforceMode(index);</mark>
+	}
+
+	<mark>private void EnforceMode (int index) {</mark>
+		<mark>int modeIndex = (index + 1) / 3;</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>We should check if we actually don't have to enforce anything. This is the case when the mode is set to free, or when we're at the end points of the curve. In these cases, we can return without doing anything.</p>
+			</div>
+			
+			<pre translate="no">	private void EnforceMode (int index) {
+		int modeIndex = (index + 1) / 3;
+		<mark>BezierControlPointMode mode = modes[modeIndex];</mark>
+		<mark>if (mode == BezierControlPointMode.Free || modeIndex == 0 || modeIndex == modes.Length - 1) {</mark>
+			<mark>return;</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>Now which point should we adjust? When we change a point's mode, it is either a point in between curves or one of its neighbors. When we have the middle point selected, we can just keep the previous point fixed and enforce the constraints on the point on the opposite side. If we have one of the other points selected, we should keep that one fixed and adjust its opposite. That way our selected point always stays where it is. So let's define the indices for these points.</p>
+			</div>
+			
+			<pre translate="no">		if (mode == BezierControlPointMode.Free || modeIndex == 0 || modeIndex == modes.Length - 1) {
+			return;
+		}
+		
+		<mark>int middleIndex = modeIndex * 3;</mark>
+		<mark>int fixedIndex, enforcedIndex;</mark>
+		<mark>if (index &lt;= middleIndex) {</mark>
+			<mark>fixedIndex = middleIndex - 1;</mark>
+			<mark>enforcedIndex = middleIndex + 1;</mark>
+		<mark>}</mark>
+		<mark>else {</mark>
+			<mark>fixedIndex = middleIndex + 1;</mark>
+			<mark>enforcedIndex = middleIndex - 1;</mark>
+		<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Let's consider the mirrored case first. To mirror around the middle point, we have to take the vector from the middle to the fixed point &ndash; which is (fixed - middle) &ndash; and invert it. This is the enforced tangent, and adding it to the middle gives us our enforced point.</p>
+			</div>
+			
+			<pre translate="no">		if (index &lt;= middleIndex) {
+			fixedIndex = middleIndex - 1;
+			enforcedIndex = middleIndex + 1;
+		}
+		else {
+			fixedIndex = middleIndex + 1;
+			enforcedIndex = middleIndex - 1;
+		}
+
+		<mark>Vector3 middle = points[middleIndex];</mark>
+		<mark>Vector3 enforcedTangent = middle - points[fixedIndex];</mark>
+		<mark>points[enforcedIndex] = middle + enforcedTangent;</mark></pre>
+			
+			<div class="instructions">
+				<p>For the aligned mode, we also have to make sure that the new tangent has the same length as the old one. So we normalize it and then multiply by the distance between the middle and the old enforced point.</p>
+			</div>
+			
+			<pre translate="no">		Vector3 enforcedTangent = middle - points[fixedIndex];
+		<mark>if (mode == BezierControlPointMode.Aligned) {</mark>
+			<mark>enforcedTangent = enforcedTangent.normalized * Vector3.Distance(middle, points[enforcedIndex]);</mark>
+		<mark>}</mark>
+		points[enforcedIndex] = middle + enforcedTangent;</pre>
+			
+			<figure>
+				<img src="04-enforced.png" width="356" height="242">
+				<figcaption>Enforced constraints.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>From now on, whenever you move a point or change a point's mode, the constraints will be enforced. But when moving a middle point, the previous point always stays fixed and the next point is always enforced. This might be fine, but it's intuitive if both other points move along with the middle one. So let's adjust <code>SetControlPoint</code> so it moves them together.</p>
+			</div>
+			
+			<pre translate="no">	public void SetControlPoint (int index, Vector3 point) {
+		<mark>if (index % 3 == 0) {</mark>
+			<mark>Vector3 delta = point - points[index];</mark>
+			<mark>if (index > 0) {</mark>
+				<mark>points[index - 1] += delta;</mark>
+			<mark>}</mark>
+			<mark>if (index + 1 &lt; points.Length) {</mark>
+				<mark>points[index + 1] += delta;</mark>
+			<mark>}</mark>
+		<mark>}</mark>
+		points[index] = point;
+		EnforceMode(index);
+	}</pre>
+			
+			<div class="instructions">
+				<p>To wrap things up, we should also make sure that the constraints are enforced when we add a curve. We can do this by simply calling <code>EnforceMode</code> at the point where the new curve was added.</p>
+			</div>
+			
+			<pre translate="no">	public void AddCurve () {
+		Vector3 point = points[points.Length - 1];
+		Array.Resize(ref points, points.Length + 3);
+		point.x += 1f;
+		points[points.Length - 3] = point;
+		point.x += 1f;
+		points[points.Length - 2] = point;
+		point.x += 1f;
+		points[points.Length - 1] = point;
+
+		Array.Resize(ref modes, modes.Length + 1);
+		modes[modes.Length - 1] = modes[modes.Length - 2];
+		<mark>EnforceMode(points.Length - 4);</mark>
+	}</pre>
+			
+			<div class="instructions">
+				<p>There is yet another constraint that we could add. By enforcing that the first and last control points share the same position, we can turn our spline into a loop. Of course, we also have to take modes into consideration as well.</p>
+				<p>So let's add a loop property to <code>BezierSpline</code>. Whenever it is set to true, we make sure the modes of the end points match and we call <code>SetPosition</code>, trusting that it will take care of the position and mode constraints.</p>
+			</div>
+			
+			<pre translate="no">	<mark>[SerializeField]</mark>
+	<mark>private bool loop;</mark>
+
+	<mark>public bool Loop {</mark>
+		<mark>get {</mark>
+			<mark>return loop;</mark>
+		<mark>}</mark>
+		<mark>set {</mark>
+			<mark>loop = value;</mark>
+			<mark>if (value == true) {</mark>
+				<mark>modes[modes.Length - 1] = modes[0];</mark>
+				<mark>SetControlPoint(0, points[0]);</mark>
+			<mark>}</mark>
+		<mark>}</mark>
+	<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now we can add the loop property to <code>BezierSplineInspector</code>.</p>
+			</div>
+			
+			<pre translate="no">	public override void OnInspectorGUI () {
+		spline = target as BezierSpline;
+		<mark>EditorGUI.BeginChangeCheck();</mark>
+		<mark>bool loop = EditorGUILayout.Toggle("Loop", spline.Loop);</mark>
+		<mark>if (EditorGUI.EndChangeCheck()) {</mark>
+			<mark>Undo.RecordObject(spline, "Toggle Loop");</mark>
+			<mark>EditorUtility.SetDirty(spline);</mark>
+			<mark>spline.Loop = loop;</mark>
+		<mark>}</mark>
+		if (selectedIndex >= 0 &amp;&amp; selectedIndex &lt; spline.ControlPointCount) {
+			DrawSelectedPointInspector();
+		}
+		if (GUILayout.Button("Add Curve")) {
+			Undo.RecordObject(spline, "Add Curve");
+			spline.AddCurve();
+			EditorUtility.SetDirty(spline);
+		}
+	}</pre>
+			
+			<figure>
+				<img src="04-loop-property.png" width="320" height="132">
+				<figcaption>Optional loop.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>To correctly enforce the loop, we need to make a few more changes to <code>BezierSpline</code>.</p>
+				<p>First, <code>SetControlPointMode</code> needs to make sure that the first and last mode remain equal in case of a loop.</p>
+			</div>
+			
+			<pre translate="no">	public void SetControlPointMode (int index, BezierControlPointMode mode) {
+		<mark>int modeIndex =</mark> (index + 1) / 3<mark>;</mark>
+		modes[<mark>modeIndex</mark>] = mode;
+		<mark>if (loop) {</mark>
+			<mark>if (modeIndex == 0) {</mark>
+				<mark>modes[modes.Length - 1] = mode;</mark>
+			<mark>}</mark>
+			<mark>else if (modeIndex == modes.Length - 1) {</mark>
+				<mark>modes[0] = mode;</mark>
+			<mark>}</mark>
+		<mark>}</mark>
+		EnforceMode(index);
+	}</pre>
+			
+			<div class="instructions">
+				<p>Next, <code>SetControlPoint</code> needs different edge cases when dealing with a loop, because it needs to wrap around the points array.</p>
+			</div>
+			
+			<pre translate="no">	public void SetControlPoint (int index, Vector3 point) {
+		if (index % 3 == 0) {
+			Vector3 delta = point - points[index];
+			<mark>if (loop) {</mark>
+				<mark>if (index == 0) {</mark>
+					<mark>points[1] += delta;</mark>
+					<mark>points[points.Length - 2] += delta;</mark>
+					<mark>points[points.Length - 1] = point;</mark>
+				<mark>}</mark>
+				<mark>else if (index == points.Length - 1) {</mark>
+					<mark>points[0] = point;</mark>
+					<mark>points[1] += delta;</mark>
+					<mark>points[index - 1] += delta;</mark>
+				<mark>}</mark>
+				<mark>else {</mark>
+					<mark>points[index - 1] += delta;</mark>
+					<mark>points[index + 1] += delta;</mark>
+				<mark>}</mark>
+			<mark>}</mark>
+			<mark>else {</mark>
+				if (index > 0) {
+					points[index - 1] += delta;
+				}
+				if (index + 1 &lt; points.Length) {
+					points[index + 1] += delta;
+				}
+			<mark>}</mark>
+		}
+		points[index] = point;
+		EnforceMode(index);
+	}</pre>
+			
+			<div class="instructions">
+				<p>Next, <code>EnforceMode</code> can now only bail at the end points when not looping. It also has to check whether the fixed or enforced point wraps around the array.</p>
+			</div>
+			
+			<pre translate="no">	private void EnforceMode (int index) {
+		int modeIndex = (index + 1) / 3;
+		BezierControlPointMode mode = modes[modeIndex];
+		if (mode == BezierControlPointMode.Free || <mark>!loop &amp;&amp; (</mark>modeIndex == 0 || modeIndex == modes.Length - 1<mark>)</mark>) {
+			return;
+		}
+
+		int middleIndex = modeIndex * 3;
+		int fixedIndex, enforcedIndex;
+		if (index &lt;= middleIndex) {
+			fixedIndex = middleIndex - 1;
+			<mark>if (fixedIndex &lt; 0) {</mark>
+				<mark>fixedIndex = points.Length - 2;</mark>
+			<mark>}</mark>
+			enforcedIndex = middleIndex + 1;
+			<mark>if (enforcedIndex >= points.Length) {</mark>
+				<mark>enforcedIndex = 1;</mark>
+			<mark>}</mark>
+		}
+		else {
+			fixedIndex = middleIndex + 1;
+			<mark>if (fixedIndex >= points.Length) {</mark>
+				<mark>fixedIndex = 1;</mark>
+			<mark>}</mark>
+			enforcedIndex = middleIndex - 1;
+			<mark>if (enforcedIndex &lt; 0) {</mark>
+				<mark>enforcedIndex = points.Length - 2;</mark>
+			<mark>}</mark>
+		}
+
+		Vector3 middle = points[middleIndex];
+		Vector3 enforcedTangent = middle - points[fixedIndex];
+		if (mode == BezierControlPointMode.Aligned) {
+			enforcedTangent = enforcedTangent.normalized * Vector3.Distance(middle, points[enforcedIndex]);
+		}
+		points[enforcedIndex] = middle + enforcedTangent;
+	}</pre>
+			
+			<div class="instructions">
+				<p>And finally, we also have to take looping into account when adding a curve to the spline. The result might be a tangle, but it will remain a proper loop.</p>
+			</div>
+			
+			<pre translate="no">	public void AddCurve () {
+		Vector3 point = points[points.Length - 1];
+		Array.Resize(ref points, points.Length + 3);
+		point.x += 1f;
+		points[points.Length - 3] = point;
+		point.x += 1f;
+		points[points.Length - 2] = point;
+		point.x += 1f;
+		points[points.Length - 1] = point;
+
+		Array.Resize(ref modes, modes.Length + 1);
+		modes[modes.Length - 1] = modes[modes.Length - 2];
+		EnforceMode(points.Length - 4);
+
+		<mark>if (loop) {</mark>
+			<mark>points[points.Length - 1] = points[0];</mark>
+			<mark>modes[modes.Length - 1] = modes[0];</mark>
+			<mark>EnforceMode(0);</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<figure>
+				<img src="04-spline-loop.png" width="322" height="242">
+				<figcaption>A spline loop.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>It is great that we have loops, but it is inconvenient that we can no longer see where the spline begins. We can make this obvious by letting <code>BezierSplineInspector</code> always double the size of the dot for the first point.</p>
+				<p>Note that in case of a loop the last point will be drawn on top of it, so if you clicked the middle of the big dot you'd select the last point, while if you clicked further from the center you'd get the first point.</p>
+			</div>
+			
+			<pre translate="no">	private Vector3 ShowPoint (int index) {
+		Vector3 point = handleTransform.TransformPoint(spline.GetControlPoint(index));
+		float size = HandleUtility.GetHandleSize(point);
+		<mark>if (index == 0) {</mark>
+			<mark>size *= 2f;</mark>
+		<mark>}</mark>
+		Handles.color = modeColors[(int)spline.GetControlPointMode(index)];
+		if (Handles.Button(point, handleRotation, size * handleSize, size * pickSize, Handles.DotCap)) {
+			selectedIndex = index;
+			Repaint();
+		}
+		if (selectedIndex == index) {
+			EditorGUI.BeginChangeCheck();
+			point = Handles.DoPositionHandle(point, handleRotation);
+			if (EditorGUI.EndChangeCheck()) {
+				Undo.RecordObject(spline, "Move Point");
+				EditorUtility.SetDirty(spline);
+				spline.SetControlPoint(index, handleTransform.InverseTransformPoint(point));
+			}
+		}
+		return point;
+	}</pre>
+			
+			<figure>
+				<img src="04-large-begin.png" width="322" height="238">
+				<figcaption>We start big.</figcaption>
+			</figure>
+			
+			<h2>Using Splines</h2>
+			
+			<div class="instructions">
+				<p>We have been working with splines for a while now, but we haven't used them for anything yet. There are uncountable things you can do with splines, for example moving an object alongs its path. Let's create a <code>SplineWalker</code> component that does just that.</p>
+			</div>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+
+<mark>public class SplineWalker : MonoBehaviour {</mark>
+
+	<mark>public BezierSpline spline;</mark>
+
+	<mark>public float duration;</mark>
+
+	<mark>private float progress;</mark>
+
+	<mark>private void Update () {</mark>
+		<mark>progress += Time.deltaTime / duration;</mark>
+		<mark>if (progress > 1f) {</mark>
+			<mark>progress = 1f;</mark>
+		<mark>}</mark>
+		<mark>transform.localPosition = spline.GetPoint(progress);</mark>
+	<mark>}</mark>
+<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now we can create a walker object, assign our spline, set a duration, and watch it move after we enter play mode. I simply used a cube and gave it smaller cubes to resemble eyes, so you can see in what direction it's looking.</p>
+			</div>
+			
+			<figure>
+				<img alt="walker" src="05-walker.png" width="786" height="192">
+				<img alt="walking" src="05-walking.png" width="296" height="230">
+				<figcaption>Walking the spline.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>The walker now walks, but it's not looking in the direction that it's going. We can add an option for that.</p>
+			</div>
+			
+			<aside>
+				<ul>
+					<li><a href="index.html#a-look-at" id="q-look-at">How does <code>LookAt</code> work?</a></li>
+				</ul>
+			</aside>
+			
+			<pre translate="no">	<mark>public bool lookForward;</mark>
+
+	private void Update () {
+		progress += Time.deltaTime / duration;
+		if (progress > 1f) {
+			progress = 1f;
+		}
+		<mark>Vector3 position =</mark> spline.GetPoint(progress);
+		transform.localPosition = <mark>position;</mark>
+		<mark>if (lookForward) {</mark>
+			<mark>transform.LookAt(position + spline.GetDirection(progress));</mark>
+		<mark>}</mark>
+	}</pre>
+			
+			<figure>
+				<img alt="looking forward" src="05-looking-forward.png" width="320" height="98">
+				<img alt="walking and looking" src="05-walking-and-looking.png" width="310" height="232">
+				<figcaption>Looking where you go.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Another option is to keep looping the splines, instead of walking it just once. While we're at it, we could also make the walker move back and forth, ping-ponging across the spline. Let's create an enumeration to select between these modes.</p>
+			</div>
+			
+			<pre translate="no"><mark>public enum SplineWalkerMode {</mark>
+	<mark>Once,</mark>
+	<mark>Loop,</mark>
+	<mark>PingPong</mark>
+<mark>}</mark></pre>
+			
+			<div class="instructions">
+				<p>Now <code>SplineWalker</code> has to remember whether it's going forward or backward. It also needs to adjust the progress when passing the spline ends depending on its mode.</p>
+			</div>
+			
+			<pre translate="no">	<mark>public SplineWalkerMode mode;</mark>
+
+	<mark>private bool goingForward = true;</mark>
+
+	private void Update () {
+		<mark>if (goingForward) {</mark>
+			progress += Time.deltaTime / duration;
+			if (progress > 1f) {
+				<mark>if (mode == SplineWalkerMode.Once) {</mark>
+					progress = 1f;
+				<mark>}</mark>
+				<mark>else if (mode == SplineWalkerMode.Loop) {</mark>
+					<mark>progress -= 1f;</mark>
+				<mark>}</mark>
+				<mark>else {</mark>
+					<mark>progress = 2f - progress;</mark>
+					<mark>goingForward = false;</mark>
+				<mark>}</mark>
+			}
+		<mark>}</mark>
+		<mark>else {</mark>
+			<mark>progress -= Time.deltaTime / duration;</mark>
+			<mark>if (progress &lt; 0f) {</mark>
+				<mark>progress = -progress;</mark>
+				<mark>goingForward = true;</mark>
+			<mark>}</mark>
+		<mark>}</mark>
+
+		Vector3 position = spline.GetPoint(progress);
+		transform.localPosition = position;
+		if (lookForward) {
+			transform.LookAt(position + spline.GetDirection(progress));
+		}
+	}</pre>
+			
+			<figure>
+				<img src="05-walk-mode.png" width="554" height="226">
+				<figcaption>Walking in different ways.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>Another thing we could do is create a decorator that instantiates a sequence of items along a spline when it awakens. We also give it a forward-looking option, which applies to the items it spawns. Adding a frequency option to the item sequence allows for repetition. Of course, if either the frequency is zero or there are no items, we do nothing.</p>
+				<p>We need some items, so create a few prefabs for that purpose as well.</p>
+			</div>
+			
+			<pre translate="no"><mark>using UnityEngine;</mark>
+
+<mark>public class SplineDecorator : MonoBehaviour {</mark>
+
+	<mark>public BezierSpline spline;</mark>
+
+	<mark>public int frequency;</mark>
+
+	<mark>public bool lookForward;</mark>
+
+	<mark>public Transform[] items;</mark>
+
+	<mark>private void Awake () {</mark>
+		<mark>if (frequency &lt;= 0 || items == null || items.Length == 0) {</mark>
+			<mark>return;</mark>
+		<mark>}</mark>
+		<mark>float stepSize = 1f / (frequency * items.Length);</mark>
+		<mark>for (int p = 0, f = 0; f &lt; frequency; f++) {</mark>
+			<mark>for (int i = 0; i &lt; items.Length; i++, p++) {</mark>
+				<mark>Transform item = Instantiate(items[i]) as Transform;</mark>
+				<mark>Vector3 position = spline.GetPoint(p * stepSize);</mark>
+				<mark>item.transform.localPosition = position;</mark>
+				<mark>if (lookForward) {</mark>
+					<mark>item.transform.LookAt(position + spline.GetDirection(p * stepSize));</mark>
+				<mark>}</mark>
+				<mark>item.transform.parent = transform;</mark>
+			<mark>}</mark>
+		<mark>}</mark>
+	<mark>}</mark>
+<mark>}</mark></pre>
+			
+			<figure>
+				<img alt="decorator and prefabs" src="05-decorator.png" width="786" height="246">
+				<img alt="decorated loop" src="05-decorating.png" width="290" height="214">
+				<img alt="decorated non-loop" src="05-decorating-no-loop.png" width="346" height="172">
+				<figcaption>Decorating splines.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>This works well for loops, but it doesn't go all the way to the end of splines that aren't loops. We can fix this by increasing our step size to cover the entire length of the spline, as long as it's not a loop and we have more than one item to place.</p>
+			</div>
+			
+			<pre translate="no">		if (frequency &lt;= 0 || items == null || items.Length == 0) {
+			return;
+		}
+		<mark>float stepSize = frequency * items.Length;</mark>
+		<mark>if (spline.Loop || stepSize == 1) {</mark>
+			stepSize = 1f / <mark>stepSize</mark>;
+		<mark>}</mark>
+		<mark>else {</mark>
+			<mark>stepSize = 1f / (stepSize - 1);</mark>
+		<mark>}</mark></pre>
+			
+			<figure>
+				<img src="05-decorating-non-loop-complete.png" width="348" height="178">
+				<figcaption>Going all the way.</figcaption>
+			</figure>
+			
+			<div class="instructions">
+				<p>There are many more ways to use splines, and there's also more features to add to the splines themselves. Like removing curves, or splitting a curve into two smaller ones, or merging two curves together. There are also other spline types to explore, like Centripetal Catmull-Rom or NURB. If you're comfortable with B&eacute;zier, you should be able to handle those as well. So the tutorial ends here, enjoy walking your own path!</p>
+				<p>Enjoyed the tutorial? <a href="https://www.patreon.com/catlikecoding">Help me make more by becoming a patron!</a></p>
+			</div>
+			
+			<aside class="share"></aside>
+			
+			<h2>Downloads</h2>
+
+			<dl>
+				<dt><a href="curves-and-splines-01.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Curves and Splines', '01']);" target="_blank" download rel="nofollow">curves-and-splines-01.unitypackage</a></dt>
+				<dd>The project after Lines.</dd>
+				<dt><a href="curves-and-splines-02.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Curves and Splines', '02']);" target="_blank" download rel="nofollow">curves-and-splines-02.unitypackage</a></dt>
+				<dd>The project after Curves.</dd>
+				<dt><a href="curves-and-splines-03.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Curves and Splines', '03']);" target="_blank" download rel="nofollow">curves-and-splines-03.unitypackage</a></dt>
+				<dd>The project after Splines.</dd>
+				<dt><a href="curves-and-splines-04.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Curves and Splines', '04']);" target="_blank" download rel="nofollow">curves-and-splines-04.unitypackage</a></dt>
+				<dd>The project after Constraining Control Points.</dd>
+
+				<dt><a href="curves-and-splines-finished.unitypackage.html" onclick="_gaq.push(['_trackEvent', 'Tutorial Download', 'Curves and Splines', 'Final']);" target="_blank" download rel="nofollow">curves-and-splines-finished.unitypackage</a></dt>
+				<dd>The finished project.</dd>
+			</dl>
+		</article>
+			
+		<h1>Questions &amp; Answers</h1>
+		
+		<dl class="questions-answers">
+			<dt><a href="index.html#q-typeof" id="a-typeof">What does <code>typeof</code> do?</a></dt>
+			<dd>
+				<p>The <code>typeof</code> operator is used to get the type object of something, usually a class. You cannot use it with variables, only with explicit type names.</p>
+				<p>Why not just write down the class name? Because that results in a compiler error! The extra step is needed because you're converting a type into a variable.</p>
+			</dd>
+
+			<dt><a href="index.html#q-editor" id="a-editor">Is the Editor folder required?</a></dt>
+			<dd>
+				<p>Unity splits projects into multiple parts that are compiled in a specific order. The Editor folder is used to separate everything that's about the editor from everything that's not. It's not included in game builds, and code outside of it cannot access it. For example, while <code>LineInspector</code> knows about <code>Line</code>, the reverse is not true.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-lerp" id="a-lerp">How does <code>Vector3.Lerp</code> work?</a></dt>
+			<dd>
+				<p>The <code>Vector3.Lerp</code> method performs a linear interpolation between two vectors or points. Linear interpolation means you start at the first value and end at the second value, moving in a straight line at constant velocity between them.</p>
+				<p>Mathematically, such interpolation is done by providing a parameter &ndash; usually named <i>t</i> &ndash; that specifies how far along this process we are. It starts at zero and ends at one.</p>
+				<p>So the result of <code>Vector3.Lerp(a, b, 0f)</code> should be <code>a</code>, the result of <code>Vector3.Lerp(a, b, 1f)</code> should be <code>b</code>, and the result of <code>Vector3.Lerp(a, b, 0.5f)</code> should be the average of them. This is done by multiplying the first argument by <code>(1f - t)</code>, multiplying the second argument by <code>t</code>, and then adding them.</p>
+				<p>As this is only valid when <i>t</i> is in the 0&ndash;1 range, it is clamped as well.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-draw-bezier" id="a-draw-bezier">How does <code>DrawBezier</code> work?</a></dt>
+			<dd>
+				<p>The method is a bit weird in that its parameter list begins with the end points, followed by the two intermediate points. The middle points are named tangents, but they are expected to be actual control points and not direction vectors.</p>
+				<p>The color argument is obvious, but it also expects a texture and a width. The width is in pixels and should be 2 if you want an anti-aliased look. The texture also needs to be of a specific form to allow anti-aliasing, though the default works fine and I always supply <code>null</code>.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-derivative" id="a-derivative">What's a derivative?</a></dt>
+			<dd>
+				<p>A derivative of a function measures its rate of change, and is a function itself as well.</p>
+				<p>For example, the function <strong>f(<i>t</i>) = 3</strong> is constant, so its derivative is <strong>f'(<i>t</i>) = 0</strong>.</p>
+				<p>Another example, <strong>f(<i>t</i>) = t</strong> is linear, so its rate of change is constant <strong>f'(<i>t</i>) = 1</strong>. Compare this with <strong>f(<i>t</i>) = 2 t</strong>, which has derivative <strong>f'(<i>t</i>) = 2</strong>.</p>
+				<p>Jumping to a quadratic function, <strong>f(<i>t</i>) = <i>t</i><sup>2</sup></strong> has a linear derivative, <strong>f'(<i>t</i>) = 2 <i>t</i></strong>, which means it keeps growing faster.</p>
+				<p>Combinations work too. <strong>f(<i>t</i>) = t<sup>2</sup> + 3 t + 4</strong> has derivative <strong>f'(<i>t</i>) = 2 <i>t</i> + 3 + 0</strong>.</p>
+				<p>In general, <strong><i>t</i><sup><i>n</i></sup></strong> becomes <strong><i>n</i> <i>t</i><sup>(<i>n</i> - 1)</sup></strong> as long as <i>n</i> is larger than zero. There are more complex rules as well, but you don't need those to deal with derivatives of B&eacute;zier curves.</p>
+				<p>So how do we get the first derivative of <strong>B(<i>t</i>) = (1 - <i>t</i>)<sup>2</sup> P<sub>0</sub> + 2 (1 - <i>t</i>) <i>t</i> P<sub>1</sub> + <i>t</i><sup>2</sup> P<sub>2</sub></strong>?</p>
+				<p>Note that <strong>(1 - <i>t</i>)<sup>2</sup></strong> rewrites to <strong><i>t</i><sup>2</sup> - 2 <i>t</i> + 1</strong>, which has derivative <strong>2 <i>t</i> - 2</strong>. And <strong>2 (1 - <i>t</i>) <i>t</i></strong> rewrites to <strong>2 <i>t</i> - 2 <i>t</i><sup>2</sup></strong>, which has derivative <strong>2 - 4 <i>t</i></strong>.</p>
+				<p>So we end up with <strong>B'(<i>t</i>) = (2 <i>t</i> - 2) P<sub>0</sub> + (2 - 4 <i>t</i>) P<sub>1</sub> + 2 <i>t</i> P<sub>2</sub></strong>.</p>
+				<p>Then we rewrite it somewhat, turning the P<sub>1</sub> part into <strong>-(2 <i>t</i> - 2) P<sub>1</sub> - 2 <i>t</i> P<sub>1</sub></strong>. This allows us to combine it with the P<sub>0</sub> and P<sub>2</sub> parts so we get <strong>B'(<i>t</i>) = (2 <i>t</i> - 2) (P<sub>0</sub> - P<sub>1</sub>) + 2 <i>t</i> (P<sub>2</sub> - P<sub>1</sub>)</strong>.</p>
+				
+				<p>As a last step we invert the first term and extract 2 so we get the nice <strong>B'(<i>t</i>) = 2 (1 - <i>t</i>) (P<sub>1</sub> - P<sub>0</sub>) + 2 <i>t</i> (P<sub>2</sub> - P<sub>1</sub>)</strong>.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-second-derivative" id="a-second-derivative">What about the second derivative?</a></dt>
+			<dd>
+				<p>The second derivative is the derivative of the first derivative, which defines the acceleration &ndash; the change of velocity &ndash; along the curve. For the quadratic B&eacute;zier curve, it is <strong>B''(<i>t</i>) = 2 (P<sub>2</sub> - 2 P<sub>1</sub> + P<sub>0</sub>)</strong>. As <i>t</i> is not part of the formula, quadratic curves have a constant acceleration.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-transform-direction" id="a-transform-direction">Why not use <code>TransformDirection</code>?</a></dt>
+			<dd>
+				<p>The <code>TransformDirection</code> method only takes the object's rotation into account, but we also need to apply its scale. So we transform our vector as if it were a point and then undo the positioning. This way it always produces the correct velocity, even when using a negative scale.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-ref" id="a-ref">What's <code>ref</code>?</a></dt>
+			<dd>
+				<p>The <code>ref</code> keyword indicates that we're passing an argument by reference. This means that the method is working directly with our value and not a copy of it. So if we provided an integer variable and the method assigned a value to it, then it is our integer that changed. It would be like the method returned the new value and we assigned it to our own variable.</p>
+				<p>The same applies when used with object references. If the method changed the reference, then it is our reference that changed. This means that after the method finished, we could be holding a reference to a different object.</p>
+				<p>You can't pass a constant value as a ref argument, it must be an initialized variable.</p>
+				<p>There is also an <code>out</code> keyword. It works the same as <code>ref</code>, except that it need not be initialized and enforces that the method assigns a value to it.</p>
+				<p>The <code>ref</code> and <code>out</code> modifiers are typically only used when a method has multiple independent results or when wanting to guarantee that a caller's variable is assigned to. And sometimes for performance when dealing with large structs. In general, it is to be avoided.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-array-resize" id="a-array-resize">How does <code>Array.Resize</code> work?</a></dt>
+			<dd>
+				<p><code>Array.Resize</code> is a generic method that takes a reference to an array variable, creates a new array of the same type of the given length, and assigns it to the variable. It also copies the contents of the old array to the new array, up to its capacity.</p>
+				<p>So a new array is created and the old one &ndash; if there was one &ndash; is probably no longer used by anyone and will be taken care of by the garbage collector at some point.</p>
+				<p>Note that it is a generic method, but we didn't indicate what type to use. The compiler is smart enough to infer the type from the argument and turn it into <code>Array.Resize&lt;Vector3>(ref points, points.Length + 3)</code>.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-guilayout-button" id="a-guilayout-button">How does <code>GUILayout.Button</code> work?</a></dt>
+			<dd>
+				<p>The <code>Button</code> method both shows a button and returns whether it was clicked. So you typically call it inside an <code>if</code> statement and perform the necessary work in the corresponding code block.</p>
+				<p>What actually happens is that your own GUI method &ndash; in this case <code>OnInspectorGUI</code> &ndash; gets called far more often than just once. It gets called when performing layout, when repainting, and whenever a significant GUI event happens, which is quite often. Only when a mouse click event comes along that is consumed by the button, will it return <code>true</code>.</p>
+				<p>To get an idea of how often the GUI methods get called, put <code>Debug.Log(Event.current);</code> at the start of your <code>OnInspectorGUI</code> method, then fool around a bit in the editor and watch the console.</p>
+				<p>Usually you need not worry about this, but be aware of it when performing heavy work like generating textures. You don't want to do that dozens of times per second if you don't need to.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-assign-spline" id="a-assign-spline">Why assign <code>spline</code> in both methods?</a></dt>
+			<dd>
+				<p>We're using <code>spline</code> in both <code>OnInspectorGUI</code> and <code>OnSceneGUI</code>, but these two methods basically act independent of one another. <code>OnInspectorGUI</code> is called once for the entire component selection, which could contain multiple objects if we were to support that. <code>OnSceneGUI</code> is called once for each appropriate component in the selection, and each time <code>target</code> changes. So it is best to not have these methods rely on each other.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-handles-button" id="a-handles-button">How does <code>Handles.Button</code> work?</a></dt>
+			<dd>
+				<p>This <code>Button</code> method shows a button in 3D space inside the scene view. Besides a regular size, it also has a pick size. Think of this as the size of the collider used to determine whether the user touches the button. We made it larger than the visible dot so the points are easier to select.</p>
+				<p>Like a few other <code>Handles</code> method, it also needs to be told what shape to draw. This is done by giving it a delete to a draw method. We're using <code>Handles.DotCap</code>, which draws a square that ignores the rotation and always faces the scene camera.</p>
+			</dd>
+			
+			<dt><a href="index.html#q-look-at" id="a-look-at">How does <code>LookAt</code> work?</a></dt>
+			<dd>
+				<p>The <code>Transform.LookAt</code> method has multiple versions. We're using the one where we give it a position in world space and it rotates itself so its forward direction points at that position. As it's relative to its own position, we had to add the position to our spline's direction.</p>
+				<p>Providing one direction is not enough to define a 3D rotation. The method also keeps the upward direction of the transform aligned with the world's up direction. This means that the walker will try to keep itself upright. You could also provide an alternative up vector.</p>
+			</dd>
+		</dl>
+
+		<footer></footer>
+		<script src="../../jquery.js"></script>
+		<script src="../../default.js"></script>
+	</body>
+</html>

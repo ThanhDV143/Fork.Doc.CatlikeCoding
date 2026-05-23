@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/flow/waves/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/flow/waves/tutorial-image.jpg">
+		<meta property="og:title" content="Waves">
+		<meta property="og:description" content="A Unity Flow tutorial about moving vertices to create waves.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Waves</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/flow/waves/#article",
+				"headline": "Waves",
+				"alternativeHeadline": "Moving Vertices",
+				"datePublished": "2018-07-25",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Flow tutorial about moving vertices to create waves.",
+				"image": "https://catlikecoding.com/unity/tutorials/flow/waves/tutorial-image.jpg",
+				"dependencies": "Unity 2017.4.4f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/flow/", "name": "Flow" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {};
+			
+			var defaultCodeClass = 'shader';
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Flow</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Waves</h1>
+					<p>Moving Vertices</p>
+					<ul>
+						<li>Animate vertices.</li>
+						<li>Create Gerstner waves.</li>
+						<li>Control wave direction.</li>
+						<li>Combine multiple waves.</li>
+					</ul>
+				</header>
+				
+				<p>This is the third tutorial in a series about creating the appearance of <a href="../index.html">flowing materials</a>. While the previous two parts deal with animating surface textures, this one is about creating waves by animating vertex positions.
+				
+				<p>This tutorial is made with Unity 2017.4.4f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Let's make some waves.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Sine Waves</h2>
+					
+					<p>Animating textures can create the illusion of a moving surface, but the mesh surface itself remains motionless. This is fine for small ripples, but cannot represent larger waves. On large bodies of water&mdash;like an ocean of big lake&mdash;the wind can create big waves that can persist for a long time. To represent these wind waves, we'll make new shader that displaces mesh vertices vertically, using a sine wave function.</p>
+					
+					<section>
+						<h3>Adjusting Vertices</h3>
+						
+						<p>Create a new surface shader named <em translate="no">Waves</em>. We'll leave the fragment surface function unchanged. Instead, add another function <code>vert</code> to adjust the vertex data. This function has a single vertex parameter, both for input and output. We'll use Unity's default vertex data structure, <code>appdata_full</code>.</p>
+						
+						<pre translate="no">Shader "Custom/Waves" {
+	Properties {
+		_Color ("Color", Color) = (1,1,1,1)
+		_MainTex ("Albedo (RGB)", 2D) = "white" {}
+		_Glossiness ("Smoothness", Range(0,1)) = 0.5
+		_Metallic ("Metallic", Range(0,1)) = 0.0
+	}
+	SubShader {
+		Tags { "RenderType"="Opaque" }
+		LOD 200
+
+		CGPROGRAM
+		#pragma surface surf Standard fullforwardshadows
+		#pragma target 3.0
+
+		sampler2D _MainTex;
+
+		struct Input {
+			float2 uv_MainTex;
+		};
+
+		half _Glossiness;
+		half _Metallic;
+		fixed4 _Color;
+
+		<ins>void vert(inout appdata_full vertexData) {}</ins>
+
+		void surf (Input IN, inout SurfaceOutputStandard o) {
+			fixed4 c = tex2D (_MainTex, IN.uv_MainTex) * _Color;
+			o.Albedo = c.rgb;
+			o.Metallic = _Metallic;
+			o.Smoothness = _Glossiness;
+			o.Alpha = c.a;
+		}
+		ENDCG
+	}
+	FallBack "Diffuse"
+}</pre>
+						
+						<p>To indicate that the surface shader should use the vertex function, add <code>vertex:vert</code> to the surface pragma directive.</p>
+						
+						<pre translate="no">		#pragma surface surf Standard fullforwardshadows <ins>vertex:vert</ins></pre>
+						
+						<p>Create a new <em translate="no">Waves</em> material that uses this shader. I've given it the same albedo and smoothness as our other two materials.</p>
+						
+						<figure>
+							<img src="sine-waves/material.png" width="320" height="248">
+							<figcaption>Waves material.</figcaption>
+						</figure>
+						
+						<p>Because we're going to displaces vertices, we cannot make do with a quad this time. Instead, create a default plane via <em translate="no">GameObject / 3D Object / Plane</em> and have it use the <em translate="no">Waves</em> material. This gives us a grid of 10&times;10 quads to work with.</p>
+						
+						<figure>
+							<img src="sine-waves/plane.jpg" width="320" height="150">
+							<figcaption>Waves plane, with wireframe.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Adjusting Y</h3>
+						
+						<p>Ignoring the Z dimension for now, the position of each vertex can be defined as `P = [[x],[y]]`, where `P` is its final position, `x` is the original X coordinate, and `y` is the original Y coordinate, both in object space.</p>
+						
+						<p>To create a wave, we have to adjust the Y component of `P`. The simplest way to make a wave is to use a sine wave based on `x`, so `y = sin x`. The final point is then `P = [[x],[sin x]]`.</p>
+						
+						<pre translate="no">		void vert(inout appdata_full vertexData) {
+			<ins>float3 p = vertexData.vertex.xyz;</ins>
+
+			<ins>p.y = sin(p.x);</ins>
+
+			<ins>vertexData.vertex.xyz = p;</ins>
+		}</pre>
+						
+						<figure>
+							<img src="sine-waves/sin-x.jpg" width="320" height="182">
+							<figcaption>Sine wave.</figcaption>
+						</figure>
+						
+						<p>The result is a sine wave along the X dimension, which is constant along the Z dimension. The quads of the plane are of unit size, so the entire plane covers a 10&times;10 area centered on its local origin. So we end up seeing `10/(2pi)~~1.59` periods of a sine wave.</p>
+					</section>
+					
+					<section>
+						<h3>Amplitude</h3>
+						
+						<p>The default amplitude of a sine wave is 1, but we don't need to limit ourselves to that. Let's add a property to our shader so we can use `P_y = a sin x` instead, where `a` is the amplitude.</p>
+						
+						<pre translate="no">	Properties {
+		&hellip;
+		<ins>_Amplitude ("Amplitude", Float) = 1</ins>
+	}
+	SubShader {
+		&hellip;
+
+		half _Glossiness;
+		half _Metallic;
+		fixed4 _Color;
+		<ins>float _Amplitude;</ins>
+
+		void vert(inout appdata_full vertexData) {
+			float3 p = vertexData.vertex.xyz;
+
+			p.y = <ins>_Amplitude *</ins> sin(p.x);
+
+			vertexData.vertex.xyz = p;
+		}
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img alt="inspector" src="sine-waves/amplitude-inspector.png" width="320" height="60"><br>
+							<img alt="scene" src="sine-waves/amplitude-scene.jpg" width="320" height="220">
+							<figcaption>Amplitude set to 2.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Wavelength</h3>
+						
+						<p>In the case of `sin x`, the length of a full sine wave is `2pi~~6.28`. This is the wavelength and let's make it configurable too.</p>
+						
+						<p>To easily control the wavelength, we first have to multiply `x` by `2pi` then divide by the desired wavelength. So we end up with `sin((2pix)/lambda)`, where `lambda` (lambda) is the wavelength.</p>
+						
+						<p>`2pi` divided by `lambda` is known as the wave number `k=(2pi)/lambda`. We could use this as the shader property, so we don't need to perform a division in the shader. That's a useful optimization, but in this tutorial we'll stick with the more user-friendly wavelength.</p>
+						
+						<figure>
+							<img src="sine-waves/wavelength-k.png" width="200" height="200">
+							<figcaption>`lambda` (linear from 0 to 10) and `k`.</figcaption>
+						</figure>
+						
+						<p>Inside the shader, we will explicitly use the wave number, so we end up with `P_y=asin(kx)`.</p>
+						
+						<pre translate="no">Shader "Custom/Waves" {
+	Properties {
+		&hellip;
+		<ins>_Wavelength ("Wavelength", Float) = 10</ins>
+	}
+	SubShader {
+		&hellip;
+		float _Amplitude<ins>, _Wavelength</ins>;
+
+		void vert(inout appdata_full vertexData) {
+			float3 p = vertexData.vertex.xyz;
+
+			<ins>float k = 2 * UNITY_PI / _Wavelength;</ins>
+			p.y = _Amplitude * sin(<ins>k *</ins> p.x);
+
+			vertexData.vertex.xyz = p;
+		}
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img alt="inspector" src="sine-waves/wavelength-inspector.png" width="320" height="40"><br>
+							<img alt="scene" src="sine-waves/wavelength-scene.jpg" width="320" height="182">
+							<figcaption>Wavelength set to 10, amplitude to 1.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Speed</h3>
+						
+						<p>The wave needs to move, so we have to define a speed. It is most convenient to use the phase speed `c`, which defines how fast the entire wave moves in units per second. This is done by using the time offset `kct`. To make the wave move in the positive direction, we have to subtract this from `kx`, so we end up with `P_y=sin(kx-kct)=sin(k(x-ct))`.</p>
+						
+						<pre translate="no">	Properties {
+		<ins>_Speed ("Speed", Float) = 1</ins>
+	}
+	SubShader {
+		&hellip;
+		float _Amplitude, _Wavelength<ins>, _Speed</ins>;
+
+		void vert(inout appdata_full vertexData) {
+			float3 p = vertexData.vertex.xyz;
+
+			float k = 2 * UNITY_PI / _Wavelength;
+			p.y = _Amplitude * sin(k * <ins>(</ins>p.x <ins>- _Speed * _Time.y)</ins>);
+
+			vertexData.vertex.xyz = p;
+		}
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img alt="inspector" src="sine-waves/speed-inspector.png" width="320" height="40"><br>
+							<video width="324" height="182" controls loop muted>
+								<source src="sine-waves/speed-5.mp4" type="video/mp4">
+							</video>
+							<figcaption>Speed set to 5.</figcaption>
+						</figure>
+					</section>
+					<section>
+						<h3>Normal Vectors</h3>
+						
+						<p>Our surface is curved and moving, but the lighting is still that of a motionless flat plane. That's because we haven't changed the vertex normals yet. Instead of directly calculating the normal vector, let's first look at the surface tangent vector in the X dimension, `T`. For a flat surface `T=[[x^'],[0]]=[[1],[0]]`, which corresponds to the original plane's tangent. But for our wave we have to use `T=P^'=[[x^'],[asin(k(x-ct))^']]`.</p>
+						
+						<p>The derivative of the sine is the cosine, so `sin^'x=cosx`. But the argument of the sine is a function itself in our case. We can say that we have `P_y=asinf`, where `f=k(x-ct)`.</p>
+						
+						<p>We have to use the chain rule, `(P_y)^'=f^'acosf`. And `f^'=k`, so we end up with `T=[[1],[kacosf]]`. This makes sense, because changing the wavelength also changes the slope of the wave.</p>
+						
+						<p>To get the final tangent vector in the shader, we have to normalize `T`.</p>
+						
+						<pre translate="no">			float k = 2 * UNITY_PI / _Wavelength;
+			<ins>float f = k * (p.x - _Speed * _Time.y);</ins>
+			p.y = _Amplitude * sin(<ins>f</ins>);
+
+			<ins>float3 tangent = normalize(float3(1, k * _Amplitude * cos(f), 0));</ins></pre>
+						
+						<p>The normal vector is the cross product of both tangent vectors. As our wave is constant in the Z dimension, the binormal is always the unit vector and can be ignored, so we end up with `N=[[-kacosf],[1]]`. We can just grab the normalized tangent components after normalizing them.</p>
+					
+						<pre translate="no">			float3 tangent = normalize(float3(1, k * _Amplitude * cos(f), 0));
+			<ins>float3 normal = float3(-tangent.y, tangent.x, 0);</ins>
+
+			vertexData.vertex.xyz = p;
+			<ins>vertexData.normal = normal;</ins></pre>
+						
+						<figure>
+							<video width="324" height="182" controls loop muted>
+								<source src="sine-waves/correct-normal-vectors.mp4" type="video/mp4">
+							</video>
+							<figcaption>Correct normal vectors.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Mesh Resolution</h3>
+						
+						<p>While our wave looks fine when using a wavelength of 10, it won't work so well for small wavelengths. For example, a wavelength of 2 produces a standing sawtooth wave.</p>
+						
+						<figure>
+							<video width="324" height="182" controls loop muted>
+								<source src="sine-waves/wavelength-2.mp4" type="video/mp4">
+							</video>
+							<figcaption>Wavelength 2, speed 1.</figcaption>
+						</figure>
+						
+						<p>A wavelength of 1 produces no wave at all, instead the whole plane goes up and down uniformly. Other small wavelengths produce ugly waves that can even move backwards.</p>
+						
+						<p>This problem is causes by the limited resolution of our plane mesh. Because vertices are spaces one unit apart, it cannot deal with wavelengths of 2 or smaller. In general, you have to keep the wavelength greater than twice the edge length of the triangles in your mesh. You don't want to cut it too close, because waves made up of two or three quads don't look good.</p>
+						
+						<p>Either use larger wavelengths, or increase the resolution of your mesh. The simplest approach is to just use another mesh. <a href="sine-waves/big-plane.unitypackage.html" download rel="nofollow" style="display: inline; font-size: inherit; margin: 0;">Here</a> is an alternative plane mesh that consists of 100&times;100 quads, instead of just 10&times;10. Each quad is still 1&times;1 unit, so you'll have to zoom out and multiply the wave properties by 10 to get the same result as before.</p>
+						
+						<figure>
+							<video width="324" height="182" controls loop muted>
+								<source src="sine-waves/big-plane.mp4" type="video/mp4">
+							</video>
+							<figcaption>Big plane, wave settings &times;10, zoomed out.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Shadows</h3>
+						
+						<p>Although our surface looks good, it doesn't correctly interact with shadows yet. It still acts like a flat plane, both for casting and receiving shadows.</p>
+						
+						<figure>
+							<img src="sine-waves/shadows-incorrect.jpg" width="300" height="220">
+							<figcaption>Incorrect shadows.</figcaption>
+						</figure>
+						
+						<p>The solution is to include <code>addshadow</code> in the surface pragma directive. That instructs Unity to create a separate shadow caster pass for our shader that also uses our vertex displacement function.</p>
+						
+						<pre translate="no">		#pragma surface surf Standard fullforwardshadows vertex:vert <ins>addshadow</ins></pre>
+						
+						<p>The shadows are now correct, and the waves properly self-shadow too. Because we're working at at larger scale now, you might have to increase the shadow distance before they appear.</p>
+						
+						<figure>
+							<img src="sine-waves/shadows-correct.jpg" width="300" height="220">
+							<figcaption>Correct shadows, shadow distance 300.</figcaption>
+						</figure>
+						
+						<p>I have disabled shadows for the rest of this tutorial.</p>
+					</section>
+					
+					<a href="sine-waves/sine-waves.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Gerstner Waves</h2>
+					
+					<p>Sine waves are simple, but they do not match the shape of real water waves. Big wind waves are realistically modeled by the Stokes wave function, but it's rather complex. Instead, Gernster waves are often used for realtime animation of water surfaces.</p>
+					
+					<p>Gerstner waves are named after František Josef Gerstner, who discovered them. They're also known as trochoidal waves, named after their shape, or periodic surface gravity waves, which describes their physical nature.</p>
+					
+					<section>
+						<h3>Moving Back and Forth</h3>
+						
+						<p>The fundamental observation is that while waves move across a water surface, the water itself doesn't move along with it. In the case of a sine wave, each surface point goes up and down, but doesn't move horizontally.</p>
+						
+						<p>But actual water isn't just the surface. There is more water underneath. When the surface water moves down, where does the water below it go? When the surface moves up, what fills the space below it? It turns out that the surface points not only move up and down, they move forward and backward too. Half the time they move along with the wave, but the other half they move in the opposite direction. The same is true for the water below the surface, but the deeper you go the less movement there is.</p>
+						
+						<p>Specifically, each surface points moves in a circle, orbiting a fixed anchor point. As the crest of a wave approaches, the point moves toward it. After the crest passes, it slides back, and then the next crest comes along. The result is that water bunches up in crests and spreads out in troughs, and the same will happen to our vertices.</p>
+						
+						<figure>
+							<img src="gerstner-waves/sine-gerstner.png" width="480" height="180">
+							<figcaption>Sine vs. Gerstner wave.</figcaption>
+						</figure>
+						
+						<p>In reality surface points do drift and don't describe perfect circles, but Gerstner waves don't model this. That's fine, because we'll use the original vertex positions as the anchor points.</p>
+						
+						<p>We can turn our sine wave into a circle by using `P=[[acosf],[asinf]]`, but that would collapse the entire plane into a single circle. Instead, we have to anchor each point on its original X coordinate, so we need `P=[[x+acosf],[asinf]]`.</p>
+						
+						<pre translate="no">			float k = 2 * UNITY_PI / _Wavelength;
+			float f = k * (p.x - _Speed * _Time.y);
+			<ins>p.x += _Amplitude * cos(f);</ins>
+			p.y = _Amplitude * sin(f);</pre>
+						
+						<figure>
+							<video width="366" height="182" controls loop muted>
+								<source src="gerstner-waves/gerstner-wave.mp4" type="video/mp4">
+							</video>
+							<figcaption>Gerstner wave, amplitude 10, wavelength 100, speed 50.</figcaption>
+						</figure>
+						
+						<p>The result is a wave that has sharper crests and flatter troughs than a regular sine wave.</p>
+						
+						<aside>
+							<h3>Don't Gersner waves use `sin` for X and `cos` for Y?</h3>
+							<div>
+								<p>That is the conventional way of defining them, but as we already used `sin` for Y it made more sense to just use `cos` for X. The only different is that the wave's period is shifter by a quarter compared to the other approach.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Normal Vectors</h3>
+						
+						<p>Because we changed the surface function, its derivate has also changed. The X component of `T` used to be `x^'=1`, but now it's a bit more complicated. The derivative of the cosine is the negative sine, so we end up with `T=[[1-kasinf],[kacosf]]`.</p>
+						
+						<pre translate="no">			float3 tangent = normalize(float3(
+				1 <ins>- k * _Amplitude * sin(f)</ins>,
+				k * _Amplitude * cos(f),
+				0
+			));
+			float3 normal = float3(-tangent.y, tangent.x, 0);</pre>
+						
+						<figure>
+							<video width="366" height="182" controls loop muted>
+								<source src="gerstner-waves/correct-normals.mp4" type="video/mp4">
+							</video>
+							<figcaption>Correct normals.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Preventing Loops</h3>
+						
+						<p>While the resulting waves might look fine, this isn't always the case. For example, reducing the wavelength to 20 while keeping the amplitude at 10 produces weird results.</p>
+						
+						<figure>
+							<img src="gerstner-waves/wave-loops.jpg" width="350" height="180">
+							<figcaption>Wave loops, wavelength 20.</figcaption>
+						</figure>
+						
+						<p>Because the amplitude is so large relative to the wavelength, the orbits of the surface points overshoot and form loops above the surface. If this was real water, then the waves would break and fall apart, but we cannot represent that with Gerstner waves.</p>
+						
+						<p>We can see why this happens mathematically, by observing that `T_x` can become negative when `ka` is larger than 1. When that happens, the tangent vector ends up pointing backward instead of forward. And when `ka` is 1 then we end up with a tangent vector that points straight up.</p>
+						
+						<p>In reality, we don't get intact waves where the angle between both sides of the crests exceed 120&deg;. Gerstner waves don't have this limit, but we don't want to go below 0&deg;, because that's when we get surface loops.</p>
+						
+						<p>There is a relation between the wavelength and the wave amplitude. We can use `a=e^(kb)/k`, where `b` has to do with surface pressure. The stronger the pressure, the flatter the waves. In case of zero pressure, we end up with `a=1/k`, which produces 0&deg; crests, the sharpest possible before looping. We can just use `a=s/k` instead, where `s` is a measure of steepness, between 0 and 1, which is easier to work with. Then we have `P=[[x+s/kcosf],[s/ksinf]]`, which simplifies our tangent to `T=[[1-ssinf],[scosf]]`.</p>
+						
+						<pre translate="no">Shader "Custom/Waves" {
+	Properties {
+		&hellip;
+		<del>//_Amplitude ("Amplitude", Float) = 1</del>
+		<ins>_Steepness ("Steepness", Range(0, 1)) = 0.5</ins>
+		_Wavelength ("Wavelength", Float) = 10
+		_Speed ("Speed", Float) = 1
+	}
+	SubShader {
+		&hellip;
+		float <ins>_Steepness</ins>, _Wavelength, _Speed;
+
+		void vert(inout appdata_full vertexData) {
+			float3 p = vertexData.vertex.xyz;
+
+			float k = 2 * UNITY_PI / _Wavelength;
+			float f = k * (p.x - _Speed * _Time.y);
+			<ins>float a = _Steepness / k;</ins>
+			p.x += <ins>a</ins> * cos(f);
+			p.y = <ins>a</ins> * sin(f);
+
+			float3 tangent = normalize(float3(
+				1 - <ins>_Steepness</ins> * sin(f),
+				<ins>_Steepness</ins> * cos(f),
+				0
+			));
+			&hellip;
+		}
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img alt="inspector" src="gerstner-waves/steepness.png" width="320" height="56"><br>
+							<video width="324" height="156" controls loop muted>
+								<source src="gerstner-waves/steepness.mp4" type="video/mp4">
+							</video>
+							<figcaption>Steepness instead of amplitude.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Phase Speed</h3>
+						
+						<p>In reality, waves don't have an arbitrary phase speed. It is related to the wave number, `c=sqrt(g/k)=sqrt((glambda)/(2pi))`, where `g` is the pull of gravity, roughly 9.8 on Earth. This is true for waves in deep water. In shallow water the water depth also plays a role, but we won't cover that here.</p>
+						
+						<p>While we could just use the correct material properties, it's more convenient to calculate this in the shader.</p>
+						
+						<pre translate="no">			float k = 2 * UNITY_PI / _Wavelength;
+			<ins>float c = sqrt(9.8 / k);</ins>
+			float f = k * (p.x - <ins>c</ins> * _Time.y);</pre>
+						
+						<p>Now we can eliminate the speed property.</p>
+						
+						<pre translate="no">	Properties {
+		&hellip;
+		_Wavelength ("Wavelength", Float) = 10
+		<del>//_Speed ("Speed", Float) = 1</del>
+	}
+	SubShader {
+		&hellip;
+		float _Steepness, _Wavelength<ins>;</ins> <del>//, _Speed;</del>
+		&hellip;
+	}</pre>
+						
+						<p>Note that this relationship means that longer waves have a higher phase speed. Also, the stronger the gravity the faster the movement.</p>
+						
+						<figure>
+							<img src="gerstner-waves/wavelength-speed.png" width="200" height="200"><br>
+							<figcaption>`lambda` (linear, from 0 to 100) and `c`.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="gerstner-waves/gerstner-waves.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Wave Direction</h2>
+					
+					<p>Up to this point our waves only move in the X dimension. We're now going to remove this restriction. This makes our calculations a bit more complex, as both X and Z are needed to construct the final wave and its tangent vectors.</p>
+					
+					<section>
+						<h3>Direction Vector</h3>
+						
+						<p>To indicate the travel direction of our wave we'll introduce the direction vector `D=[[D_x],[D_z]]`. This is purely an indication of direction, so it's a vector of unit length, `||D||=1`.</p>
+						
+						<p>Now how much `x` contributes to the wave function is modulated by the X component of `D`. So we get `f=k(D_x x-ct)`. But `z` now also plays a role, in the same way, which leads to `f=k(D_x x+D_z z-ct)`. In other words, we're using the dot product of `D` and the original X and Z coordinates. So we end up with `f=k(D * [[x],[z]]-ct)`.</p>
+						
+						<p>Add a direction property to our shader and incorporate it into our function. It should be a unit-length vector, but to make it easier to work with we'll normalize it in the shader. Note that all vector properties are 4D, so just ignore the Z and W components.</p>
+						
+						<pre translate="no">Shader "Custom/Waves" {
+	Properties {
+		&hellip;
+		_Wavelength ("Wavelength", Float) = 10
+		<ins>_Direction ("Direction (2D)", Vector) = (1,0,0,0)</ins>
+	}
+	SubShader {
+		&hellip;
+		float _Steepness, _Wavelength;
+		<ins>float2 _Direction;</ins>
+
+		void vert(inout appdata_full vertexData) {
+			float3 p = vertexData.vertex.xyz;
+
+			float k = 2 * UNITY_PI / _Wavelength;
+			float c = sqrt(9.8 / k);
+			<ins>float2 d = normalize(_Direction);</ins>
+			float f = k * (<ins>dot(d, p.xz)</ins> - c * _Time.y);
+			&hellip;
+		}
+
+		&hellip;
+	}</pre>
+						
+						<p>We also have to adjust the horizontal offsets of `P_x` and `P_z` so they align with the wave direction. So instead of just adding the offset to `x`, we have to add it to `z` as well, in both cases modulated by the appropriate component of `D`. So the final calculation becomes `P=[[x+D_xs/kcosf],[s/ksinf],[z+D_zs/kcosf]]`.</p>
+						
+						<pre translate="no">			p.x += <ins>d.x * (</ins>a * cos(f)<ins>)</ins>;
+			p.y = a * sin(f);
+			<ins>p.z += d.y * (a * cos(f));</ins></pre>
+						
+						<figure>
+							<img alt="0,1" src="wave-direction/direction-01.jpg" width="320" height="160">
+							<img alt="1,1" src="wave-direction/direction-11.jpg" width="320" height="160">
+							<figcaption>Direction set to `[[0],[1]]` and `[[1],[1]]`.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Normal Vectors</h3>
+						
+						<p>Once again, we have to adjust the calculation of our tangent, but not just for the X dimension. We now also have to calculate the tangent in the Z dimension, the binormal vector `B`.</p>
+						
+						<p>The partial derivative of `f` in the X dimension is `f_x^'=kD_x`. In the case of `T_x` and `T_y` this simply means that we multiply with `D_x` one more time. Besides that, we also have to add `T_z` because it is no longer zero. The final tangent is `T=[[1-D_x^2ssinf],[D_xscosf],[-D_xD_zssinf]]`</p>
+						
+						<p>It's the same for the binormal, except that `f_z^'=kD_z`, we multiply with `D_z`, and the roles of the X and Z component are swapped. So `B=[[-D_xD_zssinf],[D_zscosf],[1-D_z^2ssinf]]`.</p>
+						
+						<p>Now we do need to take the proper cross product to find the normal vector.</p>
+						
+						<pre translate="no">			float3 tangent = <ins>float3</ins>(
+				1 - <ins>d.x * d.x * (</ins>_Steepness * sin(f)<ins>)</ins>,
+				<ins>d.x * (</ins>_Steepness * cos(f)<ins>)</ins>,
+				<ins>-d.x * d.y * (_Steepness * sin(f))</ins>
+			<ins>)</ins>;
+			<ins>float3 binormal = float3(</ins>
+				<ins>-d.x * d.y * (_Steepness * sin(f)),</ins>
+				<ins>d.y * (_Steepness * cos(f)),</ins>
+				<ins>1 - d.y * d.y * (_Steepness * sin(f))</ins>
+			<ins>);</ins>
+			float3 normal = <ins>normalize(cross(binormal, tangent))</ins>;</pre>
+						
+						<figure>
+							<img alt="0,1" src="wave-direction/direction-01-normals.jpg" width="320" height="160">
+							<img alt="1,1" src="wave-direction/direction-11-normals.jpg" width="320" height="160">
+							<figcaption>Correct normal vectors.</figcaption>
+						</figure>
+						
+						<p>Note that `T_z=B_x`. We don't need to optimize for this, because the shader compiler takes care of that, just like the sine and cosine are calculate only once.</p>
+					</section>
+					
+					<a href="wave-direction/wave-direction.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+					
+				<section>
+					<h2>Multiple Waves</h2>
+					
+					<p>In reality it is rare to find only a single uniform wave traveling across a water surface. Instead there are many waves, traveling in roughly the same direction. We can improve the realism of our effect by accumulating multiple waves as well.</p>
+					
+					<p>Combining multiple waves is simply a matter of adding all their offsets. Mathematically, for the X component of `P` we then get `P_x=x+sum_(i=1)^n D_(ix)s_i/k_icosf_i`, and `f_i=k(D_i * [[x],[z]]-ct)`. That's the same formula as before, just with the summation added. The same is true for the other components of `P` and for the tangents.</p>
+					
+					<section>
+						<h3>Single Parameter Vector</h3>
+						
+						<p>Each individual wave has its own properties. To make this easier to manage, let's combine all properties of a wave in a single shader property. We can fit them in a single 4D vector, using X and Y for the direction, Z for steepness, and W for the wavelength. Use this trick to define a property for our first wave, wave A.</p>
+
+						<pre translate="no">		<del>//_Steepness ("Steepness", Range(0, 1)) = 0.5</del>
+		<del>//_Wavelength ("Wavelength", Float) = 10</del>
+		<del>//_Direction ("Direction (2D)", Vector) = (1,0,0,0)</del>
+		<ins>_WaveA ("Wave A (dir, steepness, wavelength)", Vector) = (1,0,0.5,10)</ins></pre>
+
+						<figure>
+							<img src="multiple-waves/wave-a-settings.png" width="320" height="55">
+							<figcaption>Settings for wave A.</figcaption>
+						</figure>
+						
+						<p>Replace the old variables with the new wave vector.</p>
+
+						<pre translate="no">		<del>//float _Steepness, _Wavelength;</del>
+		<del>//float2 _Direction;</del>
+		<ins>float4 _WaveA;</ins></pre>
+						
+						<p>Then move the wave code to a new <code>GerstnerWave</code> function. This function has the wave settings as a parameter, followed by the original grid point. Give it input-output parameter for the tangent and binormal as well, so we can accumulate them. It returns its point offset.</p>
+						
+						<p>Because it accumulates offsets, leave the `x` and `z` parts out of the result. So they should also be omitted from the derivatives, eliminating the 1s. Finally, normalization doesn't happen per individual wave.</p>
+
+						<pre translate="no">		<ins>float3 GerstnerWave (</ins>
+			<ins>float4 wave, float3 p, inout float3 tangent, inout float3 binormal</ins>
+		<ins>) {</ins>
+		    <ins>float steepness = wave.z;</ins>
+		    <ins>float wavelength = wave.w;</ins>
+		    float k = 2 * UNITY_PI / <ins>wavelength</ins>;
+			float c = sqrt(9.8 / k);
+			float2 d = normalize(<ins>wave.xy</ins>);
+			float f = k * (dot(d, p.xz) - c * _Time.y);
+			float a = steepness / k;
+			
+			<del>//p.x += d.x * (a * cos(f));</del>
+			<del>//p.y = a * sin(f);</del>
+			<del>//p.z += d.y * (a * cos(f));</del>
+
+			<ins>tangent += float3</ins>(
+				<ins>-</ins>d.x * d.x * (<ins>steepness</ins> * sin(f)),
+				d.x * (<ins>steepness</ins> * cos(f)),
+				-d.x * d.y * (<ins>steepness</ins> * sin(f))
+			);
+			<ins>binormal += float3</ins>(
+				-d.x * d.y * (<ins>steepness</ins> * sin(f)),
+				d.y * (<ins>steepness</ins> * cos(f)),
+				<ins>-</ins>d.y * d.y * (<ins>steepness</ins> * sin(f))
+			);
+			<ins>return float3(</ins>
+				<ins>d.x * (a * cos(f)),</ins>
+				<ins>a * sin(f),</ins>
+				<ins>d.y * (a * cos(f))</ins>
+			<ins>);</ins>
+		<ins>}</ins></pre>
+						
+						<p>The waves are now relative to a flat plane. So we begin with the original grid point and the default tangent and binormal vectors, then invoke <code>GerstnerWave</code> and add its result to the final point. After that, create the normal vector via a cross product and normalization.</p>
+
+						<pre translate="no">		void vert(inout appdata_full vertexData) {
+			float3 <ins>gridPoint</ins> = vertexData.vertex.xyz;
+			<ins>float3 tangent = float3(1, 0, 0);</ins>
+			<ins>float3 binormal = float3(0, 0, 1);</ins>
+			<ins>float3 p = gridPoint;</ins>
+			<ins>p += GerstnerWave(_WaveA, gridPoint, tangent, binormal);</ins>
+			float3 normal = normalize(cross(binormal, tangent));
+			vertexData.vertex.xyz = p;
+			vertexData.normal = normal;
+		}</pre>
+					</section>
+
+					<section>
+						<h3>Two Waves</h3>
+						
+						<p>To add support for a second wave, all we have to do is add another wave property and invoke <code>GerstnerWave</code> a second time. I didn't repeat the data description in the label of wave B, because it's the same as wave A.</p>
+
+						<pre translate="no">Shader "Custom/Waves" {
+	Properties {
+		&hellip;
+		_WaveA ("Wave A (dir, steepness, wavelength)", Vector) = (1,0,0.5,10)
+		<ins>_WaveB ("Wave B", Vector) = (0,1,0.25,20)</ins>
+	}
+	SubShader {
+		&hellip;
+		float4 _WaveA<ins>, _WaveB</ins>;
+
+		&hellip;
+
+		void vert(inout appdata_full vertexData) {
+			float3 gridPoint = vertexData.vertex.xyz;
+			float3 tangent = 0;
+			float3 binormal = 0;
+			float3 p = gridPoint;
+			p += GerstnerWave(_WaveA, gridPoint, tangent, binormal);
+			<ins>p += GerstnerWave(_WaveB, gridPoint, tangent, binormal);</ins>
+			float3 normal = normalize(cross(binormal, tangent));
+			vertexData.vertex.xyz = p;
+			vertexData.normal = normal;
+		}
+		
+		&hellip;
+	}</pre>
+
+						<figure>
+							<img alt="inspector" src="multiple-waves/two-waves-inspector.png" width="320" height="70"><br>
+							<img alt="scene" src="multiple-waves/two-waves-scene.jpg" width="330" height="166">
+							<figcaption>Two waves.</figcaption>
+						</figure>
+					</section>
+
+					<section>
+						<h3>Looping Animations</h3>
+						
+						<p>Now that we have two waves, you can observe that one with a longer wavelength indeed travels faster than a shorter one. But the relationship between phase speed and wavelength is nonlinear, because `c=sqrt(gk)=sqrt((glambda)/(2pi))`. This is relevant when you want to create a looping animation with multiple waves. In the case of two waves, you have to find two wavelengths that produce phase speeds with the relationship `ac_1=bc_2`, where `a` and `b` are integers. You could do this by using even powers of two for wavelengths.</p>
+						
+						<p>For example, let's use `lambda_1=64=2^6` and `lambda_2=16=2^4`. Then `c_1=sqrt((2^6g)/(2pi))=2^3sqrt(g/(2pi))` and `c_2=sqrt((2^4g)/(2pi))=2^2sqrt(g/(2pi))`. Observe that `sqrt(g/(2pi))` is constant, so we can define it as `q` and use `c_1=2^3q` and `c_2=2^2q`. Thus `c_1=2c_2`, which means that each time the big wave repeats the small wave repeats twice. The loop duration is equal to the period of the large wave, which is `lambda/c=2^6/(2^3q)=2^3/q~~6.41` seconds.</p>
+						
+						<figure>
+							<video width="340" height="168" controls loop muted>
+								<source src="multiple-waves/two-waves.mp4" type="video/mp4">
+							</video>
+							<figcaption>Direction `[[1],[0]]`, steepness &frac12;, wavelengths 64 and 16.</figcaption>
+						</figure>
+						
+						<p>You could also rewrite the math so that you directly control the phase speed and derive the wavelength from that instead.</p>
+					</section>
+					
+					<section>
+						<h3>Looping Waves</h3>
+						
+						<p>Another important observation is that we can get looping waves again. If the sum of a partial derivative exceeds 1, then a loop forms. To prevent looping waves you have to ensure that the sum of the steepness properties of all waves does not exceed 1.</p>
+
+						<figure>
+							<img src="multiple-waves/looping.jpg" width="330" height="186">
+							<figcaption>Loop forms with two waves, both steepness 1.</figcaption>
+						</figure>
+						
+						<p>You can enforce this restriction by normalizing the steepness in the shader. This means that if you change the steepness of one wave it affects all other waves. Alternatively, you can divide all steepness values by the number of waves, but that limits the steepness per wave. You could also set no restrictions in the shader, and instead provide feedback and options via the material inspector. For this tutorial, we simply set no restrictions at all.</p>
+					</section>
+
+					<section>
+						<h3>Three Waves</h3>
+						
+						<p>We wrap up by adding support for yet another wave. The more waves we add, the more complex our shader becomes. You can make shader variations based on the amount of waves, but we'll just three as a fixed amount.</p>
+
+						<pre translate="no">Shader "Custom/Waves" {
+	Properties {
+		&hellip;
+		_WaveA ("Wave A (dir, steepness, wavelength)", Vector) = (1,0,0.5,10)
+		_WaveB ("Wave B", Vector) = (0,1,0.25,20)
+		<ins>_WaveC ("Wave C", Vector) = (1,1,0.15,10)</ins>
+	}
+	SubShader {
+		&hellip;
+		float4 _WaveA, _WaveB<ins>, _WaveC</ins>;
+
+		&hellip;
+
+		void vert(inout appdata_full vertexData) {
+			float3 gridPoint = vertexData.vertex.xyz;
+			float3 tangent = 0;
+			float3 binormal = 0;
+			float3 p = gridPoint;
+			p += GerstnerWave(_WaveA, gridPoint, tangent, binormal);
+			p += GerstnerWave(_WaveB, gridPoint, tangent, binormal);
+			<ins>p += GerstnerWave(_WaveC, gridPoint, tangent, binormal);</ins>
+			float3 normal = normalize(cross(binormal, tangent));
+			vertexData.vertex.xyz = p;
+			vertexData.normal = normal;
+		}
+
+		&hellip;
+	}</pre>
+
+						<figure>
+							<img alt="inspector" src="multiple-waves/three-waves.png" width="320" height="104"><br>
+							<video width="324" height="160" controls loop muted>
+								<source src="multiple-waves/three-waves.mp4" type="video/mp4">
+							</video>
+							<figcaption>Three waves.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../looking-through-water/index.html">Looking Through Water</a>.</p>
+					</section>
+					
+					<a href="multiple-waves/multiple-waves.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Waves.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

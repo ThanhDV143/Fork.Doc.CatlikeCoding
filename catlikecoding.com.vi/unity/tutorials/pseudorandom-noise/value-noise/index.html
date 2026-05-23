@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/pseudorandom-noise/value-noise/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/pseudorandom-noise/value-noise/tutorial-image.jpg">
+		<meta property="og:title" content="Value Noise">
+		<meta property="og:description" content="A Unity C# Pseudorandom Noise tutorial about implementing value noise.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Value Noise</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/pseudorandom-noise/value-noise/#article",
+				"headline": "Value Noise",
+				"alternativeHeadline": "Lattice Noise",
+				"datePublished": "2021-05-30",
+				"dateModified": "2021-07-15",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity C# Pseudorandom Noise tutorial about implementing value noise.",
+				"image": "https://catlikecoding.com/unity/tutorials/pseudorandom-noise/value-noise/tutorial-image.jpg",
+				"dependencies": "Unity 2020.3.6f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/pseudorandom-noise/", "name": "Pseudorandom Noise" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				HashJob: 1,
+				HashVisualization: 1,
+				INoise: 1,
+				IShape: 1,
+				Job: 1,
+				Lattice1D: 1,
+				Lattice2D: 1,
+				Lattice3D: 1,
+				LatticeSpan4 : 1,
+				MathExtensions: 1,
+				N: 1,
+				Noise: 1,
+				NoiseVisualization: 1,
+				Plane : 1,
+				Point4: 1,
+				S: 1,
+				ScheduleDelegate: 1,
+				Shape: 1,
+				Shapes: 1,
+				SmallXXHash: 1,
+				SmallXXHash4: 1,
+				SpaceTRS: 1,
+				Sphere: 1,
+				Torus: 1,
+				Visualization: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Pseudorandom Noise</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Value Noise</h1>
+					<p>Lattice Noise</p>
+					<ul>
+						<li>Create an abstract visualization class.</li>
+						<li>Introduce a generic job for noise.</li>
+						<li>Generate 1D, 2D, and 3D value noise.</li>
+					</ul>
+				</header>
+				
+				<p>This is the third tutorial in a series about <a href="../index.html">pseudorandom noise</a>. It covers the transition from pure hashing to the simplest form of lattice noise.</p>
+				
+				<p>This tutorial is made with Unity 2020.3.6f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A sphere showing 3D value noise.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Reusable Visualization</h2>
+					
+					<p>Our hash visualization shows how a hash function partitions space in discrete blocks of values, based on integer coordinates. The idea is that a noise function uses these hash values to produce a pattern that isn't as blocky. We'll specifically implement value noise in this tutorial, which smoothes out the blocky hash pattern. The output of the noise function thus produces a continuous pattern, yielding floating-point values instead of discrete bit patterns. This requires a similar yet different visualization for noise than we currently have.</p>
+					
+					<p>We could duplicate the code from <code>HashVisualization</code> and reuse that for a <code>NoiseVisualization</code> class, but that would introduce a lot of duplicate code. We'll use inheritance to avoid this redundancy by introducing an abstract <code>Visualization</code> class that will serve as the basis for both hash and noise visualizations.</p>
+					
+					<section>
+						<h3>Abstract Visualization Class</h3>
+						
+						<p>Duplicate the <code>HashVisualization</code> C# asset and rename it to <code>Visualization</code>, then remove the job and all fields that are directly related to hashes, the hash seed, and the hash domain.</p>
+						
+						<pre translate="no"><del>//using Unity.Burst;</del>
+using Unity.Collections;
+using Unity.Jobs;
+using Unity.Mathematics;
+using UnityEngine;
+
+using static Unity.Mathematics.math;
+
+public class <ins>Visualization</ins> : MonoBehaviour {
+
+	<del>//[BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = true)]</del>
+	<del>//struct HashJob : IJobFor { &hellip; }</del>
+
+	&hellip;
+
+	static int
+		<del>//hashesId = Shader.PropertyToID("_Hashes"),</del>
+		positionsId = Shader.PropertyToID("_Positions"),
+		normalsId = Shader.PropertyToID("_Normals"),
+		configId = Shader.PropertyToID("_Config");
+
+	&hellip;
+
+	<del>//[SerializeField]</del>
+	<del>//int seed;</del>
+
+	<del>//[SerializeField]</del>
+	<del>//SpaceTRS domain = new SpaceTRS {</del>
+		<del>//scale = 8f</del>
+	<del>//};</del>
+	
+	<del>//NativeArray&lt;uint4> hashes;</del>
+
+	NativeArray&lt;float3x4> positions, normals;
+
+	<del>//ComputeBuffer hashesBuffer, positionsBuffer, normalsBuffer;</del>
+	<ins>ComputeBuffer positionsBuffer, normalsBuffer;</ins>
+
+	&hellip;
+	
+}</pre>
+						
+						<p>Clean up the <code>OnEnable</code> and <code>OnDisable</code> methods to match.</p>
+						
+						<pre translate="no">	void OnEnable () {
+		isDirty = true;
+
+		int length = resolution * resolution;
+		length = length / 4 + (length & 1);
+		<del>//hashes = new NativeArray&lt;uint4>(length, Allocator.Persistent);</del>
+		positions = new NativeArray&lt;float3x4>(length, Allocator.Persistent);
+		normals = new NativeArray&lt;float3x4>(length, Allocator.Persistent);
+		<del>//hashesBuffer = new ComputeBuffer(length * 4, 4);</del>
+		positionsBuffer = new ComputeBuffer(length * 4, 3 * 4);
+		normalsBuffer = new ComputeBuffer(length * 4, 3 * 4);
+
+		propertyBlock ??= new MaterialPropertyBlock();
+		<del>//propertyBlock.SetBuffer(hashesId, hashesBuffer);</del>
+		&hellip;
+	}
+
+	void OnDisable () {
+		<del>//hashes.Dispose();</del>
+		positions.Dispose();
+		normals.Dispose();
+		<del>//hashesBuffer.Release();</del>
+		positionsBuffer.Release();
+		normalsBuffer.Release();
+		<del>//hashesBuffer = null;</del>
+		positionsBuffer = null;
+		normalsBuffer = null;
+	}</pre>
+						
+						<p>And change <code>OnValidate</code> so it checks the positions buffer instead of the hashes buffer.</p>
+						
+						<pre translate="no">	void OnValidate () {
+		if (<ins>positionsBuffer</ins> != null &amp;&amp; enabled) {
+			OnDisable();
+			OnEnable();
+		}
+	}</pre>
+						
+						<p>Then remove the scheduling of the hash job and setting of the hash buffer from <code>Update</code>.</p>
+						
+						<pre translate="no">	void Update () {
+		if (isDirty || transform.hasChanged) {
+			&hellip;
+
+			<del>//new HashJob {</del>
+			<del>//	&hellip;</del>
+			<del>//}.ScheduleParallel(hashes.Length, resolution, handle).Complete();</del>
+
+			<del>//hashesBuffer.SetData(hashes.Reinterpret&lt;uint>(4 * 4));</del>
+			&hellip;
+		}
+
+		&hellip;
+	}</pre>
+						
+						<p>What we have left is a class that does everything needed for visualization except calculating and storing the data to be visualized. So on its own it is useless and there is no point to attach a component of this type to a game object. To indicate this we mark the class as <code>abstract</code>.</p>
+						
+						<pre translate="no">public <ins>abstract</ins> class Visualization : MonoBehaviour { &hellip; }</pre>
+						
+						<p>This makes it impossible to create a direct instance of the <code>Visualization</code> type.</p>
+					</section>
+					
+					<section>
+						<h3>Abstract Methods</h3>
+						
+						<p>Whatever we use <code>Visualization</code> for, it must support being enabled and disabled. It already has <code>OnEnable</code> and <code>OnDisable</code> methods, but those do not create or remove the native arrays, buffers, or whatever else is needed for the data to be visualized. Let's assume that such work is done in dedicated <code>EnableVisualization</code> and <code>DisableVisualization</code> methods and add them to <code>Visualization</code>. As we do not know what code goes in these methods we declare them as <code>abstract</code> signatures only, similar to the contract of an interface. We can do this because the class itself is abstract as well so we can omit parts of its implementation.</p>
+						
+						<pre translate="no">	<ins>abstract void EnableVisualization ();</ins>
+
+	<ins>abstract void DisableVisualization ();</ins></pre>
+						
+						<p>When enabling a visualization both the data length and a material property block are needed, so add those as parameter to <code>EnableVisualization</code>.</p>
+						
+						<pre translate="no">	abstract void EnableVisualization (
+		<ins>int dataLength, MaterialPropertyBlock propertyBlock</ins>
+	);</pre>
+						
+						<p>Invoke <code>EnableVisualization</code> once we have a property block in <code>OnEnable</code>. Invoke <code>DisableVisualization</code> at the end of <code>OnDisable</code>.</p>
+						
+						<pre translate="no">	void OnEnable () {
+		&hellip;
+		
+		propertyBlock ??= new MaterialPropertyBlock();
+		<ins>EnableVisualization(length, propertyBlock);</ins>
+		&hellip;
+	}
+
+	void OnDisable () {
+		&hellip;
+		<ins>DisableVisualization();</ins>
+	}</pre>
+						
+						<p>We also have to perform some yet-unknown work when updating the visualization. Add an abstract <code>UpdateVisualization</code> method for this, with a native array for positions, a resolution, and a job handle as parameters.</p>
+						
+						<pre translate="no">	<ins>abstract void UpdateVisualization (</ins>
+		<ins>NativeArray&lt;float3x4> positions, int resolution, JobHandle handle</ins>
+	<ins>);</ins></pre>
+						
+						<p>Invoke this method in <code>Update</code>, passing it the handle of the shape job.</p>
+						
+						<pre translate="no">			<del>//JobHandle handle = shapeJobs[(int)shape](</del>
+				<del>//positions, normals, resolution, transform.localToWorldMatrix, default</del>
+			<del>//);</del>
+			<ins>UpdateVisualization(</ins>
+				<ins>positions, resolution,</ins>
+				<ins>shapeJobs[(int)shape](</ins>
+					<ins>positions, normals, resolution, transform.localToWorldMatrix, default</ins>
+				<ins>)</ins>
+			<ins>);</ins></pre>
+						
+						<p>The idea is that our concrete visualizations extend <code>Visualization</code> and provide implementations of the three abstract methods. These classes must be able to access those methods, but that is currently not possible because they are private to <code>Visualization</code>. We could make them <code>public</code>, but that is not needed because they're only used by the class itself. We'll make them <code>protected</code> instead, which means that only the class itself and all classes that extend it can access the methods.</p>
+						
+						<pre translate="no">	<ins>protected</ins> abstract void EnableVisualization (
+		int dataLength, MaterialPropertyBlock propertyBlock
+	);
+
+	<ins>protected</ins> abstract void DisableVisualization ();
+
+	<ins>protected</ins> abstract void UpdateVisualization (
+		NativeArray&lt;float3x4> positions, int resolution, JobHandle handle
+	);</pre>
+					</section>
+					
+					<section>
+						<h3>Extending an Abstract Class</h3>
+						
+						<p>We're now going to adjust <code>HashVisualization</code> so it extends <code>Visualization</code> instead of <code>MonoBehaviour</code> directly, thus inheriting all the general-purpose visualization functionality.</p>
+						
+						<pre translate="no">public class HashVisualization : <ins>Visualization</ins> { &hellip; }</pre>
+						
+						<p>Remove the nested <code>Shape</code> type and all fields that <code>HashVisualization</code> now inherits from <code>Visualization</code>, as they're now duplicates.</p>
+						
+						<pre translate="no">	<del>//public enum Shape { Plane, Sphere, Torus }</del>
+
+	<del>//static Shapes.ScheduleDelegate[] shapeJobs = { &hellip; };</del>
+
+	static int hashesId = Shader.PropertyToID("_Hashes")<ins>;</ins>
+		<del>//positionsId = Shader.PropertyToID("_Positions"),</del>
+		<del>//normalsId = Shader.PropertyToID("_Normals"),</del>
+		<del>//configId = Shader.PropertyToID("_Config");</del>
+
+	<del>//&hellip;</del>
+
+	[SerializeField]
+	int seed;
+
+	[SerializeField]
+	SpaceTRS domain = new SpaceTRS {
+		scale = 8f
+	};
+
+	NativeArray&lt;uint4> hashes;
+
+	<del>//NativeArray&lt;float3x4> positions, normals;</del>
+
+	<del>//ComputeBuffer hashesBuffer, positionsBuffer, normalsBuffer;</del>
+	<ins>ComputeBuffer hashesBuffer;</ins>
+
+	<del>//MaterialPropertyBlock propertyBlock;</del>
+
+	<del>//bool isDirty;</del>
+
+	<del>//Bounds bounds;</del></pre>
+						
+						<p>Change <code>OnEnable</code> so it becomes <code>EnableVisualization</code>, only containing the code that deals with the hash data.</p>
+						
+						<pre translate="no">	void <ins>EnableVisualization</ins> (<ins>int dataLength, MaterialPropertyBlock propertyBlock</ins>) {
+		<del>//&hellip;</del>
+		hashes = new NativeArray&lt;uint4>(<ins>dataLength</ins>, Allocator.Persistent);
+		//positions = new NativeArray&lt;float3x4>(length, Allocator.Persistent);
+		//normals = new NativeArray&lt;float3x4>(length, Allocator.Persistent);
+		hashesBuffer = new ComputeBuffer(<ins>dataLength</ins> * 4,4);
+		<del>//positionsBuffer = new ComputeBuffer(length * 4, 3 * 4);</del>
+		<del>//normalsBuffer = new ComputeBuffer(length * 4, 3 * 4);</del>
+
+		<del>//propertyBlock ??= new MaterialPropertyBlock();</del>
+		propertyBlock.SetBuffer(hashesId, hashesBuffer);
+		<del>//&hellip;</del>
+	}</pre>
+						
+						<p>We have to indicate that this method overrides its abstract version, which is done by writing <code>override</code> in front of it. We also have to give it the same  <code>protected</code> access level.</p>
+						
+						<pre translate="no">	<ins>protected override</ins> void EnableVisualization (
+		int dataLength, MaterialPropertyBlock propertyBlock
+	) { &hellip; }</pre>
+						
+						<p>Turn <code>OnDisable</code> into <code>DisableVisualization</code>, using the same approach.</p>
+						
+						<pre translate="no">	<ins>protected override</ins> void <ins>DisableVisualization</ins> () {
+		hashes.Dispose();
+		<del>//positions.Dispose();</del>
+		<del>//normals.Dispose();</del>
+		hashesBuffer.Release();
+		<del>//positionsBuffer.Release();</del>
+		<del>//normalsBuffer.Release();</del>
+		hashesBuffer = null;
+		<del>//positionsBuffer = null;</del>
+		<del>//normalsBuffer = null;</del>
+	}</pre>
+						
+						<p>Remove the <code>OnValidate</code> method, because it's already defined in the base class that we extend.</p>
+						
+						<pre translate="no">	<del>//void OnValidate () { &hellip; }</del></pre>
+						
+						<p>And finally change <code>Update</code> so it becomes <code>UpdateVisualization</code>, only scheduling and completing the hash job, followed by setting the hashes buffer.</p>
+						
+						<pre translate="no">	<ins>protected override</ins> void <ins>UpdateVisualization</ins> (
+		<ins>NativeArray&lt;float3x4> positions, int resolution, JobHandle handle</ins>
+	) {
+		<del>//&hellip;</del>
+		new HashJob {
+			positions = positions,
+			hashes = hashes,
+			hash = SmallXXHash.Seed(seed),
+			domainTRS = domain.Matrix
+		}.ScheduleParallel(hashes.Length, resolution, handle).Complete();
+
+		hashesBuffer.SetData(hashes.Reinterpret&lt;uint>(4 * 4));
+		<del>//&hellip;</del>
+	}</pre>
+						
+						<p>At this point our hash visualization still works as before, but with all general-purpose visualization code isolated in the separate <code>Visualization</code> class.</p>
+					</section>
+					
+					<section>
+						<h3>Visualizing Noise</h3>
+						
+						<p>We're going to create a new <code>NoiseVisualization</code> component type that also extends <code>Visualization</code>. Do this by duplicating <code>HashVisualization</code>, removing its hash job, and replacing all references to hashes with references to noise. As the noise will consist of floating-point values changes the element type of the native array to <code>float4</code>. Initially have <code>UpdateVisualization</code> only complete the provided handle and sets the noise buffer. This will produce a noise that's zero everywhere.</p>
+						
+						<pre translate="no"><del>//using Unity.Burst;</del>
+using Unity.Collections;
+using Unity.Jobs;
+using Unity.Mathematics;
+using UnityEngine;
+
+<del>//using static Unity.Mathematics.math;</del>
+
+public class <ins>NoiseVisualization</ins> : Visualization {
+	
+	<del>//[BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = true)]</del>
+	<del>//struct HashJob : IJobFor { &hellip; }</del>
+	
+	static int <ins>noiseId</ins> = Shader.PropertyToID(<ins>"_Noise"</ins>);
+	
+	[SerializeField]
+	int seed;
+
+	[SerializeField]
+	SpaceTRS domain = new SpaceTRS {
+		scale = 8f
+	};
+
+	NativeArray&lt;<ins>float4</ins>> <ins>noise</ins>;
+
+	ComputeBuffer <ins>noiseBuffer</ins>;
+	
+	protected override void EnableVisualization (
+		int dataLength, MaterialPropertyBlock propertyBlock
+	) {
+		<ins>noise</ins> = new NativeArray&lt;<ins>float4</ins>>(dataLength, Allocator.Persistent);
+		<ins>noiseBuffer</ins> = new ComputeBuffer(dataLength * 4, 4);
+		propertyBlock.SetBuffer(<ins>noiseId</ins>, <ins>noiseBuffer</ins>);
+	}
+
+	protected override void DisableVisualization () {
+		<ins>noise</ins>.Dispose();
+		<ins>noiseBuffer</ins>.Release();
+		<ins>noiseBuffer</ins> = null;
+	}
+
+	protected override void UpdateVisualization (
+		NativeArray&lt;float3x4> positions, int resolution, JobHandle handle
+	) {
+		<del>//new HashJob {</del>
+			<del>//&hellip;</del>
+		<del>//}.ScheduleParallel(hashes.Length, resolution, handle).Complete();</del>
+		
+		<ins>handle.Complete();</ins>
+		<ins>noiseBuffer</ins>.SetData(noise.Reinterpret&lt;<ins>float</ins>>(4 * 4));
+	}
+}</pre>
+						
+						<p>The noise visualization needs a slightly different shader. Duplicate <em translate="no">HashGPU</em> and rename it to <em translate="no">NoiseGPU</em>. Replace the hashes buffer with a noise buffer and directly use the noise value to offset the position in <code class="shader">ConfigureProcedural</code>. This works because our noise values will lie in the &minus;1&ndash;1 range.</p>
+						
+						<pre class="shader" translate="no">#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)
+	StructuredBuffer&lt;<ins>float</ins>> <ins>_Noise</ins>;
+	StructuredBuffer&lt;float3> _Positions, _Normals;
+#endif
+
+float4 _Config;
+
+void ConfigureProcedural () {
+	#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)
+		&hellip;
+		unity_ObjectToWorld._m03_m13_m23 +=
+			<ins>_Config.z * _Noise[unity_InstanceID]</ins> * _Normals[unity_InstanceID];
+		unity_ObjectToWorld._m00_m11_m22 = _Config.y;
+	#endif
+}</pre>
+						
+						<p>Then replace <code class="shader">GetHashColor</code> with a <code class="shader">GetNoiseColor</code> function that directly returns the noise value if it is positive, producing a grayscale value. If the noise is negative then let's make it a shade of red instead, so it's easy so see the difference between positive and negative noise.</p>
+						
+						<pre class="shader" translate="no">float3 <ins>GetNoiseColor</ins> () {
+	#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)
+		<ins>float noise = _Noise[unity_InstanceID];</ins>
+		<ins>return noise &lt; 0.0 ? float3(-noise, 0.0, 0.0) : noise;</ins>
+	#else
+		return 1.0;
+	#endif
+}
+
+void ShaderGraphFunction_float (float3 In, out float3 Out, out float3 Color) {
+	Out = In;
+	Color = <ins>GetNoiseColor</ins>();
+}
+
+void ShaderGraphFunction_half (half3 In, out half3 Out, out half3 Color) {
+	Out = In;
+	Color = <ins>GetNoiseColor</ins>();
+}</pre>
+						
+						<p>Create a shader graph or surface shader for noise, by duplicating the hash version and changing which HLSL file it uses. If you use a surface shader then you also have to change which color function is invoked. Then create a material with it, followed by a game object with the <code>NoiseVisualization</code> component that uses it.</p>
+						
+						<figure>
+							<img src="reusable-visualization/noise-visualization-inspector.png" width="320" height="410">
+							<figcaption>Noise visualization game object.</figcaption>
+						</figure>
+						
+						<p>I put the hash and noise visualizations in separate scenes, but you could also have both in the same scene, with only one of them enabled.</p>
+					</section>
+					
+					<section>
+						<h3>Extension Methods</h3>
+						
+						<p>Once we create a job for calculating noise we will have three places where we need to perform a vectorized matrix-vector transformation. Rather than introduce yet another instance of <code>TransformPositions</code> or <code>TransformVectors</code> let's put this code in a single place that we can use everywhere. The simplest way to do this is by creating a static <code>MathExtensions</code> class&mdash;in its own C# file&mdash;that contains a public static copy of the <code>TransformVectors</code> method from <code>Shapes.Job</code>.</p>
+						
+						<pre translate="no"><ins>using Unity.Mathematics;</ins>
+
+<ins>using static Unity.Mathematics.math;</ins>
+
+<ins>public static class MathExtensions {</ins>
+
+	<ins>public static</ins> float4x3 TransformVectors (
+		float3x4 trs, float4x3 p, float w = 1f
+	) => float4x3€(
+		trs.c0.x * p.c0 + trs.c1.x * p.c1 + trs.c2.x * p.c2 + trs.c3.x * w,
+		trs.c0.y * p.c0 + trs.c1.y * p.c1 + trs.c2.y * p.c2 + trs.c3.y * w,
+		trs.c0.z * p.c0 + trs.c1.z * p.c1 + trs.c2.z * p.c2 + trs.c3.z * w
+	);
+<ins>}</ins></pre>
+						
+						<p>Now we can invoke it everywhere via <code>MathExtensions.TransformVectors(trs, v)</code>. This can be reduced to just <code>TransformVectors(trs, v)</code> with the help of <code>using static MathExtensions</code>. However, another way to do this is by turning it into an extension method.</p>
+						
+						<p>An extension method is a static method that pretends to be an instance method of a type. It is created by adding the <code>this</code> modifier to the first parameter of the method.</p>
+						
+						<pre translate="no">	public static float4x3 TransformVectors (
+		<ins>this</ins> float3x4 trs, float4x3 p, float w = 1f
+	) => float4x3(&hellip;);</pre>
+						
+						<p>The method can then be invoked on an instance of that type, omitting its first argument, so we end up with <code>trs.TransformVectors(v)</code>, effectively asking a matrix to transform a vector. Change <code>Shapes.Job</code> to use this approach, eliminating its own version of the method.</p>
+						
+						<pre translate="no">		<del>//float4x3 TransformVectors (float3x4 trs, float4x3 p, float w = 1f) => float4x3(&hellip;);</del>
+
+		public void Execute (int i) {
+			Point4 p = default(S).GetPoint4(i, resolution, invResolution);
+
+			positions[i] = transpose(<ins>positionTRS.</ins>TransformVectors(<ins>p.positions</ins>));
+
+			float3x4 n = transpose(<ins>normalTRS.</ins>TransformVectors(<ins>p.normals, 0f</ins>));
+			normals[i] = float3x4€(
+				normalize(n.c0), normalize(n.c1), normalize(n.c2), normalize(n.c3)
+			);
+		}</pre>
+						
+						<p>Do the same with <code>HashVisualization.HashJob</code>.</p>
+						
+						<pre translate="no">		<del>//float4x3 TransformPositions (float3x4 trs, float4x3 p) => float4x3(&hellip;);</del>
+
+		public void Execute (int i) {
+			float4x3 p = <ins>domainTRS.TransformVectors(transpose(positions[i]))</ins>;
+
+			&hellip;
+		}</pre>
+						
+						<p>Let's add another extension method to <code>MathExtensions</code>, this time a <code>Get3x4</code> method that extracts the <code>float3x4</code> portion of a <code>float4x4</code> matrix.</p>
+						
+						<pre translate="no">	<ins>public static float3x4 Get3x4 (this float4x4 m) =></ins>
+		<ins>float3x4€(m.c0.xyz, m.c1.xyz, m.c2.xyz, m.c3.xyz);</ins></pre>
+						
+						<p>Use it to simplify <code>Shapes.Job.ScheduleParallel</code>.</p>
+						
+						<pre translate="no">		public static JobHandle ScheduleParallel (
+			NativeArray&lt;float3x4> positions, NativeArray&lt;float3x4> normals,
+			int resolution,	float4x4 trs, JobHandle dependency
+		<del>//) {</del>
+		<del>//	float4x4 tim = transpose(inverse(trs));</del>
+		<ins>) =></ins> new Job&lt;S> {
+			positions = positions,
+			normals = normals,
+			resolution = resolution,
+			invResolution = 1f / resolution,
+			positionTRS = <ins>trs.Get3x4()</ins>,
+			normalTRS = <ins>transpose(inverse(trs)).Get3x4()</ins>
+		}.ScheduleParallel(positions.Length, resolution, dependency);
+		//}</pre>
+						
+						<aside>
+							<h3>How do extension methods work?</h3>
+							<div>
+								<p>If you go deep enough, there are no such things as objects. There is just data, some of which represents information and some of which represents instructions. Objects are an abstraction. When invoking a method on an object what really happens is that the CPU pushes some data&mdash;the arguments&mdash;on a data stack and then jumps to the relevant instructions. The object on which the method was invoked is just another argument. An extension method makes this explicit.</p>
+							</div>
+						</aside>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Lattice Noise</h2>
+					
+					<p>The type of noise that we will create in this tutorial is known as value noise. It is a specific type of lattice noise, which is noise based on a geometric lattice, typically a regular grid.</p>
+					
+					<section>
+						<h3>Generic Noise Job</h3>
+						
+						<p>Because there are different types and flavors of noise we will create a dedicated static <code>Noise</code> class, like we created one for shapes. Just like <code>Shapes</code>, it contains an interface and a generic <code>Job</code> struct type. In this case the interface is <code>INoise</code>, defining a <code>GetNoise4</code> method that returns a vectorized <code>float4</code> value with noise, given a set of positions and hashes.</p>
+						
+						<pre translate="no"><ins>using Unity.Burst;</ins>
+<ins>using Unity.Collections;</ins>
+<ins>using Unity.Jobs;</ins>
+<ins>using Unity.Mathematics;</ins>
+
+<ins>using static Unity.Mathematics.math;</ins>
+
+<ins>public static class Noise {</ins>
+
+	<ins>public interface INoise {</ins>
+		<ins>float4 GetNoise4 (float4x3 positions, SmallXXHash4 hash);</ins>
+	<ins>}</ins>
+
+	<ins>[BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = true)]</ins>
+	<ins>public struct Job&lt;N> : IJobFor where N : struct, INoise {}</ins>
+<ins>}</ins></pre>
+						
+						<p>The job has positions for input, noise for output, and also needs a hash and domain transformation matrix. Its <code>Execute</code> method invokes the <code>GetNoise4</code> method of the noise, passing it the transformed positions and the hash.</p>
+						
+						<pre translate="no">	public struct Job<N> : IJobFor where N : struct, INoise {
+		
+		<ins>[ReadOnly]</ins>
+		<ins>public NativeArray&lt;float3x4> positions;</ins>
+
+		<ins>[WriteOnly]</ins>
+		<ins>public NativeArray&lt;float4> noise;</ins>
+
+		<ins>public SmallXXHash4 hash;</ins>
+
+		<ins>public float3x4 domainTRS;</ins>
+
+		<ins>public void Execute (int i) {</ins>
+			<ins>noise[i] = default(N).GetNoise4(</ins>
+				<ins>domainTRS.TransformVectors(transpose(positions[i])), hash</ins>
+			<ins>);</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>Finish by adding an appropriate <code>ScheduleParallel</code> method to the job and a corresponding delegate type to <code>Noise</code>.</p>
+						
+						<pre translate="no">	public struct Job&lt;N> : IJobFor where N : struct, INoise {
+		
+		&hellip;
+		
+		<ins>public static JobHandle ScheduleParallel (</ins>
+			<ins>NativeArray&lt;float3x4> positions, NativeArray&lt;float4> noise,</ins>
+			<ins>int seed, SpaceTRS domainTRS, int resolution, JobHandle dependency</ins>
+		<ins>) => new Job&lt;N> {</ins>
+			<ins>positions = positions,</ins>
+			<ins>noise = noise,</ins>
+			<ins>hash = SmallXXHash.Seed(seed),</ins>
+			<ins>domainTRS = domainTRS.Matrix,</ins>
+		<ins>}.ScheduleParallel(positions.Length, resolution, dependency);</ins>
+	}
+	
+	<ins>public delegate JobHandle ScheduleDelegate (</ins>
+		<ins>NativeArray&lt;float3x4> positions, NativeArray&lt;float4> noise,</ins>
+		<ins>int seed, SpaceTRS domainTRS, int resolution, JobHandle dependency</ins>
+	<ins>);</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Partial Classes</h3>
+						
+						<p>The next step is to add code for our lattice noise to <code>Noise</code>, but instead of putting it all in the same C# file let's put the lattice-specific code in a separate file to keep things organized. This is possible by turning <code>Noise</code> into a <code>partial</code> class. This tells the compiler that there can be multiple files that contain parts of <code>Noise</code>.</p>
+						
+						<pre translate="no">public static <ins>partial</ins> class Noise { &hellip; }</pre>
+						
+						<p>Now create a new C# asset file and name it <em translate="no">Noise.Lattice</em>. This naming convention is not mandatory but makes it clear that the file contains the lattice portion of <code>Noise</code>. Inside it we again define the partial <code>Noise</code> class, this time introducing a <code>Lattice1D</code> struct type that implements <code>INoise</code> by initially always returning zero. We start with lattice noise in a single dimension to keep things simple, hence we name it <code>Lattice1D</code>.</p>
+						
+						<pre translate="no"><ins>using Unity.Mathematics;</ins>
+
+<ins>using static Unity.Mathematics.math;</ins>
+
+<ins>public static partial class Noise {</ins>
+
+	<ins>public struct Lattice1D : INoise {</ins>
+
+		<ins>public float4 GetNoise4(float4x3 positions, SmallXXHash4 hash) {</ins>
+			<ins>return 0f;</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>It is now possible to schedule a job to create 1D lattice noise in <code>NoiseVisualization</code>.</p>
+						
+						<pre translate="no">&hellip;
+
+<ins>using static Noise;</ins>
+
+public class NoiseVisualization : Visualization {
+
+	&hellip;
+
+	protected override void UpdateVisualization (
+		NativeArray&lt;float3x4> positions, int resolution, JobHandle handle
+	) {
+		<ins>Job&lt;Lattice1D>.ScheduleParallel(</ins>
+			<ins>positions, noise, seed, domain, resolution, handle</ins>
+		<ins>)</ins>.Complete();
+		noiseBuffer.SetData(noise.Reinterpret&lt;float>(4 * 4));
+	}
+}</pre>
+					</section>
+					
+					<section>
+						<h3>1D Noise</h3>
+						
+						<p>The first step to create 1D noise in <code>Lattice1D.GetNoise4</code> is to hash the integer X coordinates, retrieve their first bytes as floats, then convert that to the &minus;1&ndash;1 range. To do this, first floor the coordinates, feed them to the hash, convert it to unsigned integers, mask the first byte, convert that to floating-point values, and then adjust the range.</p>
+						
+						<pre translate="no">		public float4 GetNoise4(float4x3 positions, SmallXXHash4 hash) {
+			<ins>int4 p = (int4)floor(positions.c0);</ins>
+			<ins>float4 v = (uint4)hash.Eat(p) & 255;</ins>
+			return <ins>v * (2f / 255f) - 1f</ins>;
+		}</pre>
+						
+						<figure>
+							<img src="lattice-noise/1d-hash-p0.png" width="340" height="90">
+							<figcaption>1D hash values for lattice points; domain scale 8.</figcaption>
+						</figure>
+						
+						<p>This gets us isolated hash values that are constant for integer coordinates, ignoring the fractional part of the coordinates. To make the noise smooth and continuous we have to blend these values in between integer coordinates. The integer coordinates define the points of the lattice structure. In between these points are spans of empty space that we have to fill with a continuous noise signal. To make this possible we need to known both points on either side of a span.</p>
+						
+						<figure>
+							<img src="lattice-noise/1d-lattice.png" width="260" height="60">
+							<figcaption>A single span on an 1D lattice line.</figcaption>
+						</figure>
+						
+						<p>We designate the point that we currently have as p0. The other point is one step further and will be known as point p1. If we visualize p1 instead of p0 then we'll get the same pattern as before, but shifted by a single lattice step.</p>
+						
+						<pre translate="no">			int4 <ins>p0</ins> = (int4)floor(positions.c0);
+			<ins>int4 p1 = p0 + 1;</ins>
+			float4 v = (uint4)hash.Eat(<ins>p1</ins>) & 255;</pre>
+						
+						<figure>
+							<img src="lattice-noise/1d-hash-p1.png" width="340" height="90">
+							<figcaption>Values of next lattice points.</figcaption>
+						</figure>
+						
+						<p>To fill the span between the lattice points we need to combine both values, which means that we'll have to convert hashes to floating-point values twice. To simplify code that needs bytes or floating-points values let's add two properties to <code>SmallXXHash4</code>, one to retrieve the first vectorized byte&mdash;designated as bytes A&mdash;and one to retrieve the same data but converted to a value in the 0&ndash;1 range.</p>
+						
+						<pre translate="no">	<ins>public uint4 BytesA => (uint4)this & 255;</ins>
+	
+	<ins>public float4 Floats01A => (float4)BytesA * (1f / 255f);</ins></pre>
+						
+						<p>Now we can easily retrieve 0&ndash;1 values for p0 and p1, add them, and then subtract 1 in <code>GetNoise4</code>. That gives us the average of the two lattice point values in the &minus;1&ndash;1 range.</p>
+						
+						<pre translate="no">			<del>//float4 v = (uint4)hash.Eat(p0) & 255;</del>
+			return <ins>hash.Eat(p0).Floats01A + hash.Eat(p1).Floats01A</ins> - 1f;</pre>
+						
+						<figure>
+							<img src="lattice-noise/1d-hash-average.png" width="340" height="90">
+							<figcaption>Average of both points.</figcaption>
+						</figure>
+						
+						<p>The same can be achieved via linear interpolation of p0 and p1, using the <code>lerp</code> function with 0.5 as its third argument. Its result has to be doubled before subtracting 1.</p>
+						
+						<pre translate="no">			return <ins>lerp(</ins>hash.Eat(p0).Floats01A<ins>,</ins> hash.Eat(p1).Floats01A<ins>, 0.5f) * 2f</ins> - 1f;</pre>
+						
+						<p>Finally, to create a continuous transition interpolate from p0 to p1 based on the fractional part of the lattice coordinates. It can be found by subtracting p0 from the coordinates. This gives us the interpolator value, which we'll refer to as <code>t</code>.</p>
+						
+						<pre translate="no">			<ins>float4 t = positions.c0 - p0;</ins>
+			return lerp(hash.Eat(p0).Floats01A, hash.Eat(p1).Floats01A, <ins>t</ins>) * 2f - 1f;</pre>
+						
+						<figure>
+							<img src="lattice-noise/1d-hash-interpolated.png" width="340" height="90">
+							<figcaption>Linear interpolation between lattice points.</figcaption>
+						</figure>
+						
+						<p>Let's also add properties for the other three bytes and their 0&ndash;1 versions to <code>SmallXXHash4</code>, which will be handy in the future.</p>
+						
+						<pre translate="no">	public uint4 BytesA => (uint4)this & 255;
+
+	<ins>public uint4 BytesB => ((uint4)this >> 8) & 255;</ins>
+
+	<ins>public uint4 BytesC => ((uint4)this >> 16) & 255;</ins>
+
+	<ins>public uint4 BytesD => (uint4)this >> 24;</ins>
+
+	public float4 Floats01A => (float4)BytesA * (1f / 255f);
+
+	<ins>public float4 Floats01B => (float4)BytesB * (1f / 255f);</ins>
+
+	<ins>public float4 Floats01C => (float4)BytesC * (1f / 255f);</ins>
+
+	<ins>public float4 Floats01D => (float4)BytesD * (1f / 255f);</ins></pre>
+					</section>
+					
+					<section>
+						<h3>2D Noise</h3>
+						
+						<p>At this point we have continuouos 1D noise, although it isn't smooth yet. Before worrying about smoothness let's first make a 2D variant while the noise is in its simplest form.</p>
+						
+						<p>When considering only a single dimension, we needed to keep track of two lattice points and an interpolator value. Let's define a <code>LatticeSpan4</code> struct type for this data. As it's only used for internal lattice noise calculations keep it private inside <code>Noise</code>, in the <em translate="no">Noise.Lattice</em> file.</p>
+						
+						<pre translate="no">	<ins>struct LatticeSpan4 {</ins>
+		<ins>public int4 p0, p1;</ins>
+		<ins>public float4 t;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Next, add a static <code>GetLatticeSpan4</code> method that gives us this data for a given set of 1D coordinates.</p>
+						
+						<pre translate="no">	<ins>static LatticeSpan4 GetLatticeSpan4 (float4 coordinates) {</ins>
+		<ins>float4 points = floor(coordinates);</ins>
+		<ins>LatticeSpan4 span;</ins>
+		<ins>span.p0 = (int4)points;</ins>
+		<ins>span.p1 = span.p0 + 1;</ins>
+		<ins>span.t = coordinates - points;</ins>
+		<ins>return span;</ins>
+	<ins>}</ins></pre>
+						
+						<p>This allows us to simplify <code>Lattice1D.GetNoise4</code>.</p>
+						
+						<pre translate="no">		public float4 GetNoise4(float4x3 positions, SmallXXHash4 hash) {
+			<ins>LatticeSpan4 x = GetLatticeSpan4(positions.c0);</ins>
+			return lerp(
+				hash.Eat(<ins>x.</ins>p0).Floats01A, hash.Eat(<ins>x.</ins>p1).Floats01A, <ins>x.</ins>t
+			) * 2f - 1f;
+		}</pre>
+						
+						<p>Introduce <code>Lattice2D</code>, initially as a duplicate of <code>Lattice1D</code>.</p>
+						
+						<pre translate="no">	public struct Lattice1D : INoise { &hellip; }
+	
+	<ins>public struct Lattice2D : INoise { &hellip; }</ins></pre>
+						
+						<p>Adjust <code>NoiseVisualization.UpdateVisualization</code> so it uses the 2D version.</p>
+						
+						<pre translate="no">		Job&lt;<ins>Lattice2D</ins>>.ScheduleParallel(
+			positions, noise, seed, domain, resolution, handle
+		).Complete();</pre>
+						
+						<p>Now adjust <code>Lattice2D.GetNoise4</code> so it also gets the lattice span data for the Z dimension, then use that instead of X to calculate the noise.</p>
+						
+						<pre translate="no">		public float4 GetNoise4 (float4x3 positions, SmallXXHash4 hash) {
+			LatticeSpan4
+				x = GetLatticeSpan4(positions.c0)<ins>, z = GetLatticeSpan4(positions.c2)</ins>;
+			
+			return lerp(hash.Eat(<ins>z</ins>.p0).Floats01A, hash.Eat(<ins>z</ins>.p1).Floats01A, <ins>z</ins>.t) * 2f - 1f;
+		}</pre>
+						
+						<p>This produces the same pattern as before, but now in the Z dimension instead of the X dimension. We could've also use the Y dimension, but that wouldn't produce a visible pattern for our XZ plane unless we rotated the domain.</p> 
+						
+						<figure>
+							<img src="lattice-noise/2d-only-x.png" width="320" height="240" alt="x">
+							<img src="lattice-noise/2d-only-z.png" width="320" height="240" alt="z">
+							<figcaption>Interpolating only X and only Z.</figcaption>
+						</figure>
+						
+						<p>To create a pattern that depends on both X and Z we have to take both dimensions into consideration, ultimately ending up with hash values for the four corners of a lattice square.</p>
+						
+						<figure>
+							<img src="lattice-noise/2d-lattice.png" width="310" height="290">
+							<figcaption>2D lattice square.</figcaption>
+						</figure>
+						
+						<p>Let's initially calculate the hashes of the X points, referring to them as h0 and h1.</p>
+						
+						<pre translate="no">			LatticeSpan4
+				x = GetLatticeSpan4(positions.c0), z = GetLatticeSpan4(positions.c2);
+
+			<ins>SmallXXHash4 h0 = hash.Eat(x.p0), h1 = hash.Eat(x.p1);</ins></pre>
+						
+						<p>Then feed the Z points to h0 instead of the original hash.</p>
+						
+						<pre translate="no">			return lerp(<ins>h0</ins>.Eat(z.p0).Floats01A, <ins>h0</ins>.Eat(z.p1).Floats01A, z.t) * 2f - 1f;</pre>
+						
+						<figure>
+							<img src="lattice-noise/2d-bands.png" width="330" height="210">
+							<figcaption>Independent bands along X.</figcaption>
+						</figure>
+						
+						<p>As we now base our noise on both a single X point and the interpolation of two Z points we get continuous bands along the Z dimension, along with a discontinuous pattern along the X dimension. To complete the pattern we have to interpolate between the h0 and h1 bands along X as well. Thus we have to linearly interpolate two linear interpolations, which is known as bilinear interpolation.</p>
+						
+						<pre translate="no">			return <ins>lerp(</ins>
+				lerp(h0.Eat(z.p0).Floats01A, h0.Eat(z.p1).Floats01A, z.t)<ins>,</ins>
+				<ins>lerp(h1.Eat(z.p0).Floats01A, h1.Eat(z.p1).Floats01A, z.t),</ins>
+				<ins>x.t</ins>
+			<ins>)</ins> * 2f - 1f;</pre>
+						
+						<figure>
+							<img src="lattice-noise/2d-interpolated.png" width="320" height="200">
+							<figcaption>Bilinear interpolation.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Smooth Noise</h3>
+						
+						<p>Although we have a continuous 2D pattern it isn't smooth yet. The transitions through spans between the lattice points are straight flat segments, hence there is a sudden change in direction along the edges of the lattice squares. To make this smooth we need to take the rate of change of the noise into account. If we have a function, then its first derivative function describes its rate of change. As linear interpolation produces a straight line its derivative is a constant value. There is also a second derivative function, which is the derivative of the first derivative. You can think of it as the rate of change of the curvature, or the acceleration of the noise. In this case the second derivative is always zero.</p>
+						
+						<p>For example, in the below graph 1D noise is shown as a solid black line, its first derivative is a dashed orange line, and its second derivative is a dotted purple line. The derivatives are divided by 6 to scale them down so they're easier to see. Note that there is a discontinuity in the orange line at the lattice point in the middle, where the noise suddenly changes direction.</p>
+						
+						<figure>
+							<img src="lattice-noise/linear-graph.png" width="400" height="400">
+							<figcaption>Two 1d spans between point values 0, 1, and 0.5.</figcaption>
+						</figure>
+						
+						<p>We can smooth that out by applying the smoothstep function to our interpolator in <code>GetLatticeSpan4</code>.</p>
+						
+						<pre translate="no">		span.t = coordinates - points;
+		<ins>span.t = smoothstep(0f, 1f, span.t);</ins></pre>
+						
+						<figure>
+							<img src="lattice-noise/2d-smoothstep.png" width="330" height="200">
+							<figcaption>Smooth interpolation.</figcaption>
+						</figure>
+						
+						<p>This works because the smoothstep function&mdash;`3t^2-2t^3`&mdash;is horizontal for the inputs 0 and 1. This means that the first derivative of this function&mdash;`6t-6t^2`&mdash;is zero at both ends. It is known to be C1-continuous, while our linear interpolation was only C0-continuous. However, this isn't true for its second derivative&mdash;`6-12t`&mdash;so it isn't C2-continuous.</p>
+						
+						<figure>
+							<img src="lattice-noise/smoothstep-graph.png" width="400" height="400">
+							<figcaption>Smoothstep instead of linear interpolation.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>How is the derivative of a function found?</h3>
+							<div>
+								<p>The only rules we need to know about is that the derivative of `ax^b` is `abx^(b-1)` where `a` and `b` are constants. The derivative of a constant is zero. This applies to all separate parts of the function. For example, the derivative of `4x^3+5x-2` is `12x^2+5`.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Second-Order Continuity</h3>
+						
+						<p>Although smoothstep is C1-continuous the derivative of this function is not continuous. This means that its rate of change can be different on both sides of a lattice edge. This isn't very noticeable when using our point-based visualization, but when the noise is used to define a smooth mesh surface or for a normal map, then this discontinuity can appear as visible creases revealing the lattice. To avoid this we have to go one step further, to a C2-continuous function, for which we can use `6t^5-15t^4+10t^3`. Its first derivative is `30t^4-60t^3+30t^2` and its second derivative is `120t^3-180t^2+60t`. Both derivatives yield zero for inputs 0 and 1.</p>
+						
+						<figure>
+							<img src="lattice-noise/c2-continuous-graph.png" width="400" height="400">
+							<figcaption>C2-continuous instead of smoothstep.</figcaption>
+						</figure>
+						
+						<p>Adjust <code>GetLatticeSpan4</code> to use this function. It can be rewritten to `t t t(t(t6-15)+10)`.</p>
+						
+						<pre translate="no">		span.t = coordinates - points;
+		span.t = <ins>span.t * span.t * span.t * (span.t * (span.t * 6f - 15f) + 10f)</ins>;</pre>
+						
+						<figure>
+							<img src="lattice-noise/2d-c2-continuous.png" width="330" height="200">
+							<figcaption>C2-continuous interpolation.</figcaption>
+						</figure>
+						
+					</section>
+					
+					<section>
+						<h3>3D Noise</h3>
+						
+						<p>We wrap up by adding the 3D version of value noise.</p>
+						
+						<figure>
+							<img src="lattice-noise/3d-lattice.png" width="440" height="360">
+							<figcaption>3D lattice cube.</figcaption>
+						</figure>
+						
+						<p>Create <code>Lattice3D</code> by duplicating <code>Lattice2D</code> and have it retrieve the lattice span data for the Y coordinates as well. Then also keep track of the hashes for the four points of the XY lattice square.</p>
+						
+						<pre translate="no">	public struct <ins>Lattice3D</ins> : INoise {
+
+		public float4 GetNoise4 (float4x3 positions, SmallXXHash4 hash) {
+			LatticeSpan4
+				x = GetLatticeSpan4(positions.c0),
+				<ins>y = GetLatticeSpan4(positions.c1),</ins>
+				z = GetLatticeSpan4(positions.c2);
+
+			SmallXXHash4
+				h0 = hash.Eat(x.p0), h1 = hash.Eat(x.p1)<ins>,</ins>
+				<ins>h00 = h0.Eat(y.p0), h01 = h0.Eat(y.p1),</ins>
+				<ins>h10 = h1.Eat(y.p0), h11 = h1.Eat(y.p1)</ins>;
+
+			return lerp(&hellip;) * 2f - 1f;
+		}
+	}</pre>
+						
+						<p>Adjust the result so it interpolates between two YZ lattice squares along X.</p>
+						
+						<pre translate="no">			return <ins>lerp(</ins>
+				lerp(
+					lerp(<ins>h00</ins>.Eat(z.p0).Floats01A, <ins>h00</ins>.Eat(z.p1).Floats01A, z.t),
+					lerp(<ins>h01</ins>.Eat(z.p0).Floats01A, <ins>h01</ins>.Eat(z.p1).Floats01A, z.t),
+					<ins>y.t</ins>
+				)<ins>,</ins>
+				<ins>lerp(</ins>
+					<ins>lerp(h10.Eat(z.p0).Floats01A, h10.Eat(z.p1).Floats01A, z.t),</ins>
+					<ins>lerp(h11.Eat(z.p0).Floats01A, h11.Eat(z.p1).Floats01A, z.t),</ins>
+					<ins>y.t</ins>
+				<ins>),</ins>
+				<ins>x.t</ins>
+			) * 2f - 1f;</pre>
+						
+						<p>Finally, add a configuration slider for the dimensions of the noise pattern to <code>NoiseVisualization</code> and use that to choose the correct version via a static array.</p>
+						
+						<pre translate="no">	<ins>static ScheduleDelegate[] noiseJobs = {</ins>
+		<ins>Job&lt;Lattice1D>.ScheduleParallel,</ins>
+		<ins>Job&lt;Lattice2D>.ScheduleParallel,</ins>
+		<ins>Job&lt;Lattice3D>.ScheduleParallel</ins>
+	<ins>};</ins>
+
+	&hellip;
+
+	<ins>[SerializeField, Range(1, 3)]</ins>
+	<ins>int dimensions = 3;</ins>
+
+	&hellip;
+
+	protected override void UpdateVisualization (
+		NativeArray&lt;float3x4> positions, int resolution, JobHandle handle
+	) {
+		<ins>noiseJobs[dimensions - 1]</ins>(
+			positions, noise, seed, domain, resolution, handle
+		).Complete();
+		noiseBuffer.SetData(noise.Reinterpret&lt;float>(4 * 4));
+	}</pre>
+						
+						<figure>
+							<img src="lattice-noise/dimensions-slider.png" width="320" height="42">
+							<figcaption>Noise dimensions slider.</figcaption>
+						</figure>
+						
+						<p>We can now quickly see the difference between the different versions of the noise. This is most obvious when using a 3D shape like the sphere.</p>
+						
+						<figure>
+							<img src="lattice-noise/sphere-3d.png" width="280" height="270" alt="3D">
+							<img src="lattice-noise/sphere-2d.png" width="280" height="270" alt="2D">
+							<img src="lattice-noise/sphere-1d.png" width="280" height="270" alt="1D">
+							<figcaption>Sphere with 3D, 2D, and 1D noise; domain scale 16.</figcaption>
+						</figure>
+						
+						<p><p>The next tutorial is <a href="../perlin-noise/index.html">Perlin Noise</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/pseudorandom-noise-03-value-noise/" class="repository">repository</a>
+					<a href="Value-Noise.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

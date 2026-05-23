@@ -1,0 +1,1989 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/prototypes/match-3/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/prototypes/match-3/tutorial-image.jpg">
+		<meta property="og:title" content="Match 3">
+		<meta property="og:description" content="A Unity C# Prototypes tutorial about creating a simple match-3 game.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Match 3</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/prototypes/match-3/#article",
+				"headline": "Match 3",
+				"alternativeHeadline": "Matching Tiles",
+				"datePublished": "2023-06-30",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity C# Prototypes tutorial about creating a simple match-3 game.",
+				"image": "https://catlikecoding.com/unity/tutorials/prototypes/match-3/tutorial-image.jpg",
+				"dependencies": "Unity 2022.3.2f1",
+				"proficiencyLevel": "Advanced"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/prototypes/", "name": "Prototypes" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				FallingState : 1,
+				FloatingScore : 1,
+				Game : 1,
+				Grid2D : 1,
+				Match : 1,
+				Match3Game : 1,
+				Match3Skin : 1,
+				Move : 1,
+				MoveDirection : 1,
+				PrefabInstancePool : 1,
+				SingleScore : 1,
+				T : 1,
+				Tile : 1,
+				TileDrop : 1,
+				TileState : 1,
+				TileSwapper : 1
+			};
+			
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Prototypes</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Match 3</h1>
+					<p>Matching Tiles</p>
+					<ul>
+						<li>Match sequences of tiles in a 2D grid.</li>
+						<li>Keep visualization and game logic separate.</li>
+						<li>Animate state transitions.</li>
+						<li>Accumulate match scores.</li>
+						<li>Search for possible moves.</li>
+					</ul>
+				</header>
+				
+				<p>This is the sixth tutorial in a series about <a href="../index.html">prototypes</a>. In it we will create a simple match-3 game.</p>
+				
+				<p>This tutorial is made with Unity 2022.3.2f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Tiles waiting to be matched.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>The Game</h2>
+					
+					<p>There is a great variety of match-3 and similar games, like multiple versions of <em translate="no">Bejeweled</em> and <em translate="no">Puzzle Quest</em> and others. This time we will make a very simple game in this genre, matching tiles in rows and columns of at least three of the same. We'll simple name it <em translate="no">Match 3</em>. One obvious way that these games use to distinguish themselves is by differing their visuals, while the gameplay is mostly the same. So this time we'll strictly separate the game logic and visualization. This introduces a layer of indirection, but these games are so small and simple that we don't need to worry about performance much.</p>
+					
+					<p>Once again we can start with a duplicate of the <em translate="no">Paddle Square</em> project and remove everything that we do not need. We only keep the global post-FX volume, the camera, and a main light. Disable shadows and clear the rotation of the camera, setting its position to (0, 0, &minus;10) as the game is positioned on the XY axes. Also keep the text prefab.</p>
+					
+					<p>Also, this time we'll fully support hot reloading so we can change code while the game is playing, to make debugging and testing easier.</p>
+					
+					<section>
+						<h3>Match 3 Skin</h3>
+						
+						<p>To support easy switching of visualization while keeping the game logic the same, we introduce a <code>Match3Skin</code> component type that acts as a proxy for the actual game logic. The main game object will only interact with this skin. To facilitate this interaction give it a public property to indicate whether the match-3 game is playing, one to indicate whether it is currently busy, and methods to start a new game and to do its work. These are initially dummies, indicating that we're always playing and never busy. Create a <em translate="no">Match 3 </em> game object with this component.</p>
+						
+						<pre translate="no"><ins>using TMPro;</ins>
+<ins>using Unity.Mathematics;</ins>
+<ins>using UnityEngine;</ins>
+
+<ins>using static Unity.Mathematics.math;</ins>
+
+<ins>public class Match3Skin : MonoBehaviour</ins>
+<ins>{</ins>
+	<ins>public bool IsPlaying => true;</ins>
+
+	<ins>public bool IsBusy => false;</ins>
+
+	<ins>public void StartNewGame () {}</ins>
+
+	<ins>public void DoWork () { }</ins>
+<ins>}</ins></pre>
+						
+						<p>Next, create a game object with a <code>Game</code> component that acts and the main controller of the game, as usual. Give it a configuration field for the match-3 game, which we treat as the actual game even through it is the skin. Have it start a new game when it awakens.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class Game : MonoBehaviour</ins>
+<ins>{</ins>
+	<ins>[SerializeField]</ins>
+	<ins>Match3Skin match3;</ins>
+
+	<ins>void Awake () => match3.StartNewGame();</ins>
+<ins>}</ins></pre>
+						
+						<p>Each update, if the match-3 game is playing, handle player input if the game isn't already busy, and after that tell it to do its work. If the game is not playing start a new game if space is pressed. Handling input is done is a separate method, initially doing nothing.</p>
+						
+						<pre translate="no">	<ins>void Update ()</ins>
+	<ins>{</ins>
+		<ins>if (match3.IsPlaying)</ins>
+		<ins>{</ins>
+			<ins>if (!match3.IsBusy)</ins>
+			<ins>{</ins>
+				<ins>HandleInput();</ins>
+			<ins>}</ins>
+			<ins>match3.DoWork();</ins>
+		<ins>}</ins>
+		<ins>else if (Input.GetKeyDown(KeyCode.Space))</ins>
+		<ins>{</ins>
+			<ins>match3.StartNewGame();</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	<ins>void HandleInput () { }</ins></pre>
+						
+						<p>Note that with this approach it would be fairly simple to support multiple skins, game modes, or multiple games in a single app, by changing the active game.</p>
+					</section>
+					
+					<section>
+						<h3>Handling Input</h3>
+						
+						<p>We'll add support for a single input method to <code>Match3Skin</code>, by giving it a public <code>EvaluateDrag</code> method. This method evaluates an ongoing drag action, given a start and end position. These are <code>Vector3</code> values that represent mouse or touch positions in screen space. The method returns whether the drag should be continued or aborted. We don't process input at this point yet so there's no reason to maintain the drag.</p>
+						
+						<pre translate="no">	<ins>public bool EvaluateDrag (Vector3 start, Vector3 end)</ins>
+	<ins>{</ins>
+		<ins>return false;</ins>
+	<ins>}</ins></pre>
+						
+						<p>To support dragging, <code>Game</code> needs to keep track the drag start and whether it is dragging. In <code>HandleInput</code>, if we're not already dragging and the primary mouse button is pressed down, start a drag. Otherwise if we're dragging and the button is still pressed, evaluate the drag and use this to decide whether to continue dragging. Otherwise end the drag.</p>
+						
+						<pre translate="no">	<ins>Vector3 dragStart;</ins>
+
+	<ins>bool isDragging;</ins>
+
+	&hellip;
+
+	void HandleInput ()
+	{
+		<ins>if (!isDragging &amp;&amp; Input.GetMouseButtonDown(0))</ins>
+		<ins>{</ins>
+			<ins>dragStart = Input.mousePosition;</ins>
+			<ins>isDragging = true;</ins>
+		<ins>}</ins>
+		<ins>else if (isDragging &amp;&amp; Input.GetMouseButton(0))</ins>
+		<ins>{</ins>
+			<ins>isDragging = Match3Game.EvaluateDrag(dragStart, Input.mousePosition);</ins>
+		<ins>}</ins>
+		<ins>else</ins>
+		<ins>{</ins>
+			<ins>isDragging = false;</ins>
+		<ins>}</ins>
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Tiles</h3>
+						
+						<p>To visualize the match-3 game we need to show tiles. We use small square tiles with a side length of one unit. These tiles are aligned on the XY plane and we'll make them 0.2 units thick. As usual I only use cubes to visualize them. Create seven tile prefabs that are easy to distinguish even when they are all the same color. They should all have a root game object that has the identity transformation, so without rotation and with a scale of 1.</p>
+						
+						<figure>
+							<img src="the-game/tiles.png" width="360" height="60">
+							<figcaption>Seven tiles.</figcaption>
+						</figure>
+						
+						<p>Once the tiles are visually distinct enough you can give each a different color. Doing it in this order ensures that colorblind people will also be able tell the tiles apart.</p>
+						
+						<figure>
+							<img src="the-game/tiles-colored.png" width="360" height="60">
+							<figcaption>Colored tiles.</figcaption>
+						</figure>
+						
+						<p>We'll be working through lots of tile instances, so we're going to pool them. But we'll pool something else later as well, so to avoid duplicate code let's introduce a generic <code>PrefabInstancePool</code> struct type for <code>MonoBehaviour</code> prefabs that wraps a stack. Give it a public <code>GetInstance</code> method that instantiates a gives prefab and a <code>Recycle</code> method that destroys a given instance's game object. This pool isn't serializable.</p>
+						
+						<pre translate="no"><ins>using System.Collections.Generic;</ins>
+<ins>using UnityEngine;</ins>
+
+<ins>public struct PrefabInstancePool&lt;T> where T : MonoBehaviour</ins>
+<ins>{</ins>
+	<ins>Stack&lt;T> pool;</ins>
+
+	<ins>public T GetInstance (T prefab)</ins>
+	<ins>{</ins>
+		<ins>return Object.Instantiate(prefab);</ins>
+	<ins>}</ins>
+
+	<ins>public void Recycle (T instance)</ins>
+	<ins>{</ins>
+		<ins>Object.Destroy(instance.gameObject);</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Adjust the <code>GetInstance</code> method so it uses the pool: create it if needed, reuse and instance if available and reactivate its game object, otherwise create a new instance.</p>
+						
+						<pre translate="no">	public T GetInstance (T prefab)
+	{
+		<ins>if (pool == null)</ins>
+		<ins>{</ins>
+			<ins>pool = new();</ins>
+		<ins>}</ins>
+		
+		<ins>if (pool.TryPop(out T instance))</ins>
+		<ins>{</ins>
+			<ins>instance.gameObject.SetActive(true);</ins>
+		<ins>}</ins>
+		<ins>else</ins>
+		<ins>{</ins>
+			<ins>instance =</ins> Object.Instantiate(prefab);
+		<ins>}</ins>
+		<ins>return instance;</ins>
+	}</pre>
+						
+						<p>To support disabled domain reloading, if the pool exist check if it contains a reference to something that has been destroyed. If so we assume that the pool survived exiting play mode and thus clear it to get rid of the old references. This is only needed in the editor.</p>
+						
+						<pre translate="no">		if (pool == null)
+		{
+			pool = new();
+		}
+<ins>#if UNITY_EDITOR</ins>
+		<ins>else if (pool.TryPeek(out T i) &amp;&amp; !i)</ins>
+		<ins>{</ins>
+			<ins>// Instances destroyed, assuming due to exiting play mode.</ins>
+			<ins>pool.Clear();</ins>
+		<ins>}</ins>
+<ins>#endif</ins></pre>
+						
+						<p>When recycling, if we're in the editor check whether the pool is missing. If so we assume the reference got lost due to a hot reload and only then do we destroy the game object. Otherwise we add the instance to the pool and deactivate its game object.</p>
+						
+						<p>Note that this only gets rid of game objects that were still in use during the hot reload. Those that were already recycled will never get reused, as the pool that referenced them is gone. So the amount of permanently disabled instances will slowly grow with each hot reload, until play mode is exited.</p>
+						
+						<pre translate="no">	public void Recycle (T instance)
+	{
+<ins>#if UNITY_EDITOR</ins>
+		<ins>if (pool == null)</ins>
+		<ins>{</ins>
+			<ins>// Pool lost, assuming due to hot reload.</ins>
+			Object.Destroy(instance.gameObject);
+			<ins>return;</ins>
+		<ins>}</ins>
+<ins>#endif</ins>
+		<ins>pool.Push(instance);</ins>
+		<ins>instance.gameObject.SetActive(false);</ins>
+	}</pre>
+						
+						<p>Now create a <code>Tile</code> component type that uses this pool. Give it a public <code>Spawn</code> method that gets an instance of itself, gives it the same pool, and places it at a give position. Also give it a public <code>Despawn</code> method that recycles itself.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class Tile : MonoBehaviour</ins>
+<ins>{</ins>
+	<ins>PrefabInstancePool&lt;Tile> pool;</ins>
+
+	<ins>public Tile Spawn (Vector3 position)</ins>
+	<ins>{</ins>
+		<ins>Tile instance = pool.GetInstance(this);</ins>
+		<ins>instance.pool = pool;</ins>
+		<ins>instance.transform.localPosition = position;</ins>
+		<ins>return instance;</ins>
+	<ins>}</ins>
+
+	<ins>public void Despawn () => pool.Recycle(this);</ins>
+<ins>}</ins></pre>
+						
+						<p>Add this component to the root of all seven tile prefabs. Then add a configuration array for tile prefabs to <code>Match3Skin</code> and assign the tiles to it.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>Tile[] tilePrefabs;</ins></pre>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Basic Gameplay</h2>
+					
+					<p>The basic match-3 gameplay consists of filling a 2D grid with tiles, then the player swaps tiles to make matches. Matching tiles are cleared, then the holes are filled by dropping the tiles above them, adding new tiles as needed.</p>
+					
+					<section>
+						<h3>2D Grid</h3>
+						
+						<p>Both the game logic and its skin will have to work with 2D grids, so we introduce a generic serializable <code>Grid2D</code> struct to facilitate this. It uses an internal array of cells to store its data and also keeps track of its 2D size as an <code>int2</code>, which is passed to its constructor method.
+						
+						<pre translate="no"><ins>using Unity.Mathematics;</ins>
+
+<ins>[System.Serializable]</ins>
+<ins>public struct Grid2D&lt;T></ins>
+<ins>{</ins>
+	<ins>T[] cells;</ins>
+
+	<ins>int2 size;</ins>
+	
+	<ins>public Grid2D (int2 size)</ins>
+	<ins>{</ins>
+		<ins>this.size = size;</ins>
+		<ins>cells = new T[size.x * size.y];</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Why not just use a multidimensional array?</h3>
+							<div>
+								<p>Those cannot be serialized by Unity, so cannot survive hot reloads. Also, we give it a few extra convenient properties and methods.</p>
+							</div>
+						</aside>
+						
+						<p>Add public getter properties for its size, and also for its individual size components.</p>
+						
+						<pre translate="no">	<ins>public int2 Size => size;</ins>
+
+	<ins>public int SizeX => size.x;</ins>
+
+	<ins>public int SizeY => size.y;</ins></pre>
+						
+						<p>Also make it possible to conveniently check whether the grid is undefined in the context of Unity's serialization, which means that it either lacks an array or the array length is zero.</p>
+						
+						<pre translate="no">	<ins>public bool IsUndefined => cells == null || cells.Length == 0;</ins></pre>
+						
+						<p>Give it two indexers to get and set grid elements, either with separate X and Y coordinates or with a single <code>int2</code> coordinates pair.</p>
+						
+						<pre translate="no">	<ins>public T this[int x, int y]</ins>
+	<ins>{</ins>
+		<ins>get => cells[y * size.x + x];</ins>
+		<ins>set => cells[y * size.x + x] = value;</ins>
+	<ins>}</ins>
+	
+	<ins>public T this[int2 c]</ins>
+	<ins>{</ins>
+		<ins>get => cells[c.y * size.x + c.x];</ins>
+		<ins>set => cells[c.y * size.x + c.x] = value;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Include a method to check whether given coordinates are valid. We only need a version with a single <code>int2</code> parameter, but you could add one with separate coordinate parameters as well.</p>
+						
+						<pre translate="no">	<ins>public bool AreValidCoordinates (int2 c) =></ins>
+		<ins>0 &lt;= c.x &amp;&amp; c.x &lt; size.x &amp;&amp; 0 &lt;= c.y &amp;&amp; c.y &lt; size.y;</ins></pre>
+						
+						<p>Finally, add a method to swap two elements, given their coordinates.</p>
+						
+						<pre translate="no">	<ins>public void Swap (int2 a, int2 b) => (this[a], this[b]) = (this[b], this[a]);</ins></pre>
+						
+						<aside>
+							<h3>How does that code work?</h3>
+							<div>
+								<p>The code <code>(a, b) = (b, a)</code> is shorthand for <code>var t = a; a = b; b = t;</code>.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Starting the Game</h3>
+						
+						<p>To store the game state we need to represent the tiles, for which we create a <code>TileState</code> enum, naming the seven states A through G. Also include a default zero state named <code>None</code> to represent an empty tile space.</p>
+						
+						<pre translate="no"><ins>public enum TileState</ins>
+<ins>{</ins>
+	<ins>None, A, B, C, D, E, F, G</ins>
+<ins>}</ins></pre>
+						
+						<p>The game state and logic will be taken care of by a new <code>Match3Game</code> component type. It can be added to the same game object that also has the <code>Match3Skin</code> component. Give it a configuration field for its size, set to 8&times;8 by default. Also give it a <code>TileState</code> grid and getter properties that forward to the grid's indexers and its size. This ensures that only <code>Match3Game</code> can change the grid state.</p>
+						
+						<pre translate="no"><ins>using System.Collections.Generic;</ins>
+<ins>using Unity.Mathematics;</ins>
+<ins>using UnityEngine;</ins>
+
+<ins>using Random = UnityEngine.Random;</ins>
+
+<ins>using static Unity.Mathematics.math;</ins>
+
+<ins>public class Match3Game : MonoBehaviour</ins>
+<ins>{</ins>
+	<ins>[SerializeField]</ins>
+	<ins>int2 size = 8;</ins>
+
+	<ins>Grid2D&lt;TileState> grid;</ins>
+	
+	<ins>public TileState this[int x, int y] => grid[x, y];</ins>
+	
+	<ins>public TileState this[int2 c] => grid[c];</ins>
+	
+	<ins>public int2 Size => size;</ins>
+<ins>}</ins></pre>
+						
+						<p>Give it a public <code>StartNewGame</code> method that creates an new grid if it is undefined, then invokes <code>FillGrid</code> which loops through all grid rows and fills them with random states.</p>
+						
+						<pre translate="no">	<ins>public void StartNewGame ()</ins>
+	<ins>{</ins>
+		<ins>if (grid.IsUndefined)</ins>
+		<ins>{</ins>
+			<ins>grid = new(size);</ins>
+		<ins>}</ins>
+		<ins>FillGrid();</ins>
+	<ins>}</ins>
+
+	<ins>void FillGrid ()</ins>
+	<ins>{</ins>
+		<ins>for (int y = 0; y &lt; size.y; y++)</ins>
+		<ins>{</ins>
+			<ins>for (int x = 0; x &lt; size.x; x++)</ins>
+			<ins>{</ins>
+				<ins>grid[x, y] = (TileState)Random.Range€(1, 8);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Next, add a <code>Match3Game</code> configuration field to <code>Match3Skin</code> and hook it up. Then give it its own grid with <code>Tile</code> elements, plus a 2D tile offset to position the tiles in world space.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>Match3Game game;</ins>
+
+	<ins>Grid2D&lt;Tile> tiles;</ins>
+
+	<ins>float2 tileOffset;</ins></pre>
+						
+						<p>When starting a new game first forward the invocation to the actual game. Then set the tile offset to center the tiles on the origin. Then create a new tiles grid if it is undefined, otherwise despawn all tiles and clear their references. Clearing the references isn't strictly necessary but makes it easier to detect bugs.</p>
+						
+						<pre translate="no">	public void StartNewGame () {
+		&hellip;
+
+		<ins>game.StartNewGame();</ins>
+		<ins>tileOffset = -0.5f * (float2)(game.Size - 1);</ins>
+		<ins>if (tiles.IsUndefined)</ins>
+		<ins>{</ins>
+			<ins>tiles = new(game.Size);</ins>
+		<ins>}</ins>
+		<ins>else</ins>
+		<ins>{</ins>
+			<ins>for (int y = 0; y &lt; tiles.SizeY; y++)</ins>
+			<ins>{</ins>
+				<ins>for (int x = 0; x &lt; tiles.SizeX; x++)</ins>
+				<ins>{</ins>
+					<ins>tiles[x, y].Despawn();</ins>
+					<ins>tiles[x, y] = null;</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>After that loop through all rows and spawn the appropriate tile instances and add them to the grid. Create a separate <code>SpawnTile</code> method for this that spawns a single tile given a tile state and coordinates.</p>
+						
+						<pre translate="no">	public void StartNewGame () {
+		&hellip;
+
+		<ins>for (int y = 0; y &lt; tiles.SizeY; y++)</ins>
+		<ins>{</ins>
+			<ins>for (int x = 0; x &lt; tiles.SizeX; x++)</ins>
+			<ins>{</ins>
+				<ins>tiles[x, y] = SpawnTile(game[x, y], x, y);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	}
+
+	<ins>Tile SpawnTile (TileState t, float x, float y) =></ins>
+		<ins>tilePrefabs[(int)t - 1].Spawn(new Vector3(x + tileOffset.x, y + tileOffset.y));</ins></pre>
+						
+						<figure>
+							<img src="basics-gameplay/tiles-with-match.png" width="215" height="220">
+							<figcaption>Initial random game state.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Avoiding Immediate Matches</h3>
+						
+						<p>When entering play mode we now see a grid filled with random tiles. As this is completely random it is possible that this initial state already contains horizontal or vertical sequences of three or more matching tiles. To avoid this we have to adjust <code>Match3Game.FillGrid</code>.</p>
+						
+						<p>Each tile that gets placed can generate up to two matches, one horizontal and one vertical. We have to detect these so we can avoid them. So keep track of two tiles states&mdash;A and B&mdash; and how many potential matches we have detected. If there are at least two tiles to the left then set A to one of them and if both are equal set the potential match count to 1.</p>
+						
+						<pre translate="no">	void FillGrid ()
+	{
+		for (int y = 0; y &lt; size.y; y++)
+		{
+			for (int x = 0; x &lt; size.x; x++)
+			{
+				<ins>TileState a = TileState.None, b = TileState.None;</ins>
+				<ins>int potentialMatchCount = 0;</ins>
+				<ins>if (x > 1)</ins>
+				<ins>{</ins>
+					<ins>a = grid[x - 1, y];</ins>
+					<ins>if (a == grid[x - 2, y])</ins>
+					<ins>{</ins>
+						<ins>potentialMatchCount = 1;</ins>
+					<ins>}</ins>
+				<ins>}</ins>
+
+				grid[x, y] = (TileState)Random.Range(1, 8);
+			}
+		}
+	}</pre>
+						
+						<p>Follow this by doing the same for the two tiles downward, assigning one to B and incrementing the potential match count. However, if there is only a single match use A instead, and if there are two matches ensure that A and B are ordered lowest to highest.</p>
+						
+						<pre translate="no">				if (x > 1)
+				{
+					&hellip;
+				}
+				<ins>if (y > 1)</ins>
+				<ins>{</ins>
+					<ins>b = grid[x, y - 1];</ins>
+					<ins>if (b == grid[x, y - 2])</ins>
+					<ins>{</ins>
+						<ins>potentialMatchCount += 1;</ins>
+						<ins>if (potentialMatchCount == 1)</ins>
+						<ins>{</ins>
+							<ins>a = b;</ins>
+						<ins>}</ins>
+						<ins>else if (b &lt; a)</ins>
+						<ins>{</ins>
+							<ins>(a, b) = (b, a);</ins>
+						<ins>}</ins>
+					<ins>}</ins>
+				<ins>}</ins></pre>
+						
+						<p>Now we can avoid making a match by decreasing the random range by the match count and skipping A and B if needed.</p>
+						
+						<pre translate="no">				<ins>TileState t</ins> = (TileState)Random.Range(1, 8 <ins>- potentialMatchCount</ins>);
+				<ins>if (potentialMatchCount > 0 &amp;&amp; t >= a)</ins>
+				<ins>{</ins>
+					<ins>t += 1;</ins>
+				<ins>}</ins>
+				<ins>if (potentialMatchCount == 2 &amp;&amp; t >= b)</ins>
+				<ins>{</ins>
+					<ins>t += 1;</ins>
+				<ins>}</ins>
+				<ins>grid[x, y] = t;</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Performing a Move</h3>
+						
+						<p>A move in this game consists of picking a tile and swapping it with one of its direct neighbors. Introduce a <code>MoveDirection</code> enum for the allowed directions, which are up, right, down, and left, plus a default zero state named <code>None</code> to represent an invalid move.</p>
+						
+						<pre translate="no"><ins>public enum MoveDirection</ins>
+<ins>{</ins>
+	<ins>None, Up, Right, Down, Left</ins>
+<ins>}</ins></pre>
+						
+						<p>Also create a serializable <code>Move</code> struct type to store an entire move action, with properties for its direction, from and to coordinates, plus a property that indicates whether the move is valid, based on whether its direction is set. The properties are privately set via the constructor method, which only requires the starting coordinates and direction and determines the destination coordinates from those.</p>
+						
+						<pre translate="no"><ins>using Unity.Mathematics;</ins>
+
+<ins>using static Unity.Mathematics.math;</ins>
+
+<ins>[System.Serializable]</ins>
+<ins>public struct Move</ins>
+<ins>{</ins>
+	<ins>public MoveDirection Direction</ins>
+	<ins>{ get; private set; }</ins>
+
+	<ins>public int2 From</ins>
+	<ins>{ get; private set; }</ins>
+
+	<ins>public int2 To</ins>
+	<ins>{ get; private set; }</ins>
+
+	<ins>public bool IsValid => Direction != MoveDirection.None;</ins>
+
+	<ins>public Move (int2 coordinates, MoveDirection direction)</ins>
+	<ins>{</ins>
+		<ins>Direction = direction;</ins>
+		<ins>From = coordinates;</ins>
+		<ins>To = coordinates + direction switch</ins>
+		<ins>{</ins>
+			<ins>MoveDirection.Up => int2(0, 1),</ins>
+			<ins>MoveDirection.Right => int2(1, 0),</ins>
+			<ins>MoveDirection.Down => int2(0, -1),</ins>
+			<ins>_ => int2(-1, 0)</ins>
+		<ins>};</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Couldn't this be a readonly struct?</h3>
+							<div>
+								<p>Yes, except that Unity's serialization doesn't support readonly values, so a readonly move wouldn't survive hot reloads.</p>
+							</div>
+						</aside>
+						
+						<p>Now we can add a public <code>TryMove</code> method to <code>Match3Game</code> that takes a move and returns whether it was successful, meaning that it resulted in a match. For now make it always swap the from and to tiles and indicate success.</p>
+						
+						<pre translate="no">	<ins>public bool TryMove (Move move)</ins>
+	<ins>{</ins>
+		<ins>grid.Swap(move.From, move.To);</ins>
+		<ins>return true;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Next, add a private <code>DoMove</code> method to <code>Match3Skin</code> that tries a given move and if successful swaps both the tile positions and the tiles themselves.</p>
+						
+						<pre translate="no">	<ins>void DoMove (Move move)</ins>
+	<ins>{</ins>
+		<ins>if (game.TryMove(move))</ins>
+		<ins>{</ins>
+			<ins>(</ins>
+				<ins>tiles[move.From].transform.localPosition,</ins>
+				<ins>tiles[move.To].transform.localPosition</ins>
+			<ins>) = (</ins>
+				<ins>tiles[move.To].transform.localPosition,</ins>
+				<ins>tiles[move.From].transform.localPosition</ins>
+			<ins>);</ins>
+			<ins>tiles.Swap(move.From, move.To);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>To know which tiles we should swap introduce a method that converts from screen space to the skin's tile space.</p>
+						
+						<pre translate="no">	<ins>float2 ScreenToTileSpace (Vector3 screenPosition)</ins>
+	<ins>{</ins>
+		<ins>Ray ray = Camera.main.ScreenPointToRay(screenPosition);</ins>
+		<ins>Vector3 p = ray.origin - ray.direction * (ray.origin.z / ray.direction.z);</ins>
+		<ins>return float2(p.x - tileOffset.x + 0.5f, p.y - tileOffset.y + 0.5f);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can convert the start and end of a drag to tile coordinates in <code>EvaluateDrag</code>. Add a configuration field for a drag threshold, set to half a tile by default. Use that to determine the drag direction by checking the drag delta. Then if the move and both sets of tile coordinates are valid do the move and return <code>false</code> to indicate that the drag should stop. Otherwise return <code>false</code> to indicate that the drag can continue.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Range(0.1f, 1f)]</ins>
+	<ins>float dragThreshold = 0.5f;</ins>
+	
+	&hellip;
+	
+	public bool EvaluateDrag (Vector3 start, Vector3 end)
+	{
+		<ins>float2 a = ScreenToTileSpace(start), b = ScreenToTileSpace(end);</ins>
+		<ins>var move = new Move(</ins>
+			<ins>(int2)floor(a), (b - a) switch</ins>
+			<ins>{</ins>
+				<ins>var d when d.x > dragThreshold => MoveDirection.Right,</ins>
+				<ins>var d when d.x &lt; -dragThreshold => MoveDirection.Left,</ins>
+				<ins>var d when d.y > dragThreshold => MoveDirection.Up,</ins>
+				<ins>var d when d.y &lt; -dragThreshold => MoveDirection.Down,</ins>
+				<ins>_ => MoveDirection.None</ins>
+			<ins>}</ins>
+		<ins>);</ins>
+		<ins>if (</ins>
+			<ins>move.IsValid &amp;&amp;</ins>
+			<ins>tiles.AreValidCoordinates(move.From) &amp;&amp; tiles.AreValidCoordinates(move.To)</ins>
+			<ins>)</ins>
+		<ins>{</ins>
+			<ins>DoMove(move);</ins>
+			<ins>return false;</ins>
+		<ins>}</ins>
+		<ins>return true;</ins>
+	<ins>}</ins></pre>
+						
+						<p>It is now possible to swap a tile with its neighbor via dragging.</p>
+					</section>
+					
+					<section>
+						<h3>Finding Matches</h3>
+						
+						<p>To only allow moves that result in a match we have to scan the grid for matches. To facilitate this we introduce a serializable <code>Match</code> struct type. This is just a value container so we make all fields public. It has coordinates that indicate the first tile of the match&mdash;the bottom left one&mdash;its length, and whether it is a horizontal match. Give it a convenient constructor method that sets these fields, using separate parameters for the X and Y coordinates.</p>
+						
+						<pre translate="no"><ins>using Unity.Mathematics;</ins>
+
+<ins>[System.Serializable]</ins>
+<ins>public struct Match</ins>
+<ins>{</ins>
+	<ins>public int2 coordinates;</ins>
+	
+	<ins>public int length;</ins>
+	
+	<ins>public bool isHorizontal;</ins>
+
+	<ins>public Match (int x, int y, int length, bool isHorizontal)</ins>
+	<ins>{</ins>
+		<ins>coordinates.x = x;</ins>
+		<ins>coordinates.y = y;</ins>
+		<ins>this.length = length;</ins>
+		<ins>this.isHorizontal = isHorizontal;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p><code>Match3Game</code> won't immediately process matches that it finds but will store them in a list. This allows the skin to do other work in between detecting and processing matches. The matches themselves will remain private to <code>Match3Game</code>, but it will expose whether it has any matches via a property. Also create the list at the start of a game if needed.</p>
+						
+						<pre translate="no">	<ins>List&lt;Match> matches;</ins>
+
+	&hellip;
+	
+	<ins>public bool HasMatches => matches.Count > 0;</ins>
+
+	public void StartNewGame ()
+	{
+		if (grid.IsUndefined)
+		{
+			grid = new(size);
+			<ins>matches = new();</ins>
+		}
+		FillGrid();
+	}</pre>
+						
+						<p>Add a <code>FindMatches</code> method that returns whether any matches were found, as a shorthand for invoking the propery afterwards.</p>
+						
+						<pre translate="no">	<ins>bool FindMatches ()</ins>
+	<ins>{</ins>
+		<ins>return HasMatches;</ins>
+	<ins>}</ins></pre>
+						
+						<p>We begin by searching for horizontal matches. For each row, set the start tile state to the first tile and set the match length to 1. Then loop through the rest of the row, increasing the length as long as the current tile matches the start. If there isn't a match and the length is at least 3 add the horizontal match to the list, then reset the start. Also check for a 3+ match at the end of the row.</p>
+						
+						<pre translate="no">	bool FindMatches ()
+	{
+		<ins>for (int y = 0; y &lt; size.y; y++)</ins>
+		<ins>{</ins>
+			<ins>TileState start = grid[0, y];</ins>
+			<ins>int length = 1;</ins>
+			<ins>for (int x = 1; x &lt; size.x; x++)</ins>
+			<ins>{</ins>
+				<ins>TileState t = grid[x, y];</ins>
+				<ins>if (t == start)</ins>
+				<ins>{</ins>
+					<ins>length += 1;</ins>
+				<ins>}</ins>
+				<ins>else</ins>
+				<ins>{</ins>
+					<ins>if (length >= 3)</ins>
+					<ins>{</ins>
+						<ins>matches.Add(new Match(x - length, y, length, true));</ins>
+					<ins>}</ins>
+					<ins>start = t;</ins>
+					<ins>length = 1;</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+			<ins>if (length >= 3)</ins>
+			<ins>{</ins>
+				<ins>matches.Add(new Match(size.x - length, y, length, true));</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+
+		return HasMatches;
+	}</pre>
+						
+						<p>Then do the same for vertical matches, looping through columns instead of rows.</p>
+						
+						<pre translate="no">		for (int y = 0; y &lt; size.y; y++)
+		{
+			&hellip;
+		}
+
+		<ins>for (int x = 0; x &lt; size.x; x++)</ins>
+		<ins>{</ins>
+			<ins>TileState start = grid[x, 0];</ins>
+			<ins>int length = 1;</ins>
+			<ins>for (int y = 1; y &lt; size.y; y++)</ins>
+			<ins>{</ins>
+				<ins>TileState t = grid[x, y];</ins>
+				<ins>if (t == start)</ins>
+				<ins>{</ins>
+					<ins>length += 1;</ins>
+				<ins>}</ins>
+				<ins>else</ins>
+				<ins>{</ins>
+					<ins>if (length >= 3)</ins>
+					<ins>{</ins>
+						<ins>matches.Add(new Match(x, y - length, length, false));</ins>
+					<ins>}</ins>
+					<ins>start = t;</ins>
+					<ins>length = 1;</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+			<ins>if (length >= 3)</ins>
+			<ins>{</ins>
+				<ins>matches.Add(new Match(x, size.y - length, length, false));</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+
+		return HasMatches;</pre>
+						
+						<p>Make <code>TryMove</code> invoke <code>FindMatches</code> after swapping and if it indicates success return <code>true</code>. Otherwise undo the swap and return <code>false</code>.</p>
+						
+						<pre translate="no">	public bool TryMove (Move move)
+	{
+		grid.Swap(move.From, move.To);
+		<ins>if (FindMatches())</ins>
+		<ins>{</ins>
+			return true;
+		<ins>}</ins>
+		<ins>grid.Swap(move.From, move.To);</ins>
+		<ins>return false;</ins>
+	}</pre>
+						
+						<p>If we enter play mode at this point we can initially only successfully make a move that results in a match. However, after that we can move freely, because the matches aren't cleared yet.</p>
+					</section>
+					
+					<section>
+						<h3>Processing Matches</h3>
+						
+						<p>After matches are found they need to be processed. Processing matches means clearing all matched tiles. To communicate that to the skin we add a public property that is privately set to <code>Match3Game</code> exposing a list of cleared tile coordinates. Also add a property that indicates whether the game state needs to be filled, which is privately set.</p>
+						
+						<pre translate="no">	<ins>public List&lt;int2> ClearedTileCoordinates</ins>
+	<ins>{ get; private set; }</ins>
+	
+	<ins>public bool NeedsFilling</ins>
+	<ins>{ get; private set; }</ins>
+	
+	public bool HasMatches => matches.Count > 0;
+
+	public void StartNewGame ()
+	{
+		if (grid.IsUndefined)
+		{
+			grid = new(size);
+			matches = new();
+			<ins>ClearedTileCoordinates = new();</ins>
+		}
+		FillGrid();
+	}</pre>
+						
+						<aside>
+							<h3>Doesn't <code>NeedsFilling</code> directly depend on the list's count?</h3>
+							<div>
+								<p>Logically yes, but because the list is publicly accessible it could be modified externally. So we don't depend the list's state, it is solely used to communicate changes.</p>
+							</div>
+						</aside>
+						
+						<p>Create a public <code>ProcessMatches</code> method that clears the list of cleared tiles coordinates and then loops through all matches and clears all their tiles, adding their coordinates to the list. Because horizontal and vertical matches can overlap make sure to include each cleared tile only once. When done clear the matches and indicate that filling is needed.</p>
+						
+						<pre translate="no">	<ins>public void ProcessMatches ()</ins>
+	<ins>{</ins>
+		<ins>ClearedTileCoordinates.Clear();</ins>
+		
+		<ins>for (int m = 0; m &lt; matches.Count; m++)</ins>
+		<ins>{</ins>
+			<ins>Match match = matches[m];</ins>
+			<ins>int2 step = match.isHorizontal ? int2(1, 0) : int2(0, 1);</ins>
+			<ins>int2 c = match.coordinates;</ins>
+			<ins>for (int i = 0; i &lt; match.length; c += step, i++)</ins>
+			<ins>{</ins>
+				<ins>if (grid[c] != TileState.None)</ins>
+				<ins>{</ins>
+					<ins>grid[c] = TileState.None;</ins>
+					<ins>ClearedTileCoordinates.Add(c);</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+
+		<ins>matches.Clear();</ins>
+		<ins>NeedsFilling = true;</ins>
+	<ins>}</ins></pre>
+						
+						<p><code>Match3Skin</code> now has potential work to do. If the game has matches invoke a new <code>ProcessMatches</code> method that forwards to the game and despawns all cleared tiles and clears their references.</p>
+						
+						<pre translate="no">	public void DoWork () {
+		<ins>if (game.HasMatches)</ins>
+		<ins>{</ins>
+			<ins>ProcessMatches();</ins>
+		<ins>}</ins>
+	}
+
+	<ins>void ProcessMatches ()</ins>
+	<ins>{</ins>
+		<ins>game.ProcessMatches();</ins>
+		
+		<ins>for (int i = 0; i &lt; game.ClearedTileCoordinates.Count; i++)</ins>
+		<ins>{</ins>
+			<ins>int2 c = game.ClearedTileCoordinates[i];</ins>
+			<ins>tiles[c].Despawn();</ins>
+			<ins>tiles[c] = null;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="basics-gameplay/holes.png" width="220" height="220">
+							<figcaption>Matches leave holes.</figcaption>
+						</figure>
+						
+						<p>Holes now start appearing when we make matches. Trying to swap holes will produce a  <code>NullReferenceException</code> because we cleared those references.</p>
+					</section>
+					
+					<section>
+						<h3>Filling Holes</h3>
+						
+						<p>The next step is to fill the holes created by matches. We do this by applying gravity, dropping tiles that are now floating. To communicate this we introduce a serializable <code>TileDrop</code> struct type. It contains public fields for the coordinates of a tile and a <code>fromY</code> coordinate to indicate where it fell from. Give it a convenient constructor method with separate parameters for its coordinates.</p>
+						
+						<pre translate="no"><ins>using Unity.Mathematics;</ins>
+
+<ins>[System.Serializable]</ins>
+<ins>public struct TileDrop</ins>
+<ins>{</ins>
+	<ins>public int2 coordinates;</ins>
+
+	<ins>public int fromY;</ins>
+
+	<ins>public FallenTile (int x, int y, int distance)</ins>
+	<ins>{</ins>
+		<ins>coordinates.x = x;</ins>
+		<ins>coordinates.y = y;</ins>
+		<ins>fromY = y + distance;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Add a list of dropped tiles to <code>Match3Game</code>, just like the list of cleared tiles.</p>
+						
+						<pre translate="no">	<ins>public List&lt;TileDrop> DroppedTiles</ins>
+	<ins>{ get; private set; }</ins>
+
+	&hellip;
+
+	public void StartNewGame ()
+	{
+		if (grid.IsUndefined)
+		{
+			grid = new(size);
+			matches = new();
+			ClearedTileCoordinates = new();
+			<ins>DroppedTiles = new();</ins>
+		}
+		FillGrid();
+	}</pre>
+						
+						<p>Then create a public <code>DropTiles</code> method that clears the list and then loops through all columns. It goes from bottom to top, keeping track of the hole count. If it encounters a hole, increase the count. Otherwise, if there are holes below it, drop down the tile state the appropriate distance and add an entry to the list. When done indicate that filling is no longer needed.</p>
+						
+						<pre translate="no">	<ins>public void DropTiles ()</ins>
+	{
+		<ins>DroppedTiles.Clear();</ins>
+
+		<ins>for (int x = 0; x &lt; size.x; x++)</ins>
+		<ins>{</ins>
+			<ins>int holeCount = 0;</ins>
+			<ins>for (int y = 0; y &lt; size.y; y++)</ins>
+			<ins>{</ins>
+				<ins>if (grid[x, y] == TileState.None)</ins>
+				<ins>{</ins>
+					<ins>holeCount += 1;</ins>
+				}
+				<ins>else if (holeCount > 0)</ins>
+				<ins>{</ins>
+					<ins>grid[x, y - holeCount] = grid[x, y];</ins>
+					<ins>DroppedTiles.Add(new TileDrop(x, y - holeCount, holeCount));</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+
+		<ins>NeedsFilling = false;</ins>
+	<ins>}</ins></pre>
+						
+						<p>This drops down all existing tiles, effectively pushing all holes to the top. Fill these holes with random tiles per column. Also add drop entries for these new tiles, with their origin Y coordinate set appropriately above the grid.</p>
+						
+						<pre translate="no">		for (int x = 0; x &lt; size.x; x++)
+		{
+			int holeCount = 0;
+			for (int y = 0; y &lt; size.y; y++)
+			{
+				&hellip;
+			}
+
+			<ins>for (int h = 1; h &lt;= holeCount; h++)</ins>
+			<ins>{</ins>
+				<ins>grid[x, size.y - h] = (TileState)Random.Range€(1, 8);</ins>
+				<ins>DroppedTiles.Add(new TileDrop(x, size.y - h, holeCount));</ins>
+			<ins>}</ins>
+		}</pre>
+						
+						<p><code>Match3Skin</code> now has more work to do. If it doesn't have matches to process and the game needs filling then it invokes its own <code>DropTiles</code> method, which forwards to the game. Then it loops through all dropped tiles. If the tile fell from within the grid adjust its position. Otherwise spawn a new tile at the appropriate position. Then update the tiles grid.</p>
+						
+						<pre translate="no">	public void DoWork () {
+		if (game.HasMatches)
+		{
+			ProcessMatches();
+		}
+		<ins>else if (game.NeedsFilling)</ins>
+		<ins>{</ins>
+			<ins>DropTiles();</ins>
+		<ins>}</ins>
+	}
+
+	<ins>void DropTiles ()</ins>
+	<ins>{</ins>
+		<ins>game.DropTiles();</ins>
+		
+		<ins>for (int i = 0; i &lt; game.DroppedTiles.Count; i++)</ins>
+		<ins>{</ins>
+			<ins>TileDrop drop = game.DroppedTiles[i];</ins>
+			<ins>Tile tile;</ins>
+			<ins>if (drop.fromY &lt; tiles.SizeY)</ins>
+			<ins>{</ins>
+				<ins>tile = tiles[drop.coordinates.x, drop.fromY];</ins>
+				<ins>tile.transform.localPosition = new Vector3(</ins>
+					<ins>drop.coordinates.x + tileOffset.x, drop.coordinates.y + tileOffset.y</ins>
+				<ins>);</ins>
+			<ins>}</ins>
+			<ins>else</ins>
+			<ins>{</ins>
+				<ins>tile = SpawnTile(</ins>
+					<ins>game[drop.coordinates], drop.coordinates.x, drop.coordinates.y</ins>
+				<ins>);</ins>
+			<ins>}</ins>
+			<ins>tiles[drop.coordinates] = tile;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>The fallen tiles can immediately form new matches, so we should invoke <code>FindMatches</code> again at the end of <code>Match3Game.DropTiles</code>. This will cause the game to keep cascading until it reaches a state without any matches.</p>
+						
+						<pre translate="no">		NeedsFilling = false;
+		<ins>FindMatches();</ins></pre>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Animating Transitions</h2>
+					
+					<p>Our game is minimally functional at this point, but it is hard to see what is going on because it immediately switches to the next state. So we're going to slow down the game by introducing state transitions. This won't affect the logic of the game, only its skin.</p>
+					
+					<section>
+						<h3>Swapping Tiles</h3>
+						
+						<p>The first thing that we'll do is animate the tile swapping caused by a move. To isolate this logic from the skin let's create a serializable <code>TileSwapper</code> class for it. Give it a configurable duration set to 0.25 seconds by default, but give it a high maximum like 10 so you can slow it down to easily check the transition. Also give it a configurable max depth offset set to 0.5 units by default, which controls how far tiles move in the Z dimension to avoid penetrating each other.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>[System.Serializable]</ins>
+<ins>public class TileSwapper</ins>
+<ins>{</ins>
+	<ins>[SerializeField, Range(0.1f, 10f)]</ins>
+	<ins>float duration = 0.25f;</ins>
+
+	<ins>[SerializeField, Range(0f, 1f)]</ins>
+	<ins>float maxDepthOffset = 0.5f;</ins>
+<ins>}</ins></pre>
+						
+						<p>It needs a public <code>Swap</code> method to initiate a swap along with an <code>Update</code> method to animate it. The <code>Swap</code> method has parameters for the tiles to be swapped and a parameter to indicated whether the swap should pingpong back to its original position. It returns the duration of the swap animation.</p>
+						
+						<pre translate="no">	<ins>public float Swap (Tile a, Tile b, bool pingPong) {</ins>
+		<ins>return duration;</ins>
+	<ins>}</ins>
+
+	<ins>public void Update€ () {}</ins></pre>
+						
+						<p>Add a configuration field for the swapper to <code>Match3Skin</code> along with a field for its busy duration, which indicates how long the skin is going to be busy with something. Set it to zero at the start of a game and make <code>IsBusy</code> return whether it is greater than zero.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>TileSwapper tileSwapper;</ins>
+
+	<ins>float busyDuration;</ins>
+
+	&hellip;
+	
+	public bool IsBusy => <ins>busyDuration > 0f</ins>;
+
+	public void StartNewGame () {
+		<ins>busyDuration = 0f;</ins>
+		&hellip;
+	}</pre>
+						
+						<p>Now <code>DoWork</code> should begin by checking whether the busy duration is greater than zero. If so update the tile swapper, decrease the remaining duration, and if there is still time remaining return. This delays progressing the game state until after the swappper is finished.</p>
+						
+						<pre translate="no">	public void DoWork () {
+		<ins>if (busyDuration > 0f)</ins>
+		<ins>{</ins>
+			<ins>tileSwapper.Update€();</ins>
+			<ins>busyDuration -= Time.deltaTime;</ins>
+			<ins>if (busyDuration > 0f)</ins>
+			<ins>{</ins>
+				<ins>return;</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		
+		&hellip;
+	}</pre>
+						
+						<aside>
+							<h3>Why not query the swapper instead of using a busy duration?</h3>
+							<div>
+								<p>Using a separate busy duration makes it easier to overlap multiple transitions.</p>
+							</div>
+						</aside>
+						
+						<p>Adjust <code>DoMove</code> so it no longer adjust the tile positions itself but instead activates the swapper and sets the busy duration. Make it pingpong is the move didn't succeed.</p>
+						
+						<pre translate="no">	void DoMove (Move move)
+	{
+		<ins>bool success =</ins> game.TryMove(move)<ins>;</ins>
+		<ins>Tile a = tiles[move.From], b = tiles[move.To];</ins>
+		<ins>busyDuration = tileSwapper.Swap(a, b, !success);</ins>
+		<ins>if (success)</ins>
+		<ins>{</ins>
+			<ins>tiles[move.From] = b;</ins>
+			<ins>tiles[move.To] = a;</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>Moving back to <code>TileSwapper</code>, we implement its functionality. Give it fields to store the tiles, their initial positions, a progress set to &minus;1 by default, and whether it should pingpong. Set all these fields in <code>Swap</code>, set progress to zero, and return double the duration for a pingpong.</p>
+						
+						<pre translate="no">	<ins>Tile tileA, tileB;</ins>
+
+	<ins>Vector3 positionA, positionB;</ins>
+
+	<ins>float progress = -1f;</ins>
+
+	<ins>bool pingPong;</ins>
+
+	public float Swap (Tile a, Tile b, bool pingPong)
+	{
+		<ins>tileA = a;</ins>
+		<ins>tileB = b;</ins>
+		<ins>positionA = a.transform.localPosition;</ins>
+		<ins>positionB = b.transform.localPosition;</ins>
+		<ins>this.pingPong = pingPong;</ins>
+		<ins>progress = 0f;</ins>
+		<ins>return pingPong ? 2f * duration : duration;</ins>
+	}</pre>
+						
+						<p>We use a progress of &minus;1 to indicate that the swapper is inactive. So <code>Update€</code> should begin checking that and return if inactive. Otherwise it continues and increases its progress. If it exceeded its duration it should do one of two things. In case of a pingpong it decreases progress by the duration, disables pingpong, and swaps the tiles. Otherwise it sets progress to &minus;1, sets the tiles to their final positions, and returns.</p>
+						
+						<pre translate="no">	public void Update€ ()
+	{
+		<ins>if (progress &lt; 0f)</ins>
+		<ins>{</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+		
+		<ins>progress += Time.deltaTime;</ins>
+		<ins>if (progress >= duration)</ins>
+		<ins>{</ins>
+			<ins>if (pingPong)</ins>
+			<ins>{</ins>
+				<ins>progress -= duration;</ins>
+				<ins>pingPong = false;</ins>
+				<ins>(tileA, tileB) = (tileB, tileA);</ins>
+			<ins>}</ins>
+			<ins>else</ins>
+			<ins>{</ins>
+				<ins>progress = -1f;</ins>
+				<ins>tileA.transform.localPosition = positionB;</ins>
+				<ins>tileB.transform.localPosition = positionA;</ins>
+				<ins>return;</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>After all that linearly interpolate both tile positions. We use the sine of &pi; times the interpolator scaled by the max depth offset to displace the tiles in the Z dimension, negative for the first tile and positive for the second tile.</p>
+						
+						<pre translate="no">	public void Update€ ()
+	{
+		&hellip;
+
+		<ins>float t = progress / duration;</ins>
+		<ins>float z = Mathf.Sin(Mathf.PI * t) * maxDepthOffset;</ins>
+		<ins>Vector3 p = Vector3.Lerp(positionA, positionB, t);</ins>
+		<ins>p.z = -z;</ins>
+		<ins>tileA.transform.localPosition = p;</ins>
+		<ins>p = Vector3.Lerp(positionA, positionB, 1f - t);</ins>
+		<ins>p.z = z;</ins>
+		<ins>tileB.transform.localPosition = p;</ins>
+	}</pre>
+						
+						<figure>
+							<img src="animating-transitions/swapping.png" width="220" height="220">
+							<figcaption>Tiles getting swapped.</figcaption>
+						</figure>
+						
+						<p>Tile swaps are now animated and the game waits until the animation is finished before showing the results of the move. If it was a successful move the tiles change and the game progresses, otherwise the tiles bounce back. As the skin is busy during this time we cannot initiate a new swap while the current one is still in progress.</p>
+					</section>
+					
+					<section>
+						<h3>Disappearing Tiles</h3>
+						
+						<p>We're also going to add animations to disappearing tiles. To support different animations for each tile add a configurable disappear duration to <code>Tile</code>, set to 0.25 seconds by default. Let it keep track of its disappear progress, initialized to &minus;1 when it spawns. We'll simple shrink the tile's scale to zero, so set it back to 1 when it spawns. Also disable the component so it won't needlessly update itself when it is not transitioning.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Range(0f, 1f)]</ins>
+	<ins>float disappearDuration = 0.25f;</ins>
+
+	PrefabInstancePool&lt;Tile> pool;
+
+	<ins>float disappearProgress;</ins>
+
+	public Tile Spawn (Vector3 position)
+	{
+		Tile instance = pool.GetInstance(this);
+		instance.pool = pool;
+		instance.transform.localPosition = position;
+		<ins>instance.transform.localScale = Vector3.one;</ins>
+		<ins>instance.disappearProgress = -1f;</ins>
+		<ins>instance.enabled = false;</ins>
+		return instance;
+	}</pre>
+						
+						<p>Give it a public <code>Disappear</code> method that sets its progress to zero, enables itself, and returns its duration. Add an <code>Update</code> method that, if it is progressing, decreases its scale to zero and despawns itself when it is done.</p>
+						
+						<pre translate="no">	<ins>public float Disappear ()</ins>
+	<ins>{</ins>
+		<ins>disappearProgress = 0f;</ins>
+		<ins>enabled = true;</ins>
+		<ins>return disappearDuration;</ins>
+	<ins>}</ins>
+
+	<ins>void Update ()</ins>
+	<ins>{</ins>
+		<ins>if (disappearProgress >= 0f)</ins>
+		<ins>{</ins>
+			<ins>disappearProgress += Time.deltaTime;</ins>
+			<ins>if (disappearProgress >= disappearDuration)</ins>
+			<ins>{</ins>
+				<ins>Despawn();</ins>
+				<ins>return;</ins>
+			<ins>}</ins>
+			<ins>transform.localScale =</ins>
+				<ins>Vector3.one * (1f - disappearProgress / disappearDuration);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>All that <code>Match3Skin</code> has to do to support disappearing tiles is invoke <code>Disappear</code> instead of <code>Despawn</code> in <code>ProcessMatches</code>. To wait until all animations are finished set the busy duration to the maximum of each tile's disappear duration and itself.</p>
+						
+						<pre translate="no">	void ProcessMatches ()
+	{
+		game.ProcessMatches();
+
+		for (int i = 0; i &lt; game.ClearedTileCoordinates.Count; i++)
+		{
+			int2 c = game.ClearedTileCoordinates[i];
+			<ins>busyDuration = Mathf.Max(</ins>tiles[c].<ins>Disappear</ins>()<ins>, busyDuration)</ins>;
+			tiles[c] = null;
+		}
+	}</pre>
+						
+						<figure>
+							<img src="animating-transitions/disappearing.png" width="220" height="220">
+							<figcaption>Disappearing tiles.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Falling Tiles</h3>
+						
+						<p>The third and final type of transitions that we'll animate are those of falling tiles. We'll let each tile take care of its own falling animation. It needs to keep track of a from and to Y position, the falling duration, and its progress. We could include <code>falling</code> in these field names, but let's group them in a inner <code>FallingState</code> struct instead. Once again we use a progress of &minus;1 to indicate that the transition is inactive.</p>
+						
+						<pre translate="no">	<ins>[System.Serializable]</ins>
+	<ins>struct FallingState</ins>
+	<ins>{</ins>
+		<ins>public float fromY, toY, duration, progress;</ins>
+	<ins>}</ins>
+
+	<ins>FallingState falling;</ins>
+
+	public Tile Spawn (Vector3 position)
+	{
+		&hellip;
+		instance.disappearProgress = -1f;
+		<ins>instance.falling.progress = -1f;</ins>
+		instance.enabled = false;
+		return instance;
+	}</pre>
+						
+						<p>Add a public <code>Fall</code> method with a destination Y position and speed as parameters and use those to set the falling state. Make it return the duration of the fall.</p>
+						
+						<pre translate="no">	<ins>public float Fall (float toY, float speed)</ins>
+	<ins>{</ins>
+		<ins>falling.fromY = transform.localPosition.y;</ins>
+		<ins>falling.toY = toY;</ins>
+		<ins>falling.duration = (falling.fromY - toY) / speed;</ins>
+		<ins>falling.progress = 0f;</ins>
+		<ins>enabled = true;</ins>
+		<ins>return falling.duration;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now when updating the tile also has to check whether it is falling. If so perform a linear interpolation and stop when it is done.</p>
+						
+						<pre translate="no">	void Update ()
+	{
+		&hellip;
+
+		<ins>if (falling.progress >= 0f)</ins>
+		<ins>{</ins>
+			<ins>Vector3 position = transform.localPosition;</ins>
+			<ins>falling.progress += Time.deltaTime;</ins>
+			<ins>if (falling.progress >= falling.duration)</ins>
+			<ins>{</ins>
+				<ins>falling.progress = -1f;</ins>
+				<ins>position.y = falling.toY;</ins>
+			<ins>}</ins>
+			<ins>else</ins>
+			<ins>{</ins>
+				<ins>position.y = Mathf.Lerp(</ins>
+					<ins>falling.fromY, falling.toY, falling.progress / falling.duration</ins>
+				<ins>);</ins>
+			<ins>}</ins>
+			<ins>transform.localPosition = position;</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>In this case we can disable the component when done falling, but only if it isn't already disappearing at that moment.</p>
+						
+						<pre translate="no">				falling.progress = -1f;
+				position.y = falling.toY;
+				<ins>enabled = disappearProgress >= 0f;</ins></pre>
+						
+						<p>All tiles will drop with the same speed, so add a configuration field for it to <code>Match3Skin</code>, set to 8 by default. Also give it a configuration field for an extra offset to be added to dropped tiles that were newly created, set to 2 by default. If it is set to zero new tiles will spawn directly above the grid. Increasing it makes those tiles spawn higher, so they can spawn out of view and then drop into view from above.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Range(0.1f, 20f)]</ins>
+	<ins>float dropSpeed = 8f;</ins>
+
+	<ins>[SerializeField, Range(0f, 10f)]</ins>
+	<ins>float newDropOffset = 2f;</ins></pre>
+						
+						<p>In <code>DropTiles</code>, no longer adjust the position of tiles that were already in the grid. Add the vertical drop offset to those tiles that fall in from above the grid. Then make the tiles fall and set the busy duration to the longest fall duration.</p>
+						
+						<pre translate="no">			<ins>if (drop.fromY &lt; tiles.SizeY)</ins>
+			{
+				tile = tiles[drop.coordinates.x, drop.fromY];
+				<del>//tile.transform.localPosition = new Vector3(</del>
+				<del>//	drop.coordinates.x + tileOffset.x, drop.coordinates.y + tileOffset.y</del>
+				<del>//);</del>
+			}
+			else
+			{
+				tile = SpawnTile(
+					game[drop.coordinates], drop.coordinates.x, <ins>drop.fromY + newDropOffset</ins>
+				);
+			}
+			tiles[drop.coordinates] = tile;
+			<ins>busyDuration = Mathf.Max(</ins>
+				<ins>tile.Fall(drop.coordinates.y + tileOffset.y, dropSpeed), busyDuration</ins>
+			<ins>);</ins></pre>
+						
+						<figure>
+							<img src="animating-transitions/dropping.png" width="220" height="220">
+							<figcaption>Dropping tiles.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Scoring</h2>
+					
+					<p>Now that we can see what is going on, let's add scoring to the game.</p>
+					
+					<section>
+						<h3>Total Score</h3>
+						
+						<p>Add a public property for the total score to <code>Match3Game</code>, which is privately set. Set it to zero at the start of a new game and increase it by the match length for each match in <code>ProcessMatches</code>.</p>
+						
+						<pre translate="no">	<ins>public int TotalScore</ins>
+	<ins>{ get; private set; }</ins>
+
+	public bool HasMatches => matches.Count > 0;
+
+	public void StartNewGame ()
+	{
+		<ins>TotalScore = 0;</ins>
+		&hellip;
+	}
+	
+	&hellip;
+
+	public void ProcessMatches ()
+	{
+		ClearedTileCoordinates.Clear();
+
+		for (int m = 0; m &lt; matches.Count; m++)
+		{
+			&hellip;
+			<ins>TotalScore += match.length;</ins>
+		}
+
+		&hellip;
+	}</pre>
+						
+						<p>Add a configuration field for a total score text display to <code>Match3Skin</code>, set its text to 0 at the start of a game, and update it after processing matches.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>TextMeshPro totalScoreText;</ins>
+
+	&hellip;
+
+	public void StartNewGame () {
+		busyDuration = 0f;
+		<ins>totalScoreText.SetText("0");</ins>
+		&hellip;
+	}
+	
+	&hellip;
+
+	void ProcessMatches ()
+	{
+		&hellip;
+
+		<ins>totalScoreText.SetText("{0}", game.TotalScore);</ins>
+	}</pre>
+						
+						<p>Create a text game object and use it for the total score text. Position it to the left of the game, at &minus;6. Give it a width of 3 and a height of 2. Enable its <em translate="no">Auto Size</em> option with its min set to 6 and its max set to 12. That way the text shrinks to fit its designated area in case a very high score is achieved.</p>
+						
+						<figure>
+							<img src="scoring/total-score.png" width="290" height="220">
+							<figcaption>Total score.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Floating Scores</h3>
+						
+						<p>We'll also add scores for individual matches that will temporarily float in front of the grid. To communicate these scores from game to skin introduce a serializable <code>SingleScore</code> struct with public fields for its position and its value. The position is a <code>float2</code> because it can end up in between two tiles in case of a match length of 4.</p>
+						
+						<pre translate="no"><ins>using Unity.Mathematics;</ins>
+
+<ins>[System.Serializable]</ins>
+<ins>public struct SingleScore</ins>
+<ins>{</ins>
+	<ins>public float2 position;</ins>
+	
+	<ins>public int value;</ins>
+<ins>}</ins></pre>
+						
+						<p>Add a property for a list of scores to <code>Match3Game</code>, like the other publicly accessible lists. Clear it at the start of <code>ProcessMatches</code> and add a score to it in the middle of each match.</p>
+						
+						<pre translate="no">	<ins>public List&lt;SingleScore> Scores</ins>
+	<ins>{ get; private set; }</ins>
+
+	&hellip;
+
+	public void StartNewGame ()
+	{
+		TotalScore = 0;
+		if (grid.IsUndefined)
+		{
+			&hellip;
+			<ins>Scores = new();</ins>
+		}
+		FillGrid();
+	}
+	
+	&hellip;
+
+	public void ProcessMatches ()
+	{
+		ClearedTileCoordinates.Clear();
+		<ins>Scores.Clear();</ins>
+
+		for (int m = 0; m &lt; matches.Count; m++)
+		{
+			&hellip;
+
+			<ins>var score = new SingleScore</ins>
+			<ins>{</ins>
+				<ins>position = match.coordinates + (float2)step * (match.length - 1) * 0.5f,</ins>
+				<ins>value = match.length</ins>
+			<ins>};</ins>
+			<ins>Scores.Add(score);</ins>
+			TotalScore += <ins>score.value</ins>;
+		}
+
+		&hellip;
+	}</pre>
+						
+						<p>Create a prefab from an empty game object with a text child. Give the child a Z offset of &minus;0.25 so it will float in front of the tiles. Set its width and height to 1 and its font size of 8. To make it easier to see I gave it an adjusted material with a black color and a bright yellow outline instead of the default material that we've been using for all text.</p>
+						
+						<figure>
+							<img src="scoring/floating-score-prefab.png" width="60" height="60">
+							<figcaption>Floating score.</figcaption>
+						</figure>
+						
+						<p>Create a <code>FloatingScore</code> component type and assign it to the root of the prefab. Give it a configuration field for its text and hook it up. Also give it a public <code>Show</code> method with a position and value as parameters and use those to display and instance from a pool.</p>
+						
+						<pre translate="no"><ins>using TMPro;</ins>
+<ins>using UnityEngine;</ins>
+
+<ins>public class FloatingScore : MonoBehaviour</ins>
+<ins>{</ins>
+	<ins>[SerializeField]</ins>
+	<ins>TextMeshPro displayText;</ins>
+
+	<ins>PrefabInstancePool&lt;FloatingScore> pool;</ins>
+
+	<ins>public void Show (Vector3 position, int value)</ins>
+	<ins>{</ins>
+		<ins>FloatingScore instance = pool.GetInstance(this);</ins>
+		<ins>instance.pool = pool;</ins>
+		<ins>instance.displayText.SetText("{0}", value);</ins>
+		<ins>instance.transform.localPosition = position;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>We make the text disappear automatically and also rise upward while it is visible. Add configuration fields for the duration and rise speed, set to 0.5 and 2 by default. Give it an age set to zero when it is shown. Have an <code>Update</code> method increase its age, recycle itself when its time is up, and move itself upward otherwise.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Range(0.1f, 1f)]</ins>
+	<ins>float displayDuration = 0.5f;</ins>
+
+	<ins>[SerializeField, Range(0f, 4f)]</ins>
+	<ins>float riseSpeed = 2f;</ins>
+
+	<ins>float age;</ins>
+
+	PrefabInstancePool&lt;FloatingScore> pool;
+
+	public void Show (int score, Vector3 position)
+	{
+		&hellip;
+		<ins>instance.age = 0f;</ins>
+	}
+
+	<ins>void Update ()</ins>
+	<ins>{</ins>
+		<ins>age += Time.deltaTime;</ins>
+		<ins>if (age >= displayDuration)</ins>
+		<ins>{</ins>
+			<ins>pool.Recycle(this);</ins>
+		<ins>}</ins>
+		<ins>else</ins>
+		<ins>{</ins>
+			<ins>Vector3 p = transform.localPosition;</ins>
+			<ins>p.y += riseSpeed * Time.deltaTime;</ins>
+			<ins>transform.localPosition = p;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Add a configuration field for the floating score prefab to <code>Match3Skin</code> and hook it up. Then show all scores at the end of <code>ProcessMatches</code>.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>FloatingScore floatingScorePrefab;</ins>
+	
+	&hellip;
+
+	void ProcessMatches ()
+	{
+		&hellip;
+
+		<ins>for (int i = 0; i &lt; game.Scores.Count; i++)</ins>
+		<ins>{</ins>
+			<ins>SingleScore score = game.Scores[i];</ins>
+			<ins>floatingScorePrefab.Show(</ins>
+				<ins>new Vector3(</ins>
+					<ins>score.position.x + tileOffset.x,</ins>
+					<ins>score.position.y + tileOffset.y</ins>
+				<ins>),</ins>
+				<ins>score.value</ins>
+			<ins>);</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<img src="scoring/floating-score-instance.png" width="220" height="220">
+							<figcaption>Single floating score.</figcaption>
+						</figure>
+						
+						<p>It is possible for floating scores to overlap, because we don't wait for them to disappear, and also because horizontal and vertical matches can overlap. To avoid Z-fighting of overlapping scores add a tiny depth offset to successive scores, pulling each closer by 0.001 units. Reset this offset back to zero once it has passed &minus;0.02.</p>
+						
+						<pre translate="no">	<ins>float floatingScoreZ;</ins>
+
+	&hellip;
+
+	void ProcessMatches ()
+	{
+		&hellip;
+
+		for (int i = 0; i &lt; game.Scores.Count; i++)
+		{
+			SingleScore score = game.Scores[i];
+			floatingScorePrefab.Show(
+				new Vector3(
+					score.position.x + tileOffset.x,
+					score.position.y + tileOffset.y<ins>,</ins>
+					<ins>floatingScoreZ</ins>
+				),
+				score.value
+			);
+			<ins>floatingScoreZ = floatingScoreZ &lt;= -0.02f ? 0f : floatingScoreZ - 0.001f;</ins>
+		}
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Score Multiplier</h3>
+						
+						<p>Match 3 games usually reward combos, cascades, or simultaneous matches. Let's do this as well, by adding a score multiplier to <code>Match3Game</code>. Set it to 1 each time a move is tried, multiply each single score value with it, and then increment it. Thus the more matches you get from a single move&mdash;no matter how&mdash;the greater the reward.</p>
+						
+						<pre translate="no">	<ins>int scoreMultiplier;</ins>
+
+	&hellip;
+
+	public bool TryMove (Move move)
+	{
+		<ins>scoreMultiplier = 1;</ins>
+		&hellip;
+	}
+
+	public void ProcessMatches ()
+	{
+		&hellip;
+
+		for (int m = 0; m &lt; matches.Count; m++)
+		{
+			&hellip;
+
+			var score = new SingleScore
+			{
+				position = match.coordinates + (float2)step * (match.length - 1) * 0.5f,
+				value = match.length <ins>* scoreMultiplier++</ins>
+			};
+			&hellip;
+		}
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="scoring/multiplied-score.png" width="220" height="220">
+							<figcaption>Second match after a move scores double points.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Finding Moves</h2>
+					
+					<p>The point of the game is to make matches, so it should end when it is no longer possible to do so. To detect this game-over state we have to search the grid for a possible move.</p>
+					
+					<section>
+						<h3>Searching for a Move</h3>
+						
+						<p>Let's add a public static <code>FindMove</code> method to <code>Move</code> that returns a move given a game. It runs though all rows of the game, looking for a valid move for the current tile. If it doesn't find such a move it returns the default move instead, which is invalid. We begin with the double loop that only retrieves the current tile. We use an <code>int2</code> coordinates variable for the loop, and store the game size in a local <code>s</code> variable to keep the code short.</p>
+						
+						<pre translate="no">	<ins>public static Move FindMove (Match3Game game)</ins>
+	<ins>{</ins>
+		<ins>int2 s = game.Size;</ins>
+		<ins>for (int2 c = 0; c.y &lt; s.y; c.y++)</ins>
+		<ins>{</ins>
+			<ins>for (c.x = 0; c.x &lt; s.x; c.x++)</ins>
+			<ins>{</ins>
+				<ins>TileState t = game[c];</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+
+		<ins>return default;</ins>
+	<ins>}</ins></pre>
+						
+						<p>There are various ways to look for a potential match, but we'll take the current tile as the one to move. The first case that we consider is when a match can be made on the same row by moving the tile left. In schematic form, where <code>X</code> is the tile and <code>?</code> is a potential match to check:</p>
+						
+						<pre style="text-align: center">?? X</pre>
+						
+						<p>This match is possible if the tiles two and three steps to the left both exist and match the tile. If so return the appropriate move.</p>
+						
+						<pre translate="no">				TileState t = game[c];
+
+				<ins>if (c.x >= 3 &amp;&amp; game[c.x - 2, c.y] == t &amp;&amp; game[c.x - 3, c.y] == t)</ins>
+				<ins>{</ins>
+					<ins>return new Move(c, MoveDirection.Left);</ins>
+				<ins>}</ins></pre>
+						
+						<p>If this match isn't possible we can try the same in the opposite direction as well:</p>
+						
+						<pre style="text-align: center">?? X ??</pre>
+						
+						<pre translate="no">				if (c.x >= 3 &amp;&amp; game[c.x - 2, c.y] == t &amp;&amp; game[c.x - 3, c.y] == t)
+				{
+					return new Move(c, MoveDirection.Left);
+				}
+
+				<ins>if (c.x + 3 &lt; s.x &amp;&amp; game[c.x + 2, c.y] == t &amp;&amp; game[c.x + 3, c.y] == t)</ins>
+				<ins>{</ins>
+					<ins>return new Move(c, MoveDirection.Right);</ins>
+				<ins>}</ins></pre>
+						
+						<p>After that we can perform the same checks vertically:</p>
+						
+						<pre style="text-align: center">?
+?
+
+?? X ??
+
+?
+?</pre>
+						
+						<pre translate="no">				<ins>if (c.y >= 3 &amp;&amp; game[c.x, c.y - 2] == t &amp;&amp; game[c.x, c.y - 3] == t)</ins>
+				<ins>{</ins>
+					<ins>return new Move(c, MoveDirection.Down);</ins>
+				<ins>}</ins>
+
+				<ins>if (c.y + 3 &lt; s.y &amp;&amp; game[c.x, c.y + 2] == t &amp;&amp; game[c.x, c.y + 3] == t)</ins>
+				<ins>{</ins>
+					<ins>return new Move(c, MoveDirection.Up);</ins>
+				<ins>}</ins></pre>
+						
+						<p>If we're still going we have to start looking diagonally. Let's first consider all cases involving the tile one step down and left. We begin with the case where that tile and the one to the left of it will form a match after moving down:</p>
+						
+						<pre style="text-align: center">   X
+??</pre>
+						
+						<p>First check if we can go down one step. Then check if the down-left tile exists and matches. If so check if the tile to the left of that one matches as well, and if so return the move.</p>
+						
+						<pre translate="no">				<ins>if (c.y > 1)</ins>
+				<ins>{</ins>
+					<ins>if (c.x > 1 &amp;&amp; game[c.x - 1, c.y - 1] == t)</ins>
+					<ins>{</ins>
+						<ins>if (c.x >= 2 &amp;&amp; game[c.x - 2, c.y - 1] == t)</ins>
+						<ins>{</ins>
+							<ins>return new Move(c, MoveDirection.Down);</ins>
+						<ins>}</ins>
+					<ins>}</ins>
+				<ins>}</ins></pre>
+						
+						<p>If that fails a move down could still work with the down-left tile if the down-right tile also matches:</p>
+						
+						<pre style="text-align: center">X
+?? ? </pre>
+						
+						<pre translate="no">						if (
+							c.x >= 2 &amp;&amp; game[c.x - 2, c.y - 1] == t <ins>||</ins>
+							<ins>c.x + 1 &lt; s.x &amp;&amp; game[c.x + 1, c.y - 1] == t</ins>
+						)
+						{
+							return new Move(c, MoveDirection.Down);
+						}</pre>
+						
+						<p>If moving down doesn't work we might still be able to match with the down-left tile by moving to the left instead:</p>
+						
+												<pre style="text-align: center;">?  
+X
+?? ? 
+?  </pre>
+						
+						<p>These checks are the same, but with X and Y swapped.</p>
+						
+						<pre translate="no">				if (c.y > 1)
+				{
+					if (c.x > 1 &amp;&amp; game[c.x - 1, c.y - 1] == t)
+					{
+						if (
+							c.x >= 2 &amp;&amp; game[c.x - 2, c.y - 1] == t ||
+							c.x + 1 &lt; s.x &amp;&amp; game[c.x + 1, c.y - 1] == t
+						)
+						{
+							return new Move(c, MoveDirection.Down);
+						}
+						<ins>if (</ins>
+							<ins>c.y >= 2 &amp;&amp; game[c.x - 1, c.y - 2] == t ||</ins>
+							<ins>c.y + 1 &lt; s.y &amp;&amp; game[c.x - 1, c.y + 1] == t</ins>
+						<ins>)</ins>
+						<ins>{</ins>
+							<ins>return new Move(c, MoveDirection.Left);</ins>
+						<ins>}</ins>
+					<ins>}</ins>
+				}</pre>
+						
+						<p>At this point it is clear that there is no match possible with the down-left tile. So let's check the down-right tile, with <code>O</code> indicating old checks that we don't have to consider again:</p>
+						
+						<pre style="text-align: center;"> O ? 
+X
+OO ??
+O ?</pre>
+						
+						<p>This requires the same code as for the down-left tile, but now to the right instead of left. Also note that we can skip one case.</p>
+						
+						<pre translate="no">				if (c.y > 1)
+				{
+					&hellip;
+
+					<ins>if (c.x + 1 &lt; s.x &amp;&amp; game[c.x + 1, c.y - 1] == t)</ins>
+					<ins>{</ins>
+						<ins>if (c.x + 2 &lt; s.x &amp;&amp; game[c.x + 2, c.y - 1] == t)</ins>
+						<ins>{</ins>
+							<ins>return new Move(c, MoveDirection.Down);</ins>
+						<ins>}</ins>
+						<ins>if (</ins>
+							<ins>c.y >= 2 &amp;&amp; game[c.x + 1, c.y - 2] == t ||</ins>
+							<ins>c.y + 1 &lt; s.y &amp;&amp; game[c.x + 1, c.y + 1] == t</ins>
+						<ins>)</ins>
+						<ins>{</ins>
+							<ins>return new Move(c, MoveDirection.Right);</ins>
+						<ins>}</ins>
+					<ins>}</ins>
+				}</pre>
+						
+						<p>If there still isn't a match we have to perform the same checks again but for the two diagonal tiles up instead of down:</p>
+						
+						<pre style="text-align: center;">? ?
+?? ??
+X
+OO OO
+O O</pre>
+						
+						<p>We can do this by duplicating the entire <code>if (c.y > 1) { &hellip; }</code> code block, flip the vertical direction, and remove two cases. I only marked the changes in the duplicated code.</p>
+						
+						<pre translate="no">				if (<ins>c.y + 1 &lt; s.y</ins>)
+				{
+					if (c.x > 1 &amp;&amp; game[c.x - 1, c.y <ins>+</ins> 1] == t)
+					{
+						if (
+							c.x >= 2 &amp;&amp; game[c.x - 2, c.y <ins>+</ins> 1] == t ||
+							c.x + 1 &lt; s.x &amp;&amp; game[c.x + 1, c.y <ins>+</ins> 1] == t
+						)	
+						{
+							return new Move(c, MoveDirection.<ins>Up</ins>);
+						}
+						if (<ins>c.y + 2 &lt; s.y &amp;&amp; game[c.x - 1, c.y + 2] == t</ins>)
+						{
+							return new Move(c, MoveDirection.Left);
+						}
+					}
+
+					if (c.x + 1 &lt; s.x &amp;&amp; game[c.x + 1, c.y <ins>+</ins> 1] == t)
+					{
+						if (c.x + 2 &lt; s.x &amp;&amp; game[c.x + 2, c.y <ins>+</ins> 1] == t)
+						{
+							return new Move(c, MoveDirection.<ins>Up</ins>);
+						}
+						if (<ins>c.y + 2 &lt; s.y &amp;&amp; game[c.x + 1, c.y + 2] == t</ins>)
+						{
+							return new Move(c, MoveDirection.Right);
+						}
+					}
+				}</pre>
+					</section>
+					
+					<section>
+						<h3>No More Moves</h3>
+						
+						<p>Now that we can find a move, add a publicly accessible property for a possible move to <code>Match3Game</code> that is privately set. Find a new possible move after filling the grid when starting a new game and if no matches were found after dropping tiles.</p>
+						
+						<pre translate="no">	<ins>public Move PossibleMove</ins>
+	<ins>{ get; private set; }</ins>
+
+	&hellip;
+
+	public void StartNewGame ()
+	{
+		&hellip;
+		FillGrid();
+		<ins>PossibleMove = Move.FindMove(this);</ins>
+	}
+
+	&hellip;
+
+	public void DropTiles ()
+	{
+		&hellip;
+
+		NeedsFilling = false;
+		<ins>if (!</ins>FindMatches()<ins>)</ins>
+		<ins>{</ins>
+			<ins>PossibleMove = Move.FindMove(this);</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>This makes it possible for <code>Match3Skin</code> to detect the game-over state. Give it a configurable game-over text that is deactivated when a new game is started. Change the <code>IsPlaying</code> property so it returns whether we're busy or there is a valid possible move. Then at the end of <code>DoWork</code>, when there are neither matches, nor a need for filling, and we're not playing, activate the game-over text.</p>
+						
+						<pre translate="no">	[SerializeField]
+	TextMeshPro <ins>gameOverText,</ins> totalScoreText;
+
+	&hellip;
+
+	public bool IsPlaying => <ins>IsBusy || game.PossibleMove.IsValid</ins>;
+
+	public void StartNewGame () {
+		busyDuration = 0f;
+		totalScoreText.SetText("0");
+		<ins>gameOverText.gameObject.SetActive(false);</ins>
+		
+		&hellip;
+	}
+
+	&hellip;
+
+	public void DoWork () {
+		&hellip;
+
+		if (game.HasMatches)
+		{
+			ProcessMatches();
+		}
+		else if (game.NeedsFilling)
+		{
+			DropTiles();
+		}
+		<ins>else if (!IsPlaying)</ins>
+		<ins>{</ins>
+			<ins>gameOverText.gameObject.SetActive(true);</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>Create a game-over text game object and set its X position to 6. Give it width 3, height 5, and font size 8. Use it to indicate that there are no more moves, and also a smaller hint that a new game can be started by pressing space:</p>
+						
+						<pre translate="no">NO MORE MOVES
+
+&lt;size=50%>PRESS SPACE</pre>
+						
+						<figure>
+							<img src="finding-moves/game-over.png" width="390" height="220">
+							<figcaption>Game over.</figcaption>
+						</figure>
+						
+						<p>The game will now automatically stop when there are no more valid moves. Although unlikely, it is possible that this is already the case at the very start of the game. To Avoid this make <code>Match3Game</code> keep filling the grid in <code>StartNewGame</code> until there is a valid possible move.</p>
+						
+						<pre translate="no">		<ins>do</ins>
+		<ins>{</ins>
+			FillGrid();
+			PossibleMove = Move.FindMove(this);
+		<ins>}</ins>
+		<ins>while (!PossibleMove.IsValid);</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Automatic Play</h3>
+						
+						<p>We end this tutorial by adding the ability for the game to play itself. This is done by simply adding a public <code>DoAutomaticMove</code> method to <code>Match3Skin</code> that uses the possible move.</p>
+						
+						<pre translate="no">	<ins>public void DoAutomaticMove () => DoMove(game.PossibleMove);</ins></pre>
+						
+						<p>Add a configuration option to <code>Game</code> to toggle automatic play. If enabled have <code>HandleInput</code> do an automatic move instead of checking for player input.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>bool automaticPlay;</ins>
+
+	&hellip;
+	
+	void HandleInput ()
+	{
+		<ins>if (automaticPlay)</ins>
+		<ins>{</ins>
+			<ins>match3.DoAutomaticMove();</ins>
+		<ins>}</ins>
+		<ins>else</ins> if (!isDragging &amp;&amp; Input.GetMouseButtonDown(0))
+		{
+			dragStart = Input.mousePosition;
+			isDragging = true;
+		}
+		&hellip;
+	}</pre>
+						
+						<p>The game can now play itself. Its artificial intelligence is very basic as it simply performs the first move that was found. It plays as fast as possible, issuing the move as soon as the skin is not busy.</p>
+						
+						<p>Our match-3 game prototype is now finished. It could be improved by adding more visuals and animations, by adding special tiles with their own behavior, by introducing entirely new game mechanics, by improving the AI, by making it multiplayer, or in other ways. Such changes would be the basis for a project based on this tutorial.</p>
+						
+						<p>The next tutorial is <a href="../bouncy-ball-shooter/index.html">Bouncy Ball Shooter</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/prototypes-06-match-3/" class="repository">repository</a>
+					<a href="Match-3.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

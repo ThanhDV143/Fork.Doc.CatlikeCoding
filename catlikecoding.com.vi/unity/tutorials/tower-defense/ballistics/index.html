@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/tower-defense/ballistics/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/tower-defense/ballistics/tutorial-image.jpg">
+		<meta property="og:title" content="Ballistics">
+		<meta property="og:description" content="A Unity Tower Defense tutorial about launching and detonating shells.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Ballistics</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/tower-defense/ballistics/#article",
+				"headline": "Ballistics",
+				"alternativeHeadline": "Lobbing Explosives",
+				"datePublished": "2019-07-21",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Tower Defense tutorial about launching and detonating shells.",
+				"image": "https://catlikecoding.com/unity/tutorials/tower-defense/ballistics/tutorial-image.jpg",
+				"dependencies": "Unity 2018.4.4f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/tower-defense/", "name": "Tower Defense" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				Direction: 1,
+				DirectionChange: 1,
+				DirectionExtensions: 1,
+				Enemy: 1,
+				EnemyCollection: 1,
+				EnemyFactory: 1,
+				Explosion: 1,
+				FloatRange: 1,
+				FloatRangeSliderAttribute: 1,
+				FloatRangeSliderDrawer: 1,
+				Game: 1,
+				GameBehavior: 1,
+				GameBehaviorCollection: 1,
+				GameBoard: 1,
+				GameObjectFactory: 1,
+				GameTile: 1,
+				GameTileContent: 1,
+				GameTileContentFactory: 1,
+				GameTileContentType: 1,
+				LaserTower: 1,
+				MortarTower: 1,
+				Shell: 1,
+				T: 1,
+				TargetPoint: 1,
+				Tower: 1,
+				TowerType: 1,
+				WarEntity: 1,
+				WarFactory: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Tower Defense</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Ballistics</h1>
+					<p>Lobbing Explosives</p>
+					<ul>
+						<li>Support more than one tower type.</li>
+						<li>Create a mortar tower.</li>
+						<li>Calculate parabolic trajectories.</li>
+						<li>Launch explosive shells.</li>
+					</ul>
+				</header>
+				
+				<p>This is the fourth installment of a tutorial series about creating a simple <a href="../index.html">tower defense</a> game. It adds a mortar tower that launches shells that detonate on impact.</p>
+				
+				<p>This tutorial is made with Unity 2018.4.4f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Enemies getting shelled.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Tower Types</h2>
+					
+					<p>Laser aren't the only kind of weaponry that we could mount on a tower. In this tutorial we'll add a second tower type that lobs shells that explode on impact and damage all nearby enemies. To make that possible we have to support more than one type of tower.</p>
+					
+					<section>
+						<h3>Abstract Tower</h3>
+						
+						<p>Acquiring and tracking a target is functionality that any tower could use, so we'll put that in an abstract base class for towers. We'll simply use <code>Tower</code> for that, but first duplicate it for later use as the concrete <code>LaserTower</code>. Then remove all code specific to the laser from <code>Tower</code>. A tower might not track a specific target, so also remove the <code>target</code> field and change <code>AcquireTarget</code> to use an output parameter and <code>TrackTarget</code> to use a reference parameter. Then remove the target visualization from <code>OnDrawGizmosSelected</code>, but keep the targeting range because that applies to all towers.</p>
+						
+						<pre translate="no">using UnityEngine;
+
+public <ins>abstract</ins> class Tower : GameTileContent {
+
+	const int enemyLayerMask = 1 &lt;&lt; 9;
+
+	static Collider[] targetsBuffer = new Collider[100];
+
+	[SerializeField, Range(1.5f, 10.5f)]
+	<ins>protected</ins> float targetingRange = 1.5f;
+
+	<del>//&hellip;</del>
+
+	<ins>protected</ins> bool AcquireTarget (<ins>out TargetPoint target</ins>) {
+		&hellip;
+	}
+
+	<ins>protected</ins> bool TrackTarget (<ins>ref TargetPoint target</ins>) {
+		&hellip;
+	}
+
+	void OnDrawGizmosSelected () {
+		Gizmos.color = Color.yellow;
+		Vector3 position = transform.localPosition;
+		position.y += 0.01f;
+		Gizmos.DrawWireSphere(position, targetingRange);
+		<del>//if (target != null) {</del>
+		<del>//	Gizmos.DrawLine(position, target.Position);</del>
+		<del>//}</del>
+	}
+}</pre>
+						
+					<p>Adjust the duplicate class so it becomes <code>LaserTower</code> that extends <code>Tower</code> and uses the functionality of its base class, getting rid of the duplicate code.</p>
+						
+						<pre translate="no">using UnityEngine;
+
+public class <ins>LaserTower</ins> : <ins>Tower</ins> {
+
+	<del>//&hellip;</del>
+
+	[SerializeField, Range(1f, 100f)]
+	float damagePerSecond = 10f;
+
+	[SerializeField]
+	Transform turret = default, laserBeam = default;
+
+	TargetPoint target;
+
+	Vector3 laserBeamScale;
+
+	void Awake () {
+		laserBeamScale = laserBeam.localScale;
+	}
+
+	public override void GameUpdate () {
+		if (TrackTarget(<ins>ref target</ins>) || AcquireTarget(<ins>out target</ins>)) {
+			Shoot();
+		}
+		else {
+			laserBeam.localScale = Vector3.zero;
+		}
+	}
+
+	void Shoot () {
+		&hellip;
+	}
+
+	<del>//&hellip;</del>
+}</pre>
+						
+						<p>Then update the laser tower prefab so it uses the new specific component.</p>
+						
+						<figure>
+							<img src="tower-types/laser-tower-inspector.png" width="320" height="130">
+							<figcaption>Laser tower component.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Fabricating a Specific Tower Type</h3>
+						
+						<p>To make it possible to select which kind of tower gets placed on the board we will introduce a <code>TowerType</code> enumeration, just like <code>GameTileContentType</code>. We'll support the existing laser type and the mortar type that we'll create later.</p>
+						
+						<pre translate="no"><ins>public enum TowerType {</ins>
+	<ins>Laser, Mortar</ins>
+<ins>}</ins></pre>
+						
+						<p>As we'll create a class for each tower type, add an abstract getter property to <code>Tower</code> to indicate its type. This works the same as the shape behavior type from the <a href="../../object-management/index.html">Object Management</a> series.</p>
+						
+						<pre translate="no">	<ins>public abstract TowerType TowerType€ { get; }</ins></pre>
+						
+						<p>Override it in <code>LaserTower</code> to have it return the correct type.</p>
+						
+						<pre translate="no">	<ins>public override TowerType TowerType€ => TowerType.Laser;</ins></pre>
+						
+						<p>Next, adjust <code>GameTileContentFactory</code> so it can produce a tower of a desired type. We'll do that with a tower array and adding an alternative public <code>Get</code> method that has a <code>TowerType</code> parameter. We can use assertions to verify that the array is set up correctly. The other public <code>Get</code> method is now only for non-tower tile content.</p>
+						
+						<pre translate="no">	[SerializeField]
+	Tower<ins>[] towerPrefabs</ins> = default;
+
+	public GameTileContent Get (GameTileContentType type) {
+		switch (type) {
+			&hellip;
+			<del>//case GameTileContentType.Tower: return Get(towerPrefab);</del>
+		}
+		Debug.Assert(false, "Unsupported <ins>non-tower</ins> type: " + type);
+		return null;
+	}
+
+	<ins>public GameTileContent Get (TowerType type) {</ins>
+		<ins>Debug.Assert((int)type &lt; towerPrefabs.Length, "Unsupported tower type!");</ins>
+		<ins>Tower prefab = towerPrefabs[(int)type];</ins>
+		<ins>Debug.Assert(type == prefab.TowerType€, "Tower prefab at wrong index!");</ins>
+		<ins>return Get(prefab);</ins>
+	<ins>}</ins></pre>
+						
+						<p>It makes sense to return the most specific type, so ideally the new <code>Get</code> method's return type should be <code>Tower</code>. But the private <code>Get</code> method used to instantiate the prefab returns <code>GameTileContent</code>. We could either perform a cast here, or make the private <code>Get</code> method generic. Let's do the latter.</p>
+						
+						<pre translate="no">	public <ins>Tower</ins> Get (TowerType type) {
+		&hellip;
+	}
+	
+	<ins>T</ins> Get<ins>&lt;T></ins> (<ins>T</ins> prefab) <ins>where T : GameTileContent</ins> {
+		<ins>T</ins> instance = CreateGameObjectInstance(prefab);
+		instance.OriginFactory = this;
+		return instance;
+	}</pre>
+						
+						<p>As we only have the laser tower yet, make it the single element of the factory's tower array.</p>
+						
+						<figure>
+							<img src="tower-types/tower-prefabs-array.png" width="320" height="150">
+							<figcaption>Tower prefabs array.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Spawning Specific Tower Types</h3>
+						
+						<p>To spawn a specific kind of tower, adjust <code>GameBoard.ToggleTower</code> so it requires a <code>TowerType</code> parameter and passes it on to the factory.</p>
+						
+						<pre translate="no">	public void ToggleTower (GameTile tile<ins>, TowerType towerType</ins>) {
+		if (tile.Content.Type == GameTileContentType.Tower€) {
+			&hellip;
+		}
+		else if (tile.Content.Type == GameTileContentType.Empty) {
+			tile.Content = contentFactory.Get(<ins>towerType</ins>);
+			&hellip;
+		}
+		else if (tile.Content.Type == GameTileContentType.Wall) {
+			tile.Content = contentFactory.Get(<ins>towerType</ins>);
+			updatingContent.Add(tile.Content);
+		}
+	}</pre>
+						
+						<p>That introduces a new possibility: a tower gets toggled while one already exists, but they are of different types. Currently that just removes the existing tower, but it makes more sense that it gets replaced with the new type, so let's do that instead. As that keeps the tile occupied pathfinding isn't needed when this happens.</p>
+						
+						<pre translate="no">		if (tile.Content.Type == GameTileContentType.Tower€) {
+			updatingContent.Remove(tile.Content);
+			<ins>if (((Tower)tile.Content).TowerType€ == towerType) {</ins>
+				tile.Content = contentFactory.Get(GameTileContentType.Empty);
+				FindPaths();
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>tile.Content = contentFactory.Get(towerType);</ins>
+				<ins>updatingContent.Add(tile.Content);</ins>
+			<ins>}</ins>
+		}</pre>
+						
+						<p>Now <code>Game</code> has to keep track of what kind of tower should be toggled. We'll simply associate each tower type with a number. The laser tower is 1, which is also the default, while the mortar tower is 2. Pressing the number keys will select the corresponding tower type.</p>
+						
+						<pre translate="no">	<ins>TowerType selectedTowerType;</ins>
+
+	&hellip;
+
+	void Update () {
+		&hellip;
+		if (Input.GetKeyDown(KeyCode.G)) {
+			board.ShowGrid = !board.ShowGrid;
+		}
+
+		<ins>if (Input.GetKeyDown(KeyCode.Alpha1)) {</ins>
+			<ins>selectedTowerType = TowerType.Laser;</ins>
+		<ins>}</ins>
+		<ins>else if (Input.GetKeyDown(KeyCode.Alpha2)) {</ins>
+			<ins>selectedTowerType = TowerType.Mortar;</ins>
+		<ins>}</ins>
+
+		&hellip;
+	}
+	
+	&hellip;
+	
+	void HandleTouch () {
+		GameTile tile = board.GetTile(TouchRay);
+		if (tile != null) {
+			if (Input.GetKey(KeyCode.LeftShift)) {
+				board.ToggleTower(tile<ins>, selectedTowerType</ins>);
+			}
+			else {
+				board.ToggleWall(tile);
+			}
+		}
+	}</pre>
+					
+					</section>
+					
+					<section>
+						<h3>Mortar Tower</h3>
+						
+						<p>Placing a mortar tower currently fails, because we don't have a prefab for it yet. Begin by creating a minimal <code>MortarTower</code> type . Mortars have a fire rate, for which we can use a shots-per-second configuration field. Besides that we need a reference to the mortar so that we can aim it.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class MortarTower : Tower {</ins>
+
+	<ins>[SerializeField, Range(0.5f, 2f)]</ins>
+	<ins>float shotsPerSecond = 1f;</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>Transform mortar = default;</ins>
+
+	<ins>public override TowerType TowerType€ => TowerType.Mortar;</ins>
+<ins>}</ins></pre>
+						
+						<p>Next, create a prefab for the mortar tower. You can do that by duplicating the laser tower prefab and replacing its tower component. Then get rid of the tower and laser beam objects. Rename the turret to mortar, move it down so it sits on top of the base, give it a slightly gray color, and hook it up. Again, we can keep the mortar's collider fixed, in this case by using a separate object with just the collider superimposed on the mortar's default orientation. I set its range to 3.5 and shots-per-second to 1.</p>
+						
+						<figure>
+							<img src="tower-types/mortar-scene.png" width="180" height="180" alt="scene"><br>
+							<img src="tower-types/mortar-hierarchy.png" width="226" height="66" alt="hierarchy"><br>
+							<img src="tower-types/mortar-inspector.png" width="320" height="112" alt="inspector">
+							<figcaption>Mortar tower prefab.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why is it known as a mortar?</h3>
+							<div>
+								<p>The earliest versions of the weapon were basically iron bowls, which looked like the mortars used to grind ingredients in with a pestle.</p>
+							</div>
+						</aside>
+						
+						<p>Add the mortar prefab to the factory's array, so it becomes possible to place mortar towers on the board. At this point they don't do anything yet though.</p>
+						
+						<figure>
+							<img src="tower-types/two-tower-types-inspector.png" width="320" height="74" alt="inspector"><br>
+							<img src="tower-types/two-tower-types-scene.png" width="230" height="230" alt="scene">
+							<figcaption>Two tower types, one inactive</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Calculating Trajectories</h2>
+					
+					<p>A mortar works by firing a projectile at an angle, so it gets lobbed over obstacles and hits its target from above. Typically, shells are used that detonate on impact or while they are still above their target. To keep it simple we'll always aim at the ground, so shells will detonate once their elevation has been reduced to zero.</p>
+					
+					<section>
+						<h3>Aiming Horizontally</h3>
+						
+						<p>To aim a mortar you have to both point it toward the target horizontally and then adjust its vertical orientation so the shell lands at the correct distance. We begin with the first step, initially using fixed relative points instead of moving targets to make it easy to verify that our calculations are correct.</p>
+						
+						<p>Add a <code>GameUpdate</code> method to <code>MortarTower</code> that always invokes a <code>Launch</code> method. Instead of launching an actual shell, for now we'll visualize the math involved. The launch point is the mortar's world position, which is a little above the ground. Place the target point three units further along the X axis, and set its Y component to zero as we always aim at the ground. Then show the points by drawing a yellow line between them, by invoking <code>Debug.DrawLine</code>. The line will be visible in the scene view for one frame, which is enough because we draw a new line every frame.</p>
+						
+						<pre translate="no">	<ins>public override void GameUpdate () {</ins>
+		<ins>Launch();</ins>
+	<ins>}</ins>
+
+	<ins>public void Launch () {</ins>
+		<ins>Vector3 launchPoint = mortar.position;</ins>
+		<ins>Vector3 targetPoint = new Vector3(launchPoint.x + 3f, 0f, launchPoint.z);</ins>
+
+		<ins>Debug.DrawLine(launchPoint, targetPoint, Color.yellow);</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="calculating-trajectories/targeting-a-point.png" width="310" height="120">
+							<figcaption>Targeting a fixed relative point.</figcaption>
+						</figure>
+						
+						<p>Using this line we can define a right triangle. Its top point sits at the mortar's position. Relative to the mortar that's `[[0],[0]]`. The point below at the base of the tower is `[[0],[y]]` and the point at the target is `[[x],[y]]`, where `x` is 3 and `y` is negative mortar's vertical position. We have to keep track of these two values.</p>
+						
+						<pre translate="no">		Vector3 launchPoint = mortar.position;
+		Vector3 targetPoint = new Vector3(launchPoint.x + 3f, 0f, launchPoint.z);
+
+		<ins>float x = 3f;</ins>
+		<ins>float y = -launchPoint.y;</ins></pre>
+						
+						<figure>
+							<img src="calculating-trajectories/triangle.png" width="225" height="125">
+							<figcaption>Targeting triangle.</figcaption>
+						</figure>
+						
+						<p>In general the target can be anywhere within range, so the Z dimension also plays a role. However, the targeting triangle remains 2D, it just gets rotated around the Y axis. To illustrate this we'll add a relative offset vector parameter to <code>Launch</code> and invoke it with four XZ offsets: `[[3],[0]]`, `[[0],[1]]`,`[[1],[1]]`, and `[[3],[1]]`. The the target point becomes equal to the launch point plus that offset, with its Y coordinate then set to zero.</p>
+						
+						<pre translate="no">	public override void GameUpdate () {
+		Launch(<ins>new Vector3(3f, 0f, 0f)</ins>);
+		<ins>Launch(new Vector3(0f, 0f, 1f));</ins>
+		<ins>Launch(new Vector3(1f, 0f, 1f));</ins>
+		<ins>Launch(new Vector3(3f, 0f, 1f));</ins>
+	}
+
+	public void Launch (<ins>Vector3 offset</ins>) {
+		Vector3 launchPoint = mortar.position;
+		Vector3 targetPoint = <ins>launchPoint + offset</ins>;
+		<ins>targetPoint.y = 0f;</ins>
+		
+		&hellip;
+	}</pre>
+						
+						<p>Now the `x` of the targeting triangle is equal to the length of the 2D vector pointing from the base of the tower to the target point. Normalizing that vector also gives us an XZ direction vector that we can use to align the triangle. We can show that by drawing the bottom of the triangle with a white line, derived from the direction and `x`.</p>
+						
+						<pre translate="no">		<ins>Vector2 dir;</ins>
+		<ins>dir.x = targetPoint.x - launchPoint.x;</ins>
+		<ins>dir.y = targetPoint.z - launchPoint.z;</ins>
+		float x = <ins>dir.magnitude</ins>;
+		float y = -launchPoint.y;
+		<ins>dir /= x;</ins>
+
+		Debug.DrawLine(launchPoint, targetPoint, Color.yellow);
+		<ins>Debug.DrawLine(</ins>
+			<ins>new Vector3(launchPoint.x, 0.01f, launchPoint.z),</ins>
+			<ins>new Vector3(</ins>
+				<ins>launchPoint.x + dir.x * x, 0.01f, launchPoint.z + dir.y * x</ins>
+			<ins>),</ins>
+			<ins>Color.white</ins>
+		<ins>);</ins></pre>
+						
+						<figure>
+							<img src="calculating-trajectories/launch-direction.png" width="310" height="120">
+							<figcaption>Aligned targeting triangles.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Launch Angle</h3>
+						
+						<p>The next step is to figure out the angle at which the shell must be launched. We have to derive that from the physics of the shell's trajectory. We won't consider drag, wind, or any other kind of interference, only the launch velocity `v` and gravity `g = 9.81`.</p>
+						
+						<p>The displacement `d` of the shell is aligned with the targeting triangle and can be described with two components. The horizontal displacement is straightforward `d_x=v_xt` where `t` is the time since launch. The vertical component is similar but also subject to negative acceleration due to gravity, so `d_y=v_yt-(g t^2)/2`.</p>
+						
+						<aside>
+							<h3>How does the displacement calculation work?</h3>
+							<div>
+								<p>Velocity `v` defines distance per second, so multiplying a velocity and a duration `t` gives you a distance `d=vt`. When acceleration `a` is involved velocity isn't constant. Acceleration is velocity change per second, thus distance per squared second. The velocity at any given time is `v=at`. In our case we have constant acceleration `a=-g`, so we can halve that to get the average velocity and multiply that with the time to find the displacement `d=(at^2)/2` caused by gravity.</p>
+							</div>
+						</aside>
+						
+						<p>We launch the shells with a fixed speed `s` that is independent of the launch angle `theta` (theta). So `v_x=scostheta` and `v_y=ssintheta`.</p>
+						
+						<figure>
+							<img src="calculating-trajectories/launch-velocity.png" width="225" height="125">
+							<figcaption>Launch velocity derivation.</figcaption>
+						</figure>
+						
+						<p>Substituting, we arrive at `d_x=stcostheta` and `d_y=stsintheta-(g t^2)/2`.</p>
+						
+						<p>We launch the shell such that its flight time `t` is exactly long enough that it reaches its target. As the horizontal displacement is simplest, we can express the time using `t=d_x/v_x`. At the destination `d_x=x`, thus `t=x/(scostheta)`. This means that `y=xtantheta-(gx^2)/(2s^2cos^2theta)`.</p>
+						
+						<aside>
+							<h3>How does that derivation of `y` work?</h3>
+							<div>
+								<p>`y=d_y=s(x/(scostheta))sintheta-(g (x/(scostheta))^2)/2=xsintheta/costheta-(gx^2)/(2s^2cos^2theta)` and `tantheta=sintheta/costheta`.</p>
+							</div>
+						</aside>
+						
+						<p>Using that, we find `tantheta=(s^2+-sqrt(s^4-g(gx^2+2ys^2)))/(gx)`.</p>
+						
+						<aside>
+							<h3>How does that derivation of `tantheta` work?</h3>
+							<div>
+								<p>First, we use the trigonometric identities `sectheta=1/costheta` and `1+tan^2theta=sec^2theta` to arrive at `y=xtantheta-(gx^2)/(2s^2)(1+tan^2theta)=-(gx^2)/(2s^2)tan^2theta+xtantheta-(gx^2)/(2s^2)`.</p>
+								
+								<p>That's an expression of the form `au^2+bu+c=0`, with `u=tantheta`, `a=-(gx^2)/(2s^2)`, `b=x`, and `c=a-y`.</p>
+								
+								<p>We can solve that with the quadratic formula `u=(-b+-sqrt(b^2-4ac))/(2a)`.</p>
+								
+								<p>Substitution creates a mess, but we can simplify it by multiplying with `m=s^2/x` such that we get `tantheta=(-mb+-msqrtr)/(2ma)` where `r=b^2-4ac`.</p>
+								<p>That leads to `tantheta=(s^2+-sqrt(m^2r))/(gx)`.</p>
+								
+								<p>Finally, `m^2r=(s^4/x^2)r=s^4+2gs^2c=s^4-g^2x^2-2gys^2=s^4-g(gx^2+2ys^2)`.</p>
+							</div>
+						</aside>
+						
+						<p>There are two possible launch angles because it's possible to aim either low or high. A low trajectory is faster as it's closer to a straight line to the target. But a high trajectory is more visually interesting so we'll go for that. This means that we only need to use the largest solution, `tantheta=(s^2+sqrt(s^4-g(gx^2+2ys^2)))/(gx)`. Calculate that and also `costheta` and `sintheta`, because we need those to derive the launch velocity vector. We have to convert `tantheta` to a radian angle for that, via <code>Mathf.Atan</code>. Let's initially use a fixed launch speed of 5.</p>
+						
+						<pre translate="no">		float x = dir.magnitude;
+		float y = -launchPoint.y;
+		dir /= x;
+
+		<ins>float g = 9.81f;</ins>
+		<ins>float s = 5f;</ins>
+		<ins>float s2 = s * s;</ins>
+
+		<ins>float r = s2 * s2 - g * (g * x * x + 2f * y * s2);</ins>
+		<ins>float tanTheta = (s2 + Mathf.Sqrt(r)) / (g * x);</ins>
+		<ins>float cosTheta = Mathf.Cos(Mathf.Atan(tanTheta));</ins>
+		<ins>float sinTheta = cosTheta * tanTheta;</ins></pre>
+						
+						<p>Let's visualize the trajectory by drawing ten blue line segments covering the first second of the flight.</p>
+						
+						<pre translate="no">		float sinTheta = cosTheta * tanTheta;
+
+		<ins>Vector3 prev = launchPoint, next;</ins>
+		<ins>for (int i = 1; i &lt;= 10; i++) {</ins>
+			<ins>float t = i / 10f;</ins>
+			<ins>float dx = s * cosTheta * t;</ins>
+			<ins>float dy = s * sinTheta * t - 0.5f * g * t * t;</ins>
+			<ins>next = launchPoint + new Vector3(dir.x * dx, dy, dir.y * dx);</ins>
+			<ins>Debug.DrawLine(prev, next, Color.blue);</ins>
+			<ins>prev = next;</ins>
+		<ins>}</ins></pre>
+						
+						<figure>
+							<img src="calculating-trajectories/parabolic-trajectories.png" width="310" height="160">
+							<figcaption>Parabolic flight trajectories up to one second.</figcaption>
+						</figure>
+						
+						
+						<p>The two farthest points can be reached in less than a second, so we see their entire trajectories and the lines continue a bit below the ground. The other two points require larger launch angles, which leads to longer trajectories that take more than a second to traverse.</p>
+					</section>
+					
+					<section>
+						<h3>Launch Speed</h3>
+						
+						<p>If we want to reach the nearest two points within a second then we'd have to reduce the launch speed. Let's set it to 4.</p>
+						
+						<pre translate="no">		float s = <ins>4f</ins>;</pre>
+						
+						<figure>
+							<img src="calculating-trajectories/launch-speed-4.png" width="310" height="140">
+							<figcaption>Launch speed reduced to 4.</figcaption>
+						</figure>
+						
+						<p>Their trajectories are now complete, but the other two have disappeared. That happened because the launch speed is now insufficient to reach those points. There are no solutions for `tantheta` in those cases, which means that we end up with the square root of a negative number, leading to not-a-number values which cause our lines to disappear. We can detect that by checking whether `r` is negative.</p>
+						
+						<pre translate="no">		float r = s2 * s2 - g * (g * x * x + 2f * y * s2);
+		<ins>Debug.Assert(r >= 0f, "Launch velocity insufficient for range!");</ins></pre>
+						
+						<p>We can avoid this situation by using a high enough launch speed. But if it becomes too high then nearby targets would require very high trajectories and flight times to hit, so we want to keep the speed as low as possible. Our launch speed should be just enough to hit a target at maximum range.</p>
+						
+						<p>At maximum range, `r=0` so there is only one solution for `tantheta`, which is a low trajectory. This means that we know the required launch speed `s=sqrt(g(y+sqrt(x^2+y^2)))`.</p>
+						
+						<aside>
+							<h3>How does that derivation of `s` work?</h3>
+							<div>
+								<p>We need to solve `s^4-g(gx^2+2ys^2)=s^4-2gys^2-g^2x^2=0` for `s`.</p>
+								
+								<p>That's an expression of the form `au^2+bu+c=0`, with `u=s^2`, `a=1`, `b=-2gy`, and `c=-g^2x^2`.</p>
+								
+								<p>We can solve that with the simplified quadratic formula `u=(-b+-sqrt(b^2-4c))/2`.</p>
+								
+								<p>Substitution gives us `s^2=(2gy+-sqrt(4g^2y^2+4g^2x^2))/2=gy+-gsqrt(x^2+y^2)`.</p>
+								
+								<p>We require a positive solution, so we arrive at `s^2 = g(y+sqrt(x^2+y^2))`.</p>
+							</div>
+						</aside>
+						
+						<p>We only need to figure out the required speed when the mortar awakens, or when we adjust its range while in play mode. So keep track of it with a field and calculate it in <code>Awake</code> and <code>OnValidate</code>.</p>
+						
+						<pre translate="no">	<ins>float launchSpeed;</ins>
+
+	<ins>void Awake () {</ins>
+		<ins>OnValidate();</ins>
+	<ins>}</ins>
+
+	<ins>void OnValidate () {</ins>
+		<ins>float x = targetingRange;</ins>
+		<ins>float y = -mortar.position.y;</ins>
+		<ins>launchSpeed = Mathf.Sqrt(9.81f * (y + Mathf.Sqrt(x * x + y * y)));</ins>
+	<ins>}</ins></pre>
+						
+						<p>However, due to floating-point precision a target very close to the maximum range might fail. So we should add a tiny amount to the range when calculating the required speed. Also, the enemy collider radius effectively extends the maximum tower range. We set it to 0.125 subject to at most doubling due to enemy scale, so increase the effective range by a further 0.25, to something like 0.25001.</p>
+						
+						<pre translate="no">		float x = targetingRange <ins>+ 0.25001f</ins>;</pre>
+						
+						<p>Finally, use the derived launch speed in <code>Launch</code>.</p>
+						
+						<pre translate="no">		float s = <ins>launchSpeed</ins>;</pre>
+						
+						<figure>
+							<img src="calculating-trajectories/minimum-launch-speed.png" width="310" height="170">
+							<figcaption>Using derived speed for targeting range 3.5.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Barrage</h3>
+						
+						<p>Now that our trajectory calculation is correct we can get rid of the relative test targets. Instead, <code>Launch</code> should be provided with a target point.</p>
+						
+						<pre translate="no">	public void Launch (<ins>TargetPoint target</ins>) {
+		Vector3 launchPoint = mortar.position;
+		Vector3 targetPoint = <ins>target.Position</ins>;
+		targetPoint.y = 0f;
+
+		&hellip;
+	}</pre>
+						
+						<p>And we're not firing every frame. Keep track of the launch progress just like the spawn progress for enemies and acquire a random target when it's time to launch in <code>GameUpdate</code>. But there might be no target available at that time. In that case we keep the launch progress, but don't let it accumulate further. In fact, to prevent an infinite loop we should set it to slightly less than 1.</p>
+						
+						<pre translate="no">	<ins>float launchProgress;</ins>
+
+	&hellip;
+
+	public override void GameUpdate () {
+		<ins>launchProgress += shotsPerSecond * Time.deltaTime;</ins>
+		<ins>while (launchProgress >= 1f) {</ins>
+			<ins>if (AcquireTarget(out TargetPoint target)) {</ins>
+				<ins>Launch(target);</ins>
+				<ins>launchProgress -= 1f;</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>launchProgress = 0.999f;</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>We don't track targets in between launches, but we have to properly align the mortar when firing. We can use the horizontal launch direction vector to horizontally rotate the mortar by using <code>Quaternion.LookRotation</code>. We also have to incorporate the launch angle, by using `tantheta` for the Y component of the direction vector. That works because the horizontal direction has a length of 1, thus `tantheta=sintheta`.</p>
+						
+						<figure>
+							<img src="calculating-trajectories/look-rotation-vector.png" width="225" height="125">
+							<figcaption>Decomposition of look-rotation vector.</figcaption>
+						</figure>
+						
+						<pre translate="no">		float tanTheta = (s2 + Mathf.Sqrt(r)) / (g * x);
+		float cosTheta = Mathf.Cos(Mathf.Atan(tanTheta));
+		float sinTheta = cosTheta * tanTheta;
+		
+		<ins>mortar.localRotation =</ins>
+			<ins>Quaternion.LookRotation(new Vector3(dir.x, tanTheta, dir.y));</ins></pre>
+						
+						<p>To still be able to see the launch trajectories, we can add a parameter to <code>Debug.DrawLine</code> to give them a duration.</p>
+						
+						<pre translate="no">		Vector3 prev = launchPoint, next;
+		for (int i = 1; i &lt;= 10; i++) {
+			&hellip;
+			Debug.DrawLine(prev, next, Color.blue<ins>, 1f</ins>);
+			prev = next;
+		}
+
+		Debug.DrawLine(launchPoint, targetPoint, Color.yellow<ins>, 1f</ins>);
+		Debug.DrawLine(
+			&hellip;
+			Color.white<ins>, 1f</ins>
+		);</pre>
+						
+						<figure>
+							<video width="230" height="230" controls loop muted>
+								<source src="calculating-trajectories/barrage-targeting.mp4" type="video/mp4">
+							</video>
+							<figcaption>Barrage targeting.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Shells</h2>
+					
+					<p>The point of calculating trajectories is that we now know how to launch shells. The next step is to create and launch them.
+					
+					<section>
+						<h3>War Factory</h3>
+						
+						<p>We need a factory to create instances of shell objects. Once in the air, shells exist on their own and no longer depend on the mortar that launched them. So mortar tower's shouldn't manage them and the game tile content factory also isn't a good fit. Let's create a new factory for everything related to weaponry, naming it the war factory. First, create an abstract <code>WarEntity</code> with an appropriate <code>OriginFactory</code> property and <code>Recycle</code> method.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public abstract class WarEntity : MonoBehaviour {</ins>
+
+	<ins>WarFactory originFactory;</ins>
+
+	<ins>public WarFactory OriginFactory {</ins>
+		<ins>get => originFactory;</ins>
+		<ins>set {</ins>
+			<ins>Debug.Assert(originFactory == null, "Redefined origin factory!");</ins>
+			<ins>originFactory = value;</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	<ins>public void Recycle () {</ins>
+		<ins>originFactory.Reclaim(this);</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Then create a concrete <code>Shell</code> war entity of our shells.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class Shell : WarEntity { }</ins></pre>
+						
+						<p>Followed by <code>WarFactory</code> itself, which can deliver a shell via a public getter property.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>[CreateAssetMenu]</ins>
+<ins>public class WarFactory : GameObjectFactory {</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>Shell shellPrefab = default;</ins>
+
+	<ins>public Shell Shell€ => Get(shellPrefab);</ins>
+
+	<ins>T Get&lt;T> (T prefab) where T : WarEntity {</ins>
+		<ins>T instance = CreateGameObjectInstance(prefab);</ins>
+		<ins>instance.OriginFactory = this;</ins>
+		<ins>return instance;</ins>
+	<ins>}</ins>
+
+	<ins>public void Reclaim (WarEntity entity) {</ins>
+		<ins>Debug.Assert(entity.OriginFactory == this, "Wrong factory reclaimed!");</ins>
+		<ins>Destroy(entity.gameObject);</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Create a prefab for the shell. I simply used a cube with uniform scale 0.25 and a dark material, plus the <code>Shell</code> component. Then create the war factory asset and assign the shell prefab to it.</p>
+						
+						<figure>
+							<img src="shells/war-factory.png" width="320" height="88">
+							<figcaption>War factory.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Game Behavior</h3>
+						
+						<p>To move the shells we'll have to update them. We can use the same approach that <code>Game</code> uses to update the enemies. In fact, we can make this approach generic by introducing an abstract <code>GameBehavior</code> component that extends <code>MonoBehaviour</code> and adds a virtual <code>GameUpdate</code> method.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public abstract class GameBehavior : MonoBehaviour {</ins>
+
+	<ins>public virtual bool GameUpdate () => true;</ins>
+<ins>}</ins></pre>
+						
+						<p>Then refactor <code>EnemyCollection</code>, turning it into <code>GameBehaviorCollection</code>.</p>
+						
+						<pre translate="no">public class <ins>GameBehaviorCollection</ins> {
+
+	List&lt;<ins>GameBehavior</ins>> <ins>behaviors</ins> = new List&lt;<ins>GameBehavior</ins>>();
+
+	public void Add (<ins>GameBehavior behavior</ins>) {
+		behaviors.Add(<ins>behavior</ins>);
+	}
+
+	public void GameUpdate () {
+		for (int i = 0; i &lt; <ins>behaviors</ins>.Count; i++) {
+			if (!<ins>behaviors</ins>[i].GameUpdate()) {
+				int lastIndex = <ins>behaviors</ins>.Count - 1;
+				<ins>behaviors</ins>[i] = <ins>behaviors</ins>[lastIndex];
+				<ins>behaviors</ins>.RemoveAt(lastIndex);
+				i -= 1;
+			}
+		}
+	}
+}</pre>
+						
+						<p>Make <code>WarEntity</code> extend <code>GameBehavior</code> instead of <code>MonoBehavior</code>.</p>
+						
+						<pre translate="no">public abstract class WarEntity : <ins>GameBehavior</ins> { &hellip; }</pre>
+						
+						<p>And do the same for <code>Enemy</code>, now overriding the <code>GameUpdate</code> method.</p>
+						
+						<pre translate="no">public class Enemy : <ins>GameBehavior</ins> {
+
+	&hellip;
+
+	public <ins>override</ins> bool GameUpdate () { &hellip; }
+	
+	&hellip;
+}</pre>
+						
+						<p>From now on <code>Game</code> has to keep track of two collections, one for enemies and another for non-enemies. The non-enemies should be updated after everything else.</p>
+						
+						<pre translate="no">	<ins>GameBehaviorCollection</ins> enemies = new <ins>GameBehaviorCollection</ins>();
+	<ins>GameBehaviorCollection nonEnemies = new GameBehaviorCollection();</ins>
+
+	&hellip;
+
+	void Update () {
+		&hellip;
+		enemies.GameUpdate();
+		Physics.SyncTransforms();
+		board.GameUpdate();
+		<ins>nonEnemies.GameUpdate();</ins>
+	}</pre>
+						
+						<p>The last step to get updating shells is to somehow add them to the collection of non-enemies. Let's do that by having <code>Game</code> function as a static facade for the war factory, so shells can be spawned by invoking <code>Game.SpawnShell()</code>. To make that work <code>Game</code> needs a reference to the war factory and has to keep track of its own instance.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>WarFactory warFactory = default;</ins>
+
+	&hellip;
+
+	<ins>static Game instance;</ins>
+
+	<ins>public static Shell SpawnShell () {</ins>
+		<ins>Shell shell = instance.warFactory.Shell€;</ins>
+		<ins>instance.nonEnemies.Add(shell);</ins>
+		<ins>return shell;</ins>
+	<ins>}</ins>
+
+	<ins>void OnEnable () {</ins>
+		<ins>instance = this;</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="shells/game-with-factories.png" width="320" height="164">
+							<figcaption>Game with war factory.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Is a static facade a good approach?</h3>
+							<div>
+								<p>It's a convenient one for simple things that can be spawned anywhere by potentially lots of things, like shells.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Launching the Shell</h3>
+						
+						<p>Once a shell has been spawned, it must fly along its trajectory until it reaches its target. To make that possible, add an <code>Initialize</code> method to <code>Shell</code> and use it to set up its launch point, target point, and launch velocity.</p>
+						
+						<pre translate="no">	<ins>Vector3 launchPoint, targetPoint, launchVelocity;</ins>
+	
+	<ins>public void Initialize (</ins>
+		<ins>Vector3 launchPoint, Vector3 targetPoint, Vector3 launchVelocity</ins>
+	<ins>) {</ins>
+		<ins>this.launchPoint = launchPoint;</ins>
+		<ins>this.targetPoint = targetPoint;</ins>
+		<ins>this.launchVelocity = launchVelocity;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can spawn a shell in <code>MortarTower.Launch</code> and send it on its way.</p>
+						
+						<pre translate="no">		mortar.localRotation =
+			Quaternion.LookRotation(new Vector3(dir.x, tanTheta, dir.y));
+
+		<ins>Game.SpawnShell().Initialize(</ins>
+			<ins>launchPoint, targetPoint,</ins>
+			<ins>new Vector3(s * cosTheta * dir.x, s * sinTheta, s * cosTheta * dir.y)</ins>
+		<ins>);</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Shell Motion</h3>
+						
+						<p>To make <code>Shell</code> move we have to keep track of its age, which is the time since launch. We can then calculate its position in <code>GameUpdate</code>. We always do this relative to its launch point, so it perfectly follows its trajectory, regardless of the update frequency.</p>
+						
+						<pre translate="no">	<ins>float age;</ins>
+
+	&hellip;
+
+	<ins>public override bool GameUpdate () {</ins>
+		<ins>age += Time.deltaTime;</ins>
+		<ins>Vector3 p = launchPoint + launchVelocity * age;</ins>
+		<ins>p.y -= 0.5f * 9.81f * age * age;</ins>
+		<ins>transform.localPosition = p;</ins>
+		<ins>return true;</ins>
+	}</pre>
+						
+						<figure>
+							<video width="230" height="230" controls loop muted>
+								<source src="shells/lobbing.mp4" type="video/mp4">
+							</video>
+							<figcaption>Lobbing Shells.</figcaption>
+						</figure>
+						
+						<p>To also align the shells with their trajectory we have to make them look along the derivate vector, which is simply the velocity at that time.</p>
+						
+						<pre translate="no">	public override bool GameUpdate () {
+		&hellip;
+		
+		<ins>Vector3 d = launchVelocity;</ins>
+		<ins>d.y -= 9.81f * age;</ins>
+		<ins>transform.localRotation = Quaternion.LookRotation(d);</ins>
+		return true;
+	}</pre>
+						
+						<figure>
+							<video width="230" height="230" controls loop muted>
+								<source src="shells/rotating.mp4" type="video/mp4">
+							</video>
+							<figcaption>Rotating Shells.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Cleaning Up</h3>
+						
+						<p>Now that it is clear that shells are flying as they should, we can remove the trajectory visualization from <code>MortarTower.Launch</code>.</p>
+						
+						<pre translate="no">	public void Launch (TargetPoint target) {
+		&hellip;
+		
+		Game.SpawnShell().Initialize(
+			launchPoint, targetPoint,
+			new Vector3(s * cosTheta * dir.x, s * sinTheta, s * cosTheta * dir.y)
+		);
+
+		<del>//Vector3 prev = launchPoint, next;</del>
+		<del>//&hellip;</del>
+	}</pre>
+						
+						<p>Also, we have to make sure that shells cease to exist once they've reached their target. As we always aim at the ground, we can do that by checking whether the vertical position has been reduced to zero or less in <code>Shell.GameUpdate</code>. We can do that directly after calculating it, before adjusting the shell's position and rotation.</p>
+						
+						<pre translate="no">	public override bool GameUpdate () {
+		age += Time.deltaTime;
+		Vector3 p = launchPoint + launchVelocity * age;
+		p.y -= 0.5f * 9.81f * age * age;
+
+		<ins>if (p.y &lt;= 0f) {</ins>
+			<ins>OriginFactory.Reclaim(this);</ins>
+			<ins>return false;</ins>
+		<ins>}</ins>
+		
+		transform.localPosition = p;
+		&hellip;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Detonation</h3>
+						
+						<p>We're launching shells because they're filled with explosives. When a shell reaches it target, it should detonate and damage all enemies in the blast zone. The blast radius and amount of damage depends on what shells are fired by the mortar, so add configuration options for them to <code>MortarTower</code>.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Range(0.5f, 3f)]</ins>
+	<ins>float shellBlastRadius = 1f;</ins>
+
+	<ins>[SerializeField, Range(1f, 100f)]</ins>
+	<ins>float shellDamage = 10f;</ins></pre>
+						
+						<figure>
+							<img src="shells/shell-blast-radius-damage.png" width="320" height="148">
+							<figcaption>Shell blast radius 1.5 and damage 15.</figcaption>
+						</figure>
+						
+						<p>This configuration only matters when the shell explodes, so must be added to <code>Shell</code> and its <code>Initialize</code> method as well.</p>
+						
+						<pre translate="no">	float age<ins>, blastRadius, damage</ins>;
+
+	public void Initialize (
+		Vector3 launchPoint, Vector3 targetPoint, Vector3 launchVelocity<ins>,</ins>
+		<ins>float blastRadius, float damage</ins>
+	) {
+		&hellip;
+		<ins>this.blastRadius = blastRadius;</ins>
+		<ins>this.damage = damage;</ins>
+	}</pre>
+						
+						<p><code>MortarTower</code> only has to pass the data to the shell, after spawning it.</p>
+						
+						<pre translate="no">		Game.SpawnShell().Initialize(
+			launchPoint, targetPoint,
+			new Vector3(s * cosTheta * dir.x, s * sinTheta, s * cosTheta * dir.y)<ins>,</ins>
+			<ins>shellBlastRadius, shellDamage</ins>
+		);</pre>
+						
+						<p>To hit enemies in range, the shell must acquire targets. We already have code for that, but it's in <code>Tower</code>. As it is useful for anything that needs a target, copy that functionality to <code>TargetPoint</code> and make it statically available. Add a method to fill the buffer, a property to get the buffered count, and a method to get a buffered target.</p>
+						
+						<pre translate="no">	<ins>const int enemyLayerMask = 1 &lt;&lt; 9;</ins>
+
+	<ins>static Collider[] buffer = new Collider[100];</ins>
+
+	<ins>public static int BufferedCount { get; private set; }</ins>
+
+	<ins>public static bool FillBuffer (Vector3 position, float range) {</ins>
+		<ins>Vector3 top = position;</ins>
+		<ins>top.y += 3f;</ins>
+		<ins>BufferedCount = Physics.OverlapCapsuleNonAlloc(</ins>
+			<ins>position, top, range, buffer, enemyLayerMask</ins>
+		<ins>);</ins>
+		<ins>return BufferedCount > 0;</ins>
+	<ins>}</ins>
+
+	<ins>public static TargetPoint GetBuffered (int index) {</ins>
+		<ins>var target = buffer[index].GetComponent&lt;TargetPoint>();</ins>
+		<ins>Debug.Assert(target != null, "Targeted non-enemy!", buffer[0]);</ins>
+		<ins>return target;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can acquire all targets in range&mdash;up to the maximum buffer size&mdash;and damage them when <code>Shell</code> detonates.</p>
+						
+						<pre translate="no">		if (p.y &lt;= 0f) {
+			<ins>TargetPoint.FillBuffer(targetPoint, blastRadius);</ins>
+			<ins>for (int i = 0; i &lt; TargetPoint.BufferedCount; i++) {</ins>
+				<ins>TargetPoint.GetBuffered(i).Enemy€.ApplyDamage(damage);</ins>
+			<ins>}</ins>
+			OriginFactory.Reclaim(this);
+			return false;
+		}</pre>
+						
+						<figure>
+							<video width="230" height="230" controls loop muted>
+								<source src="shells/detonating.mp4" type="video/mp4">
+							</video>
+							<figcaption>Detonating Shells.</figcaption>
+						</figure>
+						
+						<p>We can also add a static property to <code>TargetPoint</code> to conveniently get a random buffered target.</p>
+						
+						<pre translate="no">	<ins>public static TargetPoint RandomBuffered =></ins>
+		<ins>GetBuffered(Random.Range(0, BufferedCount));</ins></pre>
+						
+						<p>That allows us to simplify <code>Tower</code>, as it can now rely on <code>TargetPoint</code> to find a random target.</p>
+						
+						<pre translate="no">	<del>//const int enemyLayerMask = 1 &lt;&lt; 9;</del>
+
+	<del>//static Collider[] targetsBuffer = new Collider[100];</del>
+
+	&hellip;
+
+	protected bool AcquireTarget (out TargetPoint target) {
+		<del>//Vector3 a = transform.localPosition;</del>
+		<del>//&hellip;</del>
+		<del>//if (hits > 0) {</del>
+		<del>//	&hellip;</del>
+		<del>//}</del>
+		<ins>if (TargetPoint.FillBuffer(transform.localPosition, targetingRange)) {</ins>
+			<ins>target = TargetPoint.RandomBuffered;</ins>
+			<ins>return true;</ins>
+		<ins>}</ins>
+		target = null;
+		return false;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Explosions</h3>
+						
+						<p>Everything works, but it doesn't look very convincing yet. We can approve that by adding a visualization of the explosion blast when a shell detonates. Besides looking more interesting, it also provided useful visual feedback to the player. We'll do this by creating an explosion prefab that's just like the laser beam, except it's a sphere, it's more transparent, and has a brighter color. Give it a new <code>Explosion</code> war entity component with a configurable duration, with half a second as a reasonable default that is short but long enough to register clearly. Give it an <code>Initialize</code> method to set its position and blast radius. We have to double the radius when setting the scale, because the sphere mesh's radius is 0.5. This is also a good place to apply the damage to all enemies in range, so it should have a parameter for damage as well. Besides that, it needs a <code>GameUpdate</code> method that simply checks whether its time is up.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class Explosion : WarEntity {</ins>
+
+	<ins>[SerializeField, Range(0f, 1f)]</ins>
+	<ins>float duration = 0.5f;</ins>
+
+	<ins>float age;</ins>
+
+	<ins>public void Initialize (Vector3 position, float blastRadius, float damage) {</ins>
+		<ins>TargetPoint.FillBuffer(position, blastRadius);</ins>
+		<ins>for (int i = 0; i &lt; TargetPoint.BufferedCount; i++) {</ins>
+			<ins>TargetPoint.GetBuffered(i).Enemy.ApplyDamage(damage);</ins>
+		<ins>}</ins>
+		<ins>transform.localPosition = position;</ins>
+		<ins>transform.localScale = Vector3.one * (2f * blastRadius);</ins>
+	<ins>}</ins>
+
+	<ins>public override bool GameUpdate () {</ins>
+		<ins>age += Time.deltaTime;</ins>
+		<ins>if (age >= duration) {</ins>
+			<ins>OriginFactory.Reclaim(this);</ins>
+			<ins>return false;</ins>
+		<ins>}</ins>
+		<ins>return true;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Add the explosion to <code>WarFactory</code>.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>Explosion explosionPrefab = default;</ins>
+
+	[SerializeField]
+	Shell shellPrefab = default;
+
+	<ins>public Explosion Explosion€ => Get(explosionPrefab);</ins>
+
+	public Shell Shell => Get(shellPrefab);</pre>
+						
+						<figure>
+							<img src="shells/war-factory-explosion.png" width="320" height="60">
+							<figcaption>War factory with explosion.</figcaption>
+						</figure>
+						
+						<p>And add a facade method for it to <code>Game</code>.</p>
+						
+						<pre translate="no">	<ins>public static Explosion SpawnExplosion () {</ins>
+		<ins>Explosion explosion = instance.warFactory.Explosion€;</ins>
+		<ins>instance.nonEnemies.Add(explosion);</ins>
+		<ins>return explosion;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now <code>Shell</code> can spawn and initialize an explosion when it reaches its target. The damage is taken care of by the explosion.</p>
+						
+						<pre translate="no">		if (p.y &lt;= 0f) {
+			<del>//TargetPoint.FillBuffer(targetPoint, blastRadius);</del>
+			<del>//for (int i = 0; i &lt; TargetPoint.BufferedCount; i++) {</del>
+			<del>//	TargetPoint.GetBuffered(i).Enemy.ApplyDamage(damage);</del>
+			<del>//}</del>
+			<ins>Game.SpawnExplosion().Initialize(targetPoint, blastRadius, damage);</ins>
+			OriginFactory.Reclaim(this);
+			return false;
+		}</pre>
+						
+						<figure>
+							<video width="230" height="230" controls loop muted>
+								<source src="shells/explosions.mp4" type="video/mp4">
+							</video>
+							<figcaption>Shell Explosions.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Smoother Explosions</h3>
+						
+						<p>Using unchanging spheres for explosions looks bad. We can improve that by animating their opacity and scale. We could use simple formula for that, but let's use animation curves for both so it's easier to tweak them. Add two <code>AnimationCurve</code> configuration fields to <code>Explosion</code> for that. We'll use the curves to configure the values during the explosion's lifetime, with time 1 representing the end of the explosion, regardless of its actual duration. The same goes for the scale and blast radius. That makes it easier to configure.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>AnimationCurve opacityCurve = default;</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>AnimationCurve scaleCurve = default;</ins></pre>
+						
+						<p>I made opacity start and end at zero, smoothly scaling up to 0.3 at the halfway point. I made the scale start at 0.7 and quickly increase and then slowly approach 1.</p>
+						
+						<figure>
+							<img src="shells/explosion-curves.png" width="320" height="98">
+							<figcaption>Explosion curves.</figcaption>
+						</figure>
+						
+						<p>We'll use a material property block to set the material's color, which is black with variable opacity. The scale is now set in <code>GameUpdate</code>, but we have to keep track of the radius with a field. We can apply the scale doubling once in <code>Initialize</code>. The curve values are found by invoking <code>Evaluate</code> on them with the current age divided by the explosion duration as an argument.</p>
+						
+						<pre translate="no">	<ins>static int colorPropertyID = Shader.PropertyToID("_Color");</ins>
+
+	<ins>static MaterialPropertyBlock propertyBlock;</ins>
+	
+	&hellip;
+	
+	<ins>float scale;</ins>
+
+	<ins>MeshRenderer meshRenderer;</ins>
+
+	<ins>void Awake () {</ins>
+		<ins>meshRenderer = GetComponent&lt;MeshRenderer>();</ins>
+		<ins>Debug.Assert(meshRenderer != null, "Explosion without renderer!");</ins>
+	<ins>}</ins>
+
+	public void Initialize (Vector3 position, float blastRadius, float damage) {
+		&hellip;
+		transform.localPosition = position;
+		<del>//transform.localScale = Vector3.one * (2f * blastRadius);</del>
+		<ins>scale = 2f * blastRadius;</ins>
+	}
+	
+	public override bool GameUpdate () {
+		&hellip;
+		
+		<ins>if (propertyBlock == null) {</ins>
+			<ins>propertyBlock = new MaterialPropertyBlock();</ins>
+		<ins>}</ins>
+		<ins>float t = age / duration;</ins>
+		<ins>Color c = Color.clear;</ins>
+		<ins>c.a = opacityCurve.Evaluate(t);</ins>
+		<ins>propertyBlock.SetColor(colorPropertyID, c);</ins>
+		<ins>meshRenderer.SetPropertyBlock(propertyBlock);</ins>
+		<ins>transform.localScale = Vector3.one * (scale * scaleCurve.Evaluate(t));</ins>
+		return true;
+	}</pre>
+						
+						<figure>
+							<video width="230" height="230" controls loop muted>
+								<source src="shells/animated-explosions.mp4" type="video/mp4">
+							</video>
+							<figcaption>Animated Explosions.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Tracer Shells</h3>
+						
+						<p>Because shells are small and have a relatively high velocity it can be hard to see them. And when looking at a screenshot of a single frame the trajectories aren't clear at all. We could make that more obvious by adding a trail effect to the shells. That isn't realistic for normal shells, but we can declare that they are tracer shells. Such projectiles are specifically made to leave a bright trail for the purpose of making their trajectories visible.</p>
+						
+						<p>There are various ways to create trails, but we'll use a very simple approach here. We repurpose explosions, having <code>Shell</code> spawn a small one every frame. These are explosions that don't do any damage, so it would be a waste to acquire targets. Have <code>Explosion</code> support such cosmetic use by only applying damage that is larger than zero, then make the damage parameter of <code>Initialize</code> optional.</p>
+						
+						<pre translate="no">	public void Initialize (
+		Vector3 position, float blastRadius, float damage <ins>= 0f</ins>
+	) {
+		<ins>if (damage > 0f) {</ins>
+			TargetPoint.FillBuffer(position, blastRadius);
+			for (int i = 0; i &lt; TargetPoint.BufferedCount; i++) {
+				TargetPoint.GetBuffered(i).Enemy.ApplyDamage(damage);
+			}
+		<ins>}</ins>
+		transform.localPosition = position;
+		radius = 2f * blastRadius;
+	}</pre>
+						
+						<p>Spawn an explosion at the end up <code>Shell.GameUpdate</code> with a small radius, say 0.1, to turn them into tracer shells. Note that this approach spawns an explosion per frame, so is frame-rate dependent, which is fine for this simple effect.</p>
+						
+						<pre translate="no">	public override bool GameUpdate () {
+		&hellip;
+		
+		<ins>Game.SpawnExplosion().Initialize(p, 0.1f);</ins>
+		return true;
+	}</pre>
+						
+						<figure>
+							<video width="230" height="230" controls loop muted>
+								<source src="shells/tracer-shells.mp4" type="video/mp4">
+							</video>
+							<figcaption>Tracer Shells.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../scenarios/index.html">Scenarios</a>.</p>
+					</section>
+					
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/tower-defense-04-ballistics/" class="repository">repository</a>
+					<a href="Ballistics.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

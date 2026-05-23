@@ -1,0 +1,1534 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/rendering/part-5/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/rendering/part-5/tutorial-image.jpg">
+		<meta property="og:title" content="Rendering 5">
+		<meta property="og:description" content="A Unity Rendering tutorial series about supporting multiple lights. Part 5 of 20.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Rendering 5</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/rendering/part-5/#article",
+				"headline": "Rendering 5",
+				"alternativeHeadline": "Multiple Lights",
+				"datePublished": "2016-06-30",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Rendering tutorial series about supporting multiple lights. Part 5 of 20.",
+				"image": "https://catlikecoding.com/unity/tutorials/rendering/part-5/tutorial-image.jpg",
+				"dependencies": "Unity 5.4.0b21",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/rendering/", "name": "Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+			};
+			
+			var hasAnimations = true;
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Rendering 5</h1>
+					<p>Multiple Lights</p>
+					<ul>
+						<li>Render multiple lights per object.</li>
+						<li>Support different light types.</li>
+						<li>Use light cookies.</li>
+						<li>Compute vertex lights.</li>
+						<li>Include spherical harmonics.</li>
+					</ul>
+				</header>
+
+				<p>This is the fifth part of a tutorial series about rendering. The <a href="../part-4.1.html">previous part</a> introduced lighting, with a single directional light. Now we'll add support for multiple lights.</p>
+				
+				<p>This tutorials was made using Unity 5.4.0b21.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A boring white sphere, with interesting lights.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Include Files</h2>
+					
+					<p>To add support for multiple lights to our shader, we'll have to add more passes to it. These passes will end up containing nearly identical code. To prevent code duplication, we're going to move our shader code to an include file.</p>
+					
+					<p>Unity doesn't have a menu option to create a shader include file. So you'll have to manually go to the asset folder of your project, via the file browser of your operating system. Create a <em translate="no">My Lighting.cginc</em> plain text file in the same folder as your lighting shader. You could do so by duplicating our shader, renaming it, and then clearing its contents.</p>
+					
+					<figure>
+						<img src="include-files/project.png" width="178" height="98">
+						<figcaption>Your first include file.</figcaption>
+					</figure>
+					
+					<p>Copy all the code of our lighting shader to this file, from right below the <code class="shader">#pragma</code> statements until <code class="shader">ENDCG</code>. Because this code is no longer directly inside a shader pass, I'll no longer indent it.</p>
+					
+					<pre translate="no" class="shader">#include "UnityPBSLighting.cginc"
+
+&hellip;
+
+float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+	&hellip;
+}</pre>
+					
+					<p>We can now include this file in our shader, replacing the code that used to be there. Because it's in the same folder, we can directly reference it.</p>
+					
+					<pre translate="no" class="shader">			CGPROGRAM
+
+			#pragma target 3.0
+
+			#pragma vertex MyVertexProgram
+			#pragma fragment MyFragmentProgram
+
+			<ins>#include "My Lighting.cginc"</ins>
+
+			ENDCG</pre>
+					
+					<section>
+						<h3>Preventing Redefinitions</h3>
+
+						<p>As you already know, include files can themselves include other include files. When you're including files that in turn include the same other file, you end up with code duplication. This will lead to compiler errors about code redefinitions.</p>
+						
+						<p>To prevent such redefinitions, it is typical to guard include files with a definition check. This is a pre-processor check to see whether a certain definition has been made. The definition is simply a unique identifier that corresponds with the name of the include file. You can define it to be anything, even nothing. In our case, we'll use the identifier <code class="shader">MY_LIGHTING_INCLUDED</code>.</p>
+						
+						<pre translate="no" class="shader"><ins>#define MY_LIGHTING_INCLUDED</ins>
+
+#include "UnityPBSLighting.cginc"
+
+&hellip;</pre>
+						
+						<p>Now we can put the entire contents of our include file inside a pre-processor if-block. The condition is that <code class="shader">MY_LIGHTING_INCLUDED</code> has not yet been defined.</p>
+
+						<pre translate="no" class="shader"><ins>#if !defined(MY_LIGHTING_INCLUDED)</ins>
+#define MY_LIGHTING_INCLUDED
+
+#include "UnityPBSLighting.cginc"
+
+&hellip;
+
+<ins>#endif</ins></pre>
+						
+						<p>Typically, the code inside this include-file guard is not indented.</p>
+					</section>
+					
+					<a href="include-files/include-files.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>The Second Light</h2>
+					
+					<p>Our second light will once again be a directional light. Duplicate the main light and change its color and rotation so you can tell them apart. Also, reduce its intensity slider, for example to 0.8. Unity will use the intensity to automatically determine the main light.</p>
+					
+					<figure>
+						<img alt="main" src="the-second-light/main-light-inspector.png" width="320" height="236">
+						<img alt="secondary" src="the-second-light/secondary-light-inspector.png" width="320" height="236">
+						<figcaption>Two directional lights.</figcaption>
+					</figure>
+					
+					<p>Even though we have two directional lights, there is no visual difference. We can see their light independently, by having only one active at a time. But when both are active, only the main light has any effect.</p>
+					
+					<figure>
+						<img alt="main" src="the-second-light/main-light.png" width="280" height="200">
+						<img alt="secondary" src="the-second-light/secondary-light.png" width="280" height="200">
+						<figcaption>One or the other, not both.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>A Second Pass</h3>
+						
+						<p>We see only a single light, because our shader only computes one light. The forward base pass is for the main directional light. To render an additional light, we need an additional pass.</p>
+						
+						<p>Duplicate our shader pass code and set the new one's light mode to <em translate="no">ForwardAdd</em>. Unity will use this pass to render the additional light.</p>
+						
+						<pre translate="no" class="shader">	SubShader {
+
+		Pass {
+			Tags {
+				"LightMode" = "ForwardBase"
+			}
+
+			CGPROGRAM
+
+			#pragma target 3.0
+
+			#pragma vertex MyVertexProgram
+			#pragma fragment MyFragmentProgram
+
+			#include "My Lighting.cginc"
+
+			ENDCG
+		}
+
+		<ins>Pass {</ins>
+			<ins>Tags {</ins>
+				<ins>"LightMode" = "ForwardAdd"</ins>
+			<ins>}</ins>
+
+			<ins>CGPROGRAM</ins>
+
+			<ins>#pragma target 3.0</ins>
+
+			<ins>#pragma vertex MyVertexProgram</ins>
+			<ins>#pragma fragment MyFragmentProgram</ins>
+
+			<ins>#include "My Lighting.cginc"</ins>
+
+			<ins>ENDCG</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>We now see the secondary light, instead of the main light. Unity renders both, but the additive pass ends up overwriting the results of the base pass. This is wrong. The additive pass has to add its results to the base pass, not replace it. We can instruct the GPU to do this, by changing the blend mode of the additive pass.</p>
+						
+						<p>How the new and old pixel data is combined is defined by two factors. The new and old data is multiplied with these factors, then added to become the final result. The default mode is no blending, which is equivalent to <code class="shader">One Zero</code>. The result of such a pass replaced anything that was previously in the frame buffer. To add to the frame buffer, we'll have to instruct it to use the <code class="shader">One One</code> blend mode. This is known as additive blending.</p>
+						
+						<pre translate="no" class="shader">			Tags {
+				"LightMode" = "ForwardAdd"
+			}
+
+			<ins>Blend One One</ins>
+
+			CGPROGRAM
+</pre>
+						
+						<figure>
+							<img src="the-second-light/both-lights.png" width="280" height="200">
+							<figcaption>Both lights added together.</figcaption>
+						</figure>
+						
+						<p>The first time an object is rendered, the GPU checks whether a fragments ends up in front of anything else that's already been rendered to that pixel. This distance information is stored in the GPU's depth buffer, also known as the Z buffer. So each pixel has both a color and a depth. This depth represents the distance to the nearest surface from the camera, per pixel. It's like sonar.</p>
+						
+						<p>If there's nothing in front of the fragment that we want to render, then it's currently the surface closest to the camera. The GPU goes ahead and runs the fragment program. It overwrites the pixel's color and also records its new depth.</p>
+						
+						<p>If the fragment ends up further away than what's already there, then there's something in front of it. In that case, we cannot see it, and it won't be rendered at all.</p>
+						
+						<aside>
+							<h3>What about semitransparent objects?</h3>
+							<div>
+								<p>The depth-buffer approach only works with fully opaque objects. Semitransparent objects require a different approach. We'll deal with those in a future tutorial.</p>
+							</div>
+						</aside>
+						
+						<p>This process is repeated for the secondary light, except now we're adding to what's already there. Once again, the fragment program is only run if nothing is in front of what we're rendering. If so, we end up at the exact same depth as the previous pass, because it's for the same object. So we end up recording the exact same depth value.</p>
+						
+						<p>Because writing to the depth buffer twice is not necessary, let's disable it. This is done with the <code class="shader">ZWrite Off</code> shader statement.</p>
+						
+						<pre translate="no" class="shader">			Blend One One
+			<ins>ZWrite Off</ins>
+</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Draw Call Batches</h3>
+						
+						<p>To get a better idea of what's going on, you can enable the <em translate="no">Stats</em> panel at the top right corner of the game view. Look at the amount of batches, as well as those saved by batching. These represent draw calls. Do this with only the main light active.</p>
+						
+						<figure>
+							<img src="the-second-light/batches-one-light-shadows.png" width="310" height="214">
+							<figcaption>Five batches, seven total.</figcaption>
+						</figure>
+						
+						<p>As we have six objects, you'd expect six batches. But with dynamic batching enabled, all three cubes are combined into a single batch. So you'd expect four batches, with two saved. But you might have five batches.</p>
+						
+						<p>The extra batch is caused by dynamic shadows. Let's eliminate it by entirely disabling shadows in the quality settings, via <em translate="no">Edit / Project Settings / Quality</em>. Make sure that you adjust the quality settings that you're currently using in the editor.</p>
+						
+						<figure>
+							<img alt="quality settings" src="the-second-light/no-shadows.png" width="296" height="130">
+							<img alt="statistics" src="the-second-light/batches-one-light.png" width="310" height="214">
+							<figcaption>No more shadows, four batches.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why do I still have an additional batch?</h3>
+							<div>
+								<p>You're probably rendering the environmental cube map. That's another draw call. We disabled it in a previous tutorial.</p>
+							</div>
+						</aside>
+						
+						<p>You might have to trigger a statistics update &ndash; for example by clicking the game view &ndash; after which the draw calls should be four, with two saved by batching. Then, activate the secondary light.</p>
+						
+						<figure>
+							<img src="the-second-light/batches-two-lights.png" width="310" height="214">
+							<figcaption>Two lights, twelve batches.</figcaption>
+						</figure>
+						
+						<p>Because each object is now rendered twice, we end up with twelve batches, instead of six. This is expected. What you might not expect, is that dynamic batching is no longer working. Unfortunately, Unity's dynamic batching only works for objects that are affected by at most a single directional light. Activating the second light made this optimization impossible.</p>
+						
+					</section>
+					
+					<section>
+						<h3>Frame Debugger</h3>
+						
+						<p>To get an even better insight into how the scene is rendered, you can use the frame debugger. Open it via <em translate="no">Window / Frame Debugger</em>.</p>
+						
+						<figure>
+							<img src="the-second-light/frame-debugger.png" width="578" height="326">
+							<figcaption>Frame debugger window.</figcaption>
+						</figure>
+						
+						<p>When enabled, the frame debugger allows you to step through each individual draw call. The window itself shows details of each draw call. The game view will show what's rendered up to and including the selected draw call.</p>
+						
+						<figure>
+							<video width="280" height="200" controls loop muted>
+								<source src="the-second-light/draw-calls.mp4" type="video/mp4">
+							</video>
+							<figcaption>Stepping though draw calls.</figcaption>
+						</figure>
+						
+						<p>Preferably, opaque objects close to the camera are drawn first. This front-to-back draw order is efficient, because thanks to the depth buffer, hidden fragments will be skipped. If we would draw back-to-front instead, we'd keep overwriting pixels of more distant objects. This is known as overdraw, and should be avoided as much as possible.</p>
+						
+						<p>Unity orders objects front-to-back, but that's not the only thing that determines the draw order. Changing GPU state is also expensive, and should be minimized too. This is done by rendering similar objects together. For example, Unity prefers to render the spheres and cubes in groups, because then it doesn't have to switch between meshes as often. Likewise, Unity prefers to group objects that use the same material.</p>
+					</section>
+					
+					<a href="the-second-light/the-second-light.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Point Lights</h2>
+					
+					<p>Directional lights are not the only types of light. Let's add a point light, via <em translate="no">GameObject / Light / Point Light</em>.</p>
+					
+					<figure>
+						<img src="point-lights/inspector.png" width="320" height="322">
+						<figcaption>A point light.</figcaption>
+					</figure>
+					
+					<p>To get a good look at it, disable both directional lights. Then move the point light around a bit.</p>
+					
+					<figure>
+						<video width="280" height="200" controls loop muted>
+								<source src="point-lights/below-above.mp4" type="video/mp4">
+							</video>
+						<figcaption>Moving the light from below to above.</figcaption>
+					</figure>
+					
+					<p>The light behaves very strange. What's going on? When you use the frame debugger, you'll notice that our objects are first rendered solid black, then again with the weird light.</p>
+					
+					<p>The first pass is the base pass. It is always rendered, even though there isn't an active directional light. So we end up with a black silhouettes.</p>
+					
+					<p>The second pass is our additive pass again. This time, it uses a point light instead of a directional light. But our code still assumes a directional light. We have to fix this.</p>
+					
+					<section>
+						<h3>Light Function</h3>
+						
+						<p>Because our light is about to become more complex, let's move the code that creates it to a separate function. Place this function directly above the <code class="shader">MyFragmentProgram</code> function.</p>
+						
+						<pre translate="no" class="shader"><ins>UnityLight CreateLight (Interpolators i) {</ins>
+	<ins>UnityLight light;</ins>
+	<ins>light.dir = _WorldSpaceLightPos0.xyz;</ins>
+	<ins>light.color = _LightColor0.rgb;</ins>
+	<ins>light.ndotl = DotClamped(i.normal, light.dir);</ins>
+	<ins>return light;</ins>
+<ins>}</ins></pre>
+						
+						<p>Now we can simplify <code class="shader">MyFragmentProgram</code>.</p>
+						
+						<pre translate="no" class="shader">float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+	i.normal = normalize(i.normal);
+<del>//	float3 lightDir = _WorldSpaceLightPos0.xyz;</del>
+	float3 viewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
+
+<del>//	float3 lightColor = _LightColor0.rgb;</del>
+	float3 albedo = tex2D(_MainTex, i.uv).rgb * _Tint.rgb;
+
+	float3 specularTint;
+	float oneMinusReflectivity;
+	albedo = DiffuseAndSpecularFromMetallic(
+		albedo, _Metallic, specularTint, oneMinusReflectivity
+	);
+
+<del>//	UnityLight light;</del>
+<del>//	light.color = lightColor;</del>
+<del>//	light.dir = lightDir;</del>
+<del>//	light.ndotl = DotClamped(i.normal, lightDir);</del>
+
+	UnityIndirect indirectLight;
+	indirectLight.diffuse = 0;
+	indirectLight.specular = 0;
+
+	return UNITY_BRDF_PBS(
+		albedo, specularTint,
+		oneMinusReflectivity, _Smoothness,
+		i.normal, viewDir,
+		<ins>CreateLight(i)</ins>, indirectLight
+	);
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Light Position</h3>
+						
+						<p>The <code class="shader">_WorldSpaceLightPos0</code> variable contains the current light's position. But in case of a directional light, it actually holds the direction towards the light. Now that we're using a point light, the variable really contains the data that its name suggests. So we have to compute the light direction ourselves. This is done by subtracting the fragment's world position and normalizing the result.</p>
+						
+						<pre translate="no" class="shader">	light.dir = <ins>normalize(</ins>_WorldSpaceLightPos0.xyz <ins>- i.worldPos)</ins>;</pre>
+						
+						<figure>
+							<video width="280" height="200" controls loop muted>
+								<source src="point-lights/direction-from-position.mp4" type="video/mp4">
+							</video>
+							<figcaption>Deriving direction from position.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Light Attenuation</h3>
+						
+						<p>In case of a directional light, knowing its direction is enough. It is assumed to be infinitely far away. But a point light has an explicit position. This means that its distance to the object's surface can also have an effect. The further away a light, the dimmer it gets. This is known as the light's attenuation.</p>
+						
+						<p>In case of a direction light, the attenuation is assumed to vary so slowly that we can treat it as constant. So we don't bother with it. But what does the attenuation of a point light look like?</p>
+						
+						<p>Imagine a point from which we emit a single burst of photons. These photons move in all directions. As time passes, the photons move further away from the point. As they all travel at the same velocity, the photons act as the surface of a sphere, which has the point at its center. The radius of this sphere increases as the photons keep moving. As the sphere grows, so does its surface. But this surface always contains the same amount of photons. So the density of the photons decreases. This determines the brightness of the observed light.</p>
+						
+						<figure>
+							<img src="point-lights/attenuation.png" width="135" height="135">
+							<figcaption>Spherical attenuation.</figcaption>
+						</figure>
+						
+						<p>The surface area of a sphere with radius `r` is equal to `4 pi r^2`. To determine the photon density, we can divide by that. We can ignore the constant `4 pi`, as we can just assume that's factored into the light's intensity. That leads to an attenuation factor of `1 / d^2` where `d` is the light's distance.</p>
+						
+						<pre translate="no" class="shader">UnityLight CreateLight (Interpolators i) {
+	UnityLight light;
+	light.dir = normalize(_WorldSpaceLightPos0.xyz - i.worldPos);
+	<ins>float3 lightVec = _WorldSpaceLightPos0.xyz - i.worldPos;</ins>
+	<ins>float attenuation = 1 / (dot(lightVec, lightVec));</ins>
+	light.color = _LightColor0.rgb <ins>* attenuation</ins>;
+	light.ndotl = DotClamped(i.normal, light.dir);
+	return light;
+}</pre>
+						
+						<figure>
+							<img src="point-lights/too-bright.png" width="280" height="200">
+							<figcaption>Too bright up close.</figcaption>
+						</figure>
+						
+						<p>This produces extremely bright results close to the light. This happens because the attenuation factor shoots to infinity when the distance approaches zero. To make sure that the light's intensity is at its maximum at a distance of zero, change the attenuation equation to `1 / (1 + d^2)`.</p>
+						
+						<pre translate="no" class="shader">	float attenuation = 1 / (<ins>1 +</ins> dot(lightVec, lightVec));</pre>
+						
+						<figure>
+							<img src="point-lights/no-longer-too-bright.png" width="280" height="200">
+							<figcaption>No longer too bright.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Light Range</h3>
+						
+						<p>In real life, photons keep moving until they hit something. This means that a light's range is potentially infinite, even though it becomes so weak that we can no longer see it. But we don't want to waste time rendering lights that we cannot see. So we'll have to stop rendering them at some point.</p>
+						
+						<p>Point lights and spotlights have a range. Objects that lie inside this range will get a draw call with this lights. All other objects won't. The default range is 10. The smaller this range, the fewer objects get an extra draw call, which leads to higher frame rates. Set our light's range to 1 and move it around.</p>
+						
+						<figure>
+							<img src="point-lights/range-1.png" width="320" height="136" alt="inspector"><br>
+							<video width="280" height="200" controls loop muted>
+								<source src="point-lights/range-1.mp4" type="video/mp4">
+							</video>
+							<figcaption>Light with range 1.</figcaption>
+						</figure>
+						
+						<p>You'll clearly see when objects come in and out of range, as they'll suddenly switch between being lit and unlit. This happens because the light would still be visible beyond the range that we chose. To fix this, we have to ensure that the attenuation and range are synchronized.</p>
+						
+						<p>Realistically, light has no maximum range. So any range that we set is artistic liberty. Our objective then becomes to make sure that there is no sudden light transition when objects move out of range. This requires that the attenuation factor reaches zero at maximum range.</p>
+						
+						<p>Unity determines a point light's attenuation by transforming the fragment's world position into a light space position. This is a point in the local space of the light object, scaled by its attenuation. In this space, the point light sits at the origin. Anything that's more than one unit away from it is out of range. So the square distance from the origin defines the scaled attenuation factor.</p>
+						
+						<p>Unity goes one step further, and uses the squared distance to sample a falloff texture. This is done to ensure that the attenuation drops to zero a bit early. Without this step, you could still get light popping when objects move in or out of range.</p>
+						
+						<p>The code for this technique is found in the <em translate="no">AutoLight</em> include file. Let's use that instead of writing it ourselves.</p>
+						
+						<figure>
+							<img src="point-lights/autolight.png" width="350" height="115"><br>
+							<figcaption>AutoLight include file hierarchy.</figcaption>
+						</figure>
+						
+						<pre translate="no" class="shader"><ins>#include "AutoLight.cginc"</ins>
+#include "UnityPBSLighting.cginc"
+</pre>
+						
+						<p>We can now access the <code class="shader">UNITY_LIGHT_ATTENUATION</code> macro. This macro inserts the code to compute the correct attenuation factor. It has three parameters. The first is the name of the variable that will contain the attenuation. We'll use <code class="shader">attenuation</code> for that. The second parameter has something to do with shadows. As we don't support  those yet, just use zero. And the third parameter is the world position.</p>
+						
+						<p>Note that the macro defines the variable in the current scope. So we shouldn't declare it ourselves anymore.</p>
+						
+						<pre translate="no" class="shader">UnityLight CreateLight (Interpolators i) {
+	UnityLight light;
+	light.dir = normalize(_WorldSpaceLightPos0.xyz - i.worldPos);
+<del>//	float3 lightVec = _WorldSpaceLightPos0.xyz - i.worldPos;</del>
+<del>//	float attenuation = 1 / (dot(lightVec, lightVec));</del>
+	<ins>UNITY_LIGHT_ATTENUATION(attenuation, 0, i.worldPos);</ins>
+	light.color = _LightColor0.rgb * attenuation;
+	light.ndotl = DotClamped(i.normal, light.dir);
+	return light;
+}
+</pre>
+						
+						<aside>
+							<h3>What does <code class="shader">UNITY_LIGHT_ATTENUATION</code> look like?</h3>
+							<div>
+								<p>Here is the relevant code. The <code class="shader">#ifdef POINT</code> statement is shorthand for <code class="shader">#if defined(POINT)</code>.</p>
+								
+								<pre translate="no" class="shader">#ifdef POINT
+uniform sampler2D _LightTexture0;
+uniform unityShadowCoord4x4 unity_WorldToLight;
+#define UNITY_LIGHT_ATTENUATION(destName, input, worldPos) \
+	unityShadowCoord3 lightCoord = \
+		mul(unity_WorldToLight, unityShadowCoord4(worldPos, 1)).xyz; \
+	fixed destName = \
+		(tex2D(_LightTexture0, dot(lightCoord, lightCoord).rr). \
+		UNITY_ATTEN_CHANNEL * SHADOW_ATTENUATION(input));
+#endif</pre>
+								
+								<p>The shadow coordinate types are defined elsewhere. They're either full or half-precision floats.</p>
+								
+								<p>The dot product produces a single value. The <code class="shader">rr</code> swizzle simply duplicates it so you end up with a <code class="shader">float2</code>. This is then used to sample the attenuation texture. As the texture data is 1D, its second coordinate doesn't matter.</p>
+								
+								<p><code class="shader">UNITY_ATTEN_CHANNEL</code> is either <code class="shader">r</code> or <code class="shader">a</code>, depending on the target platform.</p>
+								
+								<p>Because we're not supporting shadows, the <code class="shader">SHADOW_ATTENUATION</code> macro becomes 1 and can be ignored.</p>
+							</div>
+						</aside>
+						
+						<p>After using this macro, it looks like attenuation doesn't work anymore. That's because there are multiple versions of it, one per light type. By default, it's for the directional light, which has no attenuation at all.</p>
+						
+						<p>The correct macro is only defined when it is known that we're dealing with a point light. To indicate this, we have to <code class="shader">#define POINT</code> before including <em translate="no">AutoLight</em>. As we're only dealing with point lights in our additive pass, define it there, before we include <em translate="no">My Lighting</em>.</p>
+						
+						<pre translate="no" class="shader">		Pass {
+			Tags {
+				"LightMode" = "ForwardAdd"
+			}
+
+			Blend One One
+			ZWrite Off
+
+			CGPROGRAM
+
+			#pragma target 3.0
+
+			#pragma vertex MyVertexProgram
+			#pragma fragment MyFragmentProgram
+
+			<ins>#define POINT</ins>
+
+			#include "My Lighting.cginc"
+
+			ENDCG
+		}
+</pre>
+						
+						<figure>
+							<video width="280" height="200" controls loop muted>
+								<source src="point-lights/attenuation.mp4" type="video/mp4">
+							</video>
+							<figcaption>Attenuation with range 10.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="point-lights/point-lights.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Mixing Lights</h2>
+					
+					<p>Turn off the point light and activate our two directional lights again.</p>
+					
+					<figure>
+						<img alt="incorrect" src="mixing-lights/wrong-directional.png" width="280" height="200">
+						<img alt="correct" src="the-second-light/both-lights.png" width="280" height="200">
+						<figcaption>Incorrect vs. correct directional lights.</figcaption>
+					</figure>
+					
+					<p>There's something wrong. We're interpreting their light directions as positions. And the secondary directional light &ndash; rendered by the additive pass &ndash; is completely treated as if it were a point light. To solve this, we have to create shader variants for the different light types.</p>
+					
+					<section>
+						<h3>Shader Variants</h3>
+						
+						<p>Check our shader in the inspector. The dropdown menu under the <em translate="no">Compile and show code</em> button contains a section that tells us how many shader variants it currently has. Click the <em translate="no">Show</em> button to get an overview of them.</p>
+						
+						<figure>
+							<img src="mixing-lights/showing-variants.png" width="214" height="266">
+							<figcaption>Currently two variants.</figcaption>
+						</figure>
+						
+						<pre translate="no" class="shader">// Total snippets: 2
+// -----------------------------------------
+// Snippet #0 platforms ffffffff:
+
+Just one shader variant.
+
+
+// -----------------------------------------
+// Snippet #1 platforms ffffffff:
+
+Just one shader variant.</pre>
+						
+						<p>The file that is opened tells us that we have two snippets, each with one shader variant. These are our base and additive passes.</p>
+						
+						<p>We want to create two shader variants for our additive pass. One for directional lights, and one for point lights. We do this by adding a multi-compile pragma statement to the pass. This statement defines a list of keywords. Unity will create multiple shader variants for us, each defining one of those keywords.</p>
+						
+						<p>Each variant is a separate shader. They are compiled individually. The only difference between them is which keywords are defined.</p>
+						
+						<p>In this case, we need <code class="shader">DIRECTIONAL</code> and <code class="shader">POINT</code>, and we should no longer define <code class="shader">POINT</code> ourselves.</p>
+						
+						<pre translate="no" class="shader">		Pass {
+			Tags {
+				"LightMode" = "ForwardAdd"
+			}
+
+			Blend One One
+			ZWrite Off
+
+			CGPROGRAM
+
+			#pragma target 3.0
+
+			<ins>#pragma multi_compile DIRECTIONAL POINT</ins>
+
+			#pragma vertex MyVertexProgram
+			#pragma fragment MyFragmentProgram
+
+<del>//			#define POINT</del>
+
+			#include "My Lighting.cginc"
+
+			ENDCG
+		}</pre>
+						
+						<p>Summon the shader variant overview again. This time, the second snippet will contain two variants, as we requested.</p>
+						
+						<pre translate="no" class="shader">// Total snippets: 2
+// -----------------------------------------
+// Snippet #0 platforms ffffffff:
+
+Just one shader variant.
+
+
+// -----------------------------------------
+// Snippet #1 platforms ffffffff:
+DIRECTIONAL POINT
+
+2 keyword variants used in scene:
+
+DIRECTIONAL
+POINT</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Using Keywords</h3>
+						
+						<p>We can check which of these keywords exist, just like <em translate="no">AutoLight</em> does for <code class="shader">POINT</code>. In our case, if <code class="shader">POINT</code> is defined, then we have to compute the light direction ourselves. Otherwise, we have a directional light and <code class="shader">_WorldSpaceLightPos0</code> is the direction.</p>
+						
+						<pre translate="no" class="shader">UnityLight CreateLight (Interpolators i) {
+	UnityLight light;
+	
+	<ins>#if defined(POINT)</ins>
+		light.dir = normalize(_WorldSpaceLightPos0.xyz - i.worldPos);
+	<ins>#else</ins>
+		<ins>light.dir = _WorldSpaceLightPos0.xyz;</ins>
+	<ins>#endif</ins>
+	
+	float3 lightVec = _WorldSpaceLightPos0.xyz - i.worldPos;
+	UNITY_LIGHT_ATTENUATION(attenuation, 0, i.worldPos);
+	light.color = _LightColor0.rgb * attenuation;
+	light.ndotl = DotClamped(i.normal, light.dir);
+	return light;
+}</pre>
+						
+						<p>This works for our two additive pass variants. It also works for the base pass, because it doesn't define <code class="shader">POINT</code>.</p>
+						
+						<p>Unity decides which variant to use based on the current light and the shader variant keywords. When rendering a directional light, it uses the <code class="shader">DIRECTIONAl</code> variant. When rendering a point light, it uses the <code class="shader">POINT</code> variant. And when there isn't a match, it just picks the first variant from the list.</p>
+						
+						<figure>
+							<video width="280" height="200" controls loop muted>
+								<source src="mixing-lights/three-lights.mp4" type="video/mp4">
+							</video>
+							<figcaption>Rendering three lights.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="mixing-lights/mixing-lights.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Spotlights</h2>
+					
+					<p>Besides directional and point lights, unity also supports spotlights. Spotlights are like point lights, except that they are restricted to a cone, instead of shining in all directions.</p>
+					
+					<figure>
+						<img src="spotlights/inspector.png" width="320" height="340">
+						<figcaption>A spotlight.</figcaption>
+					</figure>
+					
+					<aside>
+						<h3>What about area lights?</h3>
+						<div>
+							<p>Those are only supported for static light mapping. We'll cover that topic in a future tutorial.</p>
+						</div>
+					</aside>
+					
+					<p>To support spotlights as well, we have to add <code class="shader">SPOT</code> to the keyword list of our multi-compile statement.</p>
+					
+					<pre translate="no" class="shader">			#pragma multi_compile DIRECTIONAL POINT <ins>SPOT</ins></pre>
+					
+					<p>Our additive shader now has three variants.</p>
+					
+					<pre translate="no" class="shader">// Snippet #1 platforms ffffffff:
+DIRECTIONAL POINT SPOT
+
+3 keyword variants used in scene:
+
+DIRECTIONAL
+POINT
+SPOT</pre>
+					
+					<p>Spotlights have a position, just like point lights. So when either <code class="shader">POINT</code> or <code class="shader">SPOT</code> is defined, we have to compute the light direction.</p>
+					
+					<pre translate="no" class="shader">	#if defined(POINT) <ins>|| defined(SPOT)</ins>
+		light.dir = normalize(_WorldSpaceLightPos0.xyz - i.worldPos);
+	#else
+		light.dir = _WorldSpaceLightPos0.xyz;
+	#endif</pre>
+					
+					<figure>
+						<img src="spotlights/spotlight.png" width="280" height="200">
+						<figcaption>Spotlight with 60&deg; angle.</figcaption>
+					</figure>
+					
+					<p>This was already enough to get spotlights to work. They end up with a different <code class="shader">UNITY_LIGHT_ATTENUATION</code> macro, which takes care of the cone shape.</p>
+					
+					<p>The attenuation approach starts identical to that of a point light. Convert to light space, then compute the attenuation factor. Then, force the attenuation to zero for all points that lie behind the origin. That limits the light to everything in front of the spotlight.</p>
+					
+					<p>Then the X and Y coordinates in light space are used as UV coordinates to sample a texture. This texture is used to mask the light. The texture is simply a circle with a blurred edge. This produces a light cylinder. To turn it into a cone, the conversion to light space is actually a perspective transformation, and uses homogeneous coordinates.</p>
+					
+					<aside>
+						<h3>What does <code class="shader">UNITY_LIGHT_ATTENUATION</code> look like for spotlights?</h3>
+						<div>
+							<p>Here it is. Note the conversion from homogeneous to euclidean coordinates when sampling the mask texture. Adding &frac12; after that centers the texture.</p>
+							
+							<pre translate="no" class="shader">#ifdef SPOT
+uniform sampler2D _LightTexture0;
+uniform unityShadowCoord4x4 unity_WorldToLight;
+uniform sampler2D _LightTextureB0;
+inline fixed UnitySpotCookie(unityShadowCoord4 LightCoord) {
+return tex2D(_LightTexture0, LightCoord.xy / LightCoord.w + 0.5).w;
+}
+inline fixed UnitySpotAttenuate(unityShadowCoord3 LightCoord) {
+return tex2D(_LightTextureB0, dot(LightCoord, LightCoord).xx). \
+	UNITY_ATTEN_CHANNEL;
+}
+#define UNITY_LIGHT_ATTENUATION(destName, input, worldPos) \
+unityShadowCoord4 lightCoord = \
+	mul(unity_WorldToLight, unityShadowCoord4(worldPos, 1)); \
+fixed destName = (lightCoord.z > 0) * UnitySpotCookie(lightCoord) * \
+	UnitySpotAttenuate(lightCoord.xyz) * SHADOW_ATTENUATION(input);
+#endif</pre>
+						</div>
+					</aside>
+					
+					<section>
+						<h3>Spotlight Cookies</h3>
+						
+						<p>The default spotlight mask texture is a blurry circle. But you could use any square texture, as longs as it drops to zero at its edges. These textures are known as spotlight cookies. This name is derived from cucoloris, which refers to a film, theatre, or photography prop that adds shadows to a light.</p>
+						
+						<p>The alpha channel of cookies is used to mask the light. The other channels don't matter. Here's an example texture, which has all four channels set to the same value.</p>
+						
+						<figure>
+							<img src="spotlights/spotlight-cookie.png" width="128" height="128">
+							<figcaption>Spotlight cookie.</figcaption>
+						</figure>
+						
+						<p>When importing the texture, you can select <em translate="no">Cookie</em> as its type. Then you also have to set its light type, in this case <em translate="no">Spotlight</em>. Unity will then take care of most other settings for you.</p>
+						
+						<figure>
+							<img alt="inspector" src="spotlights/texture-inspector.png" width="320" height="224">
+							<img alt="preview" src="spotlights/texture-preview.png" width="320" height="234">
+							<figcaption>Imported texture.</figcaption>
+						</figure>
+						
+						<p>You can now use this texture as a custom cookie for your spotlight.</p>
+						
+						<figure>
+							<img alt="inspector" src="spotlights/assigning-cookie.png" width="320" height="340">
+							<img alt="scene" src="spotlights/spotlight-with-cookie.png" width="280" height="200">
+							<figcaption>Using a spotlight cookie.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="spotlights/spotlights.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>More Cookies</h2>
+					
+					<p>Directional lights can have cookies too. These cookies are tiled. So they don't need to fade to zero at their edge. Instead, they have to tile seamlessly.</p>
+					
+					<figure>
+						<img alt="cookie" src="more-cookies/directional-cookie.png" width="128" height="128">
+						<img alt="import settings" src="more-cookies/directional-cookie-inspector.png" width="320" height="106">
+						<figcaption>A directional cookie.</figcaption>
+					</figure>
+					
+					<p>Cookies for directional lights have a size. This determines their visual size, which in turn affects how quickly they tile. The default is 10, but a small scene requires a much smaller scale, like 1.</p>
+					
+					<figure>
+						<img src="more-cookies/directional-inspector.png" width="320" height="358">
+						<figcaption>Main directional light with cookie.</figcaption>
+					</figure>
+					
+					<p>Directional lights with cookies also have to perform a conversion to light space. As such, it has its own <code class="shader">UNITY_LIGHT_ATTENUATION</code> macro. Thus, Unity treats it as a different light type than a directional light without a cookie. So they'll always be rendered by the additive pass, using the <code class="shader">DIRECTIONAL_COOKIE</code> keyword.</p>
+					
+					<pre translate="no" class="shader">			#pragma multi_compile DIRECTIONAL <ins>DIRECTIONAL_COOKIE</ins> POINT SPOT</pre>
+					
+					<figure>
+						<img src="more-cookies/directional-with-cookie.png" width="280" height="200">
+						<figcaption>Directional light with cookie.</figcaption>
+					</figure>
+					
+					<aside>
+						<h3>What does <code class="shader">UNITY_LIGHT_ATTENUATION</code> look like in this case?</h3>
+						<div>
+							<p>As there is no attenuation, only the cookie is sampled.</p>
+							
+							<pre translate="no" class="shader">#ifdef DIRECTIONAL_COOKIE
+uniform sampler2D _LightTexture0;
+uniform unityShadowCoord4x4 unity_WorldToLight;
+#define UNITY_LIGHT_ATTENUATION(destName, input, worldPos) \
+	unityShadowCoord2 lightCoord = \
+		mul(unity_WorldToLight, unityShadowCoord4(worldPos, 1)).xy; \
+	fixed destName = \
+		tex2D(_LightTexture0, lightCoord).w * SHADOW_ATTENUATION(input);
+#endif</pre>
+						</div>
+					</aside>
+					
+					<section>
+						<h3>Cookies for Point Lights</h3>
+						
+						<p>Point lights can also have cookies. In this case, the light goes in all directions, so the cookie has to wrap around a sphere. This is done by using a cube map.</p>
+						
+						<p>You can use various texture formats to create a point light cookie, and Unity will convert it to a cube map. You'll have to specify the <em translate="no">Mapping</em> so Unity knows how to interpret your image. The best method is to provide a cube map yourself, in which case you can suffice with the automatic mapping mode.</p>
+						
+						<figure>
+							<img alt="cookie" src="more-cookies/point-cookie.png" width="384" height="64">
+							<img alt="import settings" src="more-cookies/point-cookie-inspector.png" width="320" height="114">
+							<figcaption>Point light cookie cube map.</figcaption>
+						</figure>
+						
+						<p>Point light cookies don't have any additional settings.</p>
+						
+						<figure>
+							<img src="more-cookies/point-inspector.png" width="320" height="322">
+							<figcaption>Point light with cookie.</figcaption>
+						</figure>
+						
+						<p>At this point, we'll have to add the <code class="shader">POINT_COOKIE</code> keyword to our multi-compile statement. It is becoming quite a long list. Because it is such a common list, Unity provides us with a shorthand pragma statement that we can use instead.</p>
+						
+						<pre translate="no" class="shader">			<ins>#pragma multi_compile_fwdadd</ins>
+<del>//			#pragma multi_compile DIRECTIONAL <ins>DIRECTIONAL_COOKIE</ins> POINT SPOT</del></pre>
+						
+						<p>You can verify that this indeed produces the five variants that we need.</p>
+						
+						<pre translate="no" class="shader">// Snippet #1 platforms ffffffff:
+DIRECTIONAL DIRECTIONAL_COOKIE POINT POINT_COOKIE SPOT
+
+5 keyword variants used in scene:
+
+POINT
+DIRECTIONAL
+SPOT
+POINT_COOKIE
+DIRECTIONAL_COOKIE</pre>
+						
+						<p>And don't forget to compute the light direction for point lights with a cookie as well.</p>
+						
+						<pre translate="no" class="shader">	#if defined(POINT) <ins>|| defined(POINT_COOKIE)</ins> || defined(SPOT)
+		light.dir = normalize(_WorldSpaceLightPos0.xyz - i.worldPos);
+	#else
+		light.dir = _WorldSpaceLightPos0.xyz;
+	#endif</pre>
+						
+						<figure>
+							<img src="more-cookies/point-with-cookie.png" width="280" height="200">
+							<figcaption>Point light with a cookie.</figcaption>
+						</figure>
+						
+						<aside>
+						<h3>What does <code class="shader">UNITY_LIGHT_ATTENUATION</code> look like in this case?</h3>
+						<div>
+							<p>It is equivalent to the macro for regular point lights, except that it also samples the cookie. As the cookie is a cube map in this cases, it uses <code class="shader">texCUBE</code> to do so.</p>
+							
+							<pre translate="no" class="shader">#ifdef POINT_COOKIE
+uniform samplerCUBE _LightTexture0;
+uniform unityShadowCoord4x4 unity_WorldToLight;
+uniform sampler2D _LightTextureB0;
+#define UNITY_LIGHT_ATTENUATION(destName, input, worldPos) \
+	unityShadowCoord3 lightCoord = \
+		mul(unity_WorldToLight, unityShadowCoord4(worldPos, 1)).xyz; \
+	fixed destName = \
+		tex2D(_LightTextureB0, dot(lightCoord, lightCoord).rr). \
+		UNITY_ATTEN_CHANNEL * texCUBE(_LightTexture0, lightCoord).w *
+		SHADOW_ATTENUATION(input);
+#endif</pre>
+						</div>
+					</aside>
+					</section>
+					
+					<a href="more-cookies/more-cookies.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Vertex Lights</h2>
+					
+					<p>Every visible object always gets rendered with its base pass. This pass takes care of the main directional light. Every additional light will add an extra additive pass on top of that. Thus, many lights will result in many draw calls. Many lights with many objects in their range will result in a whole lot of draw calls.</p>
+					
+					<p>Take for example a scene with four point lights and six objects. All objects are in range of all four lights. This requires five draw calls per object. One for the base pass, plus the four additive passes. That's 30 draw calls in total. Note that you could add a single directional light to that, without increasing the draw calls.</p>
+					
+					<figure>
+						<img src="vertex-lights/four-point-lights.png" width="330" height="270">
+						<figcaption>Four point lights, six objects, 30 draw calls.</figcaption>
+					</figure>
+					
+					<p>To keep the amount of draw calls in check, you can limit the <em translate="no">Pixel Light Count</em> via the quality settings. This defines the maximum amount of pixels lights used per object. Lights are referred to as pixel lights, when they are computed per fragment.</p>
+					
+					<p>Higher quality levels allow more pixel lights. The default of the highest quality level is four pixel lights.</p>
+					
+					<figure>
+						<img alt="quality settings" src="vertex-lights/pixel-light-count.png" width="294" height="112"><br>
+						<video width="280" height="200" controls loop muted>
+							<source src="vertex-lights/0-to-4.mp4" type="video/mp4">
+						</video>
+						<figcaption>From 0 to 4 lights per object.</figcaption>
+					</figure>
+					
+					<p>Which lights are rendered is different for each object. Unity orders lights from most to least significant, based on their relative intensity and distance. The lights that are expected to contribute the least are discarded first.</p>
+					
+					<p>Actually, a few more things happen, but we'll get to that later.</p>
+					
+					<p>Because different objects are affected by different lights, you'll get inconsistent lighting. This gets worse when things are in motion, as it can result in sudden changes in lighting.</p>
+					
+					<p>The problem is so bad, because lights are completely switched off. Fortunately, there is another way to render lights much cheaper, without completely turning them off. We can render them per vertex, instead of per fragment.</p>
+					
+					<p>Rendering a light per vertex means that you perform the lighting calculations in the vertex program. The resulting color is then interpolated and passed to the fragment program. This is so cheap, that Unity includes such lights in the base pass. When this happens, Unity looks for a base pass shader variant with the <code class="shader">VERTEXLIGHT_ON</code> keyword.</p>
+					
+					<p>Vertex lighting is only supported for point lights. So directional lights and spot lights cannot be vertex lights.</p>
+					
+					<p>To use vertex lights, we have to add a multi-compile statement to our base pass. It only needs a single keyword, <code class="shader">VERTEXLIGHT_ON</code>. The other option is simply no keyword at all. To indicate that, we have to use <code class="shader">_</code>.</p>
+					
+					<pre translate="no" class="shader">		Pass {
+			Tags {
+				"LightMode" = "ForwardBase"
+			}
+
+			CGPROGRAM
+
+			#pragma target 3.0
+
+			<ins>#pragma multi_compile _ VERTEXLIGHT_ON</ins>
+
+			#pragma vertex MyVertexProgram
+			#pragma fragment MyFragmentProgram
+
+			#include "My Lighting.cginc"
+
+			ENDCG
+		}</pre>
+					
+					<section>
+						<h3>One Vertex Light</h3>
+						
+						<p>To pass the color of the vertex light to the fragment program, we have to add it to our <code class="shader">Interpolators</code> struct. This is of course only necessary when the <code class="shader">VERTEXLIGHT_ON</code> keyword is defined.</p>
+						
+						<pre translate="no" class="shader">struct Interpolators {
+	float4 position : SV_POSITION;
+	float2 uv : TEXCOORD0;
+	float3 normal : TEXCOORD1;
+	float3 worldPos : TEXCOORD2;
+
+	<ins>#if defined(VERTEXLIGHT_ON)</ins>
+		<ins>float3 vertexLightColor : TEXCOORD3;</ins>
+	<ins>#endif</ins>
+};</pre>
+						
+						<p>Let's create a separate function to compute this color. It both reads from and writes to the interpolators, so that becomes an <code class="shader">inout</code> parameter.</p>
+						
+						<pre translate="no" class="shader">
+<ins>void ComputeVertexLightColor (inout Interpolators i) {</ins>
+<ins>}</ins>
+
+Interpolators MyVertexProgram (VertexData v) {
+	Interpolators i;
+	i.position = mul(UNITY_MATRIX_MVP, v.position);
+	i.worldPos = mul(unity_ObjectToWorld, v.position);
+	i.normal = UnityObjectToWorldNormal(v.normal);
+	i.uv = TRANSFORM_TEX(v.uv, _MainTex);
+	<ins>ComputeVertexLightColor(i);</ins>
+	return i;
+}</pre>
+						
+						<p>For now, we'll simply pass along the color of the first vertex light. We can only do this when the light exists. Otherwise we keep doing nothing. <em translate="no">UnityShaderVariables</em> defines an array of vertex light colors. These are RGBA colors, but we only need the RGB part.</p>
+						
+						<pre translate="no" class="shader">void ComputeVertexLightColor (inout Interpolators i) {
+	<ins>#if defined(VERTEXLIGHT_ON)</ins>
+		<ins>i.vertexLightColor = unity_LightColor[0].rgb;</ins>
+	<ins>#endif</ins>
+}</pre>
+						
+						<p>In the fragment program, we have to add this color to all the other lights that we compute there. We can do this by treating the vertex light color as indirect light. Move the creation of the indirect lighting data to its own function. In there, assign the vertex light color to the indirect diffuse component, if it exists.</p>
+						
+						<pre translate="no" class="shader"><ins>UnityIndirect CreateIndirectLight (Interpolators i) {</ins>
+	<ins>UnityIndirect indirectLight;</ins>
+	<ins>indirectLight.diffuse = 0;</ins>
+	<ins>indirectLight.specular = 0;</ins>
+
+	<ins>#if defined(VERTEXLIGHT_ON)</ins>
+		<ins>indirectLight.diffuse = i.vertexLightColor;</ins>
+	<ins>#endif</ins>
+	<ins>return indirectLight;</ins>
+<ins>}</ins>
+
+float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+	i.normal = normalize(i.normal);
+	float3 viewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
+	float3 albedo = tex2D(_MainTex, i.uv).rgb * _Tint.rgb;
+
+	float3 specularTint;
+	float oneMinusReflectivity;
+	albedo = DiffuseAndSpecularFromMetallic(
+		albedo, _Metallic, specularTint, oneMinusReflectivity
+	);
+
+<del>//	UnityIndirect indirectLight;</del>
+<del>//	indirectLight.diffuse = 0;</del>
+<del>//	indirectLight.specular = 0;</del>
+
+	return UNITY_BRDF_PBS(
+		albedo, specularTint,
+		oneMinusReflectivity, _Smoothness,
+		i.normal, viewDir,
+		CreateLight(i), <ins>CreateIndirectLight(i)</ins>
+	);
+}</pre>
+						
+						<p>Set the pixel light count to zero. Every object should now be rendered as a silhouette with the color of a single light.</p>
+						
+						<figure>
+							<img src="vertex-lights/vertex-light-colors.png" width="280" height="200">
+							<figcaption>Color of the first vertex light, per object.</figcaption>
+						</figure>
+						
+						<p>Unity supports up to four vertex lights this way. The positions of these lights are stored in four <code class="shader">float4</code> variables, one per coordinate. They are <code class="shader">unity_4LightPosX0</code>, <code class="shader">unity_4LightPosY0</code>, and <code class="shader">unity_4LightPosZ0</code>, and they are defined in <em translate="no">UnityShaderVariables</em>. The first components of these variables contain the position of the first vertex light.</p>
+						
+						<pre translate="no" class="shader">void ComputeVertexLightColor (inout Interpolators i) {
+	#if defined(VERTEXLIGHT_ON)
+		<ins>float3 lightPos = float3(</ins>
+			<ins>unity_4LightPosX0.x, unity_4LightPosY0.x, unity_4LightPosZ0.x</ins>
+		<ins>);</ins>
+		i.vertexLightColor = unity_LightColor[0].rgb;
+	#endif
+}</pre>
+						
+						<p>Next, we compute the light vector, the light direction, and the ndotl factor. We cannot use the <code class="shader">UNITY_LIGHT_ATTENUATION</code> macro here, so let's just use `1 / (1 + d^2)` again. This leads to the final color.</p>
+						
+						<pre translate="no" class="shader">void ComputeVertexLightColor (inout Interpolators i) {
+	#if defined(VERTEXLIGHT_ON)
+		float3 lightPos = float3(
+			unity_4LightPosX0.x, unity_4LightPosY0.x, unity_4LightPosZ0.x
+		);
+		<ins>float3 lightVec = lightPos - i.worldPos;</ins>
+		<ins>float3 lightDir = normalize(lightVec);</ins>
+		<ins>float ndotl = DotClamped(i.normal, lightDir);</ins>
+		<ins>float attenuation = 1 / (1 + dot(lightVec, lightVec));</ins>
+		i.vertexLightColor = unity_LightColor[0].rgb <ins>* ndotl * attenuation</ins>;
+	#endif
+}</pre>
+						
+						<p>Note that this is just a diffuse term. While we could compute the specular term as well, it will look very bad when interpolating it across large triangles.</p>
+						
+						<p>Actually, <em translate="no">UnityShaderVariables</em> provides another variable, <code class="shader">unity_4LightAtten0</code>. It contains factors to help approximate the attenuation of the pixel lights. Using this, our attenuation become `1 / (1 + d^2 a`.</p>
+						
+						<pre translate="no" class="shader">		float attenuation = 1 /
+			(1 + dot(lightVec, lightVec) <ins>* unity_4LightAtten0.x</ins>);</pre>
+						
+						<figure>
+							<img src="vertex-lights/one-vertex-lights.png" width="280" height="200">
+							<figcaption>One vertex light per object.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Four Vertex Lights</h3>
+						
+						<p>To include all four vertex lights that Unity supports, we have to perform the same vertex-light computations four times, and add the results together. Instead of writing all the code ourselves, we can use the <code class="shader">Shade4PointLights</code> function, which is defined in <em translate="no">UnityCG</em>. We have to feed it the position vectors, light colors, attenuation factors, plus the vertex position and normal.</p>
+						
+						<pre translate="no" class="shader">void ComputeVertexLightColor (inout Interpolators i) {
+	#if defined(VERTEXLIGHT_ON)
+		<ins>i.vertexLightColor = Shade4PointLights(</ins>
+			<ins>unity_4LightPosX0, unity_4LightPosY0, unity_4LightPosZ0,</ins>
+			<ins>unity_LightColor[0].rgb, unity_LightColor[1].rgb,</ins>
+			<ins>unity_LightColor[2].rgb, unity_LightColor[3].rgb,</ins>
+			<ins>unity_4LightAtten0, i.worldPos, i.normal</ins>
+		<ins>);</ins>
+	#endif
+}</pre>
+						
+						<aside>
+							<h3>What does <code>Shade4PointLights</code> look like?</h3>
+							<div>
+								<p>It's really just the same calculations that we performed, four times. The order of operations is slightly different. The normalization is performed after the dot product, using <code class="shader">rsqrt</code>. That function computes the reciprocal square root, `1 / sqrt x`.</p>
+								
+								<pre translate="no" class="shader">// Used in ForwardBase pass: Calculates diffuse lighting
+// from 4 point lights, with data packed in a special way.
+float3 Shade4PointLights (
+	float4 lightPosX, float4 lightPosY, float4 lightPosZ,
+	float3 lightColor0, float3 lightColor1,
+	float3 lightColor2, float3 lightColor3,
+	float4 lightAttenSq, float3 pos, float3 normal) {
+	// to light vectors
+	float4 toLightX = lightPosX - pos.x;
+	float4 toLightY = lightPosY - pos.y;
+	float4 toLightZ = lightPosZ - pos.z;
+	// squared lengths
+	float4 lengthSq = 0;
+	lengthSq += toLightX * toLightX;
+	lengthSq += toLightY * toLightY;
+	lengthSq += toLightZ * toLightZ;
+	// NdotL
+	float4 ndotl = 0;
+	ndotl += toLightX * normal.x;
+	ndotl += toLightY * normal.y;
+	ndotl += toLightZ * normal.z;
+	// correct NdotL
+	float4 corr = rsqrt(lengthSq);
+	ndotl = max(float4(0,0,0,0), ndotl * corr);
+	// attenuation
+	float4 atten = 1.0 / (1.0 + lengthSq * lightAttenSq);
+	float4 diff = ndotl * atten;
+	// final color
+	float3 col = 0;
+	col += lightColor0 * diff.x;
+	col += lightColor1 * diff.y;
+	col += lightColor2 * diff.z;
+	col += lightColor3 * diff.w;
+	return col;
+}</pre>
+							</div>
+						</aside>
+						
+						<figure>
+							<img src="vertex-lights/four-vertex-lights.png" width="280" height="200">
+							<figcaption>Four vertex lights.</figcaption>
+						</figure>
+						
+						<p>Now up to four lights will be included as vertex lights, if an objects ends up with more lights than the pixel light count. Actually, Unity tries to hide the transitions between pixel and vertex lights by including one light as both a pixel and a vertex light. That light is included twice, with varying intensity for its vertex and pixel versions.</p>
+						
+						<aside>
+							<h3>What happens when there are less than four vertex lights?</h3>
+							<div>
+								<p>You still compute four vertex lights. Some of them will simply be black. So you always pay the price of four lights.</p>
+							</div>
+						</aside>
+						
+						<figure>
+							<video width="280" height="200" controls loop muted>
+								<source src="vertex-lights/switching.mp4" type="video/mp4">
+							</video>
+							<figcaption>Switching between vertex and pixel lights.</figcaption>
+						</figure>
+						
+						<p>By default, Unity decides which lights become pixel lights. You can override this by changing a light's <em translate="no">Render Mode</em>. Important lights are always rendered as pixel lights, regardless of the limit. Lights that are not important are never rendered as pixel lights.</p>
+						
+						<figure>
+							<img src="vertex-lights/render-mode.png" width="320" height="76">
+							<figcaption>Light render mode.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="vertex-lights/vertex-lights.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Spherical Harmonics</h2>
+					
+					<p>When we've used up all pixel lights and all vertex lights, we can fall back to yet another method of rendering lights. We can use spherical harmonics. This is supported for all three light types.</p>
+					
+					<p>The idea behind spherical harmonics is that you can describe all incoming light at some point with a single function. This function is defined on the surface of a sphere.</p>
+					
+					<p>Typically, this function is described with spherical coordinates. But you can use 3D coordinates as well. That allows us to use our object's normal vector to sample the function.</p>
+					
+					<p>To create such a function, you'd have to sample the light intensity in all directions, then figure out how to turn that into a single, continuous function. To be perfect, you'd have to do this for every point on every object's surface. This is of course not possible. We'll have to suffice with an approximation.</p>
+					
+					<p>First, we'll only define the function from the point of view of the object's local origin. This is fine for lighting conditions that don't change much along the surface of the object. This is true for small objects, and lights that are either weak or far away from the object. Fortunately, this is typically the case for lights that don't qualify for pixel or vertex light status.</p>
+					
+					<p>Second, we also have to approximate the function itself. You can decompose any continuous function into multiple functions of different frequencies. These are known as bands. For an arbitrary function, you might need an infinite amount of bands to do this.</p>
+					
+					<p>A simple example is composing sinusoids. Start with a basic sine wave.</p>
+					
+					<figure>
+						<img src="spherical-harmonics/sine-0.png" width="400" height="100">
+						<figcaption>Sine wave, `sin 2pix`.</figcaption>
+					</figure>
+					
+					<p>This is the first band. For the second band, use a sine wave with double the frequency, and half the amplitude.</p>
+					
+					<figure>
+						<img src="spherical-harmonics/sine-1.png" width="400" height="100">
+						<figcaption>Double frequency, half amplitude, `(sin 4pix) / 2`.</figcaption>
+					</figure>
+					
+					<p>When added together, these two bands describe a more complex function.</p>
+					
+					<figure>
+						<img src="spherical-harmonics/sine-0-1.png" width="400" height="100">
+						<figcaption>Two bands, `sin 2pix + (sin 4pix) / 2`.</figcaption>
+					</figure>
+					
+					<p>You can keep adding bands like this, doubling the frequency and halving the amplitude each step.</p>
+					
+					<figure>
+						<img alt="2" src="spherical-harmonics/sine-2.png" width="400" height="100">
+						<img alt="3" src="spherical-harmonics/sine-3.png" width="400" height="100">
+						<figcaption>Third and fourth bands.</figcaption>
+					</figure>
+					
+					<p>Each band that you add makes the function more complex.</p>
+					
+					<figure>
+						<img src="spherical-harmonics/sine-0-3.png" width="400" height="100">
+						<figcaption>Four sine wave bands, `sum_(i=1)^4 (sin 2piix) / i^2`.</figcaption>
+					</figure>
+					
+					<p>This example used regular sine waves with a fixed pattern. To describe an arbitrary function with sine waves, you'd have to adjust the frequency, amplitude, and offset of each band until you get a perfect match.</p>
+					
+					<p>If you use less bands than needed for a perfect match, you end up with an approximation of the original function. The fewer bands you use, the less accurate the approximation gets. This technique is used to compress lots of things, like sound and image data. In our case, we'll use it to approximate 3D lighting.</p>
+					
+					<p>The bands with the lowest frequencies correspond with the large features of the function. We definitely want to keep those. So we'll discard the bands with higher frequencies. This means that we lose the details of our lighting function. This is fine if the lighting doesn't vary quickly, so once again we'll have to limit ourselves to diffuse light only.</p>
+					
+					<section>
+						<h3>Spherical Harmonics Bands</h3>
+						
+						<p>The simplest approximation of lighting is a uniform color. The lighting is the same in all directions. This is the first band, which we'll identify as `Y_0^0`. It is defined by a single sub-function, which is simply a constant value.</p>
+						
+						<p>The second band introduces linear directional light. For each axis, it describes where most of the light is coming from. As such, it is split into three functions, identified with `Y_1^-1`, `Y_1^0`, and `Y_1^1`. Each function includes one of our normal's coordinates, multiplied by a constant.</p>
+						
+						<p>The third band gets more complex. It consists of five functions, `Y_2^-2` &hellip; `Y_2^2`. These functions are quadratic, meaning that they contain the product of two of our normal's coordinates.</p>
+						
+						<p>We could keep going, but Unity uses only these first three bands. Here they are, in a table. All terms should be multiplied by ` 1 / (2 sqrt pi)`.</p>
+						
+						<table>
+							<thead>
+								<tr><th></th><th>-2</th><th>-1</th><th>0</th><th>1</th><th>2</th></tr>
+							</thead>
+							<tbody>
+								<tr>
+									<th>0</th><td></td><td></td><td>`1`</td><td></td><td></td>
+								</tr>
+								<tr>
+									<th>1</th><td></td><td>`-y sqrt 3`</td><td>`z sqrt 3`</td><td>`-x sqrt 3`</td><td></td>
+								</tr>
+								<tr>
+									<th>2</th><td>`xy sqrt 15`</td><td>`-yz sqrt 15`</td><td>`(3z^2 - 1) sqrt 5 / 2`</td><td>`-xz sqrt 15`</td><td>`(x^2 - y^2) sqrt 15 / 2`</td>
+								</tr>
+							</tbody>
+						</table>
+						
+						<p>This is really a single function, split so you can identify its sub-functions. The final result is all nine terms added together. Different lighting conditions are created by modulating each of the nine terms, with an additional factor.</p>
+						
+						<aside>
+							<h3>What determines the shape of this function?</h3>
+							<div>
+								<p>Spherical harmonics are a solution to Laplace's equation, in the context of a sphere. The math is rather involved. The definition of a function part is `Y_l^m = K_l^m e^(imvarphi) P_l^|m| cos theta, l in NN, -l &lt;= m &lt;= l`. The `P_l^m` terms are Legendre polynomials and the `K_l^m` terms are normalization constants.</p>
+								
+								<p>That is the complex form of the definition, using the complex number `i` and spherical coordinates, `varphi` and `theta`. You can also use a real version of it, which works with 3D coordinates. That leads to the function that we use.</p>
+								
+								<p>Fortunately, we do not need to know how to derive the function. We don't even need to know the specific numbers involved.</p>
+							</div>
+						</aside>
+						
+						<p>So we can represent an approximation of any lighting condition with nine factors. As these are RGB colors, we end up with 27 numbers. And we can merge the constant parts of the function into those factors too. That leads to our final function, `a + by + cz + dx + exy + fyz + gz^2 + hxz + i(x^2 - y^2)`, where `a` through `i` are the factors.</p>
+
+						<aside>
+							<h3>Does that approach work for `Y_2^0`?</h3>
+							<div>
+								<p>`(3z^2 - 1) sqrt 5 / 2 = z^2 3 sqrt 5 / 2 - sqrt 5 / 2` so that's `z^2` with a factor, plus an extra constant. As the whole table represents a single formula, the `-sqrt 5 / 2` constant can be merged into the `Y_0^0` term.</p>
+							</div>
+						</aside>
+
+						<p>You can visualize the normal coordinates to get a sense of which directions the terms represent. For example, here's a way to color positive coordinates white and negative coordinates red.</p>
+
+						<pre translate="no" class="shader">	float t = i.normal.x;
+	return t > 0 ? t : float4(1, 0, 0, 1) * -t;</pre>
+
+						<p>You can then visualize each term by using <code class="shader">i.normal.x</code>, and <code class="shader">i.normal.x * i.normal.y</code>, and so on.</p>
+
+						<figure>
+							<img alt="constant" src="spherical-harmonics/constant.png" width="100" height="100"><br>
+							<img alt="y" src="spherical-harmonics/y.png" width="100" height="100">
+							<img alt="z" src="spherical-harmonics/z.png" width="100" height="100">
+							<img alt="x" src="spherical-harmonics/x.png" width="100" height="100"><br>
+							<img alt="xy" src="spherical-harmonics/xy.png" width="100" height="100">
+							<img alt="yz" src="spherical-harmonics/yz.png" width="100" height="100">
+							<img alt="zz" src="spherical-harmonics/zz.png" width="100" height="100">
+							<img alt="xz" src="spherical-harmonics/xz.png" width="100" height="100">
+							<img alt="xx-yy" src="spherical-harmonics/xx-yy.png" width="100" height="100">
+							<figcaption>1,<br>y, z, x,<br>xy, yz, zz, xz, xx - yy.</figcaption>
+						</figure>
+					</section>
+						
+					<section>
+						<h3>Using Spherical Harmonics</h3>
+						
+						<p>Every light that gets approximated by spherical harmonics has to be factored into the 27 numbers. Fortunately, Unity can do this very quickly. The base pass can access them via a set of seven <code class="shader">float4</code> variables, defined in <em translate="no">UnityShaderVariables</em>.</p>
+						
+						<p><em translate="no">UnityCG</em> contains the <code class="shader">ShadeSH9</code> function, which computes lighting based on the spherical harmonics data, and a normal parameter. It expects a <code class="shader">float4</code> parameter, with its fourth component set to 1.</p>
+						
+						<aside>
+							<h3>What does <code class="shader">ShadeSH9</code> look like?</h3>
+							<div>
+								<p>The function uses two sub-functions, one for the fist two bands, and another for the third band. This is done because Unity's shaders can split the computation between the vertex and fragment programs. This is an optimization that we'll consider in the future.</p>
+								
+								<p>Also, the spherical harmonics calculations are performed in linear space. The <code class="shader">ShadeSH9</code> function converts the result to gamma space when needed.</p>
+								
+								<pre translate="no" class="shader">// normal should be normalized, w=1.0
+half3 SHEvalLinearL0L1 (half4 normal) {
+	half3 x;
+
+	// Linear (L1) + constant (L0) polynomial terms
+	x.r = dot(unity_SHAr,normal);
+	x.g = dot(unity_SHAg,normal);
+	x.b = dot(unity_SHAb,normal);
+
+	return x;
+}
+
+// normal should be normalized, w=1.0
+half3 SHEvalLinearL2 (half4 normal) {
+	half3 x1, x2;
+	// 4 of the quadratic (L2) polynomials
+	half4 vB = normal.xyzz * normal.yzzx;
+	x1.r = dot(unity_SHBr,vB);
+	x1.g = dot(unity_SHBg,vB);
+	x1.b = dot(unity_SHBb,vB);
+
+	// Final (5th) quadratic (L2) polynomial
+	half vC = normal.x * normal.x - normal.y * normal.y;
+	x2 = unity_SHC.rgb * vC;
+
+	return x1 + x2;
+}
+
+// normal should be normalized, w=1.0
+// output in active color space
+half3 ShadeSH9 (half4 normal) {
+	// Linear + constant polynomial terms
+	half3 res = SHEvalLinearL0L1(normal);
+
+	// Quadratic polynomials
+	res += SHEvalLinearL2(normal);
+
+	if (IsGammaSpace())
+		res = LinearToGammaSpace(res);
+
+	return res;
+}</pre>
+							</div>
+						</aside>
+						
+						<p>To get a good look at the final approximation, directly return the result of <code class="shader">ShadeSH9</code> in the fragment program.</p>
+						
+						<pre translate="no" class="shader">	<ins>float3 shColor = ShadeSH9(float4(i.normal, 1));</ins>
+	<ins>return float4(shColor, 1);</ins>
+
+	return UNITY_BRDF_PBS(
+		albedo, specularTint,
+		oneMinusReflectivity, _Smoothness,
+		i.normal, viewDir,
+		CreateLight(i), CreateIndirectLight(i)
+	);
+</pre>
+						
+						<p>Now turn off all lights.</p>
+						
+						<figure>
+							<img src="spherical-harmonics/ambient-color.png" width="280" height="200">
+							<figcaption>Ambient color.</figcaption>
+						</figure>
+						
+						<p>Surprise! Our objects aren't black anymore. They have picked up the ambient color. Unity uses spherical harmonics to add the scene's ambient color to objects.</p>
+						
+						<p>Now activate a bunch of lights. Make sure that there are enough so all pixel and vertex lights are used up. The rest are added to the spherical harmonics. Again, Unity will split a light to blend the transition.</p>
+						
+						<figure>
+							<img src="spherical-harmonics/sh-lights.png" width="370" height="286">
+							<figcaption>Lights via spherical harmonics.</figcaption>
+						</figure>
+						
+						<p>Just like with vertex lights, we'll add the spherical harmonics light data to the diffuse indirect light. Also, let's make sure that it never contributes any negative light. It's an approximation, after all.</p>
+						
+						<pre translate="no" class="shader">UnityIndirect CreateIndirectLight (Interpolators i) {
+	UnityIndirect indirectLight;
+	indirectLight.diffuse = 0;
+	indirectLight.specular = 0;
+
+	#if defined(VERTEXLIGHT_ON)
+		indirectLight.diffuse = i.vertexLightColor;
+	#endif
+
+	<ins>indirectLight.diffuse += max(0, ShadeSH9(float4(i.normal, 1)));</ins>
+	
+	return indirectLight;
+}
+
+float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+	&hellip;
+
+<del>//	float3 shColor = ShadeSH9(float4(i.normal, 1));</del>
+<del>//	return float4(shColor, 1);</del>
+
+	return UNITY_BRDF_PBS(
+		albedo, specularTint,
+		oneMinusReflectivity, _Smoothness,
+		i.normal, viewDir,
+		CreateLight(i), CreateIndirectLight(i)
+	);
+}</pre>
+						
+						<p>But we must only do this in the base pass. As spherical harmonics are independent of the vertex lights, we cannot rely on the same keyword. Instead, we'll check whether <code class="shader">FORWARD_BASE_PASS</code> is defined.</p>
+						
+						<pre translate="no" class="shader">	<ins>#if defined(FORWARD_BASE_PASS)</ins>
+		indirectLight.diffuse += max(0, ShadeSH9(float4(i.normal, 1)));
+	<ins>#endif</ins></pre>
+						
+						<p>This eliminates spherical harmonics again, because <code class="shader">FORWARD_BASE_PASS</code> is defined nowhere. If you have the pixel light count set to zero, only the vertex lights are visible.</p>
+						
+						<figure>
+							<img src="spherical-harmonics/vertex-only.png" width="280" height="200">
+							<figcaption>Only four vertex lights.</figcaption>
+						</figure>
+						
+						<p>Define <code class="shader">FORWARD_BASE_PASS</code> in the base pass, before including <em translate="no">My Lighting</em>. Now our code knows when we're in the base pass.</p>
+						
+						<pre translate="no" class="shader">		Pass {
+			Tags {
+				"LightMode" = "ForwardBase"
+			}
+
+			CGPROGRAM
+
+			#pragma target 3.0
+
+			#pragma multi_compile _ VERTEXLIGHT_ON
+
+			#pragma vertex MyVertexProgram
+			#pragma fragment MyFragmentProgram
+
+			<ins>#define FORWARD_BASE_PASS</ins>
+
+			#include "My Lighting.cginc"
+
+			ENDCG
+		}</pre>
+						
+						<figure>
+							<img src="spherical-harmonics/vertex-and-sh.png" width="280" height="200">
+							<figcaption>Vertex lights and spherical harmonics.</figcaption>
+						</figure>
+						
+						<p>Our shader finally includes both vertex lights and spherical harmonics. And if you make sure that the pixel light count is greater than zero, you'll see all three lighting methods combined.</p>
+						
+						<figure>
+							<img src="spherical-harmonics/pixel-vertex-and-sh.png" width="280" height="200">
+							<figcaption>With an additional four pixel lights.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Skybox</h3>
+						
+						<p>If spherical harmonics includes the solid ambient color, can it also work with an environmental skybox? Yes! Unity will approximate that skybox with spherical harmonics as well. To try this out, turn off all lights, then select the default skybox for environmental lighting. New scenes use this skybox by default, but we removed it in an earlier tutorial.</p>
+						
+						<figure>
+							<img alt="inspector" src="spherical-harmonics/skybox-inspector.png" width="290" height="100">
+							<img alt="scene" src="spherical-harmonics/skybox-without-light.png" width="310" height="150">
+							<figcaption>Default skybox, without directional light.</figcaption>
+						</figure>
+						
+						<p>Unity now renders the skybox in the background. It is a procedurally generated skybox, based on the main directional light. As we have no active light, it behaves as if the sun sits at the horizon. You can see that the objects have picked up some of the color of the skybox, which results in some subtle shading. This is all done via spherical harmonics.</p>
+						
+						<p>Turn on the main directional light. This will change the skybox a lot. You might be able to notice that the spherical harmonics change a little later than the skybox. That's because Unity needs some time to approximate the skybox. This is only really noticeable when it changes abruptly.</p>
+						
+						<figure>
+							<img alt="with sh" src="spherical-harmonics/skybox-with-light-and-sh.png" width="310" height="150">
+							<img alt="without sh" src="spherical-harmonics/skybox-with-light.png" width="310" height="150">
+							<figcaption>Skybox with main light, with and without spherical harmonics.</figcaption>
+						</figure>
+						
+						<p>The objects suddenly became a lot brighter! The ambient contribution is very strong. The procedural skybox represents a perfect sunny day. In these conditions, completely white surfaces will appear very bright indeed. And this effect will be strongest when rendering in gamma space. There aren't many perfectly white surfaces in real life, they're typically much darker. </p>
+						
+						<figure>
+							<img alt="with sh" src="spherical-harmonics/textured-and-sh.png" width="310" height="150">
+							<img alt="without sh" src="spherical-harmonics/textured.png" width="310" height="150">
+							<figcaption>Textured, with and without spherical harmonics.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../part-6.1.html">Bumpiness</a>.</p>
+					</section>
+					
+					<a href="spherical-harmonics/spherical-harmonics.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Rendering-5.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

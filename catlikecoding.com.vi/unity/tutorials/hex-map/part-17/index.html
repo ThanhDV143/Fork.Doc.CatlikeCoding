@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/hex-map/part-17/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/hex-map/part-17/tutorial-image.jpg">
+		<meta property="og:title" content="Hex Map 17">
+		<meta property="og:description" content="A Unity Hex Map tutorial about pathfinding for turn-based movement. Part 17 of 27.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hex Map 17</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/hex-map/part-17/#article",
+				"headline": "Hex Map 17",
+				"alternativeHeadline": "Limited Movement",
+				"datePublished": "2017-05-24",
+				"dateModified": "2019-03-12",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Hex Map tutorial about pathfinding for turn-based movement. Part 17 of 27.",
+				"image": "https://catlikecoding.com/unity/tutorials/hex-map/part-17/tutorial-image.jpg",
+				"dependencies": "Unity 5.6.0",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/hex-map/", "name": "Hex Map" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				EdgeVertices: 1,
+				HexCell: 1,
+				HexCellPriorityQueue: 1,
+				HexEdgeType: 1,
+				HexCoordinates: 1,
+				HexCoordinatesDrawer: 1,
+				HexDirection: 1,
+				HexDirectionExtensions: 1,
+				HexFeatureCollection: 1,
+				HexFeatureManager: 1,
+				HexGrid: 1,
+				HexGridChunk: 1,
+				HexHash: 1,
+				HexMapCamera: 1,
+				HexMapEditor: 1,
+				HexMesh: 1,
+				HexMetrics: 1,
+				ListPool: 1,
+				NewMapMenu: 1,
+				OptionalToggle: 1,
+				SaveLoadItem: 1,
+				SaveLoadMenu: 1,
+				TextureArrayWizard: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Hex Map</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hex Map 17</h1>
+					<p>Limited Movement</p>
+					<ul>
+						<li>Finds paths for turn-based movement.</li>
+						<li>Immediately show paths.</li>
+						<li>Search more efficiently.</li>
+						<li>Only visualize the path.</li>
+					</ul>
+				</header>
+
+				<p>This is part 17 of a tutorial series about <a href="../index.html">hexagon maps</a>. This time, we'll split movement into turns and search as quickly as possible.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A journey of a few turns.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Turn-based Movement</h2>
+					
+					<p>Strategy games that use hexagon grids are nearly always turn-based. Units that navigate the map have a limited speed, which constrains how far they can move in a single turn.</p>
+					
+					<section>
+						<h3>Speed</h3>
+						
+						<p>To support limited movement, let's add a <code>speed</code> integer parameter to <code>HexGrid.FindPath</code> and <code>HexGrid.Search</code>. It defines the movement budget for one turn.</p>
+						
+						<pre translate="no">	public void FindPath (HexCell fromCell, HexCell toCell<ins>, int speed</ins>) {
+		StopAllCoroutines();
+		StartCoroutine(Search(fromCell, toCell<ins>, speed</ins>));
+	}
+
+	IEnumerator Search (HexCell fromCell, HexCell toCell<ins>, int speed</ins>) {
+		&hellip;
+	}</pre>
+						
+						<p>In a game, different unit types will often have different speeds. Cavalry is fast, infantry is slow, and so on. We don't have units yet, so we'll use a fixed speed for now. Let's use 24. This is a reasonably large value which isn't divisible by 5, which is our default movement cost. Add the constant speed as an argument for <code>FindPath</code> in <code>HexMapEditor.HandleInput</code>.</p>
+						
+						<pre translate="no">			if (editMode) {
+				EditCells(currentCell);
+			}
+			else if (
+				Input.GetKey(KeyCode.LeftShift) &amp;&amp; searchToCell != currentCell
+			) {
+				if (searchFromCell) {
+					searchFromCell.DisableHighlight();
+				}
+				searchFromCell = currentCell;
+				searchFromCell.EnableHighlight(Color.blue);
+				if (searchToCell) {
+					hexGrid.FindPath(searchFromCell, searchToCell<ins>, 24</ins>);
+				}
+			}
+			else if (searchFromCell &amp;&amp; searchFromCell != currentCell) {
+				searchToCell = currentCell;
+				hexGrid.FindPath(searchFromCell, searchToCell<ins>, 24</ins>);
+			}</pre>
+					</section>
+					
+					<section>
+						<h3>Turns</h3>
+						
+						<p>Besides keeping track of the total movement cost of a path, we now also have to know how many turns it requires to travel along it. But we do not have to store this information per cell. We can derive it by dividing the traveled distance by the speed. As these are integers, we use an integer division. So total distances of at most 24 correspond to turn 0. This means that the entire path can be traveled in the current turn. If the destination were at distance 30, then its turn would be 1. The unit will have to use all of its movement of its current turn and part of its next turn before it would reach the destination.</p>
+						
+						<p>Let's figure out the turn of the current cell and that of its neighbors, inside <code>HexGrid.Search</code>. The current cell's turn can be computed once, just before looping through the neighbors. The neighbor's turn can be determined once we have found its distance.</p>
+						
+						<pre translate="no">			<ins>int currentTurn = current.Distance / speed;</ins>
+
+			for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++) {
+				&hellip;
+				int distance = current.Distance;
+				if (current.HasRoadThroughEdge(d)) {
+					distance += 1;
+				}
+				else if (current.Walled != neighbor.Walled) {
+					continue;
+				}
+				else {
+					distance += edgeType == HexEdgeType.Flat ? 5 : 10;
+					distance += neighbor.UrbanLevel + neighbor.FarmLevel +
+						neighbor.PlantLevel;
+				}
+
+				<ins>int turn = distance / speed;</ins>
+
+				&hellip;
+			}</pre>
+					</section>
+					
+					<section>
+						<h3>Lost Movement</h3>
+						
+						<p>If the neighbor's turn is larger than the current turn, then we have passed a turn boundary. If the movement required to enter the neighbor was 1, then all is fine. But when it's more costly to enter the neighbor, then it gets more complicated.</p>
+						
+						<p>Suppose that we're moving across a featureless map, so all cells require 5 movement to enter. Our speed is 24. After four steps, we have used 20 of our movement budget, with 4 remaining. The next step again requires 5 movement, which is one more than we have. What should we do at this point?</p>
+						
+						<p>There are two ways to deal with this situation. The first is to allow the fifth cell to be entered during the current turn, even if we don't have enough movement. The second is to disallow the movement during the current turn, which means that the leftover movement points cannot be used and are lost.</p>
+						
+						<p>Which option is best depends on the game. In general, the first approach works well for games with units that can only move a few steps per turn, like the Civilization games. This ensures that units can always move at least a single cell per turn. If the units can move many cells per turn, like in Age of Wonders or Battle for Wesnoth, then the second approach works better.</p>
+						
+						<p>As we use speed 24, let's go for the second option. To make this work, we have to isolate the cost to the enter the neighboring cell, before adding it to the current distance.</p>
+						
+						<pre translate="no"><del>//				int distance = current.Distance;</del>
+				<ins>int moveCost</ins>;
+				if (current.HasRoadThroughEdge(d)) {
+					<ins>moveCost =</ins> 1;
+				}
+				else if (current.Walled != neighbor.Walled) {
+					continue;
+				}
+				else {
+					<ins>moveCost =</ins> edgeType == HexEdgeType.Flat ? 5 : 10;
+					<ins>moveCost </ins> += neighbor.UrbanLevel + neighbor.FarmLevel +
+						neighbor.PlantLevel;
+				}
+
+				<ins>int distance = current.Distance + moveCost;</ins>
+				int turn = distance / speed;</pre>
+						
+				<p>If we end up crossing a turn boundary, then we first use up all the movement of the current turn. We can do this by simply multiplying the turn by the speed. After that, we add the movement cost.</p>
+						
+						<pre translate="no">				int distance = current.Distance + moveCost;
+				int turn = distance / speed;
+				<ins>if (turn > currentTurn) {</ins>
+					<ins>distance = turn * speed + moveCost;</ins>
+				<ins>}</ins></pre>
+						
+						<p>The result of this will be that we end the first turn in the fourth cell, with 4 movement points left unused. Those wasted points are factored into the cost of the fifth cell, so its distance will become 29 instead of 25. As as result, distances will end up longer than before. For example, the tenth cell used to have a distance of 50. But now two turn boundaries are crossed before we get there, wasting 8 movement points, so its distance is now 58.</p>
+						
+						<figure>
+							<img src="turn-based-movement/lost-movement.png" width="360" height="90">
+							<figcaption>Taking longer than expected.</figcaption>
+						</figure>
+						
+						<p>Because the unused movement points are added to the cell distances, they are taken into consideration when determining the shortest path. The most efficient path wastes as few points as possible. So different speeds can result in different paths.</p>
+					</section>
+					
+					<section>
+						<h3>Showing Turns instead of Distances</h3>
+						
+						<p>When playing a game, we don't really care about the distance values used to find the shortest path. We are interested in how many turns are required to reach the destination. So let's shows the turns instead of the distances.</p>
+						
+						<p>First, get rid of <code>UpdateDistanceLabel</code> and its invocation in <code>HexCell</code>.</p>
+						
+						<pre translate="no">	public int Distance {
+		get {
+			return distance;
+		}
+		set {
+			distance = value;
+<del>//			UpdateDistanceLabel();</del>
+		}
+	}
+	
+	&hellip;
+	
+<del>//	void UpdateDistanceLabel () {</del>
+<del>//		UnityEngine.UI.Text label = uiRect.GetComponent&lt;Text>();</del>
+<del>//		label.text = distance == int.MaxValue ? "" : distance.ToString();</del>
+<del>//	}</del></pre>
+						
+						<p>In its place, add a public <code>SetLabel</code> method to <code>HexCell</code> which accept an arbitrary string.</p>
+						
+						<pre translate="no">	<ins>public void SetLabel (string text) {</ins>
+		<ins>UnityEngine.UI.Text label = uiRect.GetComponent&lt;Text>();</ins>
+		<ins>label.text = text;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Use this new method in <code>HexGrid.Search</code> when clearing the cells. To hide the labels, just set them to <code>null</code>.</p>
+						
+						<pre translate="no">		for (int i = 0; i &lt; cells.Length; i++) {
+			cells[i].Distance = int.MaxValue;
+			<ins>cells[i].SetLabel(null);</ins>
+			cells[i].DisableHighlight();
+		}</pre>
+						
+						<p>Then set the neighbor's label to its turn. After that, we'll be able so see how many extra turns it would take to traverse the entire path.</p>
+						
+						<pre translate="no">				if (neighbor.Distance == int.MaxValue) {
+					neighbor.Distance = distance;
+					<ins>neighbor.SetLabel(turn.ToString());</ins>
+					neighbor.PathFrom = current;
+					neighbor.SearchHeuristic =
+						neighbor.coordinates.DistanceTo(toCell.coordinates);
+					searchFrontier.Enqueue(neighbor);
+				}
+				else if (distance &lt; neighbor.Distance) {
+					int oldPriority = neighbor.SearchPriority;
+					neighbor.Distance = distance;
+					<ins>neighbor.SetLabel(turn.ToString());</ins>
+					neighbor.PathFrom = current;
+					searchFrontier.Change(neighbor, oldPriority);
+				}</pre>
+						
+						<figure>
+							<img src="turn-based-movement/turns.png" width="360" height="90">
+							<figcaption>Turns required to move along the path.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="turn-based-movement/turn-based-movement.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Instant Paths</h2>
+					
+					<p>When playing a game, we also don't care how the pathfinding algorithm finds its way. We want to immediately see the path that we request. By now we can be confident that our algorithm works, so let's get rid of the search visualization.</p>
+					
+					<section>
+						<h3>No More Coroutine</h3>
+						
+						<p>We used a coroutine to slowly step through our algorithm. We no longer have to do this, so get rid of the invocations of <code>StartCoroutine</code> and <code>StopAllCoroutines</code> in <code>HexGrid</code>. Instead, we simply invoke <code>Search</code> like a regular method.</p>
+						
+						<pre translate="no">	public void Load (BinaryReader reader, int header) {
+<del>//		StopAllCoroutines();</del>
+		&hellip;
+	}
+
+	public void FindPath (HexCell fromCell, HexCell toCell, int speed) {
+<del>//		StopAllCoroutines();</del>
+<del>//		StartCoroutine(Search(fromCell, toCell, speed));</del>
+		<ins>Search(fromCell, toCell, speed);</ins>
+	}</pre>
+						
+						<p>As we're no longer using <code>Search</code> as a coroutine, it no longer has to yield, so get rid of that statement. That means we can also remove the <code>WaitForSeconds</code> declaration and change the method's return type to <code>void</code>.</p>
+						
+						<pre translate="no">	<ins>void</ins> Search (HexCell fromCell, HexCell toCell, int speed) {
+		&hellip;
+
+<del>//		WaitForSeconds delay = new WaitForSeconds(1 / 60f);</del>
+		fromCell.Distance = 0;
+		searchFrontier.Enqueue(fromCell);
+		while (searchFrontier.Count > 0) {
+<del>//			yield return delay;</del>
+			HexCell current = searchFrontier.Dequeue();
+			&hellip;
+		}
+	}</pre>
+						
+						<figure>
+							<video width="320" height="238" controls loop muted>
+								<source src="instant-paths/instant-paths.mp4" type="video/mp4">
+							</video>
+							<figcaption>Immediate results.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Timing Searches</h3>
+						
+						<p>We now get immediate paths, but how quickly do we get them, really? Short paths appear seemingly instantaneous, but long paths on large maps might feel sluggish.</p>
+						
+						<p>Let's measure how long it takes to find and display a path. We could use the profiler to time the search, but that's a bit overkill and generates additional overhead. Let's use a <code>Stopwatch</code> instead, which is found in the <code>System.Diagnostics</code> namespace. As we're only using it for a short while, I won't bother adding a <code>using</code> statement for it to the top of the script.</p>
+						
+						<p>Right before performing the search, create a new stopwatch and start it. Once the search is finished, stop the stopwatch and log how many milliseconds have elapsed.</p>
+						
+						<pre translate="no">	public void FindPath (HexCell fromCell, HexCell toCell, int speed) {
+		<ins>System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();</ins>
+		<ins>sw.Start();</ins>
+		Search(fromCell, toCell, speed);
+		<ins>sw.Stop();</ins>
+		<ins>Debug.Log(sw.ElapsedMilliseconds);</ins>
+	}</pre>
+						
+						<p>Let's use the worst case for our algorithm, which is a search from the bottom left to the top right of a large map. A featureless map is worst, because then the algorithm will have to process all of the 4,800 cells of the map.</p>
+						
+						<figure>
+							<img src="instant-paths/worst-case.png" width="460" height="300">
+							<figcaption>Worst-case search.</figcaption>
+						</figure>
+						
+						<p>How long it takes will vary, because the Unity editor is not the only process running on your machine. So try it a few times and to get an indication of the average duration. In my case, it takes about 45 milliseconds. That isn't very fast, corresponding to 22.22 paths per second, let's say 22 pps. This means that the game's frame rate will also drop to at most 22 fps on the frame that this path is being computed. And that ignores all the other work that has to be done, like actually rendering the frame. So we get a pretty significant frame rate drop, below 20 fps.</p>
+						
+						<p>When performing performance tests like these, keep in mind that the performance in the Unity editor will not be as good as the performance of a stand-alone app. If I perform the same test with a build, it only takes 15 milliseconds on average. That's 66 pps, which is a lot better. However, that's still a large chunk of the frame budget, which will drop the frame rate below 60 fps.</p>
+						
+						<aside>
+							<h3>Where can I see the debug log for a build?</h3>
+							<div>
+								<p>Unity apps write to a log file, which is stored somewhere on your system. Its location depends on the platform. See Unity's <a href="https://docs.unity3d.com/Manual/LogFiles.html">Log Files</a> documentation for for how to find the log files on your system.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Only Search When Needed</h3>
+						
+						<p>A quick optimization that we can do is to make sure that we only search when needed. Currently, we initiate a new search every frame that we hold the mouse button down. As a result the frame rate will be lowered consistently while dragging. We can prevent this by only initiating a new search in <code>HexMapEditor.HandleInput</code> when we're actually dealing with a new end point. If not, the currently visible path is still valid.</p>
+						
+						<pre translate="no">			if (editMode) {
+				EditCells(currentCell);
+			}
+			else if (
+				Input.GetKey(KeyCode.LeftShift)  &amp;&amp; searchToCell != currentCell
+			) {
+				<ins>if (searchFromCell != currentCell) {</ins>
+					if (searchFromCell) {
+						searchFromCell.DisableHighlight();
+					}
+					searchFromCell = currentCell;
+					searchFromCell.EnableHighlight(Color.blue);
+					if (searchToCell) {
+						hexGrid.FindPath(searchFromCell, searchToCell, 24);
+					}
+				<ins>}</ins>
+			}
+			else if (searchFromCell &amp;&amp; searchFromCell != currentCell) {
+				<ins>if (searchToCell != currentCell) {</ins>
+					searchToCell = currentCell;
+					hexGrid.FindPath(searchFromCell, searchToCell, 24);
+				<ins>}</ins>
+			}</pre>
+					</section>
+					
+					<section>
+						<h3>Only Show Labels on the Path</h3>
+						
+						<p>Displaying turn labels is fairly costly, especially because we're not using an optimized approach. Doing it for all cells surely slows us down. So let's omit setting the labels in <code>HexGrid.Search</code>.</p>
+						
+						<pre translate="no">				if (neighbor.Distance == int.MaxValue) {
+					neighbor.Distance = distance;
+<del>//					neighbor.SetLabel(turn.ToString());</del>
+					neighbor.PathFrom = current;
+					neighbor.SearchHeuristic =
+						neighbor.coordinates.DistanceTo(toCell.coordinates);
+					searchFrontier.Enqueue(neighbor);
+				}
+				else if (distance &lt; neighbor.Distance) {
+					int oldPriority = neighbor.SearchPriority;
+					neighbor.Distance = distance;
+<del>//					neighbor.SetLabel(turn.ToString());</del>
+					neighbor.PathFrom = current;
+					searchFrontier.Change(neighbor, oldPriority);
+				}</pre>
+						
+						<p>We really only need to see this information for the path that is found. So compute the turn and set the label of the cells on the path only, when the destination is reached.</p>
+						
+						<pre translate="no">			if (current == toCell) {
+				current = current.PathFrom;
+				while (current != fromCell) {
+					<ins>int turn = current.Distance / speed;</ins>
+					<ins>current.SetLabel(turn.ToString());</ins>
+					current.EnableHighlight(Color.white);
+					current = current.PathFrom;
+				}
+				break;
+			}</pre>
+						
+						<figure>
+							<img src="instant-paths/only-path-labels.png" width="360" height="90">
+							<figcaption>Only show labels of cells on the path.</figcaption>
+						</figure>
+						
+						<p>Now we only see the turn labels on the cell in between the start and destination cells. But the destination cell is most important, so we have to set its label too. We can do this by starting the path loop at the destination cell, instead of the cell before it. This will set the destination's highlight to white instead of red, so move the highlighting of the destination cell to directly below the loop.</p>
+						
+						<pre translate="no">		fromCell.EnableHighlight(Color.blue);
+<del>//		toCell.EnableHighlight(Color.red);</del>
+
+		fromCell.Distance = 0;
+		searchFrontier.Enqueue(fromCell);
+		while (searchFrontier.Count > 0) {
+			HexCell current = searchFrontier.Dequeue();
+
+			if (current == toCell) {
+<del>//				current = current.PathFrom;</del>
+				while (current != fromCell) {
+					int turn = current.Distance / speed;
+					current.SetLabel(turn.ToString());
+					current.EnableHighlight(Color.white);
+					current = current.PathFrom;
+				}
+				<ins>toCell.EnableHighlight(Color.red);</ins>
+				break;
+			}
+			
+			&hellip;
+		}</pre>
+						
+						<figure>
+							<img src="instant-paths/destination-label.png" width="360" height="90">
+							<figcaption>Turn info is most important for the destination.</figcaption>
+						</figure>
+						
+						<p>After these changes, my worst case is now improved to 23 milliseconds in the editor and 6 milliseconds in a stand-alone build. That's 43 pps and 166 pps respectively, which is a significant improvement.</p>
+					</section>
+					
+					<a href="instant-paths/instant-paths.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Smartest Search</h2>
+					
+					<p>In the <a href="../part-16/index.html">previous tutorial</a>, we made our search routine smarter by implementing the A<sup>*</sup> algorithm. However, we actually do not yet search in the most optimal way. Each iteration, we calculate the distances from the current cell to all of its neighbors. This is correct for cells that are not yet or currently part of the search frontier. But cells that have already been taken out of the frontier no longer need to be considered. That's because we've already found the shortest path to those cells. Skipping those cells is exactly what a proper A<sup>*</sup> implementation does, so we should do that as well.</p>
+					
+					<section>
+						<h3>Cell Search Phase</h3>
+						
+						<p>How do we know whether a cell has already exited the frontier? Currently, we cannot determine this. So we have to keep track of which phase of the search a cell is in. It's either not yet in the frontier, currently part of the frontier, or behind the frontier. We can track this by adding a simple integer property to <code>HexCell</code>.</p>
+						
+						<pre translate="no">	<ins>public int SearchPhase { get; set; }</ins></pre>
+						
+						<p>For example, 0 means the cell has not yet been reached, 1 indicated that the cell is currently in the frontier, while 2 means it has been taken out of the frontier.</p>
+					</section>
+					
+					<section>
+						<h3>Entering the Frontier</h3>
+						
+						<p>In <code>HexGrid.Search</code>, we could reset all cells to 0 and always use 1 for the frontier. Or we could increment the frontier number for each new search. That way, we do not have to bother with resetting the cells, as long as we increment the frontier by two each time.</p>
+						
+						<pre translate="no">	<ins>int searchFrontierPhase;</ins>
+						
+	&hellip;
+
+	void Search (HexCell fromCell, HexCell toCell, int speed) {
+		<ins>searchFrontierPhase += 2;</ins>
+		&hellip;
+	}</pre>
+						
+						<p>Now we have to set the search phase of cells when we add them to the frontier. This begins with the starting cell, when it is added to the frontier.</p>
+						
+						<pre translate="no">		<ins>fromCell.SearchPhase = searchFrontierPhase;</ins>
+		fromCell.Distance = 0;
+		searchFrontier.Enqueue(fromCell);
+</pre>
+						
+						<p>And also whenever we add a neighbor to the frontier.</p>
+						
+						<pre translate="no">				if (neighbor.Distance == int.MaxValue) {
+					<ins>neighbor.SearchPhase = searchFrontierPhase;</ins>
+					neighbor.Distance = distance;
+					neighbor.PathFrom = current;
+					neighbor.SearchHeuristic =
+						neighbor.coordinates.DistanceTo(toCell.coordinates);
+					searchFrontier.Enqueue(neighbor);
+				}</pre>
+					</section>
+					
+					<section>
+						<h3>Checking the Frontier</h3>
+						
+						<p>Up to this point, we used a distance equal to <code>int.MaxValue</code> to check whether a cell has not yet been added to the frontier. We can now compare the cell's search phase with the current frontier instead.</p>
+						
+						<pre translate="no"><del>//				if (neighbor.Distance == int.MaxValue) {</del>
+				<ins>if (neighbor.SearchPhase &lt; searchFrontierPhase) {</ins>
+					neighbor.SearchPhase = searchFrontierPhase;
+					neighbor.Distance = distance;
+					neighbor.PathFrom = current;
+					neighbor.SearchHeuristic =
+						neighbor.coordinates.DistanceTo(toCell.coordinates);
+					searchFrontier.Enqueue(neighbor);
+				}</pre>
+						
+						<p>This means that we no longer have to reset the cell distances before searching. This means that we can get away with doing less work, which is good.</p>
+						
+						<pre translate="no">		for (int i = 0; i &lt; cells.Length; i++) {
+<del>//			cells[i].Distance = int.MaxValue;</del>
+			cells[i].SetLabel(null);
+			cells[i].DisableHighlight();
+		}</pre>
+					</section>
+					
+					<section>
+						<h3>Exiting the Frontier</h3>
+						
+						<p>When a cell is taken out of the frontier, we indicate this by incrementing its search phase. That puts it behind the current frontier and in front of the next.</p>
+						
+						<pre translate="no">		while (searchFrontier.Count > 0) {
+			HexCell current = searchFrontier.Dequeue();
+			<ins>current.SearchPhase += 1;</ins>
+			
+			&hellip;
+		}</pre>
+						
+						<p>Finally, we can skip cells that have been taken out of the frontier, avoiding a pointless distance computation and comparison.</p>
+						
+						<pre translate="no">			for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++) {
+				HexCell neighbor = current.GetNeighbor(d);
+				if (
+					neighbor == null <ins>||</ins>
+					<ins>neighbor.SearchPhase > searchFrontierPhase</ins>
+				) {
+					continue;
+				}
+				&hellip;
+			}</pre>
+						
+						<p>At this point, our algorithm still produces the same results, but more efficiently. For me, the worst-case search now takes 20 milliseconds in the editor and 5 milliseconds in a build.</p>
+						
+						<p>You could also log how many times cells were processed by the algorithm, by incrementing a counter when a cell's distance is computer. Earlier, the our algorithm computed 28,239 distances for the worst-case search. Now, with our complete A<sup>*</sup> algorithm, we compute only 14,120 distances. That's a reduction of 50%. How big of an impact this has on performance depends on how costly it is to calculate the movement costs. In our case, it's not that much work, so the improvement is not that great in a build, though still pretty significant in the editor.</p>
+					</section>
+					
+					<a href="smartest-search/smartest-search.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Cleaning the Path</h2>
+					
+					<p>When a new search is initiated, we first have to clean up the visualization of the previous path. Right now, we do this by disabling the highlight and removing the label of every cell in the grid. This is a heavy-handed approach. Ideally, we only reset the cells that are part of the previous path.</p>
+					
+					<section>
+						<h3>Only Searching</h3>
+						
+						<p>Let's start by completely removing the visualization code from <code>Search</code>. All that it should do is search for a path, regardless of what we do with that information.</p>
+						
+						<pre translate="no">	void Search (HexCell fromCell, HexCell toCell, int speed) {
+		searchFrontierPhase += 2;
+		if (searchFrontier == null) {
+			searchFrontier = new HexCellPriorityQueue();
+		}
+		else {
+			searchFrontier.Clear();
+		}
+
+<del>//		for (int i = 0; i &lt; cells.Length; i++) {</del>
+<del>//			cells[i].SetLabel(null);</del>
+<del>//			cells[i].DisableHighlight();</del>
+<del>//		}</del>
+<del>//		fromCell.EnableHighlight(Color.blue);</del>
+
+		fromCell.SearchPhase = searchFrontierPhase;
+		fromCell.Distance = 0;
+		searchFrontier.Enqueue(fromCell);
+		while (searchFrontier.Count > 0) {
+			HexCell current = searchFrontier.Dequeue();
+			current.SearchPhase += 1;
+
+			if (current == toCell) {
+<del>//				while (current != fromCell) {</del>
+<del>//					int turn = current.Distance / speed;</del>
+<del>//					current.SetLabel(turn.ToString());</del>
+<del>//					current.EnableHighlight(Color.white);</del>
+<del>//					current = current.PathFrom;</del>
+<del>//				}</del>
+<del>//				toCell.EnableHighlight(Color.red);</del>
+<del>//				break;</del>
+			}
+
+			&hellip;
+		}
+	}</pre>
+						
+						<p>To communicate whether <code>Search</code> found a path, have it return a boolean.</p>
+						
+						<pre translate="no">	<ins>bool</ins> Search (HexCell fromCell, HexCell toCell, int speed) {
+		searchFrontierPhase += 2;
+		if (searchFrontier == null) {
+			searchFrontier = new HexCellPriorityQueue();
+		}
+		else {
+			searchFrontier.Clear();
+		}
+
+		fromCell.SearchPhase = searchFrontierPhase;
+		fromCell.Distance = 0;
+		searchFrontier.Enqueue(fromCell);
+		while (searchFrontier.Count > 0) {
+			HexCell current = searchFrontier.Dequeue();
+			current.SearchPhase += 1;
+
+			if (current == toCell) {
+				<ins>return true;</ins>
+			}
+
+			&hellip;
+		}
+		<ins>return false;</ins>
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Remembering the Path</h3>
+						
+						<p>When a path is found, we have to remember it. That way, we can clean it up next time. So keep track of the end points and whether a path exists between them.</p>
+						
+						<pre translate="no">	<ins>HexCell currentPathFrom, currentPathTo;</ins>
+	<ins>bool currentPathExists;</ins>
+	
+	&hellip;
+	
+	public void FindPath (HexCell fromCell, HexCell toCell, int speed) {
+		System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
+		sw.Start();
+		<ins>currentPathFrom = fromCell;</ins>
+		<ins>currentPathTo = toCell;</ins>
+		<ins>currentPathExists =</ins> Search(fromCell, toCell, speed);
+		sw.Stop();
+		Debug.Log(sw.ElapsedMilliseconds);
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Showing the Path Again</h3>
+						
+						<p>We can use the search data that we remembered to once again visualize the path. Create a new <code>ShowPath</code> method for that. It will loop from the end to the beginning of the path, highlighting the cells and setting their labels to their turn. We need to know the speed to do that, so make that a parameter. If we don't have a path, the method will just highlight the end points.</p>
+						
+						<pre translate="no">	<ins>void ShowPath (int speed) {</ins>
+		<ins>if (currentPathExists) {</ins>
+			<ins>HexCell current = currentPathTo;</ins>
+			<ins>while (current != currentPathFrom) {</ins>
+				<ins>int turn = current.Distance / speed;</ins>
+				<ins>current.SetLabel(turn.ToString());</ins>
+				<ins>current.EnableHighlight(Color.white);</ins>
+				<ins>current = current.PathFrom;</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>currentPathFrom.EnableHighlight(Color.blue);</ins>
+		<ins>currentPathTo.EnableHighlight(Color.red);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Invoke this method in <code>FindPath</code>, after searching.</p>
+						
+						<pre translate="no">		currentPathExists = Search(fromCell, toCell, speed);
+		<ins>ShowPath(speed);</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Cleaning Up</h3>
+						
+						<p>We're seeing paths again, but they no longer get erased. To clean them up, create a <code>ClearPath</code> method. It's basically a copy of <code>ShowPath</code>, except that it disables the highlights and labels instead of showing them. After doing that, it should also clear the path data that we remembered, as it is no longer valid.</p>
+						
+						<pre translate="no">	<ins>void ClearPath () {</ins>
+		<ins>if (currentPathExists) {</ins>
+			<ins>HexCell current = currentPathTo;</ins>
+			<ins>while (current != currentPathFrom) {</ins>
+				<ins>current.SetLabel(null);</ins>
+				<ins>current.DisableHighlight();</ins>
+				<ins>current = current.PathFrom;</ins>
+			<ins>}</ins>
+			<ins>current.DisableHighlight();</ins>
+			<ins>currentPathExists = false;</ins>
+		<ins>}</ins>
+		<ins>currentPathFrom = currentPathTo = null;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Besides that, we must also make sure to clear the end points in case of an invalid path.</p>
+						
+						<pre translate="no">		if (currentPathExists) {
+			&hellip;
+		}
+		<ins>else if (currentPathFrom) {</ins>
+			<ins>currentPathFrom.DisableHighlight();</ins>
+			<ins>currentPathTo.DisableHighlight();</ins>
+		<ins>}</ins>
+		currentPathFrom = currentPathTo = null;</pre>
+						
+						<p>With this method, we can clear the old path visualization by only visiting the necessary cells. The size of the map no longer matters. Invoke it in <code>FindPath</code>, before initiating a new search.</p>
+						
+						<pre translate="no">		sw.Start();
+		<ins>ClearPath();</ins>
+		currentPathFrom = fromCell;
+		currentPathTo = toCell;
+		currentPathExists = Search(fromCell, toCell, speed);
+		if (currentPathExists) {
+			ShowPath(speed);
+		}
+		sw.Stop();</pre>
+						
+						<p>Also, make sure to clear the path when creating a new map.</p>
+						
+						<pre translate="no">	public bool CreateMap (int x, int z) {
+		&hellip;
+
+		<ins>ClearPath();</ins>
+		if (chunks != null) {
+			for (int i = 0; i &lt; chunks.Length; i++) {
+				Destroy(chunks[i].gameObject);
+			}
+		}
+
+		&hellip;
+	}</pre>
+						
+						<p>And also before loading another map.</p>
+						
+						<pre translate="no">	public void Load (BinaryReader reader, int header) {
+		<ins>ClearPath();</ins>
+		&hellip;
+	}</pre>
+						
+						<p>The path visualizations once again gets cleaned up, just like before we made this change. Now that we're using a more efficient approach, my worst-case search is down to 14 milliseconds in the editor. That's quite an improvement for simply cleaning up smarter. In a build, I'm now down to 3 milliseconds. That's 333 pps, which makes our pathfinding definitely usable in real time.</p>
+						
+						<p>Now that we have fast pathfinding, we can remove the timing debug code.</p>
+						
+						<pre translate="no">	public void FindPath (HexCell fromCell, HexCell toCell, int speed) {
+<del>//		System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();</del>
+<del>//		sw.Start();</del>
+		ClearPath();
+		currentPathFrom = fromCell;
+		currentPathTo = toCell;
+		currentPathExists = Search(fromCell, toCell, speed);
+		ShowPath(speed);
+<del>//		sw.Stop();</del>
+<del>//		Debug.Log(sw.ElapsedMilliseconds);</del>
+	}</pre>
+						
+						<p>The next tutorial is <a href="../part-18/index.html">Units</a>.</p>
+					</section>
+					
+					<a href="cleaning-the-path/cleaning-the-path.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Hex-Map-17.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

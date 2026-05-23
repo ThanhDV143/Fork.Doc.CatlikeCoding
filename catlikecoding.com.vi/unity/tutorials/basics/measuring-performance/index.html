@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/basics/measuring-performance/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/basics/measuring-performance/tutorial-image.jpg">
+		<meta property="og:title" content="Measuring Performance">
+		<meta property="og:description" content="A Unity C# Basics tutorial about profiling and morphing functions.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Measuring Performance</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/basics/measuring-performance/#article",
+				"headline": "Measuring Performance",
+				"alternativeHeadline": "MS and FPS",
+				"datePublished": "2020-10-09",
+				"dateModified": "2021-05-18",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity C# Basics tutorial about describing surfaces with math and visualizing them with cubes.",
+				"image": "https://catlikecoding.com/unity/tutorials/basics/measuring-performance/tutorial-image.jpg",
+				"dependencies": "Unity 2020.3.6f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/basics/", "name": "Basics" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				DisplayMode: 1,
+				FrameRateCounter: 1,
+				'Function': 1,
+				FunctionLibrary: 1,
+				FunctionName: 1,
+				Graph: 1,
+				GraphFunction: 1,
+				GraphFunctionName: 1,
+				TransitionMode: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Basics</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Measuring Performance</h1>
+					<p>MS and FPS</p>
+					<ul>
+						<li>Use game window stats, frame debugger, and profiler.</li>
+						<li>Compare dynamic batching, GPU instancing, and SRP batcher.</li>
+						<li>Display a frame rate counter.</li>
+						<li>Cycle through functions automatically.</li>
+						<li>Smoothly transition between functions.</li>
+					</ul>
+				</header>
+				
+				<p>This is the fourth tutorial in a series about learning the <a href="../index.html">basics</a> of working with Unity. It's an introduction to measuring performance. We'll also add the ability to morph functions to our function library.</p>
+				
+				<p>This tutorial is made with Unity 2020.3.6f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Somewhere between a wave and a sphere.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Profiling Unity</h2>
+					
+					<p>Unity continuously renders new frames. To make anything that moves appear fluid it has to do this fast enough so we perceive the sequence of images as continuous motion. Typically 30 frames per second&mdash;FPS for short&mdash;is the minimum to aim for and 60FPS is ideal. These numbers appear often because many devices have a display refresh rate of 60 hertz. You cannot draw frames faster than that without turning VSync off, which will cause image tearing. If consistent 60FPS cannot be achieved then the next best rate is 30FPS, which is once per two display refreshes. One step lower would be 15 FPS, which is insufficient for fluid motion.</p>
+					
+					<aside>
+						<h3>What are other common monitor refresh rates?</h3>
+						<div>
+							<p>75Hz, 85Hz, and 144Hz are also common for desktop monitors. For the competitive gaming scene there are even higher refresh rates. So if your app could reliably reach 85FPS then it will perform well with VSync on for all displays. If it could only reach 60FPS then 75Hz displays would drop down to half rate at 37.5FPS, 85Hz would halve to 42.5FPS, and 144Hz would drop to a third at 48FPS. This assumes constant performance though. In reality the frame rate could fluctuate between multiples of the refresh rate.</p>
+						</div>
+					</aside>
+					
+					<p>Whether a target frame rate can be achieved depends on how long it takes to process individual frames. To reach 60FPS we must update and render each frame in less than 16.67 milliseconds. The time budget for 30FPS is double that, thus 33.33ms per frame.</p>
+					
+					<p>When our graph is running we can get a sense of how smooth its motion is by simply observing it, but this is a very imprecise way to measure its performance. If motion appears smooth then it probably exceeds 30FPS and if it appears to stutter it's probably less than that. It might also be smooth one moment and stutter the next, due to inconsistent performance. This can be caused by variation in our app, but also due to other apps running on the same device. The Unity editor can also have inconsistent performance depending on what it's doing. If we barely reached 60FPS then we could end up going back and forth between 30FPS and 60FPS rapidly, which would feel jittery despite a high average FPS. So to get a good idea of what's going on we have to measure performance more precisely. Unity has a few tools to help us with this.</p>
+					
+					<section>
+						<h3>Game Window Statistics</h3>
+						
+						<p>The game window has a <em>Statistics</em> overlay panel that can be activated via its <em>Stats</em> toolbar button. It displays measurements taken for the last rendered frame. It doesn't tell us much, but it's the simplest tool that we can use to get an indication of what's going on. While in edit mode the game windows usually updates only sporadically, after something changed. It refreshes every frame while in play mode.</p>
+						
+						<p>The following statistics are for our graph with the torus function and resolution at 100, using the default built-in render pipeline, which I'll refer to as <abbr title="Built-in Render Pipeline">BRP</abbr> from now on. I have VSync turned on for the game window, so refreshes are synchronized with my 60 Hz display.</p>
+						
+						<figure>
+							<img src="profiling-unity/stats-default.png" width="310" height="238">
+							<figcaption>Statistics for <abbr title="Built-in Render Pipeline">BRP</abbr>.</figcaption>
+						</figure>
+						
+						<p>The statistics show a frame during which the CPU main thread took 31.7ms and the render thread took 29.2ms. You'll likely get different results, depending on your hardware and the game window screen size. In my case it suggests that the entire frame took 60.9ms to render, but the statistics panel reported 31.5FPS, matching the CPU time. The FPS indicator seems to takes the worst time and assumes that matches the frame rate. This is an oversimplification that only takes the CPU side into account, ignoring the GPU and display. The real frame rate is likely lower.</p>
+						
+						<aside>
+							<h3>What's a thread?</h3>
+							<div>
+								<p>A thread is a subprocess, in this case of the Unity app. There can be multiple threads running in parallel at the same time. The statistics show how long Unity's main and render threads were running during the last frame.</p>
+							</div>
+						</aside>
+						
+						<p>Besides the durations and FPS indication the statistics panel also displays various details about what was rendered. There were 30.003 batches, and apparently zero saved by batching. These are draw commands sent to the GPU. Our graph contains 10,000 points, so it appears that each point got rendered three times. That's once for a depth pass, once for shadow casters&mdash;listed separately as well&mdash;and once to render the final cube, per point. The other three batches are for additional work like the sky box and shadow processing that is independent of our graph. There were also six set-pass calls, which can be thought of as the GPU getting reconfigured to render in a different way, like with a different material.</p>
+						
+						<figure>
+							<img src="profiling-unity/stats-urp.png" width="310" height="238">
+							<figcaption>Statistics for URP.</figcaption>
+						</figure>
+						
+						<p>If we use URP instead the statistics are different. It renders faster. It's easy to see why: there are only 20.002 batches, 10.001 less than for <abbr title="Built-in Render Pipeline">BRP</abbr>. That's because URP doesn't use a separate depth pass for directional shadows. It does have more set-pass calls, but that doesn't appear to be a problem.</p>
+						
+						<p>Although <em>Saved by batching</em> reports no batching, URP uses the SRP batcher by default, but the statistics panel doesn't understand it. The SRP batcher doesn't eliminate individual draw commands but can make them much more efficient. To illustrate this select our <em>URP</em> asset and disable <em>SRP Batcher</em> under the <em>Advanced</em> section at the bottom of its inspector. Make sure that <em>Dynamic Batching</em> is disabled as well.</p>
+						
+						<figure>
+							<img src="profiling-unity/urp-advanced.png" width="320" height="124">
+							<figcaption>URP advanced settings.</figcaption>
+						</figure>
+						
+						<p>With the SRP batcher disabled URP performance is much worse.</p>
+						
+						<figure>
+							<img src="profiling-unity/stats-urp-no-batcher.png" width="310" height="238">
+							<figcaption>Statistics for URP without SRP batcher.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Dynamic Batching</h3>
+						
+						<p>Besides the SRP Batcher URP has another toggle for dynamic batching. This is an old technique that dynamically combines small meshes into a single larger one which then gets rendered instead. Enabling it for URP reduces batches to 10.024 and the statistics panel indicates that 9.978 draws were eliminated.</p> 
+						
+						<figure>
+							<img src="profiling-unity/stats-urp-dynamic-batching.png" width="310" height="238">
+							<figcaption>Statistics for URP with dynamic batching.</figcaption>
+						</figure>
+						
+						<p>In my case the SRP batcher and dynamic batching have comparable performance, because the cube meshes of our graph's points are ideal candidates for dynamic batching.</p>
+						
+						<p>The SRP batches isn't available for <abbr title="Built-in Render Pipeline">BRP</abbr>, but we can enable dynamic batching for it. In this case we can find the toggle in the <em>Other Settings</em> section of the <em>Player</em> project settings, a bit below from where we set color space to linear. It's only visible when no scriptable render pipeline settings are used.</p>
+						
+						<figure>
+							<img src="profiling-unity/stats-default-dynamic-batching.png" width="310" height="114">
+							<figcaption>Statistics for <abbr title="Built-in Render Pipeline">BRP</abbr> with dynamic batching.</figcaption>
+						</figure>
+						
+						<p>Dynamic batching is much more efficient for <abbr title="Built-in Render Pipeline">BRP</abbr>, eliminating 29.964 batches, reducing them to only 39, but it doesn't appear to help much.</p>
+					</section>
+					
+					<section>
+						<h3>GPU Instancing</h3>
+						
+						<p>Another way to improve rendering performance is by enabling GPU instancing. This makes it possible to use a single draw command to tell the GPU to draw many instances of one mesh with the same material, providing an array of transformation matrices and optionally other instance data. In this case we have to enable it per material. Ours have an <em>Enable GPU Instancing</em> toggle for it.</p>
+						
+						<figure>
+							<img src="profiling-unity/material-gpu-instancing-enabled.png" width="320" height="84">
+							<figcaption>Material with GPU instancing enabled.</figcaption>
+						</figure>
+						
+						<p>URP prefers the SRP batcher over GPU instancing, so to make it work for our points the SRP batcher has to be disabled. We can then see that the amount of batches is reduced to just 46, much better than dynamic batching. We'll discover the reason for this difference later.</p>
+						
+						<figure>
+							<img src="profiling-unity/stats-urp-gpu-instancing.png" width="310" height="238">
+							<figcaption>Statistics for URP with GPU instancing.</figcaption>
+						</figure>
+						
+						<p>We could conclude from this data that for URP GPU Instancing is best, followed by dynamic batching, and then the SRP batcher. But the difference is small, so they seem effectively equivalent for our graph. The only clear conclusion is that either GPU instancing or the SRP batcher should be used.</p>
+						
+						<p>For <abbr title="Built-in Render Pipeline">BRP</abbr> GPU instancing results in more batches than dynamic batching, but the frame rate is a little bit higher.</p>
+						
+						<figure>
+							<img src="profiling-unity/stats-default-gpu-instancing.png" width="310" height="114">
+							<figcaption>Statistics for <abbr title="Built-in Render Pipeline">BRP</abbr> with GPU instancing.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Frame Debugger</h3>
+						
+						<p>The statistics panel can tell us that using dynamic batching is different than using GPU instancing, but doesn't tell us why. To get a better understanding of what's going on we can use the frame debugger, opened via <em>Window / Analysis / Frame Debugger</em>. When enabled via its toolbar button it shows a list of all draw commands sent to the GPU for the last frame of the game window, grouped under profiling samples. This list is shown on its left side. On its right side details are shown of a specific selected draw command. Also, the game window shows the progressive draw state until directly after the selected command.</p>
+						
+						<aside>
+							<h3>Why is my PC running hot all of a sudden?</h3>
+							<div>
+								<p>Unity uses a trick that requires rendering the same frame over and over again to show the intermediate states of drawing a frame. It does this as long as the frame debugger is active. Make sure that the frame debugger is disabled when you don't need it.</p>
+							</div>
+						</aside>
+						
+						<p>In our case we must be in play mode, because that's when our graph gets drawn. Enabling the frame debugger will pause play mode, which allows us to inspect the draw command hierarchy. Let's first do this for <abbr title="Built-in Render Pipeline">BRP</abbr>, without using dynamic batching nor GPU instancing.</p>
+						
+						<figure>
+							<img src="profiling-unity/frame-debugger-default.png" width="314" height="258">
+							<figcaption>Frame debugger for <abbr title="Built-in Render Pipeline">BRP</abbr>.</figcaption>
+						</figure>
+						
+						<p>We see a total of 30.007 draw calls, more than the statistics panel reported because there are also commands that aren't counted as batches, such as clearing a target buffer. The 30,000 draws for our points are individually listed as <em>Draw Mesh Point(Clone)</em>, under <em>DepthPass.Job</em>, <em>Shadows.RenderDirJob</em>, and <em>RenderForward.RenderLoopJob</em>.</p>
+						
+						<p>If we try again with dynamic batching enabled the command structure remains the same, except that each group of 10,000 draws is reduced to twelve <em>Draw Dynamic</em> calls. This is a significant improvement in terms of CPU-GPU communication overhead.</p>
+						
+						<figure>
+							<img src="profiling-unity/frame-debugger-default-dynamic-batching.png" width="314" height="258">
+							<figcaption><abbr title="Built-in Render Pipeline">BRP</abbr> with dynamic batching.</figcaption>
+						</figure>
+						
+						<p>And if we use GPU instancing then each group gets reduced to 20 <em>Draw Mesh (Instanced) Point(Clone)</em> calls instead. Again a big improvement, but a different approach.</p>
+						
+						<figure>
+							<img src="profiling-unity/frame-debugger-default-gpu-instancing.png" width="314" height="258">
+							<figcaption><abbr title="Built-in Render Pipeline">BRP</abbr> with GPU instancing.</figcaption>
+						</figure>
+						
+						<p>We can see the same happen for URP, but with a different command hierarchy. In this case the points are drawn twice, first under <em>Shadows.Draw</em> and again under <em>RenderLoop.Draw</em>. A significant difference is that dynamic batching doesn't appear to work for the shadow map, which explains why it's less effective for URP. We also end up with 22 batches instead of only twelve, indicating that the URP material relies on more mesh vertex data than the standard <abbr title="Built-in Render Pipeline">BRP</abbr> one, so less points fit in a single batch. Unlike dynamic batching GPU instancing does work for shadows, so it is superior in this case.</p>
+						
+						<figure>
+							<img src="profiling-unity/frame-debugger-urp.png" width="400" height="178" alt="nothing"><br>
+							<img src="profiling-unity/frame-debugger-urp-dynamic-batching.png" width="400" height="178" alt="dynamic batching"><br>
+							<img src="profiling-unity/frame-debugger-urp-gpu-instancing.png" width="400" height="178" alt="GPU instancing">
+							<figcaption>URP with nothing, dynamic batching, and GPU instancing.</figcaption>
+						</figure>
+						
+						<p>Finally, with the SRP batcher enabled drawing 10,000 points gets listed as 11 <em>SRP Batch</em> commands, but keep in mind that these are still individual draw calls, just very efficient ones.</p>
+						
+						<figure>
+							<img src="profiling-unity/frame-debugger-urp-srp-batcher.png" width="400" height="178">
+							<figcaption>URP with SRP batcher.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>An Extra Light</h3>
+						
+						<p>The results that we got so far are for our graph, with a single directional light, and the other project settings that we use. Let's see what happens when we add a second light to the scene, specifically a point light via <em>GameObject / Light / Point Light</em>. Set its position to zero and make sure that it doesn't cast shadows, which is its default behavior. <abbr title="Built-in Render Pipeline">BRP</abbr> supports shadows for point lights, but URP still doesn't.</p>
+						
+						<figure>
+							<img src="profiling-unity/point-light.png" width="250" height="150">
+							<figcaption>Point light without shadows at origin.</figcaption>
+						</figure>
+						
+						<p>With the extra light <abbr title="Built-in Render Pipeline">BRP</abbr> now draws all points an additional time. The frame debugger shows us that <em>RenderForward.RenderLoopJob</em> renders twice as much as before. Even worse, dynamic batching now only works for the depth and shadow passes, not the forward passes.</p>
+						
+						<figure>
+							<img src="profiling-unity/point-light-nothing.png" width="312" height="178" alt="nothing">
+							<img src="profiling-unity/point-light-dynamic-batching.png" width="312" height="178" alt="dynamic batching">
+							<figcaption><abbr title="Built-in Render Pipeline">BRP</abbr> with nothing and dynamic batching.</figcaption>
+						</figure>
+						
+						<p>This happens because <abbr title="Built-in Render Pipeline">BRP</abbr> draws each object once per light. It has a main pass that works with a single directional light, followed by additional passes are rendered on top of it. This happens because it's an old-fashioned forward-additive render pipeline. Dynamic batching cannot handle these different passes, so doesn't get used.</p>
+						
+						<p>The same is true for GPU instancing, except that it still works for the main pass. Only the additional light passes don't benefit from it.</p>
+						
+						<figure>
+							<img src="profiling-unity/point-light-gpu-instancing.png" width="312" height="178">
+							<figcaption><abbr title="Built-in Render Pipeline">BRP</abbr> with GPU instancing.</figcaption>
+						</figure>
+						
+						<p>The second light appears to make no difference for URP, because it is a modern forward renderer that applies all lighting in a single pass. So the command list remains the same, even though the GPU needs to perform more lighting calculations per draw.</p>
+						
+						<p>These conclusions are for a single extra light that affects all points. If you add more lights and move them such that different points are affected by different lights things get more complicated and batches can get split up when GPU instancing is used. What's true for a simple scene might not be true for a complex one.</p>
+						
+						<aside>
+							<h3>What about deferred rendering?</h3>
+							<div>
+								<p><abbr title="Built-in Render Pipeline">BRP</abbr> and HDRP have both forward and deferred rendering modes, URP currently does not. The idea of deferred rendering is that objects are drawn once, which stores their visible surfaces properties in GPU buffers. After that one or more lighting passes apply lighting only to what's visible. It has advantages and disadvantages compared to forward rendering, but we won't cover it in this tutorial series.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Profiler</h3>
+						
+						<p>To get a better idea of what's happening on the CPU side we can open the profiler window. Turn off the point light and open the window via <em>Window / Analysis / Profiler</em>. It will record performance data while in play mode and store it for later inspection.</p>
+						
+						<p>The profiler is split in two sections. Its top portion contains a list of modules that show various performance graphs. The top one is <em>CPU Usage</em>, which is what we'll focus on. With that module selected the bottom part of the window shows a detailed breakdown of a frame that we can select in the graph.</p>
+						
+						<figure>
+							<img src="profiling-unity/profiler-default.png" width="700" height="361" alt="default">
+							<img src="profiling-unity/profiler-urp.png" width="700" height="361" alt="urp">
+							<figcaption>Profiler showing CPU usage timeline, for <abbr title="Built-in Render Pipeline">BRP</abbr> and URP.</figcaption>
+						</figure>
+						
+						<p>The default bottom view for CPU usage is the timeline. It visualizes how much time was spent on what during a frame. It shows that each frame begins with <em>PlayerLoop</em>, which spends most of its time invoking <em>RunBehaviourUpdate</em>. Two steps further down we see  that it's mostly the invocation of our <code>Graph.Update</code> method. You can select a timeline block to see its full name and duration in milliseconds.</p>
+						
+						<p>After the initial player loop segments comes a short <em>EditorLoop</em> part, after which comes another player segment for the rendering part of the frame where the CPU tells the GPU what to do. The work is split between the main thread, the render thread, and a few job worker threads, but the specific approach is different for <abbr title="Built-in Render Pipeline">BRP</abbr> and URP. These threads run in parallel but also have synchronization points when one has to wait for the results of another.</p>
+						
+						<p>After the render portion&mdash;while the render thread is still busy if URP is used&mdash;comes another editor segment, after which the next frame begins. The threads can also appear to cross frame boundaries. This happens because Unity can start the update loop of the next frame on the main thread before the render thread is finished, exploiting parallelism. We'll get back to this later in the next section.</p>
+						
+						<p>If you're not interested in the exact timing of threads then you can replace the <em>Timeline</em> view with the <em>Hierarchy</em> view via the dropdown list on the left side. The hierarchy displays the same data in a single a sortable list. This view makes it easier to see what takes longest and where memory allocation happens.</p>
+						
+						<figure>
+							<img src="profiling-unity/profiler-hierarchy.png" width="650" height="90">
+							<figcaption>Profiler showing hierarchy.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Profiling a Build</h3>
+						
+						<p>The profiler makes it obvious that the editor adds a lot of overhead to our app. It's thus much more useful to profile our app when it is running on its own. To to this we have to build our app, specifically for debugging. We can configure how our app is built in the <em>Build Settings</em> window, opened via <em>File / Build Settings...</em>. If you haven't configured it yet the <em>Scenes in Build</em> section is empty. This is fine because the currently open scene will be used by default.</p>
+						
+						<p>You can pick your target platform, for which your current machine is the most convenient. Then enable the <em>Development Build</em> and <em>Autoconnect Profiler</em> options.</p>
+						
+						<figure>
+							<img src="profiling-unity/development-build.png" width="200" height="60">
+							<figcaption>Development build for profiling.</figcaption>
+						</figure>
+						
+						<p>To finally create the standalone app&mdash;often refered to as a build&mdash;press the <em>Build</em> button, or <em>Build and Run</em> to immediately open the app once the build process is finished. You can also trigger another build via <em>File / Build and Run</em> or the indicated shortcut.</p>
+						
+						<aside>
+							<h3>How long does the build process take?</h3>
+							<div>
+								<p>The first build takes longest and can be busy for a few minutes when URP is used. After that Unity reuses previously generated build data if possible, significantly speeding up the process. Besides that the bigger the project the longer it takes.</p>
+							</div>
+						</aside>
+						
+						<p>Once the build runs on its own quit it after a while and switch back to Unity. The profiler should now contain information about how it performed. This doesn't always happen after the first build, if so just try again. Also keep in mind that the profiler doesn't clear old data when attached to a build, even when <em>Clear on Play</em> is enabled, so make sure that you're looking at the relevant frames if you only ran the app a few seconds.</p>
+						
+						<figure>
+							<img src="profiling-unity/profiler-default-build.png" width="700" height="361" alt="default">
+							<img src="profiling-unity/profiler-urp-build.png" width="700" height="361" alt="urp">
+							<figcaption>Profiling a build, <abbr title="Built-in Render Pipeline">BRP</abbr> and URP</figcaption>
+						</figure>
+						
+						<p>Because there is no editor overhead a build should perform better than play mode in the Unity editor. The profiler will indeed no longer show editor loop sections.</p>
+						
+					</section>
+				</section>
+				
+				<section>
+					<h2>Showing the Frame Rate</h2>
+					
+					<p>We don't always need detailed profiling information, a rough indication of the frame rate will often suffice. Also, we&mdash;or someone else&mdash;might be running our app somewhere without a Unity editor available. What we could do for those cases is measure and display the frame in the app itself, in a small overlay panel. Such functionality isn't available by default, so we'll create it ourselves.</p>
+					
+					<section>
+						<h3>UI Panel</h3>
+						
+						<p>A small overlay panel can be created with Unity's in-game UI. We'll also use <em>TextMeshPro</em> to create text to display the frame rate. <em>TextMeshPro</em> is a separate package containing advanced text display functionality, superior to the default UI text component. If you don't have its package installed already add it via the package manager. This also automatically installs the <em>Unity UI</em> package because <em>TextMeshPro</em> depends on it.</p>
+						
+						<aside>
+							<h3>Why not use the <em>UI Toolkit</em>?</h3>
+							<div>
+								<p>The <em>UI Toolkit</em> is currently only available for editor UIs. There is a package for runtime use, but it is still in preview, so I won't use it.</p>
+							</div>
+						</aside>
+						
+						<p>Once the UI package is part of the project create a panel via <em>GameObject / UI / Panel</em>. This creates a semitransparent panel that covers the entire UI canvas. The canvas matches the game window size, but is much bigger in the scene window. It's easiest to see it by enabling 2D mode via the scene window toolbar and then zooming out.</p>
+						
+						<figure>
+							<img src="showing-the-frame-rate/ui-panel.png" width="220" height="190">
+							<figcaption>Panel covering entire canvas.</figcaption>
+						</figure>
+						
+						<p>Each UI has a canvas root object, which got automatically created when we added a panel. The panel is a child of the canvas. An <em>EventSystem</em> game object got created as well, which is responsible for handling UI input events. We won't use those so can ignore or even delete it.</p>
+						
+						<figure>
+							<img src="showing-the-frame-rate/ui-hierarchy.png" width="280" height="51">
+							<figcaption>UI game object hierarchy.</figcaption>
+						</figure>
+						
+						<p>The canvas has a scaler component that can be used to configure the scale of the UI. The default settings assume a constant pixel size. If you're working with a high-resolution or retina display then you'd have to increase the scale factor otherwise the UI will be too small. There are also other scale modes that you can experiment with.</p>
+						
+						<figure>
+							<img src="showing-the-frame-rate/canvas-inspector.png" width="320" height="225">
+							<figcaption>UI canvas game object.</figcaption>
+						</figure>
+						
+						<p>UI game objects have a specialized <code>RectTransform</code> component that replaces the usual <code>Transform</code> component. Besides the usual position, rotation, and scale it exposes extra properties based on the anchors. The anchors control the relative position and resizing behavior of an object relative to its parent. The easiest way to change it is via the popup window that is opened by clicking the square anchor image.</p>
+						
+						<figure>
+							<img src="showing-the-frame-rate/panel-inspector.png" width="320" height="542">
+							<figcaption>UI panel.</figcaption>
+						</figure>
+						
+						<p>We'll put the frame rate counter panel at the top right of the window so set the panel's anchors to top right and the pivot XY to 1. Then set width to 38 and height to 70 and the position to zero. After that, set the color of the image component to black, keeping its alpha as it was.</p>
+						
+						<figure>
+							<img src="showing-the-frame-rate/panel-top-right-corner.png" width="120" height="200">
+							<figcaption>Dark panel in top right corner.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Text</h3>
+						
+						<p>To put text in the panel create a <em>TextMeshPro</em> UI text element via <em>GameObject / UI / Text - TextMeshPro</em>. If this is the first time that you create a <em>TextMeshPro</em> object an <em>Import TMP Essentials</em> popup will show up. Import the essentials as suggested. This will create a <em>TextMesh Pro</em> asset folder with some assets in it, which we won't need to directly deal with.</p>
+						
+						<p>Once the text game object is created make it a child of the panel, set its anchor to stretch mode in both dimensions. Make it overlap the entire panel, which can be done by setting left, top, right, and bottom to zero. Also give it a descriptive name, like <em>Frame Rate Text</em>.</p>
+						
+						<figure>
+							<img src="showing-the-frame-rate/tmp-inspector.png" width="320" height="350">
+							<figcaption>UI Text.</figcaption>
+						</figure>
+						
+						<p>Next, make a few adjustments to the <em>TextMeshPro - Text (UI)</em> component. Set <em>Font Size</em> to 14 and <em>Alignment</em> to center middle. Then fill the <em>Text Input</em> area with placeholder text, specifically <em>FPS</em> followed by three lines with three zeros each.</p>
+						
+						<figure>
+							<img src="showing-the-frame-rate/tmp-settings.png" width="308" height="484">
+							<figcaption>Text settings.</figcaption>
+						</figure>
+						
+						<p>We can now see what our frame rate counter will look like. The three rows or zeros are placeholders for the statistics that we'll display shortly.</p>
+						
+						<figure>
+							<img src="showing-the-frame-rate/frame-rate-text.png" width="124" height="210">
+							<figcaption>Frame rate text.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Updating the Display</h3>
+						
+						<p>To update the counter we need a custom component. Create a new C# script asset for a <code>FrameRateCounter</code> component. Give it a serializable <code>TMPro.TextMeshProUGUI</code> field to hold a reference to the text component used for displaying its data.</p>
+						
+						<pre><ins>using UnityEngine;</ins>
+<ins>using TMPro;</ins>
+
+<ins>public class FrameRateCounter : MonoBehaviour {</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>TextMeshProUGUI display;</ins>
+<ins>}</ins></pre>
+						
+						<p>Add this component to the text object and hook up the display.</p>
+						
+						<figure>
+							<img src="showing-the-frame-rate/frame-rate-counter-component.png" width="320" height="250">
+							<figcaption>Frame rate counter component.</figcaption>
+						</figure>
+						
+						<p>To display the frame rate we need to know how much time has passed between the previous and current frame. This information is available via <code>Time.deltaTime</code>. However, this value is subject to a time scale that could be used for slow-motion, fast-forward, or completely stopping time. We need to use <code>Time.unscaledDeltaTime</code> instead. Retrieve it at the start of a new <code>Update</code> method in <code>FrameRateCounter</code>.</p>
+						
+						<pre>	<ins>void Update () {</ins>
+		<ins>float frameDuration = Time.unscaledDeltaTime;</ins>
+	<ins>}</ins></pre>
+						
+						<p>The next step is to adjust the displayed text. We can do this by invoking its <code>SetText</code> method with a text string argument. Let's start with supplying the same placeholder text that we already have. A string is written between double quotes and a newline is written with the special <code>\n</code> character sequence.</p>
+						
+						<pre>		float frameDuration = Time.unscaledDeltaTime;
+		<ins>display.SetText("FPS\n000\n000\n000");</ins></pre>
+						
+						<p><code>TextMeshProUGUI</code> has variant <code>SetText</code> methods that accept additional <code>float</code> arguments. Add the frame duration as a second argument and then replace the first triple-zero line of our string with a single zero within curly brackets. That indicates where the <code>float</code> argument should be inserted in the string.</p>
+						
+						<pre>		display.SetText("FPS\n<ins>{0}</ins>\n000\n000"<ins>, frameDuration</ins>);</pre>
+						
+						<p>The frame duration tells us how much time elapsed. To show the frame rate expresses as frames per second we have to display its inverse, so one divided by the frame duration.</p>
+						
+						<pre>		display.SetText("FPS\n{0}\n000\n000", <ins>1f /</ins> frameDuration);</pre>
+						
+						<p>This will show a meaningful value, but it will have lots of digits, like 59.823424. We can instruct the text to round to a specific number of digits after the decimal point, by following the zero with a colon and the desired number. We'll round to a whole number, so add zero.</p>
+						
+						<pre>		display.SetText("FPS\n{<ins>0:0</ins>}\n000\n000", 1f / frameDuration);</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="showing-the-frame-rate/last-frame.mp4" type="video/mp4">
+							</video>
+							<figcaption>Showing frame rate of the last frame.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Average Frame Rate</h3>
+						
+						<p>The displayed frame rate ends up changing rapidly, because the time between successive frames is almost never exactly the same. We can make it less erratic by showing a frame rate average instead of only the rate for the last frame. We do that by keeping track of how many frames have been rendered and the total duration, then showing the amount of frames divided by their combined duration.</p>
+						
+						<pre>	<ins>int frames;</ins>
+
+	<ins>float duration;</ins>
+	
+	void Update () {
+		float frameDuration = Time.unscaledDeltaTime;
+		<ins>frames += 1;</ins>
+		<ins>duration += frameDuration;</ins>
+		display.SetText("FPS\n{0:0}\n000\n000", <ins>frames / duration</ins>);
+	}</pre>
+						
+						<p>This will make our counter trend toward a stable average the longer it runs, but this average is for the entire run time of our app. As we want recent information we have to reset and start over frequently, sampling a new average. We can make this configurable by adding a serializable sample duration field, set to one second by default. Give it a resonable range, like 0.1&ndash;2. The shorter the duration to more precise a result we get, but it will be harder to read as it changes more rapidly.</p>
+						
+						<pre>	[SerializeField]
+	TextMeshProUGUI display;
+
+	<ins>[SerializeField, Range(0.1f, 2f)]</ins>
+	<ins>float sampleDuration = 1f;</ins></pre>
+						
+						<figure>
+							<img src="showing-the-frame-rate/sample-duration.png" width="320" height="91">
+							<figcaption>Sample duration set to a single second.</figcaption>
+						</figure>
+						
+						<p>From now on we'll only adjust the display when the accumulated duration equals or exceeds the configured sample duration. We can check this with the <code>>=</code> greater-or-equal operator. After updating the display set the accumulated frame and duration back to zero.</p>
+						
+						<pre>	void Update () {
+		float frameDuration = Time.unscaledDeltaTime;
+		frames += 1;
+		duration += frameDuration;
+
+		<ins>if (duration >= sampleDuration) {</ins>
+			display.SetText("FPS\n{0:0}\n000\n000", frames / duration);
+			<ins>frames = 0;</ins>
+			<ins>duration = 0f;</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="showing-the-frame-rate/average-frame-rate.mp4" type="video/mp4">
+							</video>
+							<figcaption>Average frame rate over one second.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Best and Worst</h3>
+						
+						<p>The average frame rate fluctuates because our app's performance isn't constant. It sometimes slows down either because it temporarily has more work to do or because other processes running on the same machine get in the way. To get an idea of how big these fluctuations are we'll also record and display the best and worst frame durations that occurred during the sample period. Set the best duration to <code>float.MaxValue</code> by default, which is the worst possible best duration.</p>
+						
+						<pre>	float duration<ins>, bestDuration = float.MaxValue, worstDuration</ins>;</pre>
+						
+						<p>Each update check whether the current frame duration is less than the best duration so far. If so make it the new best duration. Also check if the current frame duration is greater than the worst duration so far. If so make it the new worst duration.</p>
+						
+						<pre>	void Update () {
+		float frameDuration = Time.unscaledDeltaTime;
+		frames += 1;
+		duration += frameDuration;
+
+		<ins>if (frameDuration &lt; bestDuration) {</ins>
+			<ins>bestDuration = frameDuration;</ins>
+		<ins>}</ins>
+		<ins>if (frameDuration > worstDuration) {</ins>
+			<ins>worstDuration = frameDuration;</ins>
+		<ins>}</ins>
+		
+		&hellip;
+	}</pre>
+						
+						<p>We'll now put the best frame rate on the first line, the average on the second line, and the worst on the last. We can do this by adding two more arguments to <code>SetText</code> and adding more placeholders to the string. They are indices, so the first number is indicated with 0, the second with 1, and the third with 2. After that also reset the best and worst durations.</p>
+						
+						<pre>		if (duration >= sampleDuration) {
+			display.SetText(
+				"FPS\n{0:0}\n<ins>{1:0}</ins>\n<ins>{2:0}</ins>",
+				<ins>1f / bestDuration,</ins>
+				frames / duration<ins>,</ins>
+				<ins>1f / worstDuration</ins>
+			);
+			frames = 0;
+			duration = 0f;
+			<ins>bestDuration = float.MaxValue;</ins>
+			<ins>worstDuration = 0f;</ins>
+		}</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="showing-the-frame-rate/best-average-worst.mp4" type="video/mp4">
+							</video>
+							<figcaption>Best, average, and worst frame rates.</figcaption>
+						</figure>
+						
+						<p>Note that the best frame rate can exceed the display refresh rate, even when VSync is enabled. Likewise the worst frame rate doesn't have to be a multiple of the display refresh rate. This is possible because we're not measuring the duration between displayed frames. We're measuring the duration between Unity frames, which are iterations of its update loop. Unity's update loop isn't perfectly synchronized with the display. We already saw a hint of that when the profiler showed that the player loop of the next frame started while the render thread of the current frame was still busy. And after the render thread is finished the GPU still has some work to do, and after that it will still take some time before the display refreshes. So the FPS that we display isn't the real frame rate, it's what Unity tells us it is. Ideally these are the same, but getting that right is complicated. There is a <a href="https://blogs.unity3d.com/2020/10/01/fixing-time-deltatime-in-unity-2020-2-for-smoother-gameplay-what-did-it-take/">Unity blog post</a> about how Unity is improving in this regard, but that doesn't even tell the entire story.</p>
+					</section>
+					
+					<section>
+						<h3>Frame Durations</h3>
+						
+						<p>Frames-per-second is a good unit to measure perceived performance, but when trying to reach a target frame rate it's more useful to display the frame duration instead. For example, when trying to achieve a stable 60FPS on a mobile device every millisecond counts. So let's add a display mode configuration option to our frame rate counter.</p>
+						
+						<p>Define a <code>DisplayMode</code> enum for FPS and MS inside <code>FrameRateCounter</code> and then add a serializable field of that type, set to FPS by default.</p>
+						
+						<pre>	[SerializeField]
+	TextMeshProUGUI display;
+
+	<ins>public enum DisplayMode { FPS, MS }</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>DisplayMode displayMode = DisplayMode.FPS;</ins></pre>
+						
+						<figure>
+							<img src="showing-the-frame-rate/display-mode.png" width="320" height="111">
+							<figcaption>Configurable display mode.</figcaption>
+						</figure>
+						
+						<p>Then when we refresh the display in <code>Update</code> check whether the mode is set to FPS. If so do the same that we're already doing. Otherwise replace the FPS header with MS and use the inverse arguments. Multiply them with 1000 as well to convert from seconds to milliseconds.</p>
+						
+						<pre>		if (duration >= sampleDuration) {
+			<ins>if (displayMode == DisplayMode.FPS) {</ins>
+				display.SetText(
+					"FPS\n{0:0}\n{1:0}\n{2:0}",
+					1f / bestDuration,
+					frames / duration,
+					1f / worstDuration
+				);
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>display.SetText(</ins>
+					<ins>"MS\n{0:0}\n{1:0}\n{2:0}",</ins>
+					<ins>1000f * bestDuration,</ins>
+					<ins>1000f * duration / frames,</ins>
+					<ins>1000f * worstDuration</ins>
+				<ins>);</ins>
+			<ins>}</ins>
+			frames = 0;
+			duration = 0f;
+			bestDuration = float.MaxValue;
+			worstDuration = 0f;
+		}</pre>
+						
+						<p>Frame durations are often measured in tenths of milliseconds. We can increase the precision of our display one step by increasing the digit rounding from zero to 1.</p>
+						
+						<pre>				display.SetText(
+					"MS\n{0:<ins>1</ins>}\n{1:<ins>1</ins>}\n{2:<ins>1</ins>}",
+					1000f * bestDuration,
+					1000f * duration / frames,
+					1000f * worstDuration
+				);</pre>
+						
+						<figure>
+							<img src="showing-the-frame-rate/precise-frame-duration.png" width="110" height="180">
+							<figcaption>Frame durations.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Memory Allocations</h3>
+						
+						<p>Our frame rate counter is finished, but before moving on let's check how much it impacts performance. Showing the UI requires more draw calls per frame, but that doesn't really make a difference. Use the profiler in play mode and then search for a frame during which we update the text. It turns out that this doesn't take much time, but it does allocate memory. This is easiest to detect via the hierarchy view, sorting by the <em>GC Alloc</em> column.</p>
+						
+						<figure>
+							<img src="showing-the-frame-rate/profiler-hierarchy-allocations.png" width="600" height="120">
+							<figcaption>Allocations shown in profiler hierarchy.</figcaption>
+						</figure>
+						
+						<p>Text strings are objects. When we create a new one via <code>SetText</code> this produces a new string object, which is responsible for the allocation of 106 bytes. Unity's UI refresh then increases this to 4.5 kilobytes. While this isn't much it will accumulate, triggering a memory garbage collection process at some point which will result in an undesired frame duration spike.</p>
+						
+						<p>It is important to be aware of memory allocation for temporary objects and eliminate recurring ones as much as possible. Fortunately <code>SetText</code> and Unity's UI update only perform these memory allocations in the editor, for various reasons, like updating the text input field. If we profile a build then we will find some initial allocations but then no more. So it is essential to profile builds. Profiling editor play mode is only good for a first impression.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Automatic Function Switching</h2>
+					
+					<p>Now that we know how to profile our app we can compare its performance when displaying different functions. If a function requires more calculations the CPU has to do more work, so that can lower the frame rate. How the points get calculated makes no difference to the GPU though. If the resolution is the same the GPU will have to do the same amount of work.</p>
+					
+					<p>The biggest difference is between the wave and torus functions. We can compare their CPU usage via the profiler. We could either compare two separate runs with different functions configured, or profile in play mode and switch during play.</p>
+					
+					<figure>
+						<img src="automatic-function-switching/spike-during-switch.png" width="180" height="180">
+						<figcaption>Spike during switch from torus to wave.</figcaption>
+					</figure>
+					
+					<p>The CPU graph shows that indeed the load decreases after switching from torus to wave. There is also a massive frame duration spike when the switch happened. This happened because play mode is temporarily paused when a change is made via the editor. Some smaller spikes happened later as well due to deselection and editor focus changes.</p>
+					
+					<p>The spikes fall under the <em>Other</em> category. The CPU graph can be filtered by toggling the category labels on the left side so we only see the relevant data. With the <em>Other</em> category disabled the change in the amount of calculations is more obvious.</p>
+					
+					<figure>
+						<img src="automatic-function-switching/others-not-shown.png" width="180" height="180">
+						<figcaption>Other category not shown.</figcaption>
+					</figure>
+					
+					<aside>
+						<h3>What's the small spike that remains?</h3>
+						<div>
+							<p>That is the garbage collector that just happened to activate.</p>
+						</div>
+					</aside>
+					
+					<p>Switching functions via the inspector is awkward for profiling due to the pauses. Even worse is that we have to make a new build to profile a different function. We could improve this by adding the ability to switch functions to our graph besides via its inspector, either automatically or via user input. We'll go for the first option in this tutorial.</p>
+					
+					<section>
+						<h3>Looping Through Functions</h3>
+						
+						<p>We're going to automatically loop through all functions. Each function will be shown for a fixed duration, after which the next one will be shown. To make the function duration configurable add a serializable field to <code>Graph</code> for it, with a default of one second. Also set its minimum to zero by giving it the <code>Min</code> attribute. A duration of zero would result is switching to a different function every frame.</p>
+						
+						<pre>	[SerializeField]
+	FunctionLibrary.FunctionName function;
+
+	<ins>[SerializeField, Min(0f)]</ins>
+	<ins>float functionDuration = 1f;</ins></pre>
+						
+						<figure>
+							<img src="automatic-function-switching/function-duration.png" width="320" height="134">
+							<figcaption>Function duration.</figcaption>
+						</figure>
+						
+						<p>From now on we'll need to keep track of how long the current function has been active and switch to the next one when needed. This will complicate our <code>Update</code> method. Its current code deals solely with updating the current function, so let's move it to a separate <code>UpdateFunction</code> method and have <code>Update</code> invoke it. This keeps our code organized.</p>
+						
+						<pre>	void Update () {
+		<ins>UpdateFunction();</ins>
+	<ins>}</ins>
+
+	<ins>void UpdateFunction () {</ins>
+		FunctionLibrary.Function f = FunctionLibrary.GetFunction(function);
+		float time = Time.time;
+		float step = 2f / resolution;
+		float v = 0.5f * step - 1f;
+		for (int i = 0, x = 0, z = 0; i &lt; points.Length; i++, x++) { &hellip; }
+	}</pre>
+						
+						<p>Now add a duration field and increase it by the&mdash;possibly scaled&mdash;delta time at the start of <code>Update</code>. Then if the duration equals or exceeds the configured duration reset it back to zero. After that comes the invocation of <code>UpdateFunction</code>.</p>
+						
+						<pre>	Transform[] points;
+	
+	<ins>float duration;</ins>
+
+	&hellip;
+	
+	void Update () {
+		<ins>duration += Time.deltaTime;</ins>
+		<ins>if (duration >= functionDuration) {</ins>
+			<ins>duration = 0f;</ins>
+		<ins>}</ins>
+		UpdateFunction();
+	}</pre>
+						
+						<p>We'll most likely never exactly reach the function duration, we'll exceed it a little instead. We could ignore this, but to stay reasonably synchronized with the excepted timing of function switches we should deduct the extra time from the duration of the next function. We do this by subtracting the desired duration from the current duration instead of setting it to zero.</p>
+						
+						<pre>		if (duration >= functionDuration) {
+			duration <ins>-= functionDuration</ins>;
+		}</pre>
+						
+						<p>To loop through functions we'll add a <code>GetNextFunctionName</code> method to <code>FunctionLibrary</code> that takes a function name and returns the next one. As enums are integers we can just add one to its parameter and return that.</p>
+						
+						<pre>	<ins>public static FunctionName GetNextFunctionName (FunctionName name) {</ins>
+		<ins>return name + 1;</ins>
+	<ins>}</ins></pre>
+						
+						<p>But we also have to loop back to the first function instead of moving past the last one, otherwise we would end up with an invalid name. Thus only if the provided name is less than the torus can we increase it. Otherwise we return the first function, which is the wave. We can do this with if-else blocks that each return the appropriate result.</p>
+						
+						<pre>		<ins>if (name &lt; FunctionName.Torus) {</ins>
+			return name + 1;
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>return FunctionName.Wave;</ins>
+		<ins>}</ins></pre>
+						
+						<p>We can make this method function-name agnostic by comparing the name&mdash;as an int&mdash;to the length of the functions array minus one, which matches the index of the last function. If we're at the end we can also return zero, which is the first index. The advantage of this approach is that we won't have to adjust the method if we change the function names later.</p>
+						
+						<pre>		if (<ins>(int)</ins>name &lt; <ins>functions.Length - 1</ins>) {
+			return name + 1;
+		}
+		else {
+			return <ins>0</ins>;
+		}</pre>
+						
+						<p>It's also possible to reduce the method body to a single expression by using the <code>?:</code> ternary conditional operator. It's an if-then-else expression with the <code>?</code> and <code>:</code> separating its parts. Both alternatives must produce a value of the same type.</p>
+						
+						<pre>	public static FunctionName GetNextFunctionName (FunctionName name) {
+		<ins>return (int)name &lt; functions.Length - 1 ? name + 1 : 0;</ins>
+	}</pre>
+						
+						<p>Use the new method in <code>Graph.Update</code> to switch to the next function when appropriate.</p>
+												
+						<pre>		if (duration >= functionDuration) {
+			duration -= functionDuration;
+			<ins>function = FunctionLibrary.GetNextFunctionName(function);</ins>
+		}</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="automatic-function-switching/cycling-through-functions.mp4" type="video/mp4">
+							</video>
+							<figcaption>Cycling through functions.</figcaption>
+						</figure>
+						
+						<p>We can now see the performance of all functions in sequence by profiling a build.</p>
+						
+						<figure>
+							<img src="automatic-function-switching/profiler-build-looping-functions.png" width="670" height="180">
+							<figcaption>Profiling a build of looping functions.</figcaption>
+						</figure>
+						
+						<p>In my case the frame rate is the same for all functions because it never dropped below 60FPS. The differences are smoothed out by waiting for VSync. Profiling a build with VSync enable makes the difference more obvious. Alternatively, only show the scripts in the profiler.</p>
+						
+						<figure>
+							<img src="automatic-function-switching/profiler-build-looping-functions-only-scripts.png" width="670" height="60">
+							<figcaption>Only showing scripts.</figcaption>
+						</figure>
+						
+						<p>It turns out that <em>Wave</em> is fastest, followed by <em>Ripple</em>, then <em>Multi Wave</em>, after that <em>Sphere</em>, and <em>Torus</em> is slowest. This matches what we would expect, knowing the code.</p>
+						
+						<aside>
+							<h3>Shouldn't VSync be shown separately in yellow in the profiler?</h3>
+							<div>
+								<p>It should, but this doesn't happen for me in Unity 2020. It instead gets combined with rendering.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Random Functions</h3>
+						
+						<p>Let's make our graph a bit more interesting, by adding an option to switch between functions at random instead of cycling through a fixed sequence. Add a <code>GetRandomFunctionName</code> method to support this to <code>FunctionLibrary</code>. It can pick a random index by invoking <code>Random.Range€</code> with zero and the functions array length as argument. The chosen index is valid because this is the integer version of the method, for which the provided range is inclusive-exclusive.</p>
+						
+						<pre>	<ins>public static FunctionName GetRandomFunctionName () {</ins>
+		<ins>var choice = (FunctionName)Random.Range€(0, functions.Length);</ins>
+		<ins>return choice;</ins>
+	<ins>}</ins></pre>
+						
+						<p>We can go a step further and make sure that we never get the same function twice in a row. Do this by renaming our new method to <code>GetRandomFunctionNameOtherThan</code> and adding a function name parameter. Increase the first argument of <code>Random.Range€</code> to 1, so index zero is never chosen at random. Then check if the choice equals the name to avoid. If so return the first name, otherwise the chosen one. Thus we substitute zero for the disallowed index, without introducing a selection bias.</p>
+						
+						<pre>	public static FunctionName <ins>GetRandomFunctionNameOtherThan</ins> (<ins>FunctionName name</ins>) {
+		var choice = (FunctionName)Random.Range€(<ins>1</ins>, functions.Length);
+		return choice <ins>== name ? 0 : choice</ins>;
+	}</pre>
+						
+						<p>Back to <code>Graph</code>, add a configuration option for the transition mode, either cycle or random. Again do this with a custom enum field.</p>
+						
+						<pre>	[SerializeField]
+	FunctionLibrary.FunctionName function;
+	
+	<ins>public enum TransitionMode { Cycle, Random€ }</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>TransitionMode transitionMode;</ins></pre>
+						
+						<p>When picking the next function check whether the transition mode is set to cycle. If so invoke <code>GetNextFunctionName</code>, otherwise <code>GetRandomFunctionName</code>. As this complicates picking the next function let's put this code in a separate method as well, keeping <code>Update</code> simple.</p>
+						
+						<pre>	void Update () {
+		duration += Time.deltaTime;
+		if (duration >= functionDuration) {
+			duration -= functionDuration;
+			<del>//function = FunctionLibrary.GetNextFunctionName(function);</del>
+			<ins>PickNextFunction();</ins>
+		}
+		UpdateFunction();
+	}
+	
+	<ins>void PickNextFunction () {</ins>
+		<ins>function = transitionMode == TransitionMode.Cycle ?</ins>
+			<ins>FunctionLibrary.GetNextFunctionName(function) :</ins>
+			<ins>FunctionLibrary.GetRandomFunctionNameOtherThan(function)</ins>;
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="automatic-function-switching/transition-mode-random.png" width="320" height="64" alt="inspector"><br>
+							<video width="250" height="216" controls loop muted>
+								<source src="automatic-function-switching/random-functions.mp4" type="video/mp4">
+							</video>
+							<figcaption>Picking random functions.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Interpolating Functions</h3>
+						
+						<p>We wrap up this tutorial by making the transition between functions more interesting. Instead of suddenly switching to another function we'll smoothly morph our graph to the next one. This is also interesting for performance profiling because it requires calculating two functions at the same time during a transition.</p>
+						
+						<p>Begin by adding a <code>Morph</code> function to <code>FunctionLibrary</code> that will take care of the transition. Give it the same parameters as the function methods, plus two <code>Function</code> parameters and a <code>float</code> parameter to control the morph progress.</p>
+						
+						<pre>	<ins>public static Vector3 Morph (</ins>
+		<ins>float u, float v, float t, Function from, Function to, float progress</ins>
+	<ins>) {}</ins></pre>
+						
+						<p>We're using <code>Function</code> parameters instead of <code>FunctionName</code> parameters because that way <code>Graph</code> can retrieve the functions by name once per update, so we won't have to access the functions array twice per point.</p>
+						
+						<aside>
+							<h3>Why retrieve the functions each update <code>Graph</code> in graph?</h3>
+							<div>
+								<p>We could store the functions in fields of <code>Graph</code> as well, instead of getting them every update. We don't do this because field values of type <code>Function</code> do not survive hot reloads, while <code>FunctionName</code> fields do. Also, retrieving one or two functions per update doesn't meaningfully affect performance. But doing it per point per update would be a lot of unnecessary extra work.</p>
+								
+								<p>Unity's <code>UnityEvent</code> types are serializable so we could use those instead, but they add more overhead and functionality that we do not need. They're typically used to hook methods to UI events.</p>
+							</div>
+						</aside>
+						
+						<p>The progress is a 0&ndash;1 value that we'll use to interpolate from the first provided function to the second one. We can use the <code>Vector3.Lerp</code> function for this, passing it the result of both functions and the progress value.</p>
+						
+						<pre>	public static Vector3 Morph (
+		float u, float v, float t, Function from, Function to, float progress
+	) {
+		<ins>return Vector3.Lerp(from(u, v, t), to(u, v, t), progress);</ins>
+	}</pre>
+						
+						<p><em>Lerp</em> is shorthand for linear interpolation. It will produce a straight constant-speed transition between the functions. We can make it look a bit smoother by slowing down the progress near the start and end. This is done by replacing the raw progress with an invocation of <code>Mathf.Smoothstep</code> with zero, one, and the progress as arguments. It applies the `3x^2-2x^3` function, commonly known as smoothstep. The first two parameter of <code>Smoothstep</code> are an offset and scale for this function, which we don't need so use 0 and 1.</p>
+						
+						<figure>
+							<img src="automatic-function-switching/smoothstep.png" width="160" height="160">
+							<figcaption>0&ndash;1 Smoothstep and linear.</figcaption>
+						</figure>
+						
+						<pre>		return Vector3.Lerp(from(u, v, t), to(u, v, t), <ins>SmoothStep(0f, 1f, progress)</ins>);</pre>
+						
+						<p>The <code>Lerp</code> method clamps its third argument so it falls in the 0&ndash;1 range. The <code>Smoothstep</code> method does this as well. We configured the latter to output a 0&ndash;1 value, so the extra clamp of <code>Lerp</code> is not needed. For cases like this there is an alternative <code>LerpUnclamped</code> method, so let's use that one instead.</p>
+						
+						<pre>		return Vector3.<ins>LerpUnclamped</ins>(
+			from(u, v, t), to(u, v, t), SmoothStep(0f, 1f, progress)
+		);</pre>
+					</section>
+					
+					<section>
+						<h3>Transitioning</h3>
+						
+						<p>The transition period between functions requires a duration, so add a configuration option for it to <code>Graph</code>, with the same minumum and default as the function duration.</p>
+						
+						<pre>	[SerializeField, Min(0f)]
+	float functionDuration = 1f<ins>, transitionDuration = 1f</ins>;</pre>
+						
+						<figure>
+							<img src="automatic-function-switching/transition-duration.png" width="320" height="84">
+							<figcaption>Transition duration.</figcaption>
+						</figure>
+						
+						<p>Our graph can now be in two modes, either transitioning or not. We'll keep track of this with a boolean field, which has the <code>bool</code> type. We also need to keep track of the name of the function from which we are transitioning.</p>
+						
+						<pre>	float duration;
+
+	<ins>bool transitioning;</ins>
+
+	<ins>FunctionLibrary.FunctionName transitionFunction;</ins></pre>
+						
+						<p>The <code>UpdateFunction</code> method works for displaying a single function. Duplicate it and rename the new one to <code>UpdateFunctionTransition</code>. Change it so it gets both functions and calculates the progress, which is the current duration divided by the transition duration. Then have it invoke <code>Morph</code> instead of a single function in its loop.</p>
+						
+						<pre>	<ins>void UpdateFunctionTransition</ins> () {
+		FunctionLibrary.Function
+			<ins>from = FunctionLibrary.GetFunction(transitionFunction),</ins>
+			<ins>to</ins> = FunctionLibrary.GetFunction(function);
+		<ins>float progress = duration / transitionDuration;</ins>
+		float time = Time.time;
+		float step = 2f / resolution;
+		float v = 0.5f * step - 1f;
+		for (int i = 0, x = 0, z = 0; i &lt; points.Length; i++, x++) {
+			&hellip;
+			points[i].localPosition = <ins>FunctionLibrary.Morph(</ins>
+				<ins>u, v, time, from, to, progress</ins>
+			<ins>)</ins>;
+		}
+	}</pre>
+						
+						<p>At the end of <code>Update</code> check whether we're transitioning. If so invoke <code>UpdateFunctionTransition</code>, otherwise <code>UpdateFuction</code>.</p>
+						
+						<pre>	void Update () {
+		duration += Time.deltaTime;
+		if (duration >= functionDuration) {
+			duration -= functionDuration;
+			PickNextFunction();
+		}
+
+		<ins>if (transitioning) {</ins>
+			<ins>UpdateFunctionTransition();</ins>
+		}
+		<ins>else {</ins>
+			UpdateFunction();
+		<ins>}</ins>
+	}</pre>
+						
+						<p>Once the duration exceeds the function duration we move on to the next one. Before picking the next function indicate that we're transitioning and make the transition function equal to the current function.</p>
+						
+						<pre>		if (duration >= functionDuration) {
+			duration -= functionDuration;
+			<ins>transitioning = true;</ins>
+			<ins>transitionFunction = function;</ins>
+			PickNextFunction();
+		}</pre>
+						
+						<p>But if we're already transitioning we have to do something else. So first check whether we're transitioning. Only if that's not the case do we have to check whether we exceeded the function duration.</p>
+						
+						<pre>		duration += Time.deltaTime;
+		<ins>if (transitioning) {}</ins>
+		<ins>else</ins> if (duration >= functionDuration) {
+			duration -= functionDuration;
+			transitioning = true;
+			transitionFunction = function;
+			PickNextFunction();
+		}</pre>
+						
+						<p>If we are transitioning then we have to check whether we exceeded the transition duration. If so deduct the transition duration from the current duration and switch back to the single function mode.</p>
+						
+						<pre>		if (transitioning) {
+			<ins>if (duration >= transitionDuration) {</ins>
+				<ins>duration -= transitionDuration;</ins>
+				<ins>transitioning = false;</ins>
+			<ins>}</ins>
+		}
+		else if (duration >= functionDuration) { &hellip; }</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="automatic-function-switching/transitioning.mp4" type="video/mp4">
+							</video>
+							<figcaption>Transitioning between functions.</figcaption>
+						</figure>
+						
+						<p>If we profile now we can see that indeed during transitions <code>Graph.Update</code> takes significantly longer. Exactly how much time it takes depends on between which functions it blends.</p>
+						
+						<figure>
+							<img src="automatic-function-switching/profiler-build-showing-transitions.png" width="670" height="110">
+							<figcaption>Profiler build showing extra script work for transitions.</figcaption>
+						</figure>
+						
+						<p>It bears repeating that the profiling results you get depend on your hardware and can be quite different from the examples I've shown in this tutorial. When developing your own app decide what minimum hardware specifications you support and test with those. Your development machine is only for preliminary testing. If you're targeting multiple platforms or hardware specifications then you'll need multiple testing devices.</p>
+						
+						<p>The next tutorial is <a href="../compute-shaders/index.html">Compute Shaders</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/basics-04-measuring-performance/" class="repository">repository</a>
+					<a href="Measuring-Performance.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

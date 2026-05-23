@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/movement/custom-gravity/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/movement/custom-gravity/tutorial-image.jpg">
+		<meta property="og:title" content="Custom Gravity">
+		<meta property="og:description" content="A Unity Movement tutorial about applying custom gravity to our sphere and other objects.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Custom Gravity</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/movement/custom-gravity/#article",
+				"headline": "Custom Gravity",
+				"alternativeHeadline": "Walking on a Sphere",
+				"datePublished": "2020-02-22",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Movement tutorial about applying custom gravity to our sphere and other objects.",
+				"image": "https://catlikecoding.com/unity/tutorials/movement/custom-gravity/tutorial-image.jpg",
+				"dependencies": "Unity 2019.2.21f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/movement/", "name": "Movement" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				CustomGravity: 1,
+				CustomGravityRigidbody: 1,
+				MovingSphere: 1,
+				OrbitCamera: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Movement</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Custom Gravity</h1>
+					<p>Walking on a Sphere</p>
+					<ul>
+						<li>Support arbitrary gravity.</li>
+						<li>Work with a variable up axis.</li>
+						<li>Pull everything to a single point.</li>
+						<li>Apply custom gravity to arbitrary bodies.</li>
+					</ul>
+				</header>
+				
+				<p>This is the fifth installment of a tutorial series about controlling the <a href="../index.html">movement</a> of a character. It covers replacing standard gravity with a custom approach, through which we support walking on a sphere.</p>
+				
+				<p>This tutorial is made with Unity 2019.2.21f1. It also uses the ProBuilder package.</p>
+								
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Exploring a tiny planet.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Variable Gravity</h2>
+					
+					<p>Up to this point we have always worked with a fixed gravity vector: 9.81 straight down. This is sufficient for most games, but not all. For example, walking on the surface of a sphere that represents a planet isn't currently possible. So we're going to add support for custom gravity, which needn't be uniform.</p>
+					
+					<p>Before we get complex, let's start by simply flipping the gravity and see what happens, by making the Y component of the gravity vector positive, via the project settings. This effectively turns it into antigravity, which should make our sphere fall upward.</p>
+					
+					<figure>
+						<video width="250" height="216" controls loop muted>
+							<source src="variable-gravity/fighting-antigravity.mp4" type="video/mp4">
+						</video>
+						<figcaption>Fighting antigravity.</figcaption>
+					</figure>
+					
+					<p>It turns out that our sphere does fly upward, but it initially clings to the ground. That's because we're snapping it to the ground and our code assumes normal gravity. We have to change it so it can work with any gravity vector.</p>
+					
+					<section>
+						<h3>Up Axis</h3>
+						
+						<p>We relied on the up axis always being equal to the Y axis. To let go of this assumption we have to add an up axis field to <code>MovingSphere</code> and use that instead. To support gravity that can change at any time we'll have to set the up axis at the start of <code>FixedUpdate</code>. It points in the opposite direction that gravity pulls, so it's equal to the negated normalized gravity vector.</p>
+						
+						<pre>	<ins>Vector3 upAxis;</ins>
+
+	&hellip;
+
+	void FixedUpdate () {
+		<ins>upAxis = -Physics.gravity.normalized;</ins>
+		&hellip;
+	}</pre>
+						
+						<p>Now we have to replace all usage of <code>Vector3.up</code> with the new up axis. First, in <code>UpdateState</code> when the sphere is in the air and we use it for the contact normal.</p>
+						
+						<pre>	void UpdateState () {
+		&hellip;
+		else {
+			contactNormal = <ins>upAxis</ins>;
+		}
+	}</pre>
+						
+						<p>Second, in <code>Jump</code> when biasing the jump direction.</p>
+						
+						<pre>	void Jump () {
+		&hellip;
+		jumpDirection = (jumpDirection + <ins>upAxis</ins>).normalized;
+		&hellip;
+	}</pre>
+						
+						<p>And we also have to adjust how we determine the jump speed. The idea is that we counteract gravity. We used &minus;2 times the gravity Y component, but this no longer works. Instead we have to use the magnitude of the gravity vector, regardless of its direction. This means that we have to remove the minus sign as well.</p>
+						
+						<pre>		float jumpSpeed = Mathf.Sqrt(<ins>2f</ins> * Physics.gravity<ins>.magnitude</ins> * jumpHeight);</pre>
+						
+						<p>Finally, when probing for the ground in <code>SnapToGround</code> we have to replace <code>Vector3.down</code> with the up axis, negated.</p>
+						
+						<pre>	bool SnapToGround () {
+		&hellip;
+		if (!Physics.Raycast(
+			body.position, <ins>-upAxis</ins>, out RaycastHit hit,
+			probeDistance, probeMask
+		)) {
+			return false;
+		}
+		&hellip;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Dot Products</h3>
+						
+						<p>We can also no longer directly use the Y component of a normal vector when we need a dot product. We have to invoke <code>Vector3.Dot</code> with the up axis and normal vector as arguments. First in <code>SnapToGround</code>, when checking if we found ground.</p>
+						
+						<pre>		<ins>float upDot = Vector3.Dot(upAxis, hit.normal);</ins>
+		if (<ins>upDot</ins> &lt; GetMinDot(hit.collider.gameObject.layer)) {
+			return false;
+		}</pre>
+						
+						<p>Then in <code>CheckSteepContacts</code> to see whether we're wedged in a crevasse.</p>
+						
+						<pre>	bool CheckSteepContacts () {
+		if (steepContactCount > 1) {
+			steepNormal.Normalize();
+			<ins>float upDot = Vector3.Dot(upAxis, steepNormal);</ins>
+			if (<ins>upDot</ins> >= minGroundDotProduct) {
+				&hellip;
+			}
+		}
+		return false;
+	}</pre>
+						
+						<p>And in <code>EvaluateCollision</code> to check what kind of contact we have.</p>
+						
+						<pre>	void EvaluateCollision (Collision collision) {
+		float minDot = GetMinDot(collision.gameObject.layer);
+		for (int i = 0; i &lt; collision.contactCount; i++) {
+			Vector3 normal = collision.GetContact(i).normal;
+			<ins>float upDot = Vector3.Dot(upAxis, normal);</ins>
+			if (<ins>upDot</ins> >= minDot) {
+				groundContactCount += 1;
+				contactNormal += normal;
+			}
+			else if (<ins>upDot</ins> > -0.01f) {
+				steepContactCount += 1;
+				steepNormal += normal;
+			}
+		}
+	}</pre>
+						
+						<p>Our sphere can now move around no matter which direction is up. It's also possible to change the gravity direction while in play mode and it will immediately adjust to the new situation.</p>
+						
+						<figure>
+							<img src="variable-gravity/flipping-gravity.png" width="290" height="280">
+							<figcaption>Flipping gravity halfway.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Relative Controls</h3>
+						
+						<p>However, although flipping gravity upside down works without issue, any other direction makes it harder to control the sphere. For example, when gravity aligns with the X axis we can only control movement along the Z axis. Movement along the Y axis is out of our control, only gravity and collisions can affect it. The X axis of our input gets eliminated because we still define our control in the world-space XZ plane. We have to define the desired velocity in a gravity-aligned plane instead.</p>
+						
+						<figure>
+							<img src="variable-gravity/gravity-left-limited-control.png" width="290" height="280">
+							<figcaption>Lost X axis control when gravity pulls left.</figcaption>
+						</figure>
+						
+						<p>As gravity can vary we also have to make the right and forward axes relative. Add fields for them.</p>
+						
+						<pre>	Vector3 upAxis<ins>, rightAxis, forwardAxis</ins>;</pre>
+						
+						<p>We need to project directions on a plane to make this work, so let's replace <code>ProjectOnContactPlane</code> with a more general <code>ProjectDirectionOnPlane</code> method that works with an arbitrary normal and also performs the normalization at the end.</p>
+						
+						<pre>	<del>//Vector3 ProjectOnContactPlane (Vector3 vector) {</del>
+	<del>//	return vector - contactNormal * Vector3.Dot(vector, contactNormal);</del>
+	<del>//}</del>
+
+	<ins>Vector3 ProjectDirectionOnPlane (Vector3 direction, Vector3 normal) {</ins>
+		<ins>return (direction - normal * Vector3.Dot(direction, normal)).normalized;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Use this new method in <code>AdjustVelocity</code> to determine the X and Z control axes, feeding it the variable axes and contact normal.</p>
+						
+						<pre>	void AdjustVelocity () {
+		Vector3 xAxis = <ins>ProjectDirectionOnPlane(rightAxis, contactNormal)</ins>;
+		Vector3 zAxis = <ins>ProjectDirectionOnPlane(forwardAxis, contactNormal)</ins>;
+
+		&hellip;
+	}</pre>
+						
+						<p>The gravity-relative axes are derived in <code>Update</code>. If a player input space exists then we project its right and forward vectors on the gravity plane to find the gravity-aligned X and Z axes. Otherwise we project the world axes. The desired velocity is now defined relative to these axes, so the input vector need not be converted to a different space.</p>
+												
+						<pre>	void Update () {
+		&hellip;
+		
+		if (playerInputSpace) {
+			<ins>rightAxis = ProjectDirectionOnPlane(playerInputSpace.right, upAxis);</ins>
+			<ins>forwardAxis =</ins>
+				<ins>ProjectDirectionOnPlane(playerInputSpace.forward, upAxis);</ins>
+		}
+		else {
+			<ins>rightAxis = ProjectDirectionOnPlane(Vector3.right, upAxis);</ins>
+			<ins>forwardAxis = ProjectDirectionOnPlane(Vector3.forward, upAxis);</ins>
+		<ins>}</ins>
+		desiredVelocity =
+			new Vector3(playerInput.x, 0f, playerInput.y) * maxSpeed;
+		<del>//}</del>
+		
+		desiredJump |= Input.GetButtonDown("Jump");
+	}</pre>
+						
+						<p>This still doesn't solve the problem that a control axis gets eliminated when it aligns with gravity, but when using the orbit camera we can orient it such that we regain full control.</p>
+						
+						<figure>
+							<img src="variable-gravity/orbit-camera.png" width="290" height="280">
+							<figcaption>Using the orbit camera.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Aligning Orbit Camera</h3>
+						
+						<p>The orbit camera is still awkward, because it always uses the world Y axis for its up direction. So we can still end up eliminating a control axis when looking straight up or down. Ideally the orbit camera aligns itself with gravity, which is both intuitive and makes sure that relative movement always works as expected.</p>
+						
+						<p>We use orbit angles to control the camera's orbit and constrain them so that it cannot go too far up or down. We want to keep this functionality no matter which way up happens to be. This can be done by applying a second rotation that aligns the orbit rotation with gravity. Add a <code>Quaternion gravityAlignment</code> field to <code>OrbitCamera</code> for this purpose, initialized with the identity rotation.</p>
+						
+						<pre>	<ins>Quaternion gravityAlignment = Quaternion.identity;</ins></pre>
+						
+						<p>At the start of <code>LateUpdate</code> adjust the alignment so it remains synchronized with the current up direction. In order to keep the orbit from changing erratically when an adjustment is needed we have to use the minimal rotation from the current alignment to the new one. The minimal rotation can be found via <code>Quaternion.FromRotation</code>, which creates a rotation from one direction to another. In our cause that's from the last aligned up direction to the current up direction. Then we multiply that with the current alignment to end up with the new one.</p>
+						
+						<pre>	void LateUpdate () {
+		<ins>gravityAlignment =</ins>
+			<ins>Quaternion.FromToRotation(</ins>
+				<ins>gravityAlignment * Vector3.up, -Physics.gravity.normalized</ins>
+			<ins>) * gravityAlignment;</ins>
+		
+		&hellip;
+	}</pre>
+						
+						<p>The orbit rotation logic has to remain unaware of the gravity alignment. To make this possible add a field to keep track of the orbit rotation separately. This quaternion contains the orbit angle rotation and should be initialized in <code>Awake</code>, set to the same value as the initial camera rotation. We can use a chained assignment for this.</p>
+						
+						<pre>	<ins>Quaternion orbitRotation;</ins>
+	
+	&hellip;
+	
+	void Awake () {
+		&hellip;
+		transform.localRotation = <ins>orbitRotation =</ins> Quaternion.Euler(orbitAngles);
+	}</pre>
+						
+						<p>It only needs to change in <code>LateUpdate</code> when there is a manual or automatic rotation. The look rotation then becomes the gravity alignment multiplied by the orbit rotation.</p>
+						
+						<pre>	void LateUpdate () {
+		&hellip;
+		<del>//Quaternion lookRotation;</del>
+		if (ManualRotation() || AutomaticRotation()) {
+			ConstrainAngles();
+			<ins>orbitRotation</ins> = Quaternion.Euler(orbitAngles);
+		}
+		<del>//else {</del>
+		<del>//	lookRotation = transform.localRotation;</del>
+		<del>//}</del>
+		<ins>Quaternion lookRotation = gravityAlignment * orbitRotation;</ins>
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="variable-gravity/orbit-camera-aligned.png" width="300" height="250">
+							<figcaption>Orbit camera aligned with leftward gravity.</figcaption>
+						</figure>
+						
+						<p>This works when manually adjusting the orbit, but <code>AutomaticRotation</code> fails because it only works when gravity points straight down. We can solve this by undoing gravity alignment before we determine the correct angles. That's done by applying the inverse gravity alignment to the movement delta, which we can get via the <code>Quaternion.Inverse</code> method.</p> 
+						
+						<pre>		<ins>Vector3 alignedDelta =</ins>
+			<ins>Quaternion.Inverse(gravityAlignment) *</ins>
+			<ins>(focusPoint - previousFocusPoint);</ins>
+		Vector2 movement = new Vector2(<ins>alignedDelta.x</ins>, <ins>alignedDelta.z</ins>);</pre>
+					</section>
+					
+				</section>
+				
+				<section>
+					<h2>Spherical Gravity</h2>
+					
+					<p>We support arbitrary gravity, but we're still limited to the uniform <code>Physics.gravity</code> vector. If we want to support spherical gravity and walk on a planet then we have to come up with a custom gravity solution.</p>
+					
+					<section>
+						<h3>Custom Gravity</h3>
+						
+						<p>For this tutorial we'll use a very simple approach. Create a static <code>CustomGravity</code> class with a public <code>GetGravity</code> method that returns a gravity vector, given a position in world space. Initially we'll return <code>Physics.gravity</code> unmodified.</p>
+						
+						<pre><ins>using UnityEngine;</ins>
+
+<ins>public static class CustomGravity {</ins>
+
+	<ins>public static Vector3 GetGravity (Vector3 position) {</ins>
+		<ins>return Physics.gravity;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>As we use gravity to determine the up axis both for the sphere and orbit camera, let's also add a convenient <code>GetUpAxis</code> method, again with a position parameter.</p>
+						
+						<pre>	<ins>public static Vector3 GetUpAxis (Vector3 position) {</ins>
+		<ins>return -Physics.gravity.normalized;</ins>
+	<ins>}</ins></pre>
+						
+						<p>We can go a step further and include a <code>GetGravity</code> variant method that provides both in one go. Let's do that by adding an output parameter for the up axis. We mark it as such by writing <code>out</code> in front of the parameter definition.</p>
+						
+						<pre>	<ins>public static Vector3 GetGravity (Vector3 position, out Vector3 upAxis) {</ins>
+		<ins>upAxis = -Physics.gravity.normalized;</ins>
+		<ins>return Physics.gravity;</ins>
+	<ins>}</ins></pre>
+						
+						<aside>
+							<h3>How does an output parameter work?</h3>
+							<div>
+								<p>It works like <code>Physics.Raycast</code>, which returns whether something was hit and puts the relevant data in a <code>RaycastHit</code> struct provided as an output argument.</p>
+								
+								<p>The <code>out</code> keyword tells us that the method is responsible for correctly setting the parameter, replacing its previous value. Not assigning a value to it will produce a compiler error.</p>
+								
+								<p>The rationale in this case is that returning the gravity vector is the primary purpose of <code>GetGravity</code>, but you can also get the associated up axis at the same time via the output parameter.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Applying Custom Gravity</h3>
+						
+						<p>From now on we can rely on <code>CustomGravity.GetUpAxis</code> in <code>OrbitCamera.LateUpdate</code> to perform the gravity alignment. We'll do that based on the current focus point.</p>
+						
+						<pre>		gravityAlignment =
+			Quaternion.FromToRotation(
+				gravityAlignment * Vector3.up,
+				<ins>CustomGravity.GetUpAxis(focusPoint)</ins>
+			) * gravityAlignment;</pre>
+						
+						<p>And in <code>MovingSphere.FixedUpdate</code> we can use <code>CustomGravity.GetGravity</code> based on the body's position to get both the gravity and up axis. We have to apply the gravity ourselves, simply by adding it to the final velocity as an acceleration. Also, let's pass the gravity vector to <code>Jump</code>.</p>
+						
+						<pre>	void FixedUpdate () {
+		<del>//upAxis = -Physics.gravity.normalized;</del>
+		<ins>Vector3 gravity = CustomGravity.GetGravity(body.position, out upAxis);</ins>
+		UpdateState();
+		AdjustVelocity();
+
+		if (desiredJump) {
+			desiredJump = false;
+			Jump(<ins>gravity</ins>);
+		}
+
+		<ins>velocity += gravity * Time.deltaTime;</ins>
+
+		body.velocity = velocity;
+		ClearState();
+	}</pre>
+						
+						<p>That way we can calculate the gravity's magnitude when needed, without having to determine gravity again for our position.</p>
+						
+						<pre>	void Jump (<ins>Vector3 gravity</ins>) {
+		&hellip;
+		float jumpSpeed = Mathf.Sqrt(2f * <ins>gravity</ins>.magnitude * jumpHeight);
+		&hellip;
+	}</pre>
+						
+						<p>And because we're using custom gravity we have to make sure that standard gravity doesn't get applied to the sphere's body. We can enforce this by setting the body's <code>useGravity</code> property to <code>false</code> in <code>Awake</code>.
+						
+						<pre>	void Awake () {
+		body = GetComponent&lt;Rigidbody>();
+		<ins>body.useGravity = false;</ins>
+		OnValidate();
+	}</pre>
+						
+						<figure>
+							<img src="spherical-gravity/not-using-gravity.png" width="320" height="36">
+							<figcaption><em>Use Gravity</em> automatically turned off in play mode.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Pulling Toward the Origin</h3>
+						
+						<p>Although we've switched to a custom gravity approach everything should still work the same. Changing Unity's gravity vector affects everything just like before. To make gravity spherical we have to make a few changes. We'll keep it simple and use the world origin as the center of our gravity source. The up axis is thus simply the direction to the position. Adjust <code>CustomGravity.GetUpAxis</code> accordingly.</p>
+						
+						<pre>	public static Vector3 GetUpAxis (Vector3 position) {
+		return <ins>position.normalized</ins>;
+	}</pre>
+						
+						<p>True gravity varies with distance. The further away you are the less you are affected by it. But we'll keep its strength constant, using the configured Y component of Unity's gravity vector. Thus we can suffice with scaling the up axis.</p>
+						
+						<pre>	public static Vector3 GetGravity (Vector3 position) {
+		return <ins>position.normalized * Physics.gravity.y</ins>;
+	}
+	
+	public static Vector3 GetGravity (Vector3 position, out Vector3 upAxis) {
+		upAxis = <ins>position.normalized</ins>;
+		return <ins>upAxis * Physics.gravity.y</ins>;
+	}</pre>
+						
+						<p>This is all it takes to make simple spherical gravity work.</p>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="spherical-gravity/walking-on-a-sphere.mp4" type="video/mp4">
+							</video>
+							<figcaption>Walking on a radius 10 sphere, gravity -9.81.</figcaption>
+						</figure>
+						
+						<p>Note that when walking and jumping on a tiny planet it is possible to end up stuck in an orbit around it. You're falling down, but forward momentum makes you fall alongside the surface instead of toward it, just like a satellite.</p>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="spherical-gravity/getting-caught-in-orbit.mp4" type="video/mp4">
+							</video>
+							<figcaption>Getting caught in orbit.</figcaption>
+						</figure>
+						
+						<p>This can be mitigated by increasing gravity or the planet's radius, allowing air acceleration, or by introducing a drag force that slows you down.</p>
+					</section>
+					
+					<section>
+						<h3>Pushing Away</h3>
+						
+						<p>We don't have to limit ourselves to realistic scenarios. By making gravity positive we end up pushing the sphere away from the origin instead, which makes it possible to move along the inside of a sphere. However, we have to flip the up axis when that is the case.</p>
+						
+						<pre>	public static Vector3 GetGravity (Vector3 position, out Vector3 upAxis) {
+		<ins>Vector3 up = position.normalized;</ins>
+		upAxis = <ins>Physics.gravity.y &lt; 0f ? up : -up</ins>;
+		return <ins>up</ins> * Physics.gravity.y;
+	}
+	
+	public static Vector3 GetUpAxis (Vector3 position) {
+		<ins>Vector3 up = position.normalized</ins>;
+		return <ins>Physics.gravity.y &lt; 0f ? up : -up</ins>;
+	}</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="spherical-gravity/walking-on-the-inside-of-a-sphere.mp4" type="video/mp4">
+							</video>
+							<figcaption>Walking on the inside of a sphere.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Other Bodies</h2>
+					
+					<p>Our sphere and orbit camera work with custom gravity, but everything else still relies on the default gravity to fall down. To make arbitrary objects with <code>Rigidbody</code> components fall toward the origin we'll have to apply custom gravity to them as well.</p>
+					
+					<section>
+						<h3>Specialized Rigidbody Component</h3>
+						
+						<p>We could extend the existing <code>Rigidbody</code> component to add custom gravity, but that would make it hard to convert objects that already have a configured <code>Rigidbody</code>. So we'll create a new <code>CustomGravityRigidbody</code> component type instead, which requires the existence of a body and retrieves a reference to it when it awakens. It also disables regular gravity.</p>
+						
+						<pre><ins>using UnityEngine;</ins>
+
+<ins>[RequireComponent(typeof(Rigidbody))]</ins>
+<ins>public class CustomGravityRigidbody : MonoBehaviour {</ins>
+
+	<ins>Rigidbody body;</ins>
+
+	<ins>void Awake () {</ins>
+		<ins>body = GetComponent&lt;Rigidbody>();</ins>
+		<ins>body.useGravity = false;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>To make the body fall toward the origin all we have to do is invoke <code>AddForce</code> on it in <code>FixedUpdate</code>, passing it our custom gravity based on its position.</p>
+						
+						<pre>	<ins>void FixedUpdate () {</ins>
+		<ins>body.AddForce(CustomGravity.GetGravity(body.position));</ins>
+	<ins>}</ins></pre>
+						
+						<p>But gravity is an acceleration, so add <code>ForceMode.Acceleration</code> as a second argument.</p>
+						
+						<pre>		body.AddForce(
+			CustomGravity.GetGravity(body.position)<ins>, ForceMode.Acceleration</ins>
+		);</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="other-bodies/messing-with-cubes-on-a-sphere.mp4" type="video/mp4">
+							</video>
+							<figcaption>Messing with cubes on a sphere.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why do flying cubes jitter?</h3>
+							<div>
+								<p>That happens for the same reason that our sphere jittered. It's especially noticeable for fast-moving objects when the camera is moving as well. If it's too obvious you could make the cubes interpolate their position. It's also possible to add logic to turn on interpolation only when needed.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Sleeping</h3>
+						
+						<p>A downside of applying gravity ourselves each fixed update is that the <code>Rigidbody</code> no longer goes to sleep. PhysX puts bodies to sleep when it can, effectively putting them in stasis, reducing the amount of work it has to do. For this reason it is a good idea to limit how many bodies are affected by our custom gravity.</p>
+						
+						<p>One thing we could do is check whether the body is sleeping at the start of <code>FixedUpdate</code>, by invoking the body's <code>IsSleeping</code> method. If so, it's in equilibrium and we shouldn't disturb it, so return immediately.</p>
+						
+						<pre>	void FixedUpdate () {
+		<ins>if (body.IsSleeping()) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+
+		body.AddForce(
+			CustomGravity.GetGravity(body.position), ForceMode.Acceleration
+		);
+	}</pre>
+						
+						<p>But it never goes to sleep, because we apply an acceleration to it. So we have to first stop doing that. Let's assume that if the body's velocity is very low it has come to rest. We'll use a threshold of 0.0001 for the square magnitude of its velocity. That's 0.01 units per second. If it's slower than that don't apply gravity.</p> 
+						
+						<pre>	void FixedUpdate () {
+		if (body.IsSleeping()) {
+			return;
+		}
+
+		<ins>if (body.velocity.sqrMagnitude &lt; 0.0001f) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+
+		body.AddForce(
+			CustomGravity.GetGravity(body.position), ForceMode.Acceleration
+		);
+	}</pre>
+						
+						<p>That doesn't work, because bodies begin stationary and can also end up hovering in place for a moment for various reasons while still in the air. So let's add a float delay, during which we assume that the body is floating but might still fall. It always resets to zero except when the velocity is below the threshold. In that case we wait one second before we stop applying gravity. If that wasn't enough time to make the body move then it should've come to rest.</p>
+						
+						<pre>	<ins>float floatDelay;</ins>
+
+	&hellip;
+
+	void FixedUpdate () {
+		if (body.IsSleeping()) {
+			<ins>floatDelay = 0f;</ins>
+			return;
+		}
+
+		if (body.velocity.sqrMagnitude &lt; 0.0001f) {
+			<ins>floatDelay += Time.deltaTime;</ins>
+			<ins>if (floatDelay >= 1f) {</ins>
+				return;
+			<ins>}</ins>
+		}
+		<ins>else {</ins>
+			<ins>floatDelay = 0f;</ins>
+		<ins>}</ins>
+		
+		body.AddForce(
+			CustomGravity.GetGravity(body.position), ForceMode.Acceleration
+		);
+	}</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="other-bodies/going-to-sleep.mp4" type="video/mp4">
+							</video>
+							<figcaption>Red is awake, yellow floats, and gray sleeps.</figcaption>
+						</figure>
+						
+						<p>Note that we do not force the body to go to sleep ourselves. We leave that up to PhysX. This is not the only way to support sleeping, but it's easy and sufficient for most simple situations.</p>
+						
+						<aside>
+							<h3>Why do bodies sometimes refuse to sleep?</h3>
+							<div>
+								<p>That happens because PhysX keeps making tiny adjustments, either changing very slowly or oscillating between two states. This can occur when there is a nearly-stable collision state.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Staying Awake</h3>
+						
+						<p>Our approach is fairly robust but not perfect. One assumption we make is that gravity remains constant for a given position. Once we've stopped applying gravity the bodies remain where they are, even if gravity were to suddenly flip. There might be other cases where our assumptions fail as well, for example bodies might move very slowly, or the floor might disappear while we're floating but not yet sleeping. Also, we don't need to worry about sleeping if a body is short-lived anyway, like temporary debris. So let's make it configurable whether a body is allowed to float so it can go to sleep.</p>
+						
+						<pre>	<ins>[SerializeField]</ins>
+	<ins>bool floatToSleep = false;</ins>
+
+	&hellip;
+
+	void FixedUpdate () {
+		<ins>if (floatToSleep) {</ins>
+			&hellip;
+		<ins>}</ins>
+		
+		body.AddForce(
+			CustomGravity.GetGravity(body.position), ForceMode.Acceleration
+		);
+	}</pre>
+						
+						<figure>
+							<img src="spherical-gravity/float-to-sleep.png" width="320" height="59">
+							<figcaption>Floating to sleep enabled.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../complex-gravity/index.html">Complex Gravity</a>.</p>
+						
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/movement-05-custom-gravity/" class="repository">repository</a>
+					<a href="Custom-Gravity.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

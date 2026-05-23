@@ -1,0 +1,1427 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/tower-defense/enemies/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/tower-defense/enemies/tutorial-image.jpg">
+		<meta property="og:title" content="Enemies">
+		<meta property="og:description" content="A Unity Tower Defense tutorial about moving enemies across the board.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Enemies</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/tower-defense/enemies/#article",
+				"headline": "Enemies",
+				"alternativeHeadline": "Moving Through a Maze",
+				"datePublished": "2019-05-11",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Tower Defense tutorial about moving enemies across the board.",
+				"image": "https://catlikecoding.com/unity/tutorials/tower-defense/enemies/tutorial-image.jpg",
+				"dependencies": "Unity 2018.3.0f2",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/tower-defense/", "name": "Tower Defense" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				Direction: 1,
+				DirectionChange: 1,
+				DirectionExtensions: 1,
+				Enemy: 1,
+				EnemyCollection: 1,
+				EnemyFactory: 1,
+				FloatRange: 1,
+				FloatRangeSliderAttribute: 1,
+				FloatRangeSliderDrawer: 1,
+				Game: 1,
+				GameBoard: 1,
+				GameObjectFactory: 1,
+				GameTile: 1,
+				GameTileContent: 1,
+				GameTileContentFactory: 1,
+				GameTileContentType: 1,
+				T: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Tower Defense</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Enemies</h1>
+					<p>Moving Through a Maze</p>
+					<ul>
+						<li>Place spawn points.</li>
+						<li>Make enemies appear and move across the board.</li>
+						<li>Create smooth motion with constant speed.</li>
+						<li>Vary enemy size, speed, and placement.</li>
+					</ul>
+				</header>
+				
+				<p>This is the second installment of a tutorial series about creating a simple <a href="../index.html">tower defense</a> game. It covers spawning enemies and moving them to the nearest destination.</p>
+				
+				<p>This tutorial is made with Unity 2018.3.0f2.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Enemies en route to their destination.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Spawn Points</h2>
+					
+					<p>Before we can spawn enemies we need to decide where to place them on the board. We'll create spawn points for that.</p>
+					
+					<section>
+						<h3>Tile Content</h3>
+						
+						<p>A spawn point is another type of tile content, so add an entry for it to <code>GameTileContentType</code>.</p>
+						
+						<pre translate="no">public enum GameTileContentType {
+	Empty, Destination, Wall<ins>, SpawnPoint</ins>
+}</pre>
+						
+						<p>Then create a prefab to visualize it. We can suffice with duplicating the destination prefab, changing its content type, and giving it another material. I made it orange.</p>
+						
+						<figure>
+							<img src="spawn-points/spawn-point-inspector.png" width="320" height="104">
+							<figcaption>Spawn point configuration.</figcaption>
+						</figure>
+						
+						<p>Add support for spawn points to the content factory and give it a reference to the prefab.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>GameTileContent spawnPointPrefab = default;</ins>
+
+	&hellip;
+
+	public GameTileContent Get (GameTileContentType type) {
+		switch (type) {
+			case GameTileContentType.Destination: return Get(destinationPrefab);
+			case GameTileContentType.Empty: return Get(emptyPrefab);
+			case GameTileContentType.Wall: return Get(wallPrefab);
+			<ins>case GameTileContentType.SpawnPoint: return Get(spawnPointPrefab);</ins>
+		}
+		Debug.Assert(false, "Unsupported type: " + type);
+		return null;
+	}</pre>
+						
+						<figure>
+							<img src="spawn-points/factory.png" width="320" height="142">
+							<figcaption>Factory supporting spawn points.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Toggling Spawn Points</h3>
+						
+						<p>Add a method to toggle a spawn point to <code>GameBoard</code>, just like the other toggle methods. But spawn points don't affect pathfinding, so we don't need to find new paths after a change.</p>
+						
+						<pre translate="no">	<ins>public void ToggleSpawnPoint (GameTile tile) {</ins>
+		<ins>if (tile.Content.Type == GameTileContentType.SpawnPoint) {</ins>
+			<ins>tile.Content = contentFactory.Get(GameTileContentType.Empty);</ins>
+		<ins>}</ins>
+		<ins>else if (tile.Content.Type == GameTileContentType.Empty) {</ins>
+			<ins>tile.Content = contentFactory.Get(GameTileContentType.SpawnPoint);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>A game only makes sense if there are enemies, which requires spawn points. So a valid board should contain at least one spawn point. We'll also need to access spawn points later when adding enemies, so let's use a list to keep track of all tiles with spawn points. Update the list when toggling a spawn point, and prevent removal of the last spawn point.</p>
+						
+						<pre translate="no">	<ins>List&lt;GameTile> spawnPoints = new List&lt;GameTile>();</ins>
+
+	&hellip;
+
+	public void ToggleSpawnPoint (GameTile tile) {
+		if (tile.Content.Type == GameTileContentType.SpawnPoint) {
+			<ins>if (spawnPoints.Count > 1) {</ins>
+				<ins>spawnPoints.Remove(tile);</ins>
+				tile.Content = contentFactory.Get(GameTileContentType.Empty);
+			<ins>}</ins>
+		}
+		else if (tile.Content.Type == GameTileContentType.Empty) {
+			tile.Content = contentFactory.Get(GameTileContentType.SpawnPoint);
+			<ins>spawnPoints.Add(tile);</ins>
+		}
+	}</pre>
+						
+						<p><code>Initialize</code> must now set a spawn point to produce an initial valid board state. Let's simply toggle the first tile, which is the bottom left corner.</p>
+						
+						<pre translate="no">	public void Initialize (
+		Vector2Int size, GameTileContentFactory contentFactory
+	) {
+		&hellip;
+
+		ToggleDestination(tiles[tiles.Length / 2]);
+		<ins>ToggleSpawnPoint(tiles[0]);</ins>
+	}</pre>
+						
+						<p>We'll make it so the alternative touch toggles spawn points from now on, except when the left shift key is held down&mdash;checked via the <code>Input.GetKey</code> method&mdash;in which case a destination is toggled instead.</p>
+						
+						<pre translate="no">	void HandleAlternativeTouch () {
+		GameTile tile = board.GetTile(TouchRay);
+		if (tile != null) {
+			<ins>if (Input.GetKey(KeyCode.LeftShift)) {</ins>
+				board.ToggleDestination(tile);
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>board.ToggleSpawnPoint(tile);</ins>
+			<ins>}</ins>
+		}
+	}</pre>
+						
+						<figure>
+							<img src="spawn-points/board-with-spawn-points.png" width="230" height="230">
+							<figcaption>Board with spawn points.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Accessing Spawn Points</h3>
+						
+						<p>The board takes care of its tiles, but enemies won't be its responsibility. Instead, we'll make it possible to access its spawn points via a public <code>GetSpawnPoint</code> method with an index parameter.</p>
+						
+						<pre translate="no">	<ins>public GameTile GetSpawnPoint (int index) {</ins>
+		<ins>return spawnPoints[index];</ins>
+	<ins>}</ins></pre>
+						
+						<p>To know which indices are valid requires knowledge of the amount of spawn points, so expose that via a public getter property.</p>
+						
+						<pre translate="no">	<ins>public int SpawnPointCount => spawnPoints.Count;</ins></pre>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Spawning Enemies</h2>
+					
+					<p>Spawning an enemy is somewhat like creating tile content. We create an instance of a prefab via a factory, which we then put on the board.</p>
+					
+					<section>
+						<h3>Factories</h3>
+						
+						<p>We'll create a factory for enemies, which will put everything it creates in its own scene. That functionality is shared with the factory that we already have, so let's put the code for that in a common base class, <code>GameObjectFactory</code>. We can suffice with a single <code>CreateGameObjectInstance</code> method with a generic prefab parameter, which creates and returns an instance and takes care of all scene management. Make the method <code>protected</code>, which means that it is only accessible to the class itself and all types that extend it. That's all the base class does, it isn't intended to be used as a fully-functional factory. So mark it as <code>abstract</code>, which makes it impossible to create object instances of it.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+<ins>using UnityEngine.SceneManagement;</ins>
+
+<ins>public abstract class GameObjectFactory : ScriptableObject {</ins>
+
+	<ins>Scene scene;</ins>
+
+	<ins>protected T CreateGameObjectInstance&lt;T> (T prefab) where T : MonoBehaviour {</ins>
+		<ins>if (!scene.isLoaded) {</ins>
+			<ins>if (Application.isEditor) {</ins>
+				<ins>scene = SceneManager.GetSceneByName(name);</ins>
+				<ins>if (!scene.isLoaded) {</ins>
+					<ins>scene = SceneManager.CreateScene(name);</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>scene = SceneManager.CreateScene(name);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>T instance = Instantiate(prefab);</ins>
+		<ins>SceneManager.MoveGameObjectToScene(instance.gameObject, scene);</ins>
+		<ins>return instance;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Adjust <code>GameTileContentFactory</code> so it extends this factory type and uses <code>CreateGameObjectInstance</code> in its <code>Get</code> method, then remove the scene-management code from it.</p>
+						
+						<pre translate="no">using UnityEngine;
+<del>//using UnityEngine.SceneManagement;</del>
+
+[CreateAssetMenu]
+public class GameTileContentFactory : <ins>GameObjectFactory</ins> {
+
+	&hellip;
+
+	<del>//Scene contentScene;</del>
+
+	&hellip;
+
+	GameTileContent Get (GameTileContent prefab) {
+		GameTileContent instance = <ins>CreateGameObjectInstance</ins>(prefab);
+		instance.OriginFactory = this;
+		<del>//MoveToFactoryScene(instance.gameObject);</del>
+		return instance;
+	}
+
+	<del>//void MoveToFactoryScene (GameObject o) {</del>
+	<del>//	&hellip;</del>
+	<del>//}</del>
+}</pre>
+						
+						<p>After that, create a new <code>EnemyFactory</code> type that instantiates a single <code>Enemy</code> prefab via a <code>Get</code> method, along with an accompanying <code>Reclaim</code> method.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>[CreateAssetMenu]</ins>
+<ins>public class EnemyFactory : GameObjectFactory {</ins>
+	
+	<ins>[SerializeField]</ins>
+	<ins>Enemy prefab = default;</ins>
+
+	<ins>public Enemy Get () {</ins>
+		<ins>Enemy instance = CreateGameObjectInstance(prefab);</ins>
+		<ins>instance.OriginFactory = this;</ins>
+		<ins>return instance;</ins>
+	<ins>}</ins>
+
+	<ins>public void Reclaim (Enemy enemy) {</ins>
+		<ins>Debug.Assert(enemy.OriginFactory == this, "Wrong factory reclaimed!");</ins>
+		<ins>Destroy(enemy.gameObject);</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>The new <code>Enemy</code> type initially only needs to keep track of its origin factory.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class Enemy : MonoBehaviour {</ins>
+
+	<ins>EnemyFactory originFactory;</ins>
+
+	<ins>public EnemyFactory OriginFactory {</ins>
+		<ins>get => originFactory;</ins>
+		<ins>set {</ins>
+			<ins>Debug.Assert(originFactory == null, "Redefined origin factory!");</ins>
+			<ins>originFactory = value;</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Prefab</h3>
+						
+						<p>Enemies need a visualization, which could be anything. A robot, a spider, a ghost, or something simpler like a cube, which is what we'll use. But in general the enemy has a 3D model of arbitrary complexity. To make it easy to support this, we'll use a root object for our enemy prefab hierarchy that only has the <code>Enemy</code> component attached to it.</p>
+						
+						
+						<figure>
+							<img src="spawning-enemies/prefab-root.png" width="320" height="160">
+							<figcaption>Prefab root.</figcaption>
+						</figure>
+						
+						<p>Give this object a single child, which is the model root. It should have the identity transform.</p>
+						
+						<figure>
+							<img src="spawning-enemies/model-root.png" width="320" height="120">
+							<figcaption>Model root.</figcaption>
+						</figure>
+						
+						<p>The purpose of the model root is to position the 3D model relative to the local origin of the enemy, so it treats it as a pivot point on which it stands, or hovers above. In our case the model will be a default cube at half scale, which I made dark blue. Make it a child of the model root and set its Y position to 0.25, so it sits on the ground.</p>
+						
+						<figure>
+							<img src="spawning-enemies/cube.png" width="320" height="206">
+							<figcaption>Cube model.</figcaption>
+						</figure>
+						
+						<p>The enemy prefab thus consists of three nested objects: a prefab root, a model root, and a cube. This can be considered overkill for a simple cube, but makes it possible to move and animate any enemy without worrying about its details.</p>
+						
+						<figure>
+							<img src="spawning-enemies/prefab-hierarchy.png" width="225" height="74">
+							<figcaption>Enemy prefab hierarchy.</figcaption>
+						</figure>
+						
+						<p>Create an enemy factory and assign the prefab to it.</p>
+						
+						<figure>
+							<img src="spawning-enemies/factory.png" width="320" height="88">
+							<figcaption>Factory asset.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Placing Enemies on the Board</h3>
+						
+						<p>To put enemies on the board, <code>Game</code> needs a reference to the enemy factory. As we'll need lots of enemies, also add a configuration option for a spawn speed, expressed in enemies per second. A range of 0.1&ndash;10 seems reasonable, with a default of 1.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>EnemyFactory enemyFactory = default;</ins>
+
+	<ins>[SerializeField, Range(0.1f, 10f)]</ins>
+	<ins>float spawnSpeed = 1f;</ins></pre>
+						
+						
+						<figure>
+							<img src="spawning-enemies/game.png" width="320" height="144">
+							<figcaption>Game with enemy factory and spawn speed 4.</figcaption>
+						</figure>
+						
+						<p>Keep track of the spawn progress in <code>Update</code> by increasing it by the speed multiplied by the time delta. If the progress exceeds 1, decrement it and spawn an enemy via a new <code>SpawnEnemy</code> method. Keep doing this as long as progress exceeds 1, in case the speed is high and the frame time ended up so long that multiple enemies should've been spawned.</p>
+						
+						<pre translate="no">	<ins>float spawnProgress;</ins>
+
+	&hellip;
+
+	void Update () {
+		&hellip;
+
+		<ins>spawnProgress += spawnSpeed * Time.deltaTime;</ins>
+		<ins>while (spawnProgress >= 1f) {</ins>
+			<ins>spawnProgress -= 1f;</ins>
+			<ins>SpawnEnemy();</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<aside>
+							<h3>Shouldn't we update progress in <code>FixedUpdate</code>?</h3>
+							<div>
+								<p>That's possible, but we don't really need such exact timing for our tower defense game. Instead, we'll simply update our game state once per frame and make sure that it works reasonably well for any time delta.</p>
+							</div>
+						</aside>
+						
+						<p>Have <code>SpawnEnemy</code> grab a random spawn point from the board and spawn an enemy on that tile. We'll give <code>Enemy</code> a <code>SpawnOn</code> method to correctly position itself.</p>
+						
+						<pre translate="no">	<ins>void SpawnEnemy () {</ins>
+		<ins>GameTile spawnPoint =</ins>
+			<ins>board.GetSpawnPoint(Random.Range(0, board.SpawnPointCount));</ins>
+		<ins>Enemy enemy = enemyFactory.Get();</ins>
+		<ins>enemy.SpawnOn(spawnPoint);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Right now all <code>SpawnOn</code> needs to do is set its own position to the tile's center. Because the prefab's model is positioned correctly the enemy cube ends up on top of the tile.</p>
+						
+						<pre translate="no">	<ins>public void SpawnOn (GameTile tile) {</ins>
+		<ins>transform.localPosition = tile.transform.localPosition;</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="spawning-enemies/spawned-enemies.png" width="230" height="230">
+							<figcaption>Enemies appear on spawn points.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Moving Enemies</h2>
+					
+					<p>Once an enemy has appeared it should start moving along the path to the nearest destination. We'll have to animate them to make that happen. We'll start by simply sliding them from tile to tile, and then make their movement more complex.</p>
+					
+					<section>
+						<h3>Enemy Collection</h3>
+						
+						<p>We'll use the same approach that we used in the <a href="../../object-management/index.html">Object Management</a> series to update enemies. Give <code>Enemy</code> a public <code>GameUpdate</code> method that returns whether it is still alive, which is always at this point. For now, just make it move forward based on the time delta.</p>
+						
+						<pre translate="no">	<ins>public bool GameUpdate () {</ins>
+		<ins>transform.localPosition += Vector3.forward * Time.deltaTime;</ins>
+		<ins>return true;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Next, we have to keep track of a list of living enemies and update them all, removing dead ones from the list. We could put all that code in <code>Game</code>, but let's isolate it and create an <code>EnemyCollection</code> type for that instead. It's a serializable class that doesn't extend anything. Give it a public method to add an enemy and another one to update the entire collection.</p>
+						
+						<pre translate="no"><ins>using System.Collections.Generic;</ins>
+
+<ins>[System.Serializable]</ins>
+<ins>public class EnemyCollection {</ins>
+
+	<ins>List&lt;Enemy> enemies = new List&lt;Enemy>();</ins>
+
+	<ins>public void Add (Enemy enemy) {</ins>
+		<ins>enemies.Add(enemy);</ins>
+	<ins>}</ins>
+
+	<ins>public void GameUpdate () {</ins>
+		<ins>for (int i = 0; i &lt; enemies.Count; i++) {</ins>
+			<ins>if (!enemies[i].GameUpdate()) {</ins>
+				<ins>int lastIndex = enemies.Count - 1;</ins>
+				<ins>enemies[i] = enemies[lastIndex];</ins>
+				<ins>enemies.RemoveAt(lastIndex);</ins>
+				<ins>i -= 1;</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Now <code>Game</code> can suffice with creating one such collection, updating it each frame, and adding spawned enemies to it. Update the enemies after potentially spawning a new one, so they get updated immediately.</p>
+						
+						<pre translate="no">	<ins>EnemyCollection enemies = new EnemyCollection();</ins>
+
+	&hellip;
+
+	void Update () {
+		&hellip;
+		<ins>enemies.GameUpdate();</ins>
+	}
+
+	&hellip;
+
+	void SpawnEnemy () {
+		&hellip;
+		<ins>enemies.Add(enemy);</ins>
+	}</pre>
+						
+						<figure>
+							<img src="moving-enemies/moving-forward.png" width="230" height="230">
+							<figcaption>Enemies moving forward.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Following the Path</h3>
+						
+						<p>Our enemies are moving, but they're not yet following the path. To make that possible, enemies must be able to know where to go next. So give <code>GameTile</code> a public getter property to retrieve the next tile on the path.</p>
+						
+						<pre translate="no">	<ins>public GameTile NextTileOnPath => nextOnPath;</ins></pre>
+						
+						<p>Given a tile from which and a tile to which to move, it is possible for enemies to determine a starting and destination point for a single-tile journey. The enemy can interpolate between those two by keeping track of its progress. After progress is complete, the process is repeated for the next tile. But the paths could change at any time. Rather than figure out where to go while in progress, we'll just keep moving along the planned route and re-evaluate once the next tile is reached.</p>
+						
+						<p>Have <code>Enemy</code> keep track of both tiles, so it is not affected by path changes. Also keep track of the positions, so we don't have to retrieve them each frame. And it needs to keep track of the progress as well.</p>
+						
+						<pre translate="no">	<ins>GameTile tileFrom, tileTo;</ins>
+	<ins>Vector3 positionFrom, positionTo;</ins>
+	<ins>float progress;</ins></pre>
+						
+						<p>Initialize these fields in <code>SpawnOn</code>. The given tile is from where to go and the destination is the next tile on the path. This assumes that there is a next tile. If not we spawned on a destination, which should be impossible. Then cache the positions of the tiles and set progress to zero. We don't have to set the position of the enemy here, because its <code>GameUpdate</code> method will get invoked during the same frame.</p>
+						
+						<pre translate="no">	public void SpawnOn (GameTile tile) {
+		<del>//transform.localPosition = tile.transform.localPosition;</del>
+		<ins>Debug.Assert(tile.NextTileOnPath != null, "Nowhere to go!", this);</ins>
+		<ins>tileFrom = tile;</ins>
+		<ins>tileTo = tile.NextTileOnPath;</ins>
+		<ins>positionFrom = tileFrom.transform.localPosition;</ins>
+		<ins>positionTo = tileTo.transform.localPosition;</ins>
+		<ins>progress = 0f;</ins>
+	}</pre>
+						
+						<p>Increase its progress in <code>GameUpdate</code>. Add the unmodified time delta, so our enemies move one tile per second. While progress is complete, shift the data so <code>To</code> becomes <code>From</code> and the new <code>To</code> is the next tile on the path. Then decrement progress. Once the data is up to date, interpolate the position of the enemy between <code>From</code> and <code>To</code>. Because the progress is our interpolator it is guaranteed to lie between 0 and 1, so we can use <code>Vector3.LerpUnclamped</code>.</p>
+						
+						<pre translate="no">	public bool GameUpdate () {
+		<ins>progress += Time.deltaTime;</ins>
+		<ins>while (progress >= 1f) {</ins>
+			<ins>tileFrom = tileTo;</ins>
+			<ins>tileTo = tileTo.NextTileOnPath;</ins>
+			<ins>positionFrom = positionTo;</ins>
+			<ins>positionTo = tileTo.transform.localPosition;</ins>
+			<ins>progress -= 1f;</ins>
+		<ins>}</ins>
+		transform.localPosition =
+			<ins>Vector3.LerpUnclamped(positionFrom, positionTo, progress)</ins>;
+		return true;
+	}</pre>
+						
+						<p>This makes enemies follow the path, but would fail when the destination tile is reached. So check whether the next tile on the path is <code>null</code> before adjusting the <code>From</code> and <code>To</code> positions. If so, we reached a destination and the enemy is done. Reclaim it and return <code>false</code>.</p>
+						
+						<pre translate="no">		while (progress >= 1f) {
+			tileFrom = tileTo;
+			tileTo = tileTo.NextTileOnPath;
+			<ins>if (tileTo == null) {</ins>
+				<ins>OriginFactory.Reclaim(this);</ins>
+				<ins>return false;</ins>
+			<ins>}</ins>
+			positionFrom = positionTo;
+			positionTo = tileTo.transform.localPosition;
+			progress -= 1f;
+		}</pre>
+						<figure>
+							<video width="230" height="230" controls loop muted>
+								<source src="moving-enemies/shortest-path.mp4" type="video/mp4">
+							</video>
+							<figcaption>Enemies following the shortest path.</figcaption>
+						</figure>
+						
+						<p>Enemies now move from one tile's center to the next. Note that because they only change their movement state at tile centers they do not immediately respond to patch changes. This means that sometimes enemies will move through walls that have just been placed. Once they're going toward a cell, there's no stopping them. That's why walls also need valid paths.</p>
+						
+						<figure>
+							<video width="230" height="230" controls loop muted>
+								<source src="moving-enemies/responding-to-path-changes.mp4" type="video/mp4">
+							</video>
+							<figcaption>Enemies responding to path changes.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Going From Edge to Edge</h3>
+						
+						<p>Moving between tile centers and suddenly changing direction looks fine for an abstract game where the enemies are sliding cubes, but in general smoother movement looks better. The first step in getting there is to move between tile edges instead of centers.</p>
+						
+						<p>The edge point between adjacent tiles can be found by averaging their positions. Rather than calculating that per step per enemy, we'll calculate it only when the path changes, in <code>GameTile.GrowPathTo</code>. Make it available via an <code>ExitPoint</code> property.</p>
+						
+						<pre translate="no">	<ins>public Vector3 ExitPoint { get; private set; }</ins>
+
+	&hellip;
+	
+	GameTile GrowPathTo (GameTile neighbor) {
+		&hellip;
+		<ins>neighbor.ExitPoint =</ins>
+			<ins>(neighbor.transform.localPosition + transform.localPosition) * 0.5f;</ins>
+		return
+			neighbor.Content.Type != GameTileContentType.Wall ? neighbor : null;
+	}</pre>
+						
+						<p>The only special case is a destination cell, for which the exit point is its center.</p>
+						
+						<pre translate="no">	public void BecomeDestination () {
+		distance = 0;
+		nextOnPath = null;
+		<ins>ExitPoint = transform.localPosition;</ins>
+	}</pre>
+						
+						<p>Adjust <code>Enemy</code> so it uses the exit points instead of the tile centers.</p>
+						
+						<pre translate="no">	public bool GameUpdate () {
+		progress += Time.deltaTime;
+		while (progress >= 1f) {
+			&hellip;
+			positionTo = <ins>tileFrom.ExitPoint</ins>;
+			progress -= 1f;
+		}
+		transform.localPosition = Vector3.Lerp(positionFrom, positionTo, progress);
+		return true;
+	}
+	
+	public void SpawnOn (GameTile tile) {
+		&hellip;
+		positionTo = <ins>tileFrom.ExitPoint</ins>;
+		progress = 0f;
+	}</pre>
+						
+						<figure>
+							<video width="230" height="230" controls loop muted>
+								<source src="moving-enemies/moving-between-edges.mp4" type="video/mp4">
+							</video>
+							<figcaption>Enemies moving between edges.</figcaption>
+						</figure>
+						
+						<p>A side effect of this change is that when enemies turn around due to a path change they remain stationary for a second.</p>
+						
+						<figure>
+							<video width="230" height="230" controls loop muted>
+								<source src="moving-enemies/stop-when-turing-around.mp4" type="video/mp4">
+							</video>
+							<figcaption>Enemies stop when turning around.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Orientation</h3>
+						
+						<p>Although the enemies move along paths, they currently never change their orientation. To make them look where they're going they have to know the direction of the path that they're following. Once again we'll define this when paths are found so that enemies don't have to calculate it.</p>
+						
+						<p>We have four directions: north, east, south, and west. Define an enumeration for this.</p>
+						
+						<pre translate="no"><ins>public enum Direction {</ins>
+	<ins>North, East, South, West</ins>
+<ins>}</ins></pre>
+						
+						<p>Then give <code>GameTile</code> a property for its path direction.</p>
+						
+						<pre translate="no">	<ins>public Direction PathDirection { get; private set; }</ins></pre>
+						
+						<p>Add a direction parameter to <code>GrowTo</code>, which sets the property. As we grow the path backwards, the direction is the opposite of where we grow the path to.</p>
+						
+						<pre translate="no">	public GameTile GrowPathNorth () => GrowPathTo(north<ins>, Direction.South</ins>);
+
+	public GameTile GrowPathEast () => GrowPathTo(east<ins>, Direction.West</ins>);
+
+	public GameTile GrowPathSouth () => GrowPathTo(south<ins>, Direction.North</ins>);
+
+	public GameTile GrowPathWest () => GrowPathTo(west<ins>, Direction.East</ins>);
+
+	GameTile GrowPathTo (GameTile neighbor<ins>, Direction direction</ins>) {
+		&hellip;
+		<ins>neighbor.PathDirection = direction;</ins>
+		return
+			neighbor.Content.Type != GameTileContentType.Wall ? neighbor : null;
+	}</pre>
+						
+						<p>We'll need to convert directions to rotations, expressed as quaternions. It would be convenient if we could just invoke <code>GetRotation</code> on a direction, so let's make that possible by creating an extension method. Add a public static <code>DirectionExtensions</code> class, give it an array to cache the required quaternions, plus the <code>GetRotation</code> method to return the appropriate value for a direction. In this case it makes sense to put the extension class in the same file as the enumeration type.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+public enum Direction {
+	North, East, South, West
+}
+
+<ins>public static class DirectionExtensions {</ins>
+
+	<ins>static Quaternion[] rotations = {</ins>
+		<ins>Quaternion.identity,</ins>
+		<ins>Quaternion.Euler(0f, 90f, 0f),</ins>
+		<ins>Quaternion.Euler(0f, 180f, 0f),</ins>
+		<ins>Quaternion.Euler(0f, 270f, 0f)</ins>
+	<ins>};</ins>
+
+	<ins>public static Quaternion GetRotation (this Direction direction) {</ins>
+		<ins>return rotations[(int)direction];</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<aside>
+							<h3>What's an extension method?</h3>
+							<div>
+								<p>An extension method is a static method inside a static class that behaves like an instance method of some type. That type could be a class, an interface, a struct, a primitive value, or an enum. The first argument of an extension method needs to have the <code>this</code> keyword. It defines the type and instance value that the method will operate on. Note that this approach means that extension properties are not possible.</p>
+								
+								<p>Does this allow us to add methods to anything? Yes, just like you could write any static method that has any type as its parameter.</p>
+							</div>
+						</aside>
+						
+						<p>Now we can rotate <code>Enemy</code> when spawning and each time we enter a new tile. After updating the data, the <code>From</code> tile gives us the direction.</p>
+						
+						<pre translate="no">	public bool GameUpdate () {
+		progress += Time.deltaTime;
+		while (progress >= 1f) {
+			&hellip;
+			<ins>transform.localRotation = tileFrom.PathDirection.GetRotation();</ins>
+			progress -= 1f;
+		}
+		transform.localPosition =
+			Vector3.LerpUnclamped(positionFrom, positionTo, progress);
+		return true;
+	}
+
+	public void SpawnOn (GameTile tile) {
+		&hellip;
+		<ins>transform.localRotation = tileFrom.PathDirection.GetRotation();</ins>
+		progress = 0f;
+	}</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Changing Direction</h3>
+						
+						<p>Rather than immediately snap to a new orientation, it's better if we interpolate between rotations, just like we interpolate between positions. To go from one orientation to another requires us to know the direction change that we have to make: none, turn right, turn left, or turn around. Add an enumeration for that, which can once again be put in the same file as <code>Direction</code>, as they're small and closely related.</p>
+						
+						<pre translate="no">public enum Direction {
+	North, East, South, West
+}
+
+<ins>public enum DirectionChange {</ins>
+	<ins>None, TurnRight, TurnLeft, TurnAround</ins>
+<ins>}</ins></pre>
+						
+						<p>Add another extension method, in this case <code>GetDirectionChangeTo</code>, which returns the direction change from the current direction to the next. If the directions are the same, then there is none. If next is one more than current, then it's a right turn. But as the directions wrap around, this is also the case if next is three less than current. Left turns are the same, but with addition and subtraction flipped. The only other case is turning around.</p>
+						
+						<pre translate="no">	<ins>public static DirectionChange GetDirectionChangeTo (</ins>
+		<ins>this Direction current, Direction next</ins>
+	<ins>) {</ins>
+		<ins>if (current == next) {</ins>
+			<ins>return DirectionChange.None;</ins>
+		<ins>}</ins>
+		<ins>else if (current + 1 == next || current - 3 == next) {</ins>
+			<ins>return DirectionChange.TurnRight;</ins>
+		<ins>}</ins>
+		<ins>else if (current - 1 == next || current + 3 == next) {</ins>
+			<ins>return DirectionChange.TurnLeft;</ins>
+		<ins>}</ins>
+		<ins>return DirectionChange.TurnAround;</ins>
+	<ins>}</ins></pre>
+						
+						<p>We're only rotating in one dimension, so a linear angle interpolation suffices. Add another extension method that gets the angle of a direction, in degrees.</p>
+						
+						<pre translate="no">	<ins>public static float GetAngle (this Direction direction) {</ins>
+		<ins>return (float)direction * 90f;</ins>
+	<ins>}</ins></pre>
+						
+						<p><code>Enemy</code> now also has to keep track of its direction, its direction change, and the angles it has to interpolate between.</p>
+						
+						<pre translate="no">	<ins>Direction direction;</ins>
+	<ins>DirectionChange directionChange;</ins>
+	<ins>float directionAngleFrom, directionAngleTo;</ins></pre>
+						
+						<p><code>SpawnOn</code> is getting more complex, so let's move the state-preparation code to another method. We'll designate the initial state of the enemy as the intro state, so name it <code>PrepareIntro</code>. In this state it moves from the center to the edge of its starting tile, so there is no direction change. The <code>From</code> and <code>To</code> angles are the same.</p>
+						
+						<pre translate="no">	public void SpawnOn (GameTile tile) {
+		Debug.Assert(tile.NextTileOnPath != null, "Nowhere to go!", this);
+		tileFrom = tile;
+		tileTo = tile.NextTileOnPath;
+		<del>//positionFrom = tileFrom.transform.localPosition;</del>
+		<del>//positionTo = tileFrom.ExitPoint;</del>
+		<del>//transform.localRotation = tileFrom.PathDirection.GetRotation();</del>
+		progress = 0f;
+		<ins>PrepareIntro();</ins>
+	}
+
+	<ins>void PrepareIntro () {</ins>
+		<ins>positionFrom = tileFrom.transform.localPosition;</ins>
+		<ins>positionTo = tileFrom.ExitPoint;</ins>
+		<ins>direction = tileFrom.PathDirection;</ins>
+		<ins>directionChange = DirectionChange.None;</ins>
+		<ins>directionAngleFrom = directionAngleTo = direction.GetAngle();</ins>
+		<ins>transform.localRotation = direction.GetRotation();</ins>
+	<ins>}</ins></pre>
+						
+						<p>We're making something like a small state machine at this point. To keep <code>GameUpdate</code> simple, move the state-changing code to a new <code>PrepareNextState</code> method. Only keep the adjustment of the <code>From</code> and <code>To</code> tiles, as we use that here to check whether the enemy is finished.</p>
+						
+						<pre translate="no">	public bool GameUpdate () {
+		progress += Time.deltaTime;
+		while (progress >= 1f) {
+			&hellip;
+			<del>//positionFrom = positionTo;</del>
+			<del>//positionTo = tileFrom.ExitPoint;</del>
+			<del>//transform.localRotation = tileFrom.PathDirection.GetRotation();</del>
+			progress -= 1f;
+			<ins>PrepareNextState();</ins>
+		}
+		&hellip;
+	}</pre>
+						
+						<p>When entering a new state, we always have to adjust the positions, find the direction change, update the current direction, and shift the <code>To</code> angle to <code>From</code>. We no longer always set the rotation.</p>
+						
+						<pre translate="no">	<ins>void PrepareNextState () {</ins>
+		<ins>positionFrom = positionTo;</ins>
+		<ins>positionTo = tileFrom.ExitPoint;</ins>
+		<ins>directionChange = direction.GetDirectionChangeTo(tileFrom.PathDirection);</ins>
+		<ins>direction = tileFrom.PathDirection;</ins>
+		<ins>directionAngleFrom = directionAngleTo;</ins>
+	<ins>}</ins></pre>
+						
+						<p>What else we have to do depends on the direction change. Let's add a method for each possibility. In case we go forward, the <code>To</code> angle matches the current cell's path direction. We also have to set the rotation so the enemy points straight ahead.</p>
+						
+						<pre translate="no">	<ins>void PrepareForward () {</ins>
+		<ins>transform.localRotation = direction.GetRotation();</ins>
+		<ins>directionAngleTo = direction.GetAngle();</ins>
+	<ins>}</ins></pre>
+						
+						<p>In case of a turn we don't rotate immediately. Instead, have to interpolate to a different angle: 90&deg; more for a right turn, 90&deg; less for a left turn, and 180&deg; more when turning around. The <code>To</code> angle has to be relative to the current direction to prevent rotating in the wrong way, due to wrapping angles. We don't need to worry about going below 0&deg; or above 360&deg; because <code>Quaternion.Euler</code> can deal with that.</p>
+						
+						<pre translate="no">	<ins>void PrepareTurnRight () {</ins>
+		<ins>directionAngleTo = directionAngleFrom + 90f;</ins>
+	<ins>}</ins>
+
+	<ins>void PrepareTurnLeft () {</ins>
+		<ins>directionAngleTo = directionAngleFrom - 90f;</ins>
+	<ins>}</ins>
+
+	<ins>void PrepareTurnAround () {</ins>
+		<ins>directionAngleTo = directionAngleFrom + 180f;</ins>
+	<ins>}</ins></pre>
+						
+						<p>At the end of <code>PrepareNextState</code>, we can use a <code>switch</code> on the direction change to decide which of the four methods to invoke.</p>
+						
+						<pre translate="no">	void PrepareNextState () {
+		&hellip;
+		<ins>switch (directionChange) {</ins>
+			<ins>case DirectionChange.None: PrepareForward(); break;</ins>
+			<ins>case DirectionChange.TurnRight: PrepareTurnRight(); break;</ins>
+			<ins>case DirectionChange.TurnLeft: PrepareTurnLeft(); break;</ins>
+			<ins>default: PrepareTurnAround(); break;</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>Now we have to check at the end of <code>GameUpdate</code> whether there is a direction change. If so, interpolate between the two angles and set the rotation.</p>
+						
+						<pre translate="no">	public bool GameUpdate () {
+		&hellip;
+		transform.localPosition =
+			Vector3.LerpUnclamped(positionFrom, positionTo, progress);
+		<ins>if (directionChange != DirectionChange.None) {</ins>
+			<ins>float angle = Mathf.LerpUnclamped(</ins>
+				<ins>directionAngleFrom, directionAngleTo, progress</ins>
+			<ins>);</ins>
+			<ins>transform.localRotation = Quaternion.Euler(0f, angle, 0f);</ins>
+		<ins>}</ins>
+		return true;
+	}</pre>
+						
+						<figure>
+							<video width="230" height="230" controls loop muted>
+								<source src="moving-enemies/rotating.mp4" type="video/mp4">
+							</video>
+							<figcaption>Enemies rotating.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Curving Motion</h3>
+						
+						<p>We can improve movement further by having enemies move along a curve while turning. Instead of going straight from edge to edge, we'll make them move along a quarter circle. The center of this circle lies at the corner shared by the <code>From</code> and <code>To</code> tiles, on the same edge that the enemy entered the <code>From</code> tile.</p>
+						
+						<figure>
+							<img src="moving-enemies/rotating.png" width="256" height="256">
+							<figcaption>Rotating a quarter circle to turn right.</figcaption>
+						</figure>
+						
+						<p>We could implement this by moving the enemy along the arc using trigonometry, while also rotating it. But we can simplify this to only rotation by temporarily moving the enemy's local origin to the circle's center. To make that possible we have to adjust the position of the enemy model, so give <code>Enemy</code> a reference to its model, exposed via a configuration field.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>Transform model = default;</ins></pre>
+						
+						<figure>
+							<img src="moving-enemies/model-reference.png" width="320" height="56">
+							<figcaption>Enemy with model reference.</figcaption>
+						</figure>
+						
+						<p>When preparing to move forward or turn around the model should be set to its default position, at the enemy's local origin. Otherwise, the model has to be offset half a unit&mdash;the rotation circle's radius&mdash;away from the rotation point.</p>
+						
+						<pre translate="no">	void PrepareForward () {
+		transform.localRotation = direction.GetRotation();
+		directionAngleTo = direction.GetAngle();
+		<ins>model.localPosition = Vector3.zero;</ins>
+	}
+
+	void PrepareTurnRight () {
+		directionAngleTo = directionAngleFrom + 90f;
+		<ins>model.localPosition = new Vector3(-0.5f, 0f);</ins>
+	}
+
+	void PrepareTurnLeft () {
+		directionAngleTo = directionAngleFrom - 90f;
+		<ins>model.localPosition = new Vector3(0.5f, 0f);</ins>
+	}
+
+	void PrepareTurnAround () {
+		directionAngleTo = directionAngleFrom + 180f;
+		<ins>model.localPosition = Vector3.zero;</ins>
+	}</pre>
+						
+						<p>Next, the enemy itself has to move to the rotation point. Again this is by half a unit, but the exact offset depends on the direction. Let's add a convenient <code>GetHalfVector</code> extension method to <code>Direction</code> for that.</p>
+						
+						<pre translate="no">	<ins>static Vector3[] halfVectors = {</ins>
+		<ins>Vector3.forward * 0.5f,</ins>
+		<ins>Vector3.right * 0.5f,</ins>
+		<ins>Vector3.back * 0.5f,</ins>
+		<ins>Vector3.left * 0.5f</ins>
+	<ins>};</ins>
+
+	&hellip;
+
+	<ins>public static Vector3 GetHalfVector (this Direction direction) {</ins>
+		<ins>return halfVectors[(int)direction];</ins>
+	<ins>}</ins></pre>
+						
+						<p>Add the appropriate vector when turning right or left.</p>
+						
+						<pre translate="no">	void PrepareTurnRight () {
+		directionAngleTo = directionAngleFrom + 90f;
+		model.localPosition = new Vector3(-0.5f, 0f);
+		<ins>transform.localPosition = positionFrom + direction.GetHalfVector();</ins>
+	}
+
+	void PrepareTurnLeft () {
+		directionAngleTo = directionAngleFrom - 90f;
+		model.localPosition = new Vector3(0.5f, 0f);
+		<ins>transform.localPosition = positionFrom + direction.GetHalfVector();</ins>
+	}</pre>
+						
+						<p>And when turning around the position should be the normal starting point.</p>
+						
+						<pre>	void PrepareTurnAround () {
+		directionAngleTo = directionAngleFrom + 180f;
+		model.localPosition = Vector3.zero;
+		<ins>transform.localPosition = positionFrom;</ins>
+	}</pre>
+
+						
+						<p>Also, we can use the half vector in <code>GameTile.GrowPathTo</code> when calculating the exit point, so we don't need to access two tile positions.</p>
+						
+						<pre translate="no">		neighbor.ExitPoint =
+			<ins>neighbor.transform.localPosition + direction.GetHalfVector()</ins>;</pre>
+						
+						<p>Now we must not interpolate the position at all in <code>Enemy.GameUpdate</code> when there is a direction change, because the movement is taken care of by the rotation.</p>
+						
+						<pre translate="no">	public bool GameUpdate () {
+		&hellip;
+		<ins>if (directionChange == DirectionChange.None) {</ins>
+			transform.localPosition =
+				Vector3.LerpUnclamped(positionFrom, positionTo, progress);
+		<ins>}</ins>
+		<del>//if (directionChange != DirectionChange.None) {</del>
+		<ins>else {</ins>
+			float angle = Mathf.LerpUnclamped(
+				directionAngleFrom, directionAngleTo, progress
+			);
+			transform.localRotation = Quaternion.Euler(0f, angle, 0f);
+		}
+		return true;
+	}</pre>
+						
+						<figure>
+							<video width="230" height="230" controls loop muted>
+								<source src="moving-enemies/turning-corners-smoothly.mp4" type="video/mp4">
+							</video>
+							<figcaption>Enemies turning corners smoothly.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Constant Speed</h3>
+						
+						<p>Up to this point the speed of our enemies is always one tile per second, no matter how they move inside a tile. But the distance that they cover depends on their state, so their speed expressed as units per second varies. To keep this speed constant, we have to adjust the progress speed depending on the state. So add a progress factor field and use it to scale the delta in <code>GameUpdate</code>.</p>
+						
+						<pre translate="no">	float progress<ins>, progressFactor</ins>;
+
+	&hellip;
+
+	public bool GameUpdate () {
+		progress += Time.deltaTime <ins>* progressFactor</ins>;
+		&hellip;
+	}</pre>
+						
+						<p>But if the progress varies per state, leftover progress cannot directly be applied to the next state. Instead, before preparing the next state we have to normalize the progress and apply the new factor once we're in the new state.</p>
+						
+						<pre translate="no">	public bool GameUpdate () {
+		progress += Time.deltaTime * progressFactor;
+		while (progress >= 1f) {
+			&hellip;
+			<del>//progress -= 1f;</del>
+			<ins>progress = (progress - 1f) / progressFactor;</ins>
+			PrepareNextState();
+			<ins>progress *= progressFactor;</ins>
+		}
+		&hellip;
+	}</pre>
+						
+						<p>The forward state requires no change so uses factor 1. When turning right or left the enemy covers a quarter circle with radius &frac12;, so 
+						the distance covered is &frac14;&pi;. The progress is one divided by that. Turning around shouldn't take too long, so let's double the progress to make it half a second. Finally, the intro movement covers only half a tile, so its progress should be doubled as well to keep the speed constant.</p>
+						
+						<pre translate="no">	void PrepareForward () {
+		&hellip;
+		<ins>progressFactor = 1f;</ins>
+	}
+
+	void PrepareTurnRight () {
+		&hellip;
+		<ins>progressFactor = 1f / (Mathf.PI * 0.25f);</ins>
+	}
+
+	void PrepareTurnLeft () {
+		&hellip;
+		<ins>progressFactor = 1f / (Mathf.PI * 0.25f);</ins>
+	}
+
+	void PrepareTurnAround () {
+		&hellip;
+		<ins>progressFactor = 2f;</ins>
+	}
+
+	void PrepareIntro () {
+		&hellip;
+		<ins>progressFactor = 2f;</ins>
+	}</pre>
+						
+						<aside>
+							<h3>Why is the distance &frac14;&pi;?</h3>
+							<div>
+								<p>The circumference or a circle is equal to 2&pi; times its radius. A right or left turn only covers a quarter of that and the radius is &frac12;, so it's &frac12;&pi; &times; &frac12;.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Outro State</h3>
+						
+						<p>As we have an intro state, let's also add an outro state. Currently enemies vanish as soon as they reach a destination, but let's delay that until they reach the destination tile's center. Create a <code>PrepareOutro</code> method for it, setting up forward movement but only toward the tile's center, with doubled progress to keep speed constant.</p>
+						
+						<pre translate="no">	<ins>void PrepareOutro () {</ins>
+		<ins>positionTo = tileFrom.transform.localPosition;</ins>
+		<ins>directionChange = DirectionChange.None;</ins>
+		<ins>directionAngleTo = direction.GetAngle();</ins>
+		<ins>model.localPosition = Vector3.zero;</ins>
+		<ins>transform.localRotation = direction.GetRotation();</ins>
+		<ins>progressFactor = 2f;</ins>
+	<ins>}</ins></pre>
+						
+						<p>To prevent <code>GameUpdate</code> from terminating the enemy too soon, remove the tile shifting from it. That will become the responsibility of <code>PrepareNextState</code>. That way the <code>null</code> check will only yield <code>true</code> after the outro has finished.</p>
+						
+						<pre translate="no">	public bool GameUpdate () {
+		progress += Time.deltaTime * progressFactor;
+		while (progress >= 1f) {
+			<del>//tileFrom = tileTo;</del>
+			<del>//tileTo = tileTo.NextTileOnPath;</del>
+			if (tileTo == null) {
+				OriginFactory.Reclaim(this);
+				return false;
+			}
+			&hellip;
+		}
+		&hellip;
+	}</pre>
+						
+						<p>In <code>PrepareNextState</code>, begin by shifting the tiles. Then after setting the <code>From</code> position but before setting the <code>To</code> position check whether the <code>To</code> tile is <code>null</code>. If so, prepare the outro and skip the rest of the method.</p>
+						
+						<pre translate="no">	void PrepareNextState () {
+		<ins>tileFrom = tileTo;</ins>
+		<ins>tileTo = tileTo.NextTileOnPath;</ins>
+		positionFrom = positionTo;
+		<ins>if (tileTo == null) {</ins>
+			<ins>PrepareOutro();</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+		positionTo = tileFrom.ExitPoint;
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<video width="230" height="230" controls loop muted>
+								<source src="moving-enemies/constant-speed-and-outro.mp4" type="video/mp4">
+							</video>
+							<figcaption>Enemies with constant speed and outro.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Enemy Variety</h2>
+					
+					<p>We have a stream of enemies that are all the same cube, moving at the same speed. The result can look more like a long snake than individual enemies. Let's make them a bit more distinct by randomizing their size, offset, and speed.</p>
+					
+					<section>
+						<h3>Float Range</h3>
+						
+						<p>We'll tweak enemies by randomly picking their characteristics from a range of values. The <code>FloatRange</code> struct that we defined in <a href="../../object-management/configuring-shapes/index.html">Object Management, Configuring Shapes</a> is useful here, so let's copy it. The only changes are that I've added a constructor with a single parameter and exposed the minimum and maximum via readonly properties, to make the range immutable.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>[System.Serializable]</ins>
+<ins>public struct FloatRange {</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>float min, max;</ins>
+
+	<ins>public float Min => min;</ins>
+
+	<ins>public float Max => max;</ins>
+	
+	<ins>public float RandomValueInRange {</ins>
+		<ins>get {</ins>
+			<ins>return Random.Range(min, max);</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+	
+	<ins>public FloatRange(float value) {</ins>
+		<ins>min = max = value;</ins>
+	<ins>}</ins>
+
+	<ins>public FloatRange (float min, float max) {</ins>
+		<ins>this.min = min;</ins>
+		<ins>this.max = max &lt; min ? min : max;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Also copy the attribute that we defined for it, to constrain its range.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class FloatRangeSliderAttribute : PropertyAttribute {</ins>
+
+	<ins>public float Min { get; private set; }</ins>
+
+	<ins>public float Max { get; private set; }</ins>
+
+	<ins>public FloatRangeSliderAttribute (float min, float max) {</ins>
+		<ins>Min = min;</ins>
+		<ins>Max = max &lt; min ? min : max;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>We only need the slider visualization, so copy <code>FloatRangeSliderDrawer</code> to an <em translate="no">Editor</em> folder.</p>
+						
+						<pre translate="no"><ins>using UnityEditor;</ins>
+<ins>using UnityEngine;</ins>
+
+<ins>[CustomPropertyDrawer(typeof(FloatRangeSliderAttribute))]</ins>
+<ins>public class FloatRangeSliderDrawer : PropertyDrawer {</ins>
+
+	<ins>public override void OnGUI (</ins>
+		<ins>Rect position, SerializedProperty property, GUIContent label</ins>
+	<ins>) {</ins>
+		<ins>int originalIndentLevel = EditorGUI.indentLevel;</ins>
+		<ins>EditorGUI.BeginProperty(position, label, property);</ins>
+
+		<ins>position = EditorGUI.PrefixLabel(</ins>
+			<ins>position, GUIUtility.GetControlID(FocusType.Passive), label</ins>
+		<ins>);</ins>
+		<ins>EditorGUI.indentLevel = 0;</ins>
+		<ins>SerializedProperty minProperty = property.FindPropertyRelative("min");</ins>
+		<ins>SerializedProperty maxProperty = property.FindPropertyRelative("max");</ins>
+		<ins>float minValue = minProperty.floatValue;</ins>
+		<ins>float maxValue = maxProperty.floatValue;</ins>
+		<ins>float fieldWidth = position.width / 4f - 4f;</ins>
+		<ins>float sliderWidth = position.width / 2f;</ins>
+		<ins>position.width = fieldWidth;</ins>
+		<ins>minValue = EditorGUI.FloatField(position, minValue);</ins>
+		<ins>position.x += fieldWidth + 4f;</ins>
+		<ins>position.width = sliderWidth;</ins>
+		<ins>FloatRangeSliderAttribute limit = attribute as FloatRangeSliderAttribute;</ins>
+		<ins>EditorGUI.MinMaxSlider(</ins>
+			<ins>position, ref minValue, ref maxValue, limit.Min, limit.Max</ins>
+		<ins>);</ins>
+		<ins>position.x += sliderWidth + 4f;</ins>
+		<ins>position.width = fieldWidth;</ins>
+		<ins>maxValue = EditorGUI.FloatField(position, maxValue);</ins>
+		<ins>if (minValue &lt; limit.Min) {</ins>
+			<ins>minValue = limit.Min;</ins>
+		<ins>}</ins>
+		<ins>if (maxValue &lt; minValue) {</ins>
+			<ins>maxValue = minValue;</ins>
+		<ins>}</ins>
+		<ins>else if (maxValue > limit.Max) {</ins>
+			<ins>maxValue = limit.Max;</ins>
+		<ins>}</ins>
+		<ins>minProperty.floatValue = minValue;</ins>
+		<ins>maxProperty.floatValue = maxValue;</ins>
+
+		<ins>EditorGUI.EndProperty();</ins>
+		<ins>EditorGUI.indentLevel = originalIndentLevel;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Model Scale</h3>
+						
+						<p>We begin by adjusting the enemy scale. Add a scale configuration option to <code>EnemyFactory</code>. The scale range shouldn't be too large, but enough to create mini and giant version of an enemy. Something like 0.5&ndash;2, with the default set to 1. Pick a random scale in this range in <code>Get</code> and pass it to the enemy, via a new <code>Initialize</code> method.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, FloatRangeSlider(0.5f, 2f)]</ins>
+	<ins>FloatRange scale = new FloatRange(1f);</ins>
+
+	public Enemy Get () {
+		Enemy instance = CreateGameObjectInstance(prefab);
+		instance.OriginFactory = this;
+		<ins>instance.Initialize(scale.RandomValueInRange);</ins>
+		return instance;
+	}</pre>
+						
+						<p>The <code>Enemy.Initialize</code> method simply sets the uniform scale of its model.</p>
+						
+						<pre translate="no">	<ins>public void Initialize (float scale) {</ins>
+		<ins>model.localScale = new Vector3(scale, scale, scale);</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="enemy-variety/scale-slider.png" width="320" height="60" alt="inspector"><br>
+							<img src="enemy-variety/varied-scales.png" width="230" height="230" alt="scene">
+							<figcaption>Scale range set to 0.5&ndash;1.5.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Path Offset</h3>
+						
+						<p>To break up the uniformity of the enemy stream more, we can adjust their relative position inside the tiles. They move forward, so offsetting in that direction only changes the timing of their movement, which doesn't add much. Instead, we'll offset them laterally, away from the ideal path that goes through the center of tiles. Add a path offset range to <code>EnemyFactory</code> and pass a random offset to <code>Initialize</code>. The offset is either positive or negative, but never more than &frac12; because that would shift the enemy into an adjacent tile. We also don't want the enemies to extend beyond the tile they're going through, so the actual range should be smaller than that, like 0.4, through the true limits depend on the enemy's size.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, FloatRangeSlider(-0.4f, 0.4f)]</ins>
+	<ins>FloatRange pathOffset = new FloatRange(0f);</ins>
+
+	public Enemy Get () {
+		Enemy instance = CreateGameObjectInstance(prefab);
+		instance.OriginFactory = this;
+		instance.Initialize(
+			scale.RandomValueInRange<ins>, pathOffset.RandomValueInRange</ins>
+		);
+		return instance;
+	}</pre>
+						
+						<p>Because the path offset influences the path followed, <code>Enemy</code> has to keep track of it.</p>
+						
+						<pre translate="no">	<ins>float pathOffset;</ins>
+
+	&hellip;
+
+	public void Initialize (float scale<ins>, float pathOffset</ins>) {
+		model.localScale = new Vector3(scale, scale, scale);
+		<ins>this.pathOffset = pathOffset;</ins>
+	}</pre>
+						
+						<p>When moving straight ahead&mdash;either during the intro, outro, or normal forward movement&mdash;we can simply apply the offset directly to the model. This is also the case when turning around. When making a right or left turn we already offset the model, which now becomes relative to the path offset.</p>
+						
+						<pre translate="no">	void PrepareForward () {
+		transform.localRotation = direction.GetRotation();
+		directionAngleTo = direction.GetAngle();
+		model.localPosition = <ins>new Vector3(pathOffset, 0f)</ins>;
+		progressFactor = 1f;
+	}
+
+	void PrepareTurnRight () {
+		directionAngleTo = directionAngleFrom + 90f;
+		model.localPosition = new Vector3(<ins>pathOffset</ins> - 0.5f, 0f);
+		transform.localPosition = positionFrom + direction.GetHalfVector();
+		progressFactor = 1f / (Mathf.PI * 0.25f);
+	}
+
+	void PrepareTurnLeft () {
+		directionAngleTo = directionAngleFrom - 90f;
+		model.localPosition = new Vector3(<ins>pathOffset +</ins> 0.5f, 0f);
+		transform.localPosition = positionFrom + direction.GetHalfVector();
+		progressFactor = 1f / (Mathf.PI * 0.25f);
+	}
+
+	void PrepareTurnAround () {
+		directionAngleTo = directionAngleFrom + 180f;
+		model.localPosition = <ins>new Vector3(pathOffset, 0f)</ins>;
+		transform.localPosition = positionFrom;
+		progressFactor = 2f;
+	}
+
+	void PrepareIntro () {
+		&hellip;
+		<ins>model.localPosition = new Vector3(pathOffset, 0f);</ins>
+		transform.localRotation = direction.GetRotation();
+		progressFactor = 2f;
+	}
+
+	void PrepareOutro () {
+		&hellip;
+		model.localPosition = <ins>new Vector3(pathOffset, 0f)</ins>;
+		transform.localRotation = direction.GetRotation();
+		progressFactor = 2f;
+	}</pre>
+						
+						<p>As the path offset changes the radius when turning, we have to adjust how we calculate the progress factor. The path offset must be subtracted from &frac12; to get the radius for a right turn and added to it for a left turn.</p>
+						
+						<pre translate="no">	void PrepareTurnRight () {
+		&hellip;
+		progressFactor = 1f / (Mathf.PI * <ins>0.5f * (0.5f - pathOffset)</ins>);
+	}
+
+	void PrepareTurnLeft () {
+		&hellip;
+		progressFactor = 1f / (Mathf.PI * <ins>0.5f * (0.5f + pathOffset)</ins>);
+	}</pre>
+						
+						<p>We now also get a turn radius when making a 180&deg; turn. In this case we're covering half of a circle with a radius equal to the path offset, so the distance is simply &pi; times the offset. However, this doesn't work when the offset is zero and results in very quick turns for tiny offsets. We can enforce a minimum radius for our speed calculation to prevent instantaneous turns, for example 0.2.</p>
+						
+						<pre translate="no">	void PrepareTurnAround () {
+		directionAngleTo = directionAngleFrom + <ins>(pathOffset &lt; 0f ? 180f : -180f)</ins>;
+		model.localPosition = new Vector3(pathOffset, 0f);
+		transform.localPosition = positionFrom;
+		progressFactor =
+			<ins>1f / (Mathf.PI * Mathf.Max(Mathf.Abs(pathOffset), 0.2f))</ins>;
+	}</pre>
+						
+						<figure>
+							<img src="enemy-variety/path-offset-slider.png" width="320" height="40" alt="inspector"><br>
+							<video width="230" height="230" controls loop muted>
+								<source src="enemy-variety/path-offset.mp4" type="video/mp4">
+							</video>
+							<figcaption>Path offset set to &minus;0.25&ndash;0.25.</figcaption>
+						</figure>
+						
+						<p>Note that enemies never change their relative path offset, even when turning around. So the total path length varies per enemy.</p>
+						
+						<p>Also note that to prevent enemies from poking into adjacent tiles their maximum possible scale must be taken into consideration. I've simply set the size maximum to 1, so the maximum allowed offset of our cube is 0.25. If the maximum size were 1.5 then the offset maximum should be reduced to 0.125.</p>
+					</section>
+					
+					<section>
+						<h3>Speed</h3>
+						
+						<p>The last thing that we'll randomize is the enemy speed. Add another range for that to <code>EnemyFactory</code> and pass a value to the instantiated enemy. Make it the second argument of <code>Initialize</code>. Enemies shouldn't be too slow nor too fast, so the game doesn't become trivial or impossible. Let's limit the range to 0.2&ndash;5. That's expressed in units per second, which corresponds to tiles per second only when moving forward.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, FloatRangeSlider(0.2f, 5f)]</ins>
+	<ins>FloatRange speed = new FloatRange(1f);</ins>
+
+	[SerializeField, FloatRangeSlider(-0.4f, 0.4f)]
+	FloatRange pathOffset = new FloatRange(0f);
+
+	public Enemy Get () {
+		Enemy instance = CreateGameObjectInstance(prefab);
+		instance.OriginFactory = this;
+		instance.Initialize(
+			scale.RandomValueInRange,
+			<ins>speed.RandomValueInRange,</ins>
+			pathOffset.RandomValueInRange
+		);
+		return instance;
+	}</pre>
+						
+						<p><code>Enemy</code> now has to keep track of its speed as well.</p>
+						
+						<pre translate="no">	<ins>float speed;</ins>
+
+	&hellip;
+
+	public void Initialize (float scale, <ins>float speed,</ins> float pathOffset) {
+		model.localScale = new Vector3(scale, scale, scale);
+		<ins>this.speed = speed;</ins>
+		this.pathOffset = pathOffset;
+	}</pre>
+						
+						<p>When we didn't use explicit speeds we simply always used a speed of 1. All we have to do now is base the progress factor on the speed.</p>
+						
+						<pre translate="no">	void PrepareForward () {
+		&hellip;
+		progressFactor = <ins>speed</ins>;
+	}
+
+	void PrepareTurnRight () {
+		&hellip;
+		progressFactor = <ins>speed</ins> / (Mathf.PI * 0.5f * (0.5f - pathOffset));
+	}
+
+	void PrepareTurnLeft () {
+		&hellip;
+		progressFactor = <ins>speed</ins> / (Mathf.PI * 0.5f * (0.5f + pathOffset));
+	}
+
+	void PrepareTurnAround () {
+		&hellip;
+		progressFactor =
+			<ins>speed</ins> / (Mathf.PI * Mathf.Max(Mathf.Abs(pathOffset), 0.2f));
+	}
+
+	void PrepareIntro () {
+		&hellip;
+		progressFactor = 2f <ins>* speed</ins>;
+	}
+
+	void PrepareOutro () {
+		&hellip;
+		progressFactor = 2f <ins>* speed</ins>;
+	}</pre>
+						
+						<figure>
+							<img src="enemy-variety/speed-slider.png" width="320" height="60" alt="inspector"><br>
+							<video width="230" height="230" controls loop muted>
+								<source src="enemy-variety/speed.mp4" type="video/mp4">
+							</video>
+							<figcaption>Speed set to 0.75&ndash;1.25.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../towers/index.html">Towers</a>.</p>
+					</section>
+					
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/tower-defense-02-enemies/" class="repository">repository</a>
+					<a href="Enemies.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

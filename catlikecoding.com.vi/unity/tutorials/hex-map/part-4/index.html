@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/hex-map/part-4/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/hex-map/part-4/tutorial-image.png">
+		<meta property="og:title" content="Hex Map 4">
+		<meta property="og:description" content="A Unity Hex Map tutorial about making the edges of cells irregular. Part 4 of 27.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hex Map 4</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/hex-map/part-4/#article",
+				"headline": "Hex Map 4",
+				"alternativeHeadline": "Irregularity",
+				"datePublished": "2016-04-19",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Hex Map tutorial about making the edges of cells irregular. Part 4 of 27.",
+				"image": "https://catlikecoding.com/unity/tutorials/hex-map/part-4/tutorial-image.png",
+				"dependencies": "Unity 5.3.1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/hex-map/", "name": "Hex Map" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				EdgeVertices: 1,
+				HexCell: 1,
+				HexEdgeType: 1,
+				HexCoordinates: 1,
+				HexCoordinatesDrawer: 1,
+				HexDirection: 1,
+				HexDirectionExtensions: 1,
+				HexGrid: 1,
+				HexMapEditor: 1,
+				HexMesh: 1,
+				HexMetrics: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Hex Map</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hex Map 4</h1>
+					<p>Irregulatity</p>
+					<ul>
+						<li>Sample a noise texture.</li>
+						<li>Perturb vertices.</li>
+						<li>Keep cells flat.</li>
+						<li>Subdivide cell edges.</li>
+					</ul>
+				</header>
+
+				<p>This tutorial is the fourth part of a series about <a href="../index.html">hexagon maps</a>. So far, our grid has been a strict honeycomb. In this installment, we'll introduce irregularities to make our map look more natural.</p>
+				
+				<figure>
+					<img src="tutorial-image.png" width="512" height="256">
+					<figcaption>No more regular hexagons.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Noise</h2>
+					
+					<p>To add irregularities, we need randomization. But not true randomness. We want things to stay consistent whenever we edit our map. Otherwise, things would jump around each time we made a change. So we need a form of reproducible pseudorandom noise.</p>
+					
+					<p>Perlin noise is a good candidate. It is reproducible at any point. When multiple frequences are combined, it also produces noise that can vary a lot over large distances, but stays fairly similar at small distances. This can produce relatively smooth distortions. Points that lie close together tend to stick together, instead of being distorted in opposite directions.</p>
+					
+					<p>We could generate Perlin noise programmatically. The <a href="https://catlikecoding.com/unity/tutorials/noise/">Noise</a> tutorial explains how to do that. But we could also sample from a pre-generated noise texture. The advantage of using a texture is that it's easier and much faster than computing multi-frequency Perlin noise. The downside is that the texture occupies more memory and only covers a small region of noise. So it needs to be a tiling texture, and has to be fairly large to make the tiling not that obvious.</p>
+					
+					<section>
+						<h3>Noise Texture</h3>
+						
+						<p>We're going to use a texture, so you don't have to go through the <a href="https://catlikecoding.com/unity/tutorials/noise/">Noise</a> tutorial right now. That means we need such a texture. Here's one.</p>
+						
+						<figure>
+							<img src="noise/tiling-perlin-noise.png" width="256" height="256">
+							<figcaption>Tiling fractal Perlin noise texture.</figcaption>
+						</figure>
+						
+						<p>The above texture contains tiling multi-frequency Perlin noise. It is a grayscale image with an average value of 0.5, with extreme values approaching 0 and 1.</p>
+						
+						<p>But wait, this is only a single value per point. If we want a 3D distortion, we need at least three pseudorandom samples! So we need two additional textures, with different noise in each.</p>
+						
+						<p>We could do that, or we could store a different noise value in each of the color channels. That allows us to store up to four different noise patterns in a single texture. Here is such a texture.</p>
+
+						<figure>
+							<img src="noise/noise.png" width="256" height="256">
+							<figcaption>Four in one.</figcaption>
+						</figure>
+						
+						<p>Grab this texture and import it into your Unity project. Because we are going to sample the texture via code, it has to be readable. Switch the <em translate="no">Texture Type</em> to <em translate="no">Advanced</em> and switch on <em translate="no">Read/Write Enabled</em>. This will keep the texture data in memory, accessible via C# code. Make sure to set the <em translate="no">Format</em> to <em translate="no">Automatic Truecolor</em>, otherwise this won't work. We wouldn't want to destroy our noise pattern via texture compression anyway.</p>
+						
+						<p>We can disable <em translate="no">Generate Mip Maps</em>, because we don't need them. While we're at it, enable <em translate="no">Bypass sRGB Sampling</em> as well. We don't need this, but it is correct. It indicates that the texture does not contain color data in Gamma space.</p>
+
+						<figure>
+							<img alt="inspector" src="noise/inspector.png" width="320" height="422">
+							<img alt="preview" src="noise/preview.png" width="320" height="248">
+							<figcaption>Imported noise texture.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>When does sRGB sampling matter?</h3>
+							<div>
+								<p>If we were to use the noise texture in a shader at some point, it would make a difference. When using Linear rendering mode, texture sampling automatically coverts the color data from Gamma to linear color space. This would produce incorrect results for our noise texture, so we don't want that to happen.</p>
+							</div>
+						</aside>
+						
+						<aside>
+							<h3>My texture import settings look different?</h3>
+							<div>
+								<p>They have been changed after this tutorial was written. You should use the default 2D texture settings, with <em translate="no">sRGB (Color Texture)</em> disabled and <em translate="no">Compression</em> set to <em translate="no">None</em>.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Sampling Noise</h3>
+						
+						<p>Let's add the noise sampling functionality to <code>HexMetrics</code>, so it can be used from anywhere. This means that <code>HexMetrics</code> much have a reference to the noise texture.</p>
+						
+						<pre translate="no">	<ins>public static Texture2D noiseSource;</ins></pre>
+						
+						<p>Because it is not a component, we cannot assign our texture to it via the editor. We'll simply use <code>HexGrid</code> as an intermediary. As <code>HexGrid</code> is the first to act, it will be fine if we pass along the texture at the start of its <code>Awake</code> method.</p>
+						
+						<pre translate="no">	<ins>public Texture2D noiseSource;</ins>
+
+	void Awake () {
+		<ins>HexMetrics.noiseSource = noiseSource;</ins>
+
+		&hellip;
+	}</pre>
+						
+						<p>However, this approach will not survive recompiles while in play mode. Static variables aren't serialized by Unity. To solve this, reassign the texture in the <code>OnEnable</code> event method as well. This method will get invoked after a recompile.</p>
+						
+						<pre translate="no">	<ins>void OnEnable () {</ins>
+		<ins>HexMetrics.noiseSource = noiseSource;</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="noise/noise-assigned.png" width="320" height="148">
+							<figcaption>Assigning the noise texture.</figcaption>
+						</figure>
+						
+						<p>Now that <code>HexMetrics</code> can access the texture, let's add a convenient noise sampling method to it. This method takes a world position and produce a 4D vector containing four noise samples.</p>
+						
+						<pre translate="no">	<ins>public static Vector4 SampleNoise (Vector3 position) {</ins>
+	<ins>}</ins></pre>
+						
+						<p>The samples are produced by sampling the texture using bilinear filtering, using the X and Z world coordinates as UV coordinates. As our noise source is 2D, we ignore the third world coordinate. If our noise source had been 3D, then we would've used the Y world coordinate too.</p>
+						
+						<p>We end up with a color, which can be cast to a 4D vector. This cast can be implicit, meaning that we can directly return the color without explicitly including <code>(Vector4)</code>.</p>
+						
+						<pre translate="no">	public static Vector4 SampleNoise (Vector3 position) {
+		<ins>return noiseSource.GetPixelBilinear(position.x, position.z);</ins>
+	}
+</pre>
+						<aside>
+							<h3>How does bilinear filtering work?</h3>
+							<div>
+								<p>See the <a href="../../rendering/part-2.1.html">Rendering 2, Shader Fundamentals</a> tutorial for an explanation of UV coordinates and texture filtering.</p>
+							</div>
+						</aside>
+						
+					</section>
+					
+					<a href="noise/noise.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+					
+				<section>
+					<h2>Perturbing Vertices</h2>
+					
+					<p>We distort our regular honeycomb grid by perturbing each vertex individually. So let's add a <code>Perturb</code> method to <code>HexMesh</code> to do this. It takes an unperturbed point and returns a perturbed one. To do so, it uses the unperturbed point to sample our noise.</p>
+
+					<pre translate="no">	<ins>Vector3 Perturb (Vector3 position) {</ins>
+		<ins>Vector4 sample = HexMetrics.SampleNoise(position);</ins>
+	<ins>}</ins></pre>
+
+					<p>Let's simply add the X, Y, and Z noise samples directly to the corresponding coordinates of the point and use that as the result.</p>
+
+					<pre translate="no">	Vector3 Perturb (Vector3 position) {
+		Vector4 sample = HexMetrics.SampleNoise(position);
+		<ins>position.x += sample.x;</ins>
+		<ins>position.y += sample.y;</ins>
+		<ins>position.z += sample.z;</ins>
+		<ins>return position;</ins>
+	}</pre>
+					
+					<p>How could we quickly change <code>HexMesh</code> so all vertices are perturbed? By adjusting each vertex when it's added to the vertices list, in <code>AddTriangle</code> and <code>AddQuad</code>. So let's do that.</p>
+
+					<pre translate="no">	void AddTriangle (Vector3 v1, Vector3 v2, Vector3 v3) {
+		int vertexIndex = vertices.Count;
+		vertices.Add(<ins>Perturb(</ins>v1<ins>)</ins>);
+		vertices.Add(<ins>Perturb(</ins>v2<ins>)</ins>);
+		vertices.Add(<ins>Perturb(</ins>v3<ins>)</ins>);
+		&hellip;
+	}
+
+	void AddQuad (Vector3 v1, Vector3 v2, Vector3 v3, Vector3 v4) {
+		int vertexIndex = vertices.Count;
+		vertices.Add(<ins>Perturb(</ins>v1<ins>)</ins>);
+		vertices.Add(<ins>Perturb(</ins>v2<ins>)</ins>);
+		vertices.Add(<ins>Perturb(</ins>v3<ins>)</ins>);
+		vertices.Add(<ins>Perturb(</ins>v4<ins>)</ins>);
+		&hellip;
+	}</pre>
+					
+					<aside>
+						<h3>Are quads still flat after perturbing their vertices?</h3>
+						<div>
+							<p>They most likely are not. They consist of two triangles, which will no longer be aligned. However, because those triangles share two vertices, the normals of those vertices will be smoothed. This means that you won't see a sharp transition between the two triangles. If the distortion is not too great, you will still perceive the quads as flat.</p>
+						</div>
+					</aside>
+
+					<figure>
+						<img src="perturbing-vertices/perturbed-vertices.png" width="460" height="230">
+						<figcaption>Perturbed vertices, or not.</figcaption>
+					</figure>
+					
+					<p>It doesn't look like much changed, except that the cell labels appear to be missing. This happens because we're adding the noise samples to our points, and they are always positive. So all triangles end up above the labels, obscuring them. We have to center the adjustments so they can go in either direction. Change the range of the noise sample from 0&ndash;1 to &minus;1&ndash;1.</p>
+
+					<pre translate="no">	Vector3 Perturb (Vector3 position) {
+		Vector4 sample = HexMetrics.SampleNoise(position);
+		position.x += sample.x <ins>* 2f - 1f</ins>;
+		position.y += sample.y <ins>* 2f - 1f</ins>;
+		position.z += sample.z <ins>* 2f - 1f</ins>;
+		return position;
+	}</pre>
+
+					<figure>
+						<img src="perturbing-vertices/perturbed-centered.png" width="460" height="230">
+						<figcaption>Centered perturbation.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Perturb Strength</h3>
+						
+						<p>It is now clear that we have distorted the grid, but the effect is very subtle. There is at most a 1 unit adjustment in each dimension. So the theoretical maximum displacement is &radic;3 &asymp; 1.73 units, which would be extremely rare, if it happens at all. As our cells have an outer radius of ten units, the perturbations are relatively small.</p>
+						
+						<p>The solution is to add a strength setting to <code>HexMetrics</code> so we can scale the perturbations. Let's try a strength of 5. This has a theoretical maximum displacement of &radic;75 &asymp; 8.66 units, which should be much more obvious.</p>
+						
+						<pre translate="no">	<ins>public const float cellPerturbStrength = 5f;</ins></pre>
+						
+						<p>Apply the strength by multiplying it with the samples in <code>HexMesh.Perturb</code>.</p>
+						
+						<pre translate="no">	Vector3 Perturb (Vector3 position) {
+		Vector4 sample = HexMetrics.SampleNoise(position);
+		position.x += <ins>(</ins>sample.x * 2f - 1f<ins>) * HexMetrics.cellPerturbStrength</ins>;
+		position.y += <ins>(</ins>sample.y * 2f - 1f<ins>) * HexMetrics.cellPerturbStrength</ins>;
+		position.z += <ins>(</ins>sample.z * 2f - 1f<ins>) * HexMetrics.cellPerturbStrength</ins>;
+		return position;
+	}
+</pre>
+						<figure>
+							<img src="perturbing-vertices/perturbed-strength.png" width="460" height="230" alt="strength">
+							<img src="perturbing-vertices/perturbed-incoherent.png" width="310" height="240" alt="incoheren">
+							<figcaption>Increased strength.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Noise Scale</h3>
+						
+						<p>While the grid looks fine before editing, things go wrong once terraces appear. Their vertices get distorted in wildly different directions, leading to a mess. This should not happen when using Perlin noise.</p>
+						
+						<p>The problem happens because we're directly using the world coordinates to sample the noise. This causes the texture to tile every unit, while our cells are much larger than that. Effectively, the texture gets sampled at arbitrary locations, destroying any coherence it has.</p>
+						
+						<figure>
+							<img src="perturbing-vertices/grid.png" width="420" height="220">
+							<figcaption>10 by 10 grid lines overlapping the honeycomb.</figcaption>
+						</figure>
+						
+						<p>We have to scale the noise sampling so the texture covers a much larger area. Let's add this scale to <code>HexMetrics</code> and set it to 0.003, then scale the sample coordinates by that factor.</p>
+						
+						<pre translate="no">	<ins>public const float noiseScale = 0.003f;</ins>
+
+	public static Vector4 SampleNoise (Vector3 position) {
+		return noiseSource.GetPixelBilinear(
+			position.x <ins>* noiseScale</ins>,
+			position.z <ins>* noiseScale</ins>
+		);
+	}</pre>
+						
+						<p>Suddenly, our texture covers 333&frac13; square units and its local coherence becomes obvious.</p>
+						
+						<figure>
+							<img src="perturbing-vertices/perturbed-scaled.png" width="460" height="240" alt="scaled">
+							<img src="perturbing-vertices/perturbed-coherent.png" width="310" height="250" alt="coherent">
+							<figcaption>Scaled noise.</figcaption>
+						</figure>
+						
+						<p>Our new scale also makes sure that the noise will take a while before it tiles. Actually, because the cells have an inner diameter of 10&radic;3 units, it will effectively never exactly tile in the X dimension. However, because of the noise's local coherence, you can still detect repeating patterns at the larger scale, roughly every 20 cells, even if the details don't match. But that's only really obvious for an otherwise featureless map.</p>
+					</section>
+					
+					<a href="perturbing-vertices/perturbing-vertices.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Leveling Cell Centers</h2>
+					
+					<p>Perturbing all vertices gives our map a more natural appearance, but there are some problems. Because the cells are now uneven, their labels intersect the mesh. And cracks appear in the mesh where terraces meet cliffs. We'll leave the cracks for later and focus on the cell surfaces.</p>
+					
+					<figure>
+						<img src="leveling-cell-centers/unleveled.png" width="480" height="272">
+						<figcaption>Less rigid, more issues.</figcaption>
+					</figure>
+					
+					<p></p>
+					
+					<p>The simplest way to solve the intersection problem is to keep the cells centers flat. Just don't adjust the Y coordinate in <code>HexMesh.Perturb</code>.</p>
+					
+					<pre translate="no">	Vector3 Perturb (Vector3 position) {
+		Vector4 sample = HexMetrics.SampleNoise(position);
+		position.x += (sample.x * 2f - 1f) * HexMetrics.cellPerturbStrength;
+<del>//		position.y += (sample.y * 2f - 1f) * HexMetrics.cellPerturbStrength;</del>
+		position.z += (sample.z * 2f - 1f) * HexMetrics.cellPerturbStrength;
+		return position;
+	}</pre>
+
+					<figure>
+						<img src="leveling-cell-centers/leveled.png" width="484" height="264">
+						<figcaption>Leveled cells.</figcaption>
+					</figure>
+					
+					<p>This change leaves all vertical positions unchanged, both for cell centers and for terrace steps. Note that this reduces the maximum displacement to &radic;50 &asymp; 7.07, in the XZ plane only.</p>
+						
+					<p>This is not a bad change, as it makes it a lot easier to identify individual cells and prevents terraces from becoming too messy. But some vertical perturbation would still be nice.</p>
+					
+					<section>
+						<h3>Perturbing Cell Elevation</h3>
+						
+						<p>Instead of applying a vertical perturbation per vertex, we could apply it per cell. That way each cell remains flat, but there is still variation between cells. It also makes sense to use a different scale for the elevation perturbation, so add one to <code>HexMetrics</code>. A strength of 1.5 units provides some subtle variation, which is roughly the height of a single terrace step.</p>
+						
+						<pre translate="no">	<ins>public const float elevationPerturbStrength = 1.5f;</ins></pre>
+						
+						<p>Adjust the <code>HexCell.Elevation</code> property so that it applies this perturbation to the cell's vertical position.</p>
+						
+						<pre translate="no">	public int Elevation {
+		get {
+			return elevation;
+		}
+		set {
+			elevation = value;
+			Vector3 position = transform.localPosition;
+			position.y = value * HexMetrics.elevationStep;
+			<ins>position.y +=</ins>
+				<ins>(HexMetrics.SampleNoise(position).y * 2f - 1f) *</ins>
+				<ins>HexMetrics.elevationPerturbStrength;</ins>
+			transform.localPosition = position;
+
+			Vector3 uiPosition = uiRect.localPosition;
+			uiPosition.z = <ins>-position.y</ins>;
+			uiRect.localPosition = uiPosition;
+		}
+	}</pre>
+						
+						<p>To make sure that the perturbation is applied immediately, we have to explicitly set each cell's elevation in <code>HexGrid.CreateCell</code>. Otherwise the grid would start out flat. Do this at the end, after the UI has been created.</p>
+						
+						<pre translate="no">	void CreateCell (int x, int z, int i) {
+		&hellip;
+
+		<ins>cell.Elevation = 0;</ins>
+	}</pre>
+						
+						<figure>
+							<img src="leveling-cell-centers/perturbed.png" width="484" height="264">
+							<figcaption>Perturbed elevations, with cracks.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Using the Same Heights</h3>
+						
+						<p>A lot of cracks have appeared in the mesh, because we're not consistently using the same cell heights when triangulating the mesh. Let's add a convenient property to <code>HexCell</code> to retrieve its position, so we can use it everywhere.</p>
+						
+						<pre translate="no">	<ins>public Vector3 Position {</ins>
+		<ins>get {</ins>
+			<ins>return transform.localPosition;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can use that property in <code>HexMesh.Triangulate</code> to determine the cell's center.</p>
+						
+						<pre translate="no">	void Triangulate (HexDirection direction, HexCell cell) {
+		Vector3 center = cell.<ins>Position</ins>;
+		&hellip;
+	}</pre>
+						
+						<p>And we can use it in <code>TriangulateConnection</code>, when determining the vertical positions of the neighboring cells.</p>
+						
+						<pre translate="no">	void TriangulateConnection (
+		HexDirection direction, HexCell cell, Vector3 v1, Vector3 v2
+	) {
+		&hellip;
+
+		Vector3 bridge = HexMetrics.GetBridge(direction);
+		Vector3 v3 = v1 + bridge;
+		Vector3 v4 = v2 + bridge;
+		v3.y = v4.y = neighbor.<ins>Position.y</ins>;
+
+		&hellip;
+
+		HexCell nextNeighbor = cell.GetNeighbor(direction.Next());
+		if (direction &lt;= HexDirection.E &amp;&amp; nextNeighbor != null) {
+			Vector3 v5 = v2 + HexMetrics.GetBridge(direction.Next());
+			v5.y = nextNeighbor.<ins>Position.y</ins>;
+
+			&hellip;
+		}
+	}</pre>
+						
+						<figure>
+							<img src="leveling-cell-centers/consistent-heights.png" width="484" height="264">
+							<figcaption>Consistent use of cell elevation.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="leveling-cell-centers/leveling-cell-centers.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Subdividing Cell Edges</h2>
+					
+					<p>While our cells are nicely varied, they are still obviously hexagons. This is not a problem per se, but we can do better than that.</p>
+					
+					<figure>
+						<img src="subdividing-cell-edges/hexagons.png" width="340" height="210">
+						<figcaption>Clearly hexagonal cells.</figcaption>
+					</figure>
+					
+					<p>If we had more vertices, we would see more local variety. So let's split each cell edge into two parts, by introducing an edge vertex halfway between each pair of corners. This means that <code>HexMesh.Triangulate</code> has to add two instead of one triangle.</p>
+					
+					<pre translate="no">	void Triangulate (HexDirection direction, HexCell cell) {
+		Vector3 center = cell.Position;
+		Vector3 v1 = center + HexMetrics.GetFirstSolidCorner(direction);
+		Vector3 v2 = center + HexMetrics.GetSecondSolidCorner(direction);
+
+		<ins>Vector3 e1 = Vector3.Lerp(v1, v2, 0.5f);</ins>
+
+		AddTriangle(center, v1, <ins>e1</ins>);
+		AddTriangleColor(cell.color);
+		<ins>AddTriangle(center, e1,</ins> v2<ins>);</ins>
+		<ins>AddTriangleColor(cell.color);</ins>
+
+		if (direction &lt;= HexDirection.SE) {
+			TriangulateConnection(direction, cell, v1, v2);
+		}
+	}</pre>
+					
+					<figure>
+						<img src="subdividing-cell-edges/12-sides.png" width="340" height="210">
+						<figcaption>Twelve sides instead of six.</figcaption>
+					</figure>
+					
+					<p>Doubling the vertices and triangles adds a bit more variety to our cell's edges. Let's make them even more rugged by tripling the vertices.</p>
+					
+					<pre translate="no">		Vector3 e1 = Vector3.Lerp(v1, v2, <ins>1f / 3f</ins>);
+		<ins>Vector3 e2 = Vector3.Lerp(v1, v2, 2f / 3f);</ins>
+
+		AddTriangle(center, v1, e1);
+		AddTriangleColor(cell.color);
+		<ins>AddTriangle(center, e1, e2);</ins>
+		<ins>AddTriangleColor(cell.color);</ins>
+		AddTriangle(center, <ins>e2</ins>, v2);
+		AddTriangleColor(cell.color);</pre>
+					
+					<figure>
+						<img src="subdividing-cell-edges/18-sides.png" width="340" height="210">
+						<figcaption>18 Sides.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Subdividing Edge Connections</h3>
+						
+						<p>Of course we also have to subdivide the edge connections. So pass the new edge vertices to <code>TriangulateConnection</code>.</p>
+						
+						<pre translate="no">		if (direction &lt;= HexDirection.SE) {
+			TriangulateConnection(direction, cell, v1, <ins>e1, e2,</ins> v2);
+		}</pre>
+						
+						<p>Add matching parameters to <code>TriangulateConnection</code> so it can work with the extra vertices.</p>
+						
+						<pre translate="no">	void TriangulateConnection (
+		HexDirection direction, HexCell cell,
+		Vector3 v1, <ins>Vector3 e1, Vector3 e2,</ins> Vector3 v2
+	) {
+	&hellip;
+}</pre>
+						
+						<p>We also need to compute extra edge vertices for the neighboring cell. We can compute those after bridging to the other side.</p>
+						
+						<pre translate="no">		Vector3 bridge = HexMetrics.GetBridge(direction);
+		Vector3 v3 = v1 + bridge;
+		Vector3 v4 = v2 + bridge;
+		v3.y = v4.y = neighbor.Position.y;
+
+		<ins>Vector3 e3 = Vector3.Lerp(v3, v4, 1f / 3f);</ins>
+		<ins>Vector3 e4 = Vector3.Lerp(v3, v4, 2f / 3f);</ins></pre>
+						
+						<p>Next, we have to adjust the triangulation of the edge. Ignoring terraced slopes for now, simply add three quads instead of one.</p>
+						
+						<pre translate="no">		if (cell.GetEdgeType(direction) == HexEdgeType.Slope) {
+			TriangulateEdgeTerraces(v1, v2, cell, v3, v4, neighbor);
+		}
+		else {
+			AddQuad(v1, <ins>e1</ins>, v3, <ins>e3</ins>);
+			<ins>AddQuadColor(cell.color, neighbor.color);</ins>
+			<ins>AddQuad(e1, e2, e3, e4);</ins>
+			<ins>AddQuadColor(cell.color, neighbor.color);</ins>
+			AddQuad(<ins>e2</ins>, v2, <ins>e4</ins>, v4);
+			AddQuadColor(cell.color, neighbor.color);
+		}</pre>
+						
+						<figure>
+							<img src="subdividing-cell-edges/subdivided-connections.png" width="340" height="210">
+							<figcaption>Subdivided connections.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Bundling Edge Vertices</h3>
+						
+						<p>As we now need four vertices to describe an edge, it makes sense to bundle them. That's more convenient than dealing with four individual vertices. Create a simple <code>EdgeVertices</code> structure for this. It should contain four vertices, ordered clockwise along a cell's edge.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public struct EdgeVertices {</ins>
+
+	<ins>public Vector3 v1, v2, v3, v4;</ins>
+<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Doesn't it need to be serializable?</h3>
+							<div>
+								<p>We're going to use this structure only when triangulating. We won't store edge vertices at this point. So there is no need for it to be serializable.</p>
+							</div>
+						</aside>
+						
+						<p>Give it a convenient constructor method, which takes care of computing the intermediary edge points.</p>
+						
+						<pre translate="no">	<ins>public EdgeVertices (Vector3 corner1, Vector3 corner2) {</ins>
+		<ins>v1 = corner1;</ins>
+		<ins>v2 = Vector3.Lerp(corner1, corner2, 1f / 3f);</ins>
+		<ins>v3 = Vector3.Lerp(corner1, corner2, 2f / 3f);</ins>
+		<ins>v4 = corner2;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can add a separate triangulate method to <code>HexMesh</code> for creating a triangle fan between a cell's center and one of its edges.</p>
+						
+						<pre translate="no">	<ins>void TriangulateEdgeFan (Vector3 center, EdgeVertices edge, Color color) {</ins>
+		<ins>AddTriangle(center, edge.v1, edge.v2);</ins>
+		<ins>AddTriangleColor(color);</ins>
+		<ins>AddTriangle(center, edge.v2, edge.v3);</ins>
+		<ins>AddTriangleColor(color);</ins>
+		<ins>AddTriangle(center, edge.v3, edge.v4);</ins>
+		<ins>AddTriangleColor(color);</ins>
+	<ins>}</ins></pre>
+						
+						<p>And a method for triangulating a strip of quads between two edges.</p>
+												
+						<pre translate="no">	<ins>void TriangulateEdgeStrip (</ins>
+		<ins>EdgeVertices e1, Color c1,</ins>
+		<ins>EdgeVertices e2, Color c2</ins>
+	<ins>) {</ins>
+		<ins>AddQuad(e1.v1, e1.v2, e2.v1, e2.v2);</ins>
+		<ins>AddQuadColor(c1, c2);</ins>
+		<ins>AddQuad(e1.v2, e1.v3, e2.v2, e2.v3);</ins>
+		<ins>AddQuadColor(c1, c2);</ins>
+		<ins>AddQuad(e1.v3, e1.v4, e2.v3, e2.v4);</ins>
+		<ins>AddQuadColor(c1, c2);</ins>
+	<ins>}</ins></pre>
+						
+						<p>This allows us to simplify the <code>Triangulate</code> method.</p>
+						
+						<pre translate="no">	void Triangulate (HexDirection direction, HexCell cell) {
+		Vector3 center = cell.Position;
+		<ins>EdgeVertices e = new EdgeVertices(</ins>
+			center + HexMetrics.GetFirstSolidCorner(direction)<ins>,</ins>
+			center + HexMetrics.GetSecondSolidCorner(direction)
+		<ins>);</ins>
+
+		<ins>TriangulateEdgeFan(center, e, cell.color);</ins>
+
+		if (direction &lt;= HexDirection.SE) {
+			TriangulateConnection(direction, cell, <ins>e</ins>);
+		}
+	}</pre>
+						
+						<p>On to <code>TriangulateConnection</code>. We can now use <code>TriangulateEdgeStrip</code>, but some other substitutions have to be made too. Where we first used <code>v1</code>, we should use <code>e1.v1</code> instead. Likewise, <code>v2</code> becomes <code>e1.v4</code>, <code>v3</code> becomes <code>e2.v1</code>, and <code>v4</code> becomes <code>e2.v4</code>.</p>
+						
+						<pre translate="no">	void TriangulateConnection (
+		HexDirection direction, HexCell cell, <ins>EdgeVertices e1</ins>
+	) {
+		HexCell neighbor = cell.GetNeighbor(direction);
+		if (neighbor == null) {
+			return;
+		}
+
+		Vector3 bridge = HexMetrics.GetBridge(direction);
+		<ins>bridge.y = neighbor.Position.y - cell.Position.y;</ins>
+		<ins>EdgeVertices e2 = new EdgeVertices(</ins>
+			<ins>e1.v1 + bridge,</ins>
+			<ins>e1.v4 + bridge</ins>
+		<ins>);</ins>
+		
+		if (cell.GetEdgeType(direction) == HexEdgeType.Slope) {
+			TriangulateEdgeTerraces(<ins>e1.</ins>v1, <ins>e1.v4</ins>, cell, <ins>e2.v1</ins>, <ins>e2.</ins>v4, neighbor);
+		}
+		else {
+			<ins>TriangulateEdgeStrip(e1, cell.color, e2, neighbor.color);</ins>
+		}
+		
+		HexCell nextNeighbor = cell.GetNeighbor(direction.Next());
+		if (direction &lt;= HexDirection.E &amp;&amp; nextNeighbor != null) {
+			Vector3 v5 = <ins>e1.v4</ins> + HexMetrics.GetBridge(direction.Next());
+			v5.y = nextNeighbor.Position.y;
+
+			if (cell.Elevation &lt;= neighbor.Elevation) {
+				if (cell.Elevation &lt;= nextNeighbor.Elevation) {
+					TriangulateCorner(
+						<ins>e1.v4</ins>, cell, <ins>e2.</ins>v4, neighbor, v5, nextNeighbor
+					);
+				}
+				else {
+					TriangulateCorner(
+						v5, nextNeighbor, <ins>e1.v4</ins>, cell, <ins>e2.</ins>v4, neighbor
+					);
+				}
+			}
+			else if (neighbor.Elevation &lt;= nextNeighbor.Elevation) {
+				TriangulateCorner(
+					<ins>e2.</ins>v4, neighbor, v5, nextNeighbor, <ins>e1.v4</ins>, cell
+				);
+			}
+			else {
+				TriangulateCorner(
+					v5, nextNeighbor, <ins>e1.v4</ins>, cell, <ins>e2.</ins>v4, neighbor
+				);
+			}
+		}</pre>
+					</section>
+					
+					<section>
+						<h3>Subdividing Terraces</h3>
+						
+						<p>We have to subdivide the terraces as well. So pass the edges to <code>TriangulateEdgeTerraces</code>.</p>
+						
+						<pre translate="no">		if (cell.GetEdgeType(direction) == HexEdgeType.Slope) {
+			TriangulateEdgeTerraces(<ins>e1</ins>, cell, <ins>e2</ins>, neighbor);
+		}</pre>
+						
+						<p>Now we have to adjust <code>TriangulateEdgeTerraces</code> so it interpolates between edges, instead of pairs of vertices. Let's assume that <code>EdgeVertices</code> has a convenient static interpolation method for that. This allows us to simplify <code>TriangulateEdgeTerraces</code>, instead of making it more complex.</p>
+						
+						<pre translate="no">	void TriangulateEdgeTerraces (
+		<ins>EdgeVertices begin</ins>, HexCell beginCell,
+		<ins>EdgeVertices end</ins>, HexCell endCell
+	) {
+		<ins>EdgeVertices e2 = EdgeVertices.TerraceLerp(begin, end, 1);</ins>
+		Color c2 = HexMetrics.TerraceLerp(beginCell.color, endCell.color, 1);
+
+		<ins>TriangulateEdgeStrip(begin, beginCell.color, e2, c2);</ins>
+
+		for (int i = 2; i &lt; HexMetrics.terraceSteps; i++) {
+			<ins>EdgeVertices e1 = e2;</ins>
+			Color c1 = c2;
+			<ins>e2 = EdgeVertices.TerraceLerp(begin, end, i);</ins>
+			c2 = HexMetrics.TerraceLerp(beginCell.color, endCell.color, i);
+			<ins>TriangulateEdgeStrip(e1, c1, e2, c2);</ins>
+		}
+
+		<ins>TriangulateEdgeStrip(e2, c2, end, endCell.color);</ins>
+	}</pre>
+						
+						<p>The <code>EdgeVertices.TerraceLerp</code> method simply performs the terrace interpolation between all four pairs of two edge vertices.</p>
+						
+						<pre translate="no">	<ins>public static EdgeVertices TerraceLerp (</ins>
+		<ins>EdgeVertices a, EdgeVertices b, int step)</ins>
+	<ins>{</ins>
+		<ins>EdgeVertices result;</ins>
+		<ins>result.v1 = HexMetrics.TerraceLerp(a.v1, b.v1, step);</ins>
+		<ins>result.v2 = HexMetrics.TerraceLerp(a.v2, b.v2, step);</ins>
+		<ins>result.v3 = HexMetrics.TerraceLerp(a.v3, b.v3, step);</ins>
+		<ins>result.v4 = HexMetrics.TerraceLerp(a.v4, b.v4, step);</ins>
+		<ins>return result;</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="subdividing-cell-edges/subdivided-terraces.png" width="470" height="264">
+							<figcaption>Subdivided terraces.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="subdividing-cell-edges/subdividing-cell-edges.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Reconnecting Cliffs and Terraces</h2>
+					
+					<p>So far, we have ignored those cracks where cliffs and terraces meet. It is time to deal with that issue. Let's consider the cliff-slope-slope (CSS) and slope-cliff-slope (SCS) cases first.</p>
+					
+					<figure>
+						<img src="reconnecting-cliffs-and-terraces/holes.png" width="260" height="200">
+						<figcaption>Holes in the mesh.</figcaption>
+					</figure>
+					
+					<p>The problem occurs because the boundary vertices get perturbed. This means that they no longer lie exactly along the cliff's side, which produces a crack. These holes might not always be noticeable, but can also be very obvious. So we have to make sure that they never appear.</p>
+					
+					<p>The solution is to not perturb the boundary vertex. This means that we need to control whether a point gets perturbed or not. The simplest approach is to create an <code>AddTriangle</code> alternative which does not perturb the vertices at all.</p>
+					
+					<pre translate="no">	<ins>void AddTriangleUnperturbed (Vector3 v1, Vector3 v2, Vector3 v3) {</ins>
+		<ins>int vertexIndex = vertices.Count;</ins>
+		<ins>vertices.Add(v1);</ins>
+		<ins>vertices.Add(v2);</ins>
+		<ins>vertices.Add(v3);</ins>
+		<ins>triangles.Add(vertexIndex);</ins>
+		<ins>triangles.Add(vertexIndex + 1);</ins>
+		<ins>triangles.Add(vertexIndex + 2);</ins>
+	<ins>}</ins></pre>
+					
+					<p>Adjust <code>TriangulateBoundaryTriangle</code> so it uses this method. This means that is has to explicitly perturb all vertices, except the boundary vertex.</p>
+					
+					<pre translate="no">	void TriangulateBoundaryTriangle (
+		Vector3 begin, HexCell beginCell,
+		Vector3 left, HexCell leftCell,
+		Vector3 boundary, Color boundaryColor
+	) {
+		Vector3 v2 = HexMetrics.TerraceLerp(begin, left, 1);
+		Color c2 = HexMetrics.TerraceLerp(beginCell.color, leftCell.color, 1);
+
+		<ins>AddTriangleUnperturbed</ins>(<ins>Perturb(</ins>begin<ins>)</ins>, <ins>Perturb(</ins>v2<ins>)</ins>, boundary);
+		AddTriangleColor(beginCell.color, c2, boundaryColor);
+
+		for (int i = 2; i &lt; HexMetrics.terraceSteps; i++) {
+			Vector3 v1 = v2;
+			Color c1 = c2;
+			v2 = HexMetrics.TerraceLerp(begin, left, i);
+			c2 = HexMetrics.TerraceLerp(beginCell.color, leftCell.color, i);
+			<ins>AddTriangleUnperturbed</ins>(<ins>Perturb(</ins>v1<ins>)</ins>, <ins>Perturb(</ins>v2<ins>)</ins>, boundary);
+			AddTriangleColor(c1, c2, boundaryColor);
+		}
+
+		<ins>AddTriangleUnperturbed</ins>(<ins>Perturb(</ins>v2<ins>)</ins>, <ins>Perturb(</ins>left<ins>)</ins>, boundary);
+		AddTriangleColor(c2, leftCell.color, boundaryColor);
+	}</pre>
+					
+					<p>Note that because we are not using <code>v2</code> to derive any other point, it is possible to perturb it immediately. It is a simple optimization to make and it reduces code, so let's do it.</p>
+					
+					<pre translate="no">	void TriangulateBoundaryTriangle (
+		Vector3 begin, HexCell beginCell,
+		Vector3 left, HexCell leftCell,
+		Vector3 boundary, Color boundaryColor
+	) {
+		Vector3 v2 = <ins>Perturb(</ins>HexMetrics.TerraceLerp(begin, left, 1)<ins>)</ins>;
+		Color c2 = HexMetrics.TerraceLerp(beginCell.color, leftCell.color, 1);
+
+		AddTriangleUnperturbed(Perturb(begin), <ins>v2</ins>, boundary);
+		AddTriangleColor(beginCell.color, c2, boundaryColor);
+
+		for (int i = 2; i &lt; HexMetrics.terraceSteps; i++) {
+			Vector3 v1 = v2;
+			Color c1 = c2;
+			v2 = <ins>Perturb(</ins>HexMetrics.TerraceLerp(begin, left, i)<ins>)</ins>;
+			c2 = HexMetrics.TerraceLerp(beginCell.color, leftCell.color, i);
+			AddTriangleUnperturbed(<ins>v1</ins>, <ins>v2</ins>, boundary);
+			AddTriangleColor(c1, c2, boundaryColor);
+		}
+
+		AddTriangleUnperturbed(<ins>v2</ins>, Perturb(left), boundary);
+		AddTriangleColor(c2, leftCell.color, boundaryColor);
+	}</pre>
+					
+					<figure>
+						<img src="reconnecting-cliffs-and-terraces/unperturbed.png" width="260" height="200">
+						<figcaption>Unperturbed boundaries.</figcaption>
+					</figure>
+					
+					<p>This looks better, but we're not done yet. Inside the <code>TriangulateCornerTerracesCliff</code> method, the boundary point is found by interpolating between the left and right points. However, these points are not yet perturbed. To make the boundary point match the final cliff, we have to interpolate between the perturbed points.</p>
+					
+					<pre translate="no">		Vector3 boundary = Vector3.Lerp(<ins>Perturb(</ins>begin<ins>)</ins>, <ins>Perturb(</ins>right<ins>)</ins>, b);</pre>
+					
+					<p>The same is true for the <code>TriangulateCornerCliffTerraces</code> method.</p>
+					
+					<pre translate="no">		Vector3 boundary = Vector3.Lerp(<ins>Perturb(</ins>begin<ins>)</ins>, <ins>Perturb(</ins>left<ins>)</ins>, b);</pre>
+					
+					<figure>
+						<img src="reconnecting-cliffs-and-terraces/closed.png" width="260" height="200">
+						<figcaption>No more holes.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Double Cliffs and a Slope</h3>
+						
+						<p>The remaining problem cases are those that feature two cliffs and a slope.</p>
+						
+						<figure>
+							<img src="reconnecting-cliffs-and-terraces/double-cliff-slope.png" width="260" height="200">
+							<figcaption>Big hole caused by a single triangle.</figcaption>
+						</figure>
+						
+						<p>This problem is fixed by using manual perturbation for the single triangle in the <code>else</code> block at the end of <code>TriangulateCornerTerracesCliff</code>.</p>
+						
+						<pre translate="no">		else {
+			<ins>AddTriangleUnperturbed</ins>(<ins>Perturb(</ins>left<ins>)</ins>, <ins>Perturb(</ins>right<ins>)</ins>, boundary);
+			AddTriangleColor(leftCell.color, rightCell.color, boundaryColor);
+		}</pre>
+						
+						<p>And the same goes for <code>TriangulateCornerCliffTerraces</code>.</p>
+						
+						<pre translate="no">		else {
+			<ins>AddTriangleUnperturbed</ins>(<ins>Perturb(</ins>left<ins>)</ins>, <ins>Perturb(</ins>right<ins>)</ins>, boundary);
+			AddTriangleColor(leftCell.color, rightCell.color, boundaryColor);
+		}</pre>
+						
+						<figure>
+							<img src="reconnecting-cliffs-and-terraces/double-cliff-closed.png" width="260" height="200">
+							<figcaption>The last cracks are gone.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="reconnecting-cliffs-and-terraces/reconnecting-cliffs-and-terraces.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Tweaking</h2>
+					
+					<p>We now have a fully correct perturbed mesh. Its exact appearance depends on the specific noise, its scale, and the perturbation strengths. In our case, the perturbation might be a bit too strong. While an irregular appearance is nice, we don't want the cells to deviate too much from the regular grid. After all, we still use that to determine which cell we're editing. And if the size of cells varies too much, it will be harder to fit content inside them later.</p>
+					
+					<figure>
+						<img alt="unperturbed" src="tweaking/unperturbed.png" width="400" height="330">
+						<img alt="perturbed" src="tweaking/perturbed.png" width="400" height="330">
+						<figcaption>Unperturbed vs. perturbed.</figcaption>
+					</figure>
+					
+					<p>A cell perturbation strength of 5 just seems a tad too much.</p>
+					
+					<figure>
+						<video width="320" height="175" controls loop muted>
+							<source src="tweaking/perturbation.mp4" type="video/mp4">
+						</video>
+						<figcaption>Cell perturbation from 0 to 5.</figcaption>
+					</figure>
+					
+					<p>Let's reduce it to 4, to make it a bit more manageable without becoming too regular. That guarantees a maximum XZ displacement of &radic;32 &asymp; 5.66.</p>
+					
+					<pre translate="no">	public const float cellPerturbStrength = <ins>4f</ins>;</pre>
+					
+					<figure>
+						<img src="tweaking/perturbation-4.png" width="500" height="274">
+						<figcaption>Cell perturbation 4.</figcaption>
+					</figure>
+					
+					<p>Another value that we can tweak is the solid factor. If we increase it, the flat cell centers will become larger. This leaves more room for future content. Of course, they will also become more hexagonal.</p>
+					
+					<figure>
+						<video width="320" height="176" controls loop muted>
+							<source src="tweaking/solid-factor.mp4" type="video/mp4">
+						</video>
+						<figcaption>Solid factor from 0.75 to 0.95.</figcaption>
+					</figure>
+					
+					<p>A slight increase of the solid factor to 0.8 will make life a little easier for us later.</p>
+					
+					<pre translate="no">	public const float solidFactor = <ins>0.8f</ins>;</pre>
+					
+					<figure>
+						<img src="tweaking/solid-factor.png" width="500" height="274">
+						<figcaption>Solid factor 0.8.</figcaption>
+					</figure>
+					
+					<p>Finally, the differences between elevation levels are a bit steep. That's handy when checking whether the mesh is generated correctly, but we're done with that. Let's reduce it to one unit per terrace step, so 3.</p>
+					
+					<pre translate="no">	public const float elevationStep = <ins>3f</ins>;</pre>
+					
+					<figure>
+						<img src="tweaking/elevation-step-3.png" width="484" height="254">
+						<figcaption>Elevation step reduced to 3.</figcaption>
+					</figure>
+					
+					<p>We could also adjust the elevation perturb strength. But it's current set to 1.5, which is now equal to half an elevation step, which is fine.</p>
+					
+					<p>A smaller elevation step also makes it more practical to use all seven of our elevation levels. This allows us to add even more variety to our map.</p>
+					
+					<figure>
+						<img src="tweaking/more-elevation-levels.png" width="490" height="274">
+						<figcaption>Using seven elevation levels.</figcaption>
+					</figure>
+					
+					<p>The next tutorial is <a href="../part-5/index.html">Larger Maps</a>.</p>
+					
+					<a href="tweaking/tweaking.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Hex-Map-4.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

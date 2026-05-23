@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/custom-srp/hdr/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/custom-srp/hdr/tutorial-image.jpg">
+		<meta property="og:title" content="HDR">
+		<meta property="og:description" content="A Unity Custom SRP tutorial about supporting HDR, tone mapping, and more realistic bloom.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>HDR</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/custom-srp/hdr/#article",
+				"headline": "HDR",
+				"alternativeHeadline": "Scattering and Tone Mapping",
+				"datePublished": "2020-08-17",
+				"dateModified": "2023-08-03",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Custom SRP tutorial about supporting HDR, tone mapping, and more realistic bloom.",
+				"image": "https://catlikecoding.com/unity/tutorials/custom-srp/hdr/tutorial-image.jpg",
+				"dependencies": "Unity 2022.3.5f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/custom-srp/", "name": "Custom SRP" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				BloomSettings: 1,
+				CameraRenderer: 1,
+				CascadeBlendMode: 1,
+				CustomLightEditor: 1,
+				CustomRenderPipeline: 1,
+				CustomRenderPipelineAsset: 1,
+				CustomShaderGUI: 1,
+				Directional: 1,
+				DirectionalShadowData: 1,
+				FilterMode: 1,
+				InputConfig: 1,
+				Lighting: 1,
+				MeshBall: 1,
+				Mode: 1,
+				Other: 1,
+				OtherShadowData: 1,
+				Pass: 1,
+				PerObjectMaterialProperties: 1,
+				PostFXSettings: 1,
+				PostFXStack: 1,
+				ShadowedDirLight: 1,
+				ShadowedOtherLight: 1,
+				ShadowData: 1,
+				Shadows: 1,
+				ShadowMask: 1,
+				ShadowMode: 1,
+				ShadowSettings: 1,
+				TextureSize: 1,
+				ToneMappingSettings: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../../scriptable-render-pipeline/reflections/index.html">Custom SRP</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>HDR</h1>
+					<p>Scattering and Tone Mapping</p>
+					<ul>
+						<li>Render to HDR textures.</li>
+						<li>Reduce bloom fireflies.</li>
+						<li>Add scattering bloom.</li>
+						<li>Support multiple tone mapping modes.</li>
+					</ul>
+				</header>
+				
+				<p>This is the 12th part of a tutorial series about creating a <a href="../../scriptable-render-pipeline/reflections/index.html">custom scriptable render pipeline</a>. It adds support for high-dynamic-range rendering, scatter-based bloom, and tone mapping.</p>
+				
+				<p>This tutorial is made with Unity 2019.4.8f1 and upgraded to 2022.3.5f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A combination of dark, bright, and very bright areas.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>High Dynamic Range</h2>
+					
+					<p>Up to this point when rendering a camera we've done so in low dynamic color range&mdash;LDR for short&mdash;which is the default. This means that each color channel is represented with a value that's clamped to 0&ndash;1. In this mode (0,0,0) represents black and (1,1,1) represents white. Although our shaders could produce results outside this range the GPU will clamp the color while storing them, as if we used <code class="shader">saturate</code> at the end of every fragment function.</p>
+					
+					<aside>
+						<h3>Is (1,1,1) really white?</h3>
+						<div>
+							<p>It is the theoretical white point, but its actual observed color depends on the display and how it is configured. Adjusting the brightness of your display shifts its white point. Also, your eyes adjust to the overall light level of what you're looking at, shifting your own relative white point. For example, if you lower the light level in a room you will still interpret colors the same way, even though the observed intensities have changed. You can also compensate for hue shifts of illumination, up to a point. This becomes obvious when illumination suddenly changes, as the adjustment is gradual.</p>
+						</div>
+					</aside>
+					
+					<p>You can use the frame debugger to check the type of the render target of each draw call. The target of a normal camera is described as <em translate="no">B8G8R8A8_SRGB</em>. This means that it's an RGBA buffer with eight bits per channel, so 32 bits per pixel. Also, the RGB channels are stored in sRGB color space. As we're working in linear color space the GPU automatically converts between both spaces when reading from and writing to the buffer. Once rendering is finished the buffer is send to the display, which interprets it as sRGB color data.</p>
+					
+					<aside>
+						<h3>What about HDR displays?</h3>
+						<div>
+							<p>Unity 2022 does support HDR displays, but it's nontrivial to get good looking HDR output and you need an HDR display to test it. So we assume that all displays are LDR sRGB.</p>
+						</div>
+					</aside>
+					
+					<p>The maximum of 1 per color channel works fine as long as light intensities don't exceed it. But the intensity of incoming light doesn't have an inherent upper bound. The sun is an example of an extremely bright light source, which is why you shouldn't look at it directly. Its intensity is far greater than we can perceive before our eyes get damaged. But many regular light sources also produce light with an intensity that can exceed the limits of the observer, especially when observed up close. to correctly work with such intensities we have to render to high-dynamic-range&mdash;HDR&mdash;buffers, which support values greater than 1.</p>
+					
+					<section>
+						<h3>HDR Reflection Probes</h3>
+						
+						<p>HDR rendering requires HDR render targets. This doesn't only apply to regular cameras, it's also true for reflection probes. Whether a reflection probe contains HDR or LDR data can be controlled via its <em translate="no">HDR</em> toggle option, which is enabled by default.</p>
+						
+						<figure>
+							<img src="high-dynamic-range/reflection-probe-hdr.png" width="320" height="56">
+							<figcaption>Reflection probe with HDR enabled.</figcaption>
+						</figure>
+						
+						<p>When a reflection probe uses HDR it can contain high-intensity colors, which are mostly specular reflections that it captured. You can observe them indirectly via the reflections they cause in a scene. Imperfect reflections weaken the probe's colors, which makes HDR values stand out.</p>
+						
+						<figure>
+							<img src="high-dynamic-range/reflections-with-hdr.png" width="120" height="120" alt="with">
+							<img src="high-dynamic-range/reflections-without-hdr.png" width="120" height="120" alt="without">
+							<figcaption>Reflections with and without HDR.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>HDR Cameras</h3>
+						
+						<p>Cameras also have an <em translate="no">HDR</em> configuration option, but it doesn't do anything on its own. It can be set to either <em translate="no">Off</em> or <em translate="no">Use Graphics Settings</em>.</p>
+						
+						<figure>
+							<img src="high-dynamic-range/camera-hdr.png" width="320" height="42">
+							<figcaption>Camera HDR depending on graphics settings.</figcaption>
+						</figure>
+						
+						<p>The <em translate="no">Use Graphics Settings</em> mode only indicates that the camera allows HDR rendering. Whether this happens is up to the RP. We'll control that by adding a toggle to <code>CustomRenderPipelineAsset</code> to allow HDR, passing it to the pipeline constructor.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>bool allowHDR = true;</ins>
+	
+	&hellip;
+
+	protected override RenderPipeline CreatePipeline () {
+		return new CustomRenderPipeline(
+			<ins>allowHDR,</ins> useDynamicBatching, useGPUInstancing, useSRPBatcher,
+			useLightsPerObject, shadows, postFXSettings
+		);
+	}</pre>
+						
+						<p>Let <code>CustomRenderPipeline</code> keep track of it and pass it to the camera renderer along with the other options.</p>
+						
+						<pre translate="no">	<ins>bool allowHDR;</ins>
+
+	&hellip;
+
+	public CustomRenderPipeline (
+		<ins>bool allowHDR,</ins>
+		&hellip;
+	) {
+		<ins>this.allowHDR = allowHDR;</ins>
+		&hellip;
+	}
+	
+	&hellip;
+	
+	protected override void Render (
+		ScriptableRenderContext context, List&lt;Camera> cameras
+	) {
+		for (int i = 0; i &lt; cameras.Count; i++) {
+			renderer.Render(
+				context, cameras[i], <ins>allowHDR,</ins>
+				useDynamicBatching, useGPUInstancing, useLightsPerObject,
+				shadowSettings, postFXSettings
+			);
+		}
+	}</pre>
+						
+						<p><code>CameraRenderer</code> then keeps track of whether HDR should be used, which is when both the camera and the RP allow it.</p>
+						
+						<pre translate="no">	<ins>bool useHDR;</ins>
+
+	public void Render (
+		ScriptableRenderContext context, Camera camera, <ins>bool allowHDR,</ins>
+		bool useDynamicBatching, bool useGPUInstancing, bool useLightsPerObject,
+		ShadowSettings shadowSettings, PostFXSettings postFXSettings
+	) {
+		&hellip;
+		if (!Cull(shadowSettings.maxDistance)) {
+			return;
+		}
+		<ins>useHDR = allowHDR &amp;&amp; camera.allowHDR;</ins>
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="high-dynamic-range/allow-hdr.png" width="320" height="60">
+							<figcaption>HDR allowed.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>HDR Render Textures</h3>
+						
+						<p>HDR rendering only makes sense in combination with post processing, because we cannot change the final frame buffer format. So when we create our own intermediate frame buffer in <code>CameraRenderer.Setup</code> we'll use the default HDR format when appropriate, instead of the regular default which is for LDR.</p>
+						
+						<pre translate="no">			buffer.GetTemporaryRT(
+				frameBufferId, camera.pixelWidth, camera.pixelHeight,
+				32, FilterMode.Bilinear, <ins>useHDR ?</ins>
+					<ins>RenderTextureFormat.DefaultHDR :</ins> RenderTextureFormat.Default
+			);</pre>
+						
+						<p>The frame debugger will show that the default HDR format is <em translate="no">R16G16B16A16_SFloat</em>, which means it's an RGBA buffer with 16 bits per channel, so 64 bits per pixel, double the size of the LDR buffer. In this case each value is a signed float in linear space, not clamped to 0&ndash;1.</p>
+						
+						<aside>
+							<h3>Can we use different render texture formats?</h3>
+							<div>
+								<p>Yes, but you have to make sure that your target platform supports it. For this tutorial we stick with the default HDR format, which will always work.</p>
+							</div>
+						</aside>
+						
+						<p>When stepping through draw calls you'll notice that the scene will appear darker than the final result. This happens because those steps are stored in the HDR texture. It appears dark because the linear color data gets displayed as-is, thus incorrectly interpreted as sRGB.</p>
+						
+						<figure>
+							<img src="high-dynamic-range/hdr-before-post.png" width="320" height="200" alt="hdr">
+							<img src="high-dynamic-range/ldr-before-post.png" width="320" height="200" alt="ldr">
+							<figcaption>HDR and LDR, before post processing via frame debugger.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why does the brightness change?</h3>
+							<div>
+								<p>The sRGB format uses a nonlinear transfer function. The display adjust for this, performing what's known as gamma correction. The gamma adjustment function is usually approximated with `c^2.2` with `c` the original color, though the real transfer function is slightly different.</p>
+								
+								<figure>
+									<img src="high-dynamic-range/incorrect-transfer-graph.png" width="160" height="160">
+									<figcaption>Incorrect adjustment of linear data, approximated.</figcaption>
+								</figure>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>HDR Post Processing</h3>
+						
+						<p>At this point the result doesn't look any different than before, because we're not doing anything with the expanded range and it gets clamped once we render to an LDR target. Bloom might appear a bit brighter, but not much because colors get clamped after the pre-filtering pass. We also have to perform post processing in HDR to take full advantage of it. So let's pass along whether HDR is used when invoking <code>PostFXStack.Setup</code> in <code>CameraRenderer.Render</code>.</p>
+
+						<pre translate="no">		postFXStack.Setup(context, camera, postFXSettings<ins>, useHDR</ins>);</pre>
+						
+						<p>Now <code>PostFXStack</code> can also keep track of whether it should use HDR.</p>
+						
+						<pre translate="no">	<ins>bool useHDR;</ins>
+
+	&hellip;
+
+	public void Setup (
+		ScriptableRenderContext context, Camera camera, PostFXSettings settings<ins>,</ins>
+		<ins>bool useHDR</ins>
+	) {
+		<ins>this.useHDR = useHDR;</ins>
+		&hellip;
+	}</pre>
+						
+						<p>And we can use the appropriate texture format in <code>DoBloom</code>.</p>
+						
+						<pre translate="no">		RenderTextureFormat format = <ins>useHDR ?</ins>
+			<ins>RenderTextureFormat.DefaultHDR :</ins> RenderTextureFormat.Default;</pre>
+						
+						<p>The difference between HDR and LDR bloom can be dramatic or unnoticeable, depending on how bright the scene is. Often the bloom threshold is set to 1 so only HDR colors contribute to it. This way the glow indicates colors that are too bright for the display.</p>
+						
+						<figure>
+							<img src="high-dynamic-range/hdr-bloom.png" width="320" height="200">
+							<figcaption>HDR bloom; threshold 1 and knee 0.</figcaption>
+						</figure>
+						
+						<p>Because bloom averages colors even a single very bright pixel can end up visually affecting a very large region. You can see this by comparing the pre-filter step with the final result. Even a single pixel can produce a big circular glow.</p>
+						
+						<figure>
+							<img src="high-dynamic-range/hdr-bloom-prefilter.png" width="326" height="190">
+							<figcaption>HDR bloom pre-filtering step.</figcaption>
+						</figure>
+						
+						<p>For example, when a 2&times;2 block of the values 0, 0, 0, and 1 gets averaged due to downsampling the result will be 0.25. But if the HDR version averages 0, 0, 0, and 10 instead the result would be 2.5. Compared to LDR it appears as if the 0.25 result got boosted to 1.</p> 
+						
+					</section>
+					
+					<section>
+						<h3>Fighting Fireflies</h3>
+						
+						<p>A downside of HDR is that it can produce small image regions that are much brighter than their surroundings. When these regions are about the size of a pixel or smaller they can drastically change relative size and pop in and out of existence during to movement, which causes flickering. These regions are known as fireflies. When bloom gets applied to them the effect can become stroboscopic.</p>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="high-dynamic-range/hdr-bloom-fireflies.mp4" type="video/mp4">
+							</video>
+							<figcaption>HDR bloom fireflies.</figcaption>
+						</figure>
+						
+						<p>Eliminating this problem entirely would require infinite resolution, which isn't possible. The next best thing that we can do is more aggressively blur the image during pre-filtering, to fade out the fireflies. Let's add a toggle option to <code>PostFXSettings.BloomSettings</code> for this.</p>
+						
+						<pre translate="no">		<ins>public bool fadeFireflies;</ins></pre>
+						
+						<figure>
+							<img src="high-dynamic-range/fade-fireflies.png" width="320" height="42">
+							<figcaption>Fade fireflies enabled.</figcaption>
+						</figure>
+						
+						<p>Add a new pre-filter fireflies pass for this purpose. Once again I won't show adding the pass to the <em translate="no">PostFxStack</em> shader an the <code>PostFXStack.Pass</code> enum. Select the appropriate pass for pre-filtering in <code>DoBloom</code>.</p>
+						
+						<pre translate="no">		Draw(
+			sourceId, bloomPrefilterId, <ins>bloom.fadeFireflies ?</ins>
+				<ins>Pass.BloomPrefilterFireflies :</ins> Pass.BloomPrefilter
+		);</pre>
+						
+						<p>The most straightforward way to fade the fireflies is to grow our 2&times;2 downsample filter of the pre-filtering pass into a large 6&times;6 box filter. We can do that with nine samples, applying the bloom threshold to each sample individually before averaging. Add the required <code class="shader">BloomPrefilterFirefliesPassFragment</code> function for that to <em translate="no">PostFXStackPasses</em>.</p>
+						
+						<figure>
+							<img src="high-dynamic-range/6x6-box-filter.png" width="228" height="228">
+							<figcaption>6&times;6 box filter.</figcaption>
+						</figure>
+						
+						<pre class="shader" translate="no"><ins>float4 BloomPrefilterFirefliesPassFragment (Varyings input) : SV_TARGET {</ins>
+	<ins>float3 color = 0.0;</ins>
+	<ins>float2 offsets[] = {</ins>
+		<ins>float2(0.0, 0.0),</ins>
+		<ins>float2(-1.0, -1.0), float2(-1.0, 1.0), float2(1.0, -1.0), float2(1.0, 1.0),</ins>
+		<ins>float2(-1.0, 0.0), float2(1.0, 0.0), float2(0.0, -1.0), float2(0.0, 1.0)</ins>
+	<ins>};</ins>
+	<ins>for (int i = 0; i &lt; 9; i++) {</ins>
+		<ins>float3 c =</ins>
+			<ins>GetSource(input.screenUV + offsets[i] * GetSourceTexelSize().xy * 2.0).rgb;</ins>
+		<ins>c = ApplyBloomThreshold(c);</ins>
+		<ins>color += c;</ins>
+	<ins>}</ins>
+	<ins>color *= 1.0 / 9.0;</ins>
+	<ins>return float4(color, 1.0);</ins>
+<ins>}</ins></pre>
+						
+						<p>But this isn't enough to solve the problem, as the very bright pixels just get spread out over a larger area. To fade the fireflies we'll use a weighed average instead, based on the color's luminance. A color's luminance is its perceived brightness. We'll use the <code class="shader">Luminance</code> function for this, defined in the <em translate="no">Color</em> HLSL file of the Core Library.
+						
+						<pre class="shader" translate="no"><ins>#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"</ins>
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Filtering.hlsl"</pre>
+						
+						<p>A sample's weight is `1/(l+1)` with `l` its luminance. Thus for luminance 0 the weight is 1, for luminance 1 the weight is &frac12;, for 3 it's &frac14;, for 7 it's &frac18;, and so on.</p>
+						
+						<figure>
+							<img src="high-dynamic-range/luminance-weight.png" width="400" height="400">
+							<figcaption>Luminance-based weights.</figcaption>
+						</figure>
+						
+						<p>At the end we divide the sample sum by the sum of those weights. This effectively spreads out the brightness of the fireflies across all other samples. If those other samples are dark the firefly fades. For example, the weighed average of 0, 0, 0, and 10 is `(10/11)/(3+1/11)=110/374~~0.29`.</p>
+						
+						<pre class="shader" translate="no">float4 BloomPrefilterFirefliesPassFragment (Varyings input) : SV_TARGET {
+	float3 color = 0.0;
+	<ins>float weightSum = 0.0;</ins>
+	&hellip;
+	for (int i = 0; i &lt; 9; i++) {
+		&hellip;
+		<ins>float w = 1.0 / (Luminance(c) + 1.0);</ins>
+		color += c <ins>* w</ins>;
+		<ins>weightSum += w;</ins>
+	}
+	color <ins>/= weightSum</ins>;
+	return float4(color, 1.0);
+}</pre>
+						
+						<figure>
+							<img src="high-dynamic-range/luminance-weighed-average.png" width="320" height="200">
+							<figcaption>Luminance-based weighed average.</figcaption>
+						</figure>
+						
+						<p>Because we perform a Gaussian blur after the initial pre-filtering step we can get away with skipping the four samples directly adjacent to the center, reducing the amount of samples from nine to five.</p>
+						
+						<figure>
+							<img src="high-dynamic-range/x-filter.png" width="228" height="228">
+							<figcaption>6&times;6 cross filter.</figcaption>
+						</figure>
+						
+						<pre class="shader" translate="no">	float2 offsets[] = {
+		float2(0.0, 0.0),
+		float2(-1.0, -1.0), float2(-1.0, 1.0), float2(1.0, -1.0), float2(1.0, 1.0)<del>//,</del>
+		<del>//float2(-1.0, 0.0), float2(1.0, 0.0), float2(0.0, -1.0), float2(0.0, 1.0)</del>
+	};
+	for (int i = 0; i &lt; <ins>5</ins>; i++) { &hellip; }</pre>
+						
+						<p>This will turn single-pixel fireflies into &times;-shape patterns and split single-pixel horizontal or vertical lines into two separate lines in the pre-filtering step, but after the first blur step those patterns are gone.</p>
+						
+						<figure>
+							<img src="high-dynamic-range/average-5.png" width="326" height="190" alt="5">
+							<img src="high-dynamic-range/average-9.png" width="326" height="190" alt="9">
+							<figcaption>Pre-filtering step with five and nine samples; half resolution.</figcaption>
+						</figure>
+						
+						<p>This doesn't completely eliminate the fireflies but reduces their strength so much that they are no longer glaringly obvious, unless the bloom intensity is set much higher than 1.</p>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="high-dynamic-range/faded-fireflies.mp4" type="video/mp4">
+							</video>
+							<figcaption>Faded fireflies.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Scattering Bloom</h2>
+					
+					<p>Now that we have HDR bloom let's consider a more realistic application of it. The idea is that cameras aren't perfect. Their lenses don't focus all light correctly. A portion of the light gets scattered over a larger area, somewhat like our bloom effect does currently. The better a camera the less it scatters. The big difference with our additive bloom effect is that scattering doesn't add light, it only diffuses it. Scattering can visually vary from a slight glow to a light haze that veils the entire image.</p>
+					
+					<p>Eyes also aren't perfect and light gets scattered inside them in a complex way. It happens with all incoming light, but is only really noticeable when it is bright. For example, it is obvious when looking at a small bright light source against a dark background, like a lantern at night, or the sun's reflection on a bright day.</p>
+					
+					<p>Instead of a uniform circular blurry glow we'll see many-pointed asymmetrical star-like patterns which also have hue shifts, unique to our own eyes. But our bloom effect will represent a featureless camera with uniform scattering.</p>
+					
+					<figure>
+						<img src="scattering-bloom/cars-scattering-bloom.jpg" width="300" height="100">
+						<figcaption>Bloom caused by scattering in camera.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Bloom Mode</h3>
+						
+						<p>We're going to support both classical additive and energy-conserving scattering bloom. Add an enum option for these modes to <code>PostFXSettings.BloomSettings</code>. Also add a 0&ndash;1 slider to control how much the light gets scattered.</p>
+						
+						<pre translate="no">		<ins>public enum Mode { Additive, Scattering }</ins>
+
+		<ins>public Mode mode;</ins>
+
+		<ins>[Range(0f, 1f)]</ins>
+		<ins>public float scatter;</ins></pre>
+						
+						<figure>
+							<img src="scattering-bloom/scattering-mode.png" width="320" height="60">
+							<figcaption>Scattering mode chosen and set to 0.5.</figcaption>
+						</figure>
+						
+						<p>Rename the existing <em translate="no">BloomCombine</em> pass to <em translate="no">BloomAdd</em> and introduce a new <em translate="no">BloomScatter</em> pass. Make sure that the enum and pass order remain alphabetical. Then use the appropriate pass in <code>DoBloom</code> during the combine phase. In the case of scattering we'll use the scatter amount for intensity instead of 1. We still use the configured intensity for the final draw.</p>
+						
+						<pre translate="no">		<ins>Pass combinePass;</ins>
+		<ins>if (bloom.mode == PostFXSettings.BloomSettings.Mode.Additive) {</ins>
+			<ins>combinePass = Pass.BloomAdd;</ins>
+			buffer.SetGlobalFloat(bloomIntensityId, 1f);
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>combinePass = Pass.BloomScatter;</ins>
+			<ins>buffer.SetGlobalFloat(bloomIntensityId, bloom.scatter);</ins>
+		<ins>}</ins>
+		
+		if (i > 1) {
+			buffer.ReleaseTemporaryRT(fromId - 1);
+			toId -= 5;
+			for (i -= 1; i > 0; i--) {
+				buffer.SetGlobalTexture(fxSource2Id, toId + 1);
+				Draw(fromId, toId, <ins>combinePass</ins>);
+				&hellip;
+			}
+		}
+		else {
+			buffer.ReleaseTemporaryRT(bloomPyramidId);
+		}
+		buffer.SetGlobalFloat(bloomIntensityId, bloom.intensity);
+		buffer.SetGlobalTexture(fxSource2Id, sourceId);
+		Draw(fromId, BuiltinRenderTextureType.CameraTarget, <ins>combinePass</ins>);</pre>
+						
+						<p>The function for the <em translate="no">BloomScatter</em> pass is the same as the one for <em translate="no">BloomAdd</em>, except that it interpolates between the high-resolution and low-resolution sources based on intensity, instead of adding them. Thus a scatter amount of zero means that only the lowest bloom pyramid level is used while scatter 1 means that only the highest is used. At 0.5 the contributions of successive levels end up as 0.5, 0.25, 0.125, 0.125 in case of four levels.</p>
+						
+						<pre class="shader" translate="no"><ins>float4 <ins>BloomScatterPassFragment</ins> (Varyings input) : SV_TARGET {</ins>
+	float3 lowRes;
+	if (_BloomBicubicUpsampling) {
+		lowRes = GetSourceBicubic(input.screenUV).rgb;
+	}
+	else {
+		lowRes = GetSource(input.screenUV).rgb;
+	}
+	float3 highRes = GetSource2(input.screenUV).rgb;
+	return float4(<ins>lerp(highRes, lowRes, _BloomIntensity)</ins>, 1.0);
+}</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="scattering-bloom/varying-bloom-scatter.mp4" type="video/mp4">
+							</video>
+							<figcaption>Varying bloom scatter; intensity 20 light inside structure; max iterations 16.</figcaption>
+						</figure>
+						
+						<p>Scattering bloom doesn't brighten the image. It might appear to darken the above example, but that's because it only shows a cropped portion of the original. The energy conservation isn't perfect however, because the Gaussian filter gets clamped to the edge of the image, which means that the contribution of the edge pixels is magnified. We could compensate for that, but won't because it's usually not obvious.</p>
+					</section>
+					
+					<section>
+						<h3>Scatter Limits</h3>
+						
+						<p>Because scatter values of 0 and 1 eliminate all but one pyramid level it doesn't make sense to use those values. So let's reduce the scatter slider's range to 0.05&ndash;0.95. This makes the default value of zero invalid, so explicitly initialize <code>BloomSettings</code> with a value. Let's use 0.07, which is the same scatter default that URP and HDRP use.</p>
+						
+						<pre translate="no">	public struct BloomSettings {
+
+		&hellip;
+
+		[Range(<ins>0.05f</ins>, <ins>0.95f</ins>)]
+		public float scatter;
+	}
+
+	[SerializeField]
+	BloomSettings bloom = <ins>new BloomSettings {</ins>
+		<ins>scatter = 0.7f</ins>
+	<ins>}</ins>;</pre>
+						
+						
+						<p>Also, an intensity greater than 1 is inappropriate for scattering bloom, as that would add light. So we'll clamp it in <code>DoBloom</code>, limiting the maximum to 0.95 so the original image will always contribute something to the result.</p>
+						
+						<pre translate="no">		<ins>float finalIntensity;</ins>
+		if (bloom.mode == PostFXSettings.BloomSettings.Mode.Additive) {
+			combinePass = Pass.BloomAdd;
+			buffer.SetGlobalFloat(bloomIntensityId, 1f);
+			<ins>finalIntensity = bloom.intensity;</ins>
+		}
+		else {
+			combinePass = Pass.BloomScatter;
+			buffer.SetGlobalFloat(bloomIntensityId, bloom.scatter);
+			<ins>finalIntensity = Mathf.Min(bloom.intensity, 0.95f);</ins>
+		}
+
+		if (i > 1) {
+			&hellip;
+		}
+		else {
+			buffer.ReleaseTemporaryRT(bloomPyramidId);
+		}
+		buffer.SetGlobalFloat(bloomIntensityId, <ins>finalIntensity</ins>);</pre>
+						
+						<figure>
+							<img src="scattering-bloom/intensity-05-scatter-07.png" width="320" height="200">
+							<figcaption>Intensity 0.5 and scatter 0.7.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Threshold</h3>
+						
+						<p>Scattering bloom is far subtler than additive bloom. It's typically also used with low intensities. This means that&mdash;just like with real cameras&mdash;the bloom effect is only really obvious for very bright light, even though all light gets scattered.</p>
+						
+						<p>Although it's not realistic, it's still possible to apply a threshold to eliminate scattering for darker pixels. This can keep the image sharp when using stronger bloom. However, this eliminates light and thus darkens the image.</p>
+						
+						<figure>
+							<img src="scattering-bloom/threshold-too-dark.png" width="320" height="200">
+							<figcaption>Threshold 1, knee 0, and Intensity 1.</figcaption>
+						</figure>
+						
+						<p>We have to compensate for the missing scattered light. We do this by creating an extra <em translate="no">BloomScatterFinal</em> pass that we use for the final draw of scattering bloom.</p>
+						
+						<pre translate="no">		Pass combinePass<ins>, finalPass</ins>;
+		float finalIntensity;
+		if (bloom.mode == PostFXSettings.BloomSettings.Mode.Additive) {
+			combinePass = <ins>finalPass =</ins> Pass.BloomAdd;
+			buffer.SetGlobalFloat(bloomIntensityId, 1f);
+			finalIntensity = bloom.intensity;
+		}
+		else {
+			combinePass = Pass.BloomScatter;
+			<ins>finalPass = Pass.BloomScatterFinal;</ins>
+			buffer.SetGlobalFloat(bloomIntensityId, bloom.scatter);
+			finalIntensity = Mathf.Min(bloom.intensity, 1f);
+		}
+
+		&hellip;
+		Draw(fromId, BuiltinRenderTextureType.CameraTarget, <ins>finalPass</ins>);
+	}</pre>
+						
+						<p>The function for this pass is a copy of the other scatter pass function, with one difference. It adds the missing light to the low-resolution pass, by adding the high-resolution light and then subtracting it again but with the bloom threshold applied to it. This isn't a perfect reconstruction&mdash;it isn't a weighed average and ignores light lost due to fading fireflies&mdash;but is close enough and doesn't add light to the original image.</p>
+						
+						<pre class="shader" translate="no">float4 BloomScatterFinalPassFragment (Varyings input) : SV_TARGET {
+	float3 lowRes;
+	if (_BloomBicubicUpsampling) {
+		lowRes = GetSourceBicubic(input.screenUV).rgb;
+	}
+	else {
+		lowRes = GetSource(input.screenUV).rgb;
+	}
+	float3 highRes = GetSource2(input.screenUV).rgb;
+	<ins>lowRes += highRes - ApplyBloomThreshold(highRes);</ins>
+	return float4(lerp(highRes, lowRes, _BloomIntensity), 1.0);
+}</pre>
+						
+						<figure>
+							<img src="scattering-bloom/scatter-final.png" width="320" height="200">
+							<figcaption>Threshold with scatter final pass.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Tone Mapping</h2>
+					
+					<p>Although we can render in HDR the final frame buffer is always LDR for regular cameras. Thus color channels get cut off at 1. Effectively the white point of the final image is at 1. Extremely bright colors end up looking no different than those what are fully saturated. For example, I made a scene with multiple light levels and objects with various amounts of emission, far exceeding 1. The strongest emission is 8 and the brightest light has intensity 200.</p>
+					
+					<figure>
+						<img src="tone-mapping/without-fx.png" width="320" height="200">
+						<figcaption>Scene without post FX; only realtime lighting.</figcaption>
+					</figure>
+					
+					<p>Without applying any post FX it is hard and even impossible to tell which objects and lights are the very bright ones. We can use bloom to make this obvious. For example, I used threshold 1, knee 0.5, intensity 0.2, and scatter 0.7 with max iterations.</p>
+					
+					<figure>
+						<img src="tone-mapping/bloom-additive.png" width="320" height="200" alt="additive">
+						<img src="tone-mapping/bloom-scattering.png" width="320" height="200" alt="scattering">
+						<figcaption>With bloom, additive and scattering.</figcaption>
+					</figure>
+					
+					<p>The glowing objects are clearly supposed to be bright, but we still don't get a sense of how bright they are relative to the rest of the scene. To do so we'd need to adjust the brightness of the image&mdash;increasing its white point&mdash;so the brightest colors no longer exceed 1. We could do that by uniformly darkening the entire image, but that would make most of it so dark that we wouldn't be able to clearly see it. Ideally we adjust the very bright colors a lot while adjusting dark colors only a little. Thus we need a nonuniform color adjustment. This color adjustment doesn't represent a physical change of the light itself, but how it is observed. For example, our eyes are more sensitive to darker tones than lighter ones.</p>
+					
+					<p>Conversion from HDR to LDR is known as tone mapping, which comes from photography and film development. Traditional photos and film also have a limited range and nonuniform light sensitivity, so many techniques have been developed to perform the conversion. There is no single correct way to perform tone mapping. Different approaches can be used to set the mood of the final result, like a classical filmic look.</p>
+					
+					<section>
+						<h3>Extra Post FX Step</h3>
+						
+						<p>We perform tone mapping in a new post FX step after bloom. Add a <code>DoToneMapping</code> method to <code>PostFXStack</code> for this purpose, which initially just copies a source to the camera target.</p>
+						
+						<pre translate="no">	<ins>void DoToneMapping(int sourceId) {</ins>
+		<ins>Draw(sourceId, BuiltinRenderTextureType.CameraTarget, Pass.Copy);</ins>
+	<ins>}</ins></pre>
+						
+						<p>We need to adjust the result of bloom, so get a new full-resolution temporary render texture and use it as the final destination in <code>DoBloom</code>. Also make it return whether it drew anything, instead of directly drawing to the camera target when the effect is skipped.</p>
+						
+						<pre translate="no">	int
+		bloomBicubicUpsamplingId = Shader.PropertyToID("_BloomBicubicUpsampling"),
+		bloomIntensityId = Shader.PropertyToID("_BloomIntensity"),
+		bloomPrefilterId = Shader.PropertyToID("_BloomPrefilter"),
+		<ins>bloomResultId = Shader.PropertyToID("_BloomResult"),</ins>
+		&hellip;;
+
+	&hellip;
+	
+	<ins>bool</ins> DoBloom (int sourceId) {
+		<del>//buffer.BeginSample("Bloom");</del>
+		PostFXSettings.BloomSettings bloom = settings.Bloom;
+		int width = camera.pixelWidth / 2, height = camera.pixelHeight / 2;
+		
+		if (
+			bloom.maxIterations == 0 || bloom.intensity &lt;= 0f ||
+			height &lt; bloom.downscaleLimit * 2 || width &lt; bloom.downscaleLimit * 2
+		) {
+			<del>//Draw(sourceId, BuiltinRenderTextureType.CameraTarget, Pass.Copy);</del>
+			<del>//buffer.EndSample("Bloom");</del>
+			<ins>return false;</ins>
+		}
+		
+		<ins>buffer.BeginSample("Bloom");</ins>
+		&hellip;
+		buffer.SetGlobalFloat(bloomIntensityId, finalIntensity);
+		buffer.SetGlobalTexture(fxSource2Id, sourceId);
+		<ins>buffer.GetTemporaryRT(</ins>
+			<ins>bloomResultId, camera.pixelWidth, camera.pixelHeight, 0,</ins>
+			<ins>FilterMode.Bilinear, format</ins>
+		<ins>);</ins>
+		Draw(fromId, <ins>bloomResultId</ins>, finalPass);
+		buffer.ReleaseTemporaryRT(fromId);
+		buffer.EndSample("Bloom");
+		<ins>return true;</ins>
+	}</pre>
+						
+						<p>Adjust <code>Render</code> so it performs tone mapping on the bloom result if bloom if active and then release the bloom result texture. Otherwise have it apply tone mapping on the original source directly, skipping bloom entirely.</p>
+						
+						<pre translate="no">	public void Render (int sourceId) {
+		<ins>if (</ins>DoBloom(sourceId)<ins>) {</ins>
+			<ins>DoToneMapping(bloomResultId);</ins>
+			<ins>buffer.ReleaseTemporaryRT(bloomResultId);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>DoToneMapping(sourceId);</ins>
+		<ins>}</ins>
+		context.ExecuteCommandBuffer(buffer);
+		buffer.Clear();
+	}</pre>
+						
+						<aside>
+							<h3>Could we combine tone mapping with the final bloom pass?</h3>
+							<div>
+								<p>Yes, the URP and HDRP do this and more in an <em translate="no">Uber</em> pass. However, keeping the FX completely separate is clearer and makes it easier to change them, so that's what we do in this tutorial.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Tone Mapping Mode</h3>
+						
+						<p>There are multiple approaches to tone mapping and we'll support a few, so add a <code>ToneMappingSettings</code> configuration struct to <code>PostFXSettings</code>, with a <code>Mode</code> enum option that initially only contains <em translate="no">None</em>.</p>
+						
+						<pre translate="no">	<ins>[System.Serializable]</ins>
+	<ins>public struct ToneMappingSettings {</ins>
+
+		<ins>public enum Mode { None }</ins>
+
+		<ins>public Mode mode;</ins>
+	<ins>}</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>ToneMappingSettings toneMapping = default;</ins>
+
+	<ins>public ToneMappingSettings ToneMapping => toneMapping;</ins></pre>
+						
+						<figure>
+							<img src="tone-mapping/tone-mapping-mode.png" width="320" height="60">
+							<figcaption>Tone mapping mode set to none.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Reinhard</h3>
+						
+						<p>The goal of our tone mapping is to reduce the brightness of the image so that otherwise uniform white regions show a variety of colors, revealing the details that were otherwise lost. It's like when your eyes adjust to a suddenly bright environment until you can see clearly again. But we don't want to scale down the entire image uniformly, because that would make darker colors indistinguishable, trading over-brightness for underexposure. So we need a nonlinear conversion that doesn't reduce dark values much but reduces high values a lot. At the extremes, zero remains zero and a value that approaches infinity is reduced to 1. A simple function that accomplishes that is `c/(1+c)` where `c` is a color channel. This function is known as the Reinhard tone mapping operation in its simplest form, initially proposed by Mark Reinhard, except that he applied it to luminance while we'll apply it to each color channel in isolation.</p>
+						
+						<figure>
+							<img src="tone-mapping/reinhard-graph.png" width="400" height="400">
+							<figcaption>Reinhard tone mapping.</figcaption>
+						</figure>
+						
+						<p>Add an option for Reinhard to <code>ToneMappingSettings.Mode</code>, after None. Then make the enum start at &minus;1 so the <em translate="no">Reinhard</em> value is zero.</p>
+						
+						<pre translate="no">		public enum Mode { None <ins>= -1, Reinhard</ins> }</pre>
+						
+						<p>Next, add a <em translate="no">ToneMappingReinhard</em> pass and make <code>PostFXStack.DoTonemapping</code> use it when appropriate. Specifically, perform a simply copy if the mode is negative, otherwise apply Reinhard tone mapping.</p>
+						
+						<pre translate="no">	void DoToneMapping(int sourceId) {
+		<ins>PostFXSettings.ToneMappingSettings.Mode mode = settings.ToneMapping.mode;</ins>
+		<ins>Pass pass = mode &lt; 0 ? Pass.Copy : Pass.ToneMappingReinhard;</ins>
+		Draw(sourceId, BuiltinRenderTextureType.CameraTarget, <ins>pass</ins>);
+	}</pre>
+						
+						<p>The <code class="shader">ToneMappingReinhardPassFragment</code> shader function simply applies the function.</p>
+						
+						<pre class="shader" translate="no"><ins>float4 ToneMappingReinhardPassFragment (Varyings input) : SV_TARGET {</ins>
+	<ins>float4 color = GetSource(input.screenUV);</ins>
+	<ins>color.rgb /= color.rgb + 1.0;</ins>
+	<ins>return color;</ins>
+<ins>}</ins></pre>
+						
+						
+						
+						
+						<figure>
+							<img src="tone-mapping/bloom-additive.png" width="320" height="200" alt="additive">
+							<img src="tone-mapping/bloom-scattering.png" width="320" height="200" alt="scattering"><br>
+							<img src="tone-mapping/reinhard-additive.png" width="320" height="200" alt="reinhard additive">
+							<img src="tone-mapping/reinhard-scattering.png" width="320" height="200" alt="reinhard scattering">
+							<figcaption>Top no tone mapping, bottom Reinhard, both with additive and scattering bloom.</figcaption>
+						</figure>
+						
+						<p>This works, but could go wrong for very large values due to precision limitations. For the same reason very large values end up at 1 much earlier than infinity. So let's clamp the color before performing tone mapping. A limit of 60 avoids any potential issues for all modes that we will support.</p>
+						
+						<pre class="shader" translate="no">	<ins>color.rgb = min(color.rgb, 60.0);</ins>
+	color.rgb /= color.rgb + 1.0;</pre>
+						
+						<aside>
+							<h3>When is precision an issue?</h3>
+							<div>
+								<p>It can become a problem for some functions when <code class="shader">half</code> values are used. Due to a bug in the shader compiler this happens in some cases with the Metal API, even when <code class="shader">float</code> is used explicitly. This also affects some MacBooks, not only mobiles.</p>
+							</div>
+						</aside>
+						
+					</section>
+					
+					<section>
+						<h3>Neutral</h3>
+						
+						<p>The white point of Reinhard tone mapping is theoretically infinite, but it can be adjusted so the maximum is reached earlier, which weakens the adjustment. This alternative function is `c(1+c/w^2)/(1+c)` where `w` is the white point.</p>
+						
+						<figure>
+							<img src="tone-mapping/adjusted-reinhard-graph.png" width="400" height="400">
+							<figcaption>Reinhard with white point at infinity and 4.</figcaption>
+						</figure>
+						
+						<p>We could add a configuration option for this, but Reinhard is not the only function that we can use. A more interesting one that gets used a lot is `t(x)=(x(ax+cb)+de)/(x(ax+b)+df)-e/f`. In this case `x` is an input color channel and the other values are constants that configure the curve. The final color is then `(t(ce))/(t(w))`, with `c` a color channel, `e` an exposure bias, and `w` the white point. It can produce an s-curve that has a toe region that curves upward from black to a linear section in the middle, ending with a shoulder region that flattens as it approaches white.</p>
+						
+						<p>The above function was designed by <a href="http://filmicworlds.com/blog/filmic-tonemapping-operators/">John Hable</a>. It was first used in <a href="https://www.slideshare.net/ozlael/hable-john-uncharted2-hdr-lighting">Uncharted 2</a> (see slides 142 and143). </p>
+						
+						<figure>
+							<img src="tone-mapping/uncharted2-graph.png" width="400" height="400">
+							<figcaption>Reinhard and Uncharted 2 tone mapping.</figcaption>
+						</figure>
+						
+						<p>The URP and HDRP use a variant of this function with their own configuration values and a white point of 5.3, but they also use the white scale for the exposure bias, so the final curve is `(t(c/(t(w))))/(t(w))`. This results in an effective white point of roughly 4.035. It's used for the neutral tone mapping option and is available via the <code class="shader">NeutralTonemap</code> function in the <em translate="no">Color</em> Core Library HLSL file.</p>
+						
+						<figure>
+							<img src="tone-mapping/reinhard-neutral-graph.png" width="400" height="400">
+							<figcaption>Reinhard white point infinite and 4, and neutral tone mapping.</figcaption>
+						</figure>
+						
+						<p>Let's add an option for this tone mapping mode. Put it after <em translate="no">None</em> and before <em translate="no">Reinhard</em> in the <code>Mode</code> enum.</p>
+						
+						<pre translate="no">		public enum Mode { None = -1, <ins>Neutral,</ins> Reinhard }</pre>
+						
+						<p>Then create another pass for it. <code>PostFXStack.DoToneMapping</code> can now find the correct pass by adding the mode to the neutral option if it's something other than <em translate="no">None</em>.</p>
+						
+						<pre translate="no">		Pass pass =
+			mode &lt; 0 ? Pass.Copy : <ins>Pass.ToneMappingNeutral + (int)mode</ins>;</pre>
+						
+						<p>The <code class="shader">ToneMappingNeutralPassFragment</code> function then only has to invoke <code class="shader">NeutralTonemap</code>.</p>
+						
+						<pre class="shader" translate="no">float4 <ins>ToneMappingNeutralPassFragment</ins> (Varyings input) : SV_TARGET {
+	float4 color = GetSource(input.screenUV);
+	color.rgb = min(color.rgb, 60.0);
+	color.rgb = <ins>NeutralTonemap(color.rgb)</ins>;
+	return color;
+}</pre>
+						
+						<figure>
+							<img src="tone-mapping/reinhard-additive.png" width="320" height="200" alt="reinhard additive">
+							<img src="tone-mapping/reinhard-scattering.png" width="320" height="200" alt="reinhard scattering"><br>
+							<img src="tone-mapping/neutral-additive.png" width="320" height="200" alt="neutral additive">
+							<img src="tone-mapping/neutral-scattering.png" width="320" height="200" alt="neutral scattering">
+							<figcaption>Top Reinhard, bottom neutral.</figcaption>
+						</figure>
+						
+						<p>You could add configuration options to tweak your own curve, but we'll move on to our final tone mapping mode.</p>
+					</section>
+					
+					<section>
+						<h3>ACES</h3>
+						
+						<p>The last mode that we'll support in this tutorial is ACES tone mapping, which URP and HDRP also use. ACES is shorthand for the <a href="https://acescentral.com">Academy Color Encoding System</a>, a global standard for interchanging digital image files, managing color workflows and creating masters for delivery and archiving. We'll only use its tone mapping approach, as implemented by Unity.</p>
+						
+						<p>First, add it to the <code>Mode</code> enum, directly after <em translate="no">None</em> to keep the rest in alphabetical order.</p>
+						
+						<pre translate="no">		public enum Mode { None = -1, <ins>ACES,</ins> Neutral, Reinhard }</pre>
+						
+						<p>Add the pass and adjust <code>PostFXStack.DoToneMapping</code> so it starts with ACES.</p>
+						
+						<pre translate="no">		Pass pass =
+			mode &lt; 0 ? Pass.Copy : Pass.<ins>ToneMappingACES</ins> + (int)mode;</pre>
+						
+						<p>The new <code class="shader">ToneMappingACESPassFragment</code> function can simply use the <code class="shader">AcesTonemap</code> function from the Core Library. It's included via <em translate="no">Color</em> but there's a separate <em translate="no">ACES</em> HLSL file that you can investigate. The input color of the function has to be in ACES color space, for which we can use the <code class="shader">unity_to_ACES</code> function.</p>
+						
+						<pre class="shader" translate="no">float4 <ins>ToneMappingACESPassFragment</ins> (Varyings input) : SV_TARGET {
+	float4 color = GetSource(input.screenUV);
+	color.rgb = min(color.rgb, 60.0);
+	color.rgb = <ins>AcesTonemap(unity_to_ACES(color.rgb))</ins>;
+	return color;
+}</pre>
+						
+						<figure>
+							<img src="tone-mapping/neutral-additive.png" width="320" height="200" alt="neutral additive">
+							<img src="tone-mapping/neutral-scattering.png" width="320" height="200" alt="neutral scattering"><br>
+							<img src="tone-mapping/aces-additive.png" width="320" height="200" alt="ACES additive">
+							<img src="tone-mapping/aces-scattering.png" width="320" height="200" alt="ACES scattering"><br>
+							<img src="tone-mapping/bloom-additive.png" width="320" height="200" alt="additive">
+							<img src="tone-mapping/bloom-scattering.png" width="320" height="200" alt="scattering">
+							<figcaption>Top neutral, middle ACES, bottom no tone mapping.</figcaption>
+						</figure>
+						
+						<p>The most obvious difference between ACES and the other modes is that it adds a hue shift to very bright colors, pushing them toward white. This also happens when cameras or eyes get overwhelmed by too much light. Combined with bloom it is now clear which surfaces are brightest. Also, ACES tone mapping decreases the darker colors a bit, which enhances contrast. The result is a filmic look.</p>
+						
+						<p>The next tutorial is <a href="../color-grading/index.html">Color Grading</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/custom-srp-12-hdr/" class="repository">repository</a>
+					<a href="HDR.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

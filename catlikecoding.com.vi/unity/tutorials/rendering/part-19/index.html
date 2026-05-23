@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/rendering/part-19/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/rendering/part-19/tutorial-image.jpg">
+		<meta property="og:title" content="Rendering 19, GPU Instancing, a Unity Tutorial">
+		<meta property="og:description" content="A Unity Rendering tutorial about adding support for GPU instancing. Part 19 of 20.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Rendering 19</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/rendering/part-19/#article",
+				"headline": "Rendering 19",
+				"alternativeHeadline": "GPU Instancing",
+				"datePublished": "2017-08-31",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Rendering tutorial about adding support for GPU instancing. Part 19 of 20.",
+				"image": "https://catlikecoding.com/unity/tutorials/rendering/part-19/tutorial-image.jpg",
+				"dependencies": "Unity 2017.1.0f3",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/rendering/", "name": "Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				DeferredFogEffect: 1,
+				EmissiveOscillator: 1,
+				GPUInstancingTest: 1,
+				MyLightingShaderGUI: 1,
+				RenderingMode: 1,
+				RenderingSettings: 1,
+				SmoothnessSource: 1,
+				TangentSpaceVisualizer: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Rendering 19</h1>
+					<p>GPU Instancing</p>
+					<ul>
+						<li>Render a boatload of spheres.</li>
+						<li>Add support for GPU instancing.</li>
+						<li>Use material property blocks.</li>
+						<li>Make instancing work with LOD groups.</li>
+					</ul>
+				</header>
+
+				<p>This is part 19 of a tutorial series about rendering. The <a href="../part-18/index.html">previous part</a> covered realtime GI, probe volumes, and LOD groups. This time we'll add support for another way to consolidate draw calls into batches.</p>
+				
+				<p>This tutorial was made with Unity 2017.1.0f3.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Thousands of spheres, rendered in a few dozen batches.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Batching Instances</h2>
+					
+					<p>Instructing the GPU to draw something takes time. Feeding it the data to do so, including the mesh and material properties, takes time as well. We already know of two ways to decrease the amount of draw calls, which are static and dynamic batching.</p>
+					
+					<p>Unity can merge the meshes of static objects into a larger static mesh, which reduces draw calls. Only objects that use the same material can be combined in this way. This comes at the cost of having to store more mesh data. When dynamic batching is enabled, Unity does the same thing at runtime for dynamic objects that are in view. This only works for small meshes, otherwise the overhead becomes too great.</p>
+					
+					<p>There is yet another way to combine draw calls. It is know as GPU instancing or geometry instancing. Like dynamic batching, this is done at runtime for visible objects. The idea is that the GPU is told to render the same mesh multiple times in one go. So it cannot combine different meshes or materials, but it's not restricted to small meshes. We're going to try out this approach.</p>
+					
+					<section>
+						<h3>Many Spheres</h3>
+						
+						<p>To test GPU instancing, we need to render the same mesh many times. Let's create a simple sphere prefab for this, which uses our white material.</p>
+						
+						<figure>
+							<img src="batching-instances/prefab.png" width="320" height="228">
+							<figcaption>White sphere prefab.</figcaption>
+						</figure>
+						
+						<p>To instantiate this sphere, create a test component which spawns a prefab many times and positions it randomly inside a spherical area. Make the spheres children of the instantiator so the editor's hierarchy window doesn't have to struggle with displaying thousands of instances.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class GPUInstancingTest : MonoBehaviour {</ins>
+
+	<ins>public Transform prefab;</ins>
+
+	<ins>public int instances = 5000;</ins>
+
+	<ins>public float radius = 50f;</ins>
+
+	<ins>void Start () {</ins>
+		<ins>for (int i = 0; i &lt; instances; i++) {</ins>
+			<ins>Transform t = Instantiate(prefab);</ins>
+			<ins>t.localPosition = Random.insideUnitSphere * radius;</ins>
+			<ins>t.SetParent(transform);</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Create a new scene and put a test object in it with this component. Assign the sphere prefab to it. I'll use it to create 5000 sphere instances inside a sphere of radius 50.</p>
+						
+						<figure>
+							<img src="batching-instances/test-object.png" width="320" height="215">
+							<figcaption>Test object.</figcaption>
+						</figure>
+						
+						<p>With the test object positioned at the origin, placing the camera at (0, 0, -100) ensures that the entire ball of spheres is in view. Now we can use the statistics panel of the game window to determine how all the objects are drawn. Turn off the shadows of the main light so only the spheres are drawn, plus the background. Also set the camera to use the forward rendering path.</p>
+						
+						<figure>
+							<img src="batching-instances/sphere-of-spheres.png" width="420" height="352">
+							<figcaption>A sphere of spheres.</figcaption>
+						</figure>
+						
+						<p>In my case, it takes 5002 draw calls to render the view, which is mentioned as <em translate="no">Batches</em> in the statistics panel. That's 5000 spheres plus two extra for the background and camera effects.</p>
+						
+						<p>Note that the spheres are not batched, even with dynamic batching enabled. That's because the sphere mesh is too large. Had we used cubes instead, they would've been batched.</p>
+						
+						<figure>
+							<img src="batching-instances/sphere-of-cubes.png" width="434" height="352">
+							<figcaption>A sphere of cubes.</figcaption>
+						</figure>
+						
+						<p>In the case of cubes, I only end up with eight batches, so all cubes are rendered in six batches. That's 4994 fewer draw calls, reported as <em translate="no">Saved by batching</em> in the statistics panel. In my case it also reports a much higher frame rate. 83 instead of 35 fps. This is a measure of the time to render a frame, not the actual frame rate, but it's still a good indication of the performance difference. The cubes are faster to draw because they're batched, but also because a cube requires far less mesh data than a sphere. So it's not a fair comparison.
+							
+						<p>As the editor generates a lot of overhead, the performance difference can be much greater in builds. Especially the scene window can slow things down a lot, as it's an extra view that has to be rendered. I have it hidden when in play mode to improve performance.</p>
+					</section>
+					
+					<section>
+						<h3>Supporting Instancing</h3>
+						
+						<p>GPU instancing isn't possible by default. Shaders have to be designed to support it. Even then, instancing has to be explicitly enabled per material. Unity's standard shaders have a toggle for this. Let's add an instancing toggle to <code>MyLightingShaderGUI</code> as well. Like the standard shader's GUI, we'll create an <em translate="no">Advanced Options</em> section for it. The toggle can be added by invoking the <code>MaterialEditor.EnableInstancingField</code> method. Do this is a new <code>DoAdvanced</code> method.</p>
+						
+						<pre translate="no">	<ins>void DoAdvanced () {</ins>
+		<ins>GUILayout.Label("Advanced Options", EditorStyles.boldLabel);</ins>
+
+		<ins>editor.EnableInstancingField();</ins>
+	<ins>}</ins></pre>
+						
+						<p>Add this section at the bottom of our GUI.</p>
+						
+						<pre translate="no">	public override void OnGUI (
+		MaterialEditor editor, MaterialProperty[] properties
+	) {
+		this.target = editor.target as Material;
+		this.editor = editor;
+		this.properties = properties;
+		DoRenderingMode();
+		DoMain();
+		DoSecondary();
+		<ins>DoAdvanced();</ins>
+	}</pre>
+						
+						<p>Select our white material. An <em translate="no">Advanced Options</em> header is now visible at the bottom of its inspector. However, there isn't a toggle for instancing yet.</p>
+						
+						<figure>
+							<img src="batching-instances/no-instancing-support.png" width="320" height="130">
+							<figcaption>No support for instancing yet.</figcaption>
+						</figure>
+						
+						<p>The toggle will only be shown if the shader actually supports instancing. We can enabled this support by adding the <code class="shader">#pragma multi_compile_instancing</code> directive to at least one pass of a shader. This will enable shader variants for a few keywords, in our case <em translate="no">INSTANCING_ON</em>, but other keywords are also possible. Do this for the base pass of <em translate="no">My First Lighting Shader</em>.</p>
+						
+						<pre translate="no" class="shader">			#pragma multi_compile_fwdbase
+			#pragma multi_compile_fog
+			<ins>#pragma multi_compile_instancing</ins></pre>
+						
+						<figure>
+							<img src="batching-instances/instancing-supported.png" width="320" height="44">
+							<figcaption>Supported and enabled instancing.</figcaption>
+						</figure>
+						
+						<p>Our material now has an <em translate="no">Enable Instancing</em> toggle. Checking will change how the spheres are rendered.</p>
+						
+						<figure>
+							<img src="batching-instances/one-sphere-per-batch.png" width="384" height="300">
+							<figcaption>Only one position per batch.</figcaption>
+						</figure>
+						
+						<p>In my case, the number of batches has been reduces to 42, which means that all 5000 spheres are now rendered with only 40 batches. The frame rate has also shot up to 80 fps. But only a few spheres are visible.</p>
+						
+						<p>All 5000 spheres are still being rendered, it's just that all spheres in the same batch end up at the same position. They all use the transformation matrix of the first sphere in the batch. This happens because the matrices of all spheres in a batch are now send to the GPU as an array. Without telling the shader which array index to use, it always uses the first one.</p>
+					</section>
+					
+					<section>
+						<h3>Instance IDs</h3>
+						
+						<p>The array index corresponding to an instance is known as its instance ID. The GPU passes it to the shader's vertex program via the vertex data. It is an unsigned integer named <code class="shader">instanceID</code> with the <em translate="no">SV_InstanceID</em> semantic on most platforms. We can simply use the <code class="shader">UNITY_VERTEX_INPUT_INSTANCE_ID</code> macro to include it in our <code class="shader">VertexData</code> structure. It is defined in <em translate="no">UnityInstancing</em>, which is included by <em translate="no">UnityCG</em>. It gives us the correct definition of the instance ID, or nothing when instancing isn't enabled. Add it to the <code class="shader">VertexData</code> structure in <em translate="no">My Lighting</em>.</p>
+						
+						<pre translate="no" class="shader">struct VertexData {
+	<ins>UNITY_VERTEX_INPUT_INSTANCE_ID</ins>
+	float4 vertex : POSITION;
+	&hellip;
+};</pre>
+						
+						<p>We now have access to the instance ID in our vertex program, when instancing is enabled. With it, we can use the correct matrix when transforming the vertex position. However, <code class="shader">UnityObjectToClipPos</code> doesn't have a matrix parameter. It always uses <code class="shader">unity_ObjectToWorld</code>. To work around this, the <em translate="no">UnityInstancing</em> include file overrides <code class="shader">unity_ObjectToWorld</code> with a macro that uses the matrix array. This can be considered a dirty macro hack, but it works without having to change existing shader code, ensuring backwards compatibility.</p>
+						
+						<p>To make the hack work, the instance's array index has to be globally available for all shader code. We have to manually set this up via the <code class="shader">UNITY_SETUP_INSTANCE_ID</code> macro, which must by done in the vertex program before any code that might potentially need it.</p>
+						
+						<pre translate="no" class="shader">InterpolatorsVertex MyVertexProgram (VertexData v) {
+	InterpolatorsVertex i;
+	UNITY_INITIALIZE_OUTPUT(Interpolators, i);
+	<ins>UNITY_SETUP_INSTANCE_ID(v);</ins>
+	i.pos = UnityObjectToClipPos(v.vertex);
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="batching-instances/instanced-spheres.png" width="432" height="352">
+							<figcaption>Instanced spheres.</figcaption>
+						</figure>
+						
+						<p>The shader can now access the transformation matrices of all instances, so the spheres are rendered at their actual locations.</p>
+						
+						<aside>
+							<h3>How does the matrix array replacement work?</h3>
+							<div>
+								<p>When instancing is enabled, in the most straightforward case, it boils down to this.</p>
+								
+								<pre translate="no" class="shader">static uint unity_InstanceID;
+
+CBUFFER_START(UnityDrawCallInfo)
+	// Where the current batch starts within the instanced arrays.
+	int unity_BaseInstanceID;
+CBUFFER_END
+
+#define UNITY_VERTEX_INPUT_INSTANCE_ID uint instanceID : SV_InstanceID;
+
+#define UNITY_SETUP_INSTANCE_ID(input) \
+	unity_InstanceID = input.instanceID + unity_BaseInstanceID;
+	
+// Redefine some of the built-in variables /
+// macros to make them work with instancing.
+UNITY_INSTANCING_CBUFFER_START(PerDraw0)
+	float4x4 unity_ObjectToWorldArray[UNITY_INSTANCED_ARRAY_SIZE];
+	float4x4 unity_WorldToObjectArray[UNITY_INSTANCED_ARRAY_SIZE];
+UNITY_INSTANCING_CBUFFER_END
+
+#define unity_ObjectToWorld     unity_ObjectToWorldArray[unity_InstanceID]
+#define unity_WorldToObject     unity_WorldToObjectArray[unity_InstanceID]</pre>
+								
+								<p>The actual code in <em translate="no">UnityInstancing</em> is a lot more complex. It deals with platform differences, other ways to use instancing, and special code for stereo rendering, which leads to multiple steps of indirect definitions. It also has to redefine <code class="shader">UnityObjectToClipPos</code> because <em translate="no">UnityCG</em> includes <em translate="no">UnityShaderUtilities</em> first.</p>
+								
+								<p>The buffer macros will be explained later.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Batch Size</h3>
+						
+						<p>It is possible that you end up with a different amount of batches than I get. In my case, 5000 sphere instances are rendered in 40 batches, which means 125 spheres per batch.</p>
+						
+						<p>Each batch requires its own array of matrices. This data is send to the GPU and stored in a memory buffer, known as a constant buffer in Direct3D and a uniform buffer in OpenGL. These buffers have a maximum size, which limits how many instances can fit in one batch. The assumption is that desktop GPUs have a limit of 64KB per buffer.</p>
+						
+						<p>A single matrix consists of 16 floats, which are four bytes each. So that's 64 bytes per matrix. Each instance requires an object-to-world transformation matrix. However, we also need a world-to-object matrix to transform normal vectors. So we end up with 128 bytes per instance. This leads to a maximum batch size of `64000 / 128 = 500`, which could render 5000 spheres in only 10 batched.</p>
+						
+						<aside>
+							<h3>Isn't the maximum 512?</h3>
+							<div>
+								<p>Memory is measure in base-two, not base-ten, so 1KB represents 1024 bytes, not 1000. Thus, `(64 * 1024) / 128 = 512`.</p>
+								
+								<p><code class="shader">UNITY_INSTANCED_ARRAY_SIZE</code> is by default defined as 500, but you could override it with a compiler directive. For example, <code class="shader">#pragma instancing_options maxcount:512</code> sets the maximum to 512. However, this will lead to assertion failure errors, so the practical limit is 511. There isn't much difference between 500 and 512, through.</p>
+							</div>
+						</aside>
+						
+						<p>Although the maximum is 64KB for desktops, most mobiles are assumed to have a maximum of only 16KB. Unity copes with this by simply dividing the maximum by four when targeting OpenGL ES 3, OpenGL Core, or Metal. Because I'm using OpenGL Core in the editor, I end up with a maximum batch size of `500 / 4 = 125`.</p>
+						
+						<p>You can disable this automatic reduction by adding the compiler directive <code class="shader">#pragma instancing_options force_same_maxcount_for_gl</code>. Multiple instancing options are combined in the same directive. However, that might lead to failure when deploying to mobile devices, so be careful.</p>
+						
+						<aside>
+							<h3>What about the <em translate="no">assumeuniformscaling</em> option?</h3>
+							<div>
+								<p>You can use <code class="shader">#pragma instancing_options assumeuniformscaling</code> to indicate that all instanced objects have a uniform scale. This obviates the need to use the world-to-object matrix for the conversion of normals. While the <code class="shader">UnityObjectToWorldNormal</code> function does change its behavior when this option is set, it doesn't eliminate the second matrix array. So this option effectively does nothing, at least in Unity 2017.1.0.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Instancing Shadows</h3>
+						
+						<p>Up to this point we have worked without shadows. Turn the soft shadows back on for the main light and make sure that the shadow distance is enough to include all spheres. As the camera sits at -100 and the sphere's radius is 50, a shadow distance of 150 is enough for me.</p>
+						
+						<figure>
+							<img src="batching-instances/lots-of-shadows.png" width="434" height="352">
+							<figcaption>Lots of shadows.</figcaption>
+						</figure>
+						
+						<p>Rendering shadows for 5000 spheres takes a toll on the GPU. But we can use GPU instancing when rendering the sphere shadows as well. Add the required directive to the shadow caster pass.</p>
+						
+						<pre translate="no" class="shader">			#pragma multi_compile_shadowcaster
+			<ins>#pragma multi_compile_instancing</ins></pre>
+						
+						<p>Also add <code class="shader">UNITY_VERTEX_INPUT_INSTANCE_ID</code> and <code class="shader">UNITY_SETUP_INSTANCE_ID</code> to <em translate="no">My Shadows</em>.</p>
+						
+						<pre translate="no" class="shader">struct VertexData {
+	<ins>UNITY_VERTEX_INPUT_INSTANCE_ID</ins>
+	&hellip;
+};
+
+&hellip;
+
+InterpolatorsVertex MyShadowVertexProgram (VertexData v) {
+	InterpolatorsVertex i;
+	<ins>UNITY_SETUP_INSTANCE_ID(v);</ins>
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="batching-instances/instanced-shadows.png" width="438" height="352">
+							<figcaption>Instanced shadows.</figcaption>
+						</figure>
+						
+						<p>Now it is a lot easier to render all those shadows.</p>
+					</section>
+					
+					<section>
+						<h3>Multiple Lights</h3>
+						
+						<p>We've only added support for instancing to the base pass and the shadow caster pass. So batching won't work for additional lights. To verify this, deactivate the main light and add a few spotlights or point lights that affect many spheres each. Don't bother turning on shadows for them, as that would really drop the frame rate.</p>
+						
+						<figure>
+							<img src="batching-instances/multiple-lights-forward.png" width="434" height="352">
+							<figcaption>Multiple lights take a while to render.</figcaption>
+						</figure>
+						
+						<p>It turns out that spheres that aren't affected by the extra lights are still batched, along with the shadows. But the other spheres aren't even batched in their base pass. Unity doesn't support batching for those cases at all. To use instancing in combination with multiple lights, we have no choice but to switch to the deferred rendering path. To make that work, add the required compiler directive to the deferred pass of our shader.</p>
+						
+						<pre translate="no" class="shader">			#pragma multi_compile_prepassfinal
+			<ins>#pragma multi_compile_instancing</ins></pre>
+						
+						<figure>
+							<img src="batching-instances/multiple-lights-deferred.png" width="434" height="352">
+							<figcaption>Multiple lights with deferred rendering.</figcaption>
+						</figure>
+						
+						<p>After verifying that it works for deferred rendering, switch back to the forward rendering mode.</p>
+					</section>
+					
+					<a href="batching-instances/batching-instances.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Mixing Material Properties</h2>
+					
+					<p>One limitation of all forms of batching is that they are limited to objects that have identical materials. This limitation becomes a problem when we desire variety in the objects that we render.</p>
+					
+					<section>
+						<h3>Randomized Colors</h3>
+						
+						<p>As an example, let's vary the colors of our spheres. Assign a random color to each instance's material after it has been created. This will implicitly create a duplicate of the shared material, so we end up with 5000 material instances in memory.</p>
+						
+						<pre translate="no">	void Start () {
+		for (int i = 0; i &lt; instances; i++) {
+			Transform t = Instantiate(prefab);
+			t.localPosition = Random.insideUnitSphere * radius;
+			t.SetParent(transform);
+
+			<ins>t.GetComponent&lt;MeshRenderer>().material.color =</ins>
+				<ins>new Color(Random.value, Random.value, Random.value);</ins>
+		}
+	}</pre>
+						
+						<figure>
+							<img src="mixing-material-properties/random-colors.png" width="412" height="352">
+							<figcaption>Spheres with random colors, without batching and shadows.</figcaption>
+						</figure>
+						
+						<p>Even though we have enabled batching for our material, it no longer works. Turn of shadows to see this more clearly. We're back to one draw call per sphere. And as each now has its own material, the shader state has to be changed for each sphere as well. This is shown in the statistics panel as <em translate="no">SetPass calls</em>. It used to be one for all spheres, but now it's 5000. As a result, my frame rate has dropped to 10fps.</p>
+					</section>
+					
+					<section>
+						<h3>Material Property Blocks</h3>
+						
+						<p>Instead of creating a new material instance per sphere, we can also use material property blocks. These are small objects which contain overrides for shader properties. Instead of directly assigning the material's color, set the color of a property block and pass that to the sphere's renderer.</p>
+						
+						<pre translate="no"><del>//			t.GetComponent&lt;MeshRenderer>().material.color =</del>
+<del>//				new Color(Random.value, Random.value, Random.value);</del>
+
+			<ins>MaterialPropertyBlock properties = new MaterialPropertyBlock();</ins>
+			<ins>properties.SetColor(</ins>
+				<ins>"_Color", new Color(Random.value, Random.value, Random.value)</ins>
+			<ins>);</ins>
+			<ins>t.GetComponent&lt;MeshRenderer>().SetPropertyBlock(properties);</ins></pre>
+						
+						<p>The <code>MeshRenderer.SetPropertyBlock</code> method copies the data of the block, so there is no dependency on the block that we have locally created. This allows us to reuse one block to configure all of our instances.</p>
+						
+						<pre translate="no">	void Start () {
+		<ins>MaterialPropertyBlock properties = new MaterialPropertyBlock();</ins>
+		for (int i = 0; i &lt; instances; i++) {
+			Transform t = Instantiate(prefab);
+			t.localPosition = Random.insideUnitSphere * radius;
+			t.SetParent(transform);
+
+<del>//			MaterialPropertyBlock properties = new MaterialPropertyBlock();</del>
+			properties.SetColor(
+				"_Color", new Color(Random.value, Random.value, Random.value)
+			);
+			t.GetComponent&lt;MeshRenderer>().SetPropertyBlock(properties);
+		}
+	}</pre>
+						
+						<p>After this change, we're back to one <em translate="no">SetPass call</em> for all our spheres. But they're also white again. That's because the GPU doesn't know about the property overrides yet.</p>
+					</section>
+					
+					<section>
+						<h3>Property Buffers</h3>
+						
+						<p>When rendering instanced objects, Unity makes the transformation matrices available to the GPU by uploading arrays to its memory. Unity does the same for the properties stored in material property blocks. But for this to work, we have to define an appropriate buffer in <em translate="no">My Lighting</em>.</p>
+						
+						<p>Declaring an instancing buffer works like creating a structure such as the interpolators, but the exact syntax varies per platform. We can use the <code class="shader">UNITY_INSTANCING_CBUFFER_START</code> and <code class="shader">UNITY_INSTANCING_CBUFFER_END</code> macros to take care of the difference. When instancing is enabled, they do nothing.</p>
+						
+						<p>Put the definition of our <code class="shader">_Color</code> variable inside an instancing buffer. The <code class="shader">UNITY_INSTANCING_CBUFFER_START</code> macro requires a name parameter. The actual name doesn't matter. The macro prefixes it with <em translate="no">UnityInstancing_</em> to prevent name clashes.</p>
+						
+						<pre translate="no" class="shader"><ins>UNITY_INSTANCING_CBUFFER_START(InstanceProperties)</ins>
+	float4 _Color;
+<ins>UNITY_INSTANCING_CBUFFER_END</ins></pre>
+						
+						<p>Like the transformation matrices, the color data will be uploaded to the GPU as an array when instancing is enabled. The <code class="shader">UNITY_DEFINE_INSTANCED_PROP</code> macro takes care of the correct declaration syntax for us.</p>
+						
+						<pre translate="no" class="shader">UNITY_INSTANCING_CBUFFER_START(InstanceProperties)
+<del>//	float4 _Color;</del>
+	<ins>UNITY_DEFINE_INSTANCED_PROP(float4, _Color)</ins>
+UNITY_INSTANCING_CBUFFER_END</pre>
+						
+						<p>To access the array in the fragment program, we need to know the instance ID there as well. So add it to the interpolator structures.</p>
+						
+						<pre translate="no" class="shader">struct InterpolatorsVertex {
+	<ins>UNITY_VERTEX_INPUT_INSTANCE_ID</ins>
+	&hellip;
+};
+
+struct Interpolators {
+	<ins>UNITY_VERTEX_INPUT_INSTANCE_ID</ins>
+	&hellip;
+};</pre>
+						
+						<p>In the vertex program, copy the ID from the vertex data to the interpolators. The <code class="shader">UNITY_TRANSFER_INSTANCE_ID</code> macro defines this simple operation when instancing is enabled and does nothing otherwise.</p>
+						
+						<pre translate="no" class="shader">InterpolatorsVertex MyVertexProgram (VertexData v) {
+	InterpolatorsVertex i;
+	UNITY_INITIALIZE_OUTPUT(Interpolators, i);
+	UNITY_SETUP_INSTANCE_ID(v);
+	<ins>UNITY_TRANSFER_INSTANCE_ID(v, i);</ins>
+	&hellip;
+}</pre>
+						
+						<p>At the beginning of the fragment program, make the ID globally available, just like in the vertex program.</p>
+						
+						<pre translate="no" class="shader">FragmentOutput MyFragmentProgram (Interpolators i) {
+	<ins>UNITY_SETUP_INSTANCE_ID(i);</ins>
+	&hellip;
+}</pre>
+						
+						<p>Now we have to access the colors either simply as <code class="shader">_Color</code> when instancing isn't used, and as <code class="shader">_Color[unity_InstanceID]</code> when instancing is enabled. We can use the <code class="shader">UNITY_ACCESS_INSTANCED_PROP</code> macro for that.</p>
+						
+						<pre translate="no" class="shader">float3 GetAlbedo (Interpolators i) {
+	float3 albedo =
+		tex2D(_MainTex, i.uv.xy).rgb * <ins>UNITY_ACCESS_INSTANCED_PROP(_Color)</ins>.rgb;
+	&hellip;
+}
+
+float GetAlpha (Interpolators i) {
+	float alpha = <ins>UNITY_ACCESS_INSTANCED_PROP(_Color)</ins>.a;
+	&hellip;
+}</pre>
+						
+						<aside>
+							<h3>Why doesn't it compile, or why does Unity change my code?</h3>
+							<div>
+								<p>Since Unity 2017.3, the <code class="shader">UNITY_ACCESS_INSTANCED_PROP</code> macro changed. It now requires you to provide the buffer name as the first agument. Instead of <code class="shader">UNITY_ACCESS_INSTANCED_PROP(_Color)</code>, use <code class="shader">UNITY_ACCESS_INSTANCED_PROP(<ins>InstanceProperties,</ins> _Color)</code>.</p>
+							</div>
+						</aside>
+						
+						<figure>
+							<img src="mixing-material-properties/bached-colors.png" width="434" height="352">
+							<figcaption>Batched colored spheres.</figcaption>
+						</figure>
+						
+						<p>Now our randomly-colored spheres are batched again. We could make other properties variable in the same way. This is possible for colors, floats, matrices, and four-component float vectors. If you wanted to vary textures, you could use a separate texture array and add the indices to an instancing buffer.</p>
+						
+						<p>Multiple properties can be combined in the same buffer, but keep the size limitation in mind. Also be aware that the buffers are partitioned into 32-bit blocks, so a single floats requires the same space as a vector. You can also use multiple buffers, but there's a limit for that too and they don't come for free. Every property that gets buffered becomes an array when instancing is enabled, so only do this for properties that need to vary per instance.</p>
+					</section>
+					
+					<section>
+						<h3>Shadows</h3>
+						
+						<p>Our shadows also depend on the color. Adjust <em translate="no">My Shadows</em> so it can support a unique color per instance as well.</p>
+						
+						<pre translate="no" class="shader"><del>//float4 _Color;</del>
+<ins>UNITY_INSTANCING_CBUFFER_START(InstanceProperties)</ins>
+	<ins>UNITY_DEFINE_INSTANCED_PROP(float4, _Color)</ins>
+<ins>UNITY_INSTANCING_CBUFFER_END</ins>
+
+&hellip;
+struct InterpolatorsVertex {
+	<ins>UNITY_VERTEX_INPUT_INSTANCE_ID</ins>
+	&hellip;
+};
+
+struct Interpolators {
+	<ins>UNITY_VERTEX_INPUT_INSTANCE_ID</ins>
+	&hellip;
+};
+
+float GetAlpha (Interpolators i) {
+	float alpha = <ins>UNITY_ACCESS_INSTANCED_PROP(_Color)</ins>.a;
+	&hellip;
+}
+
+InterpolatorsVertex MyShadowVertexProgram (VertexData v) {
+	InterpolatorsVertex i;
+	UNITY_SETUP_INSTANCE_ID(v);
+	<ins>UNITY_TRANSFER_INSTANCE_ID(v, i);</ins>
+	&hellip;
+}
+
+float4 MyShadowFragmentProgram (Interpolators i) : SV_TARGET {
+	<ins>UNITY_SETUP_INSTANCE_ID(i);</ins>
+	&hellip;
+}</pre>
+					</section>
+					
+					<section>
+						<h3>LOD Instancing</h3>
+						
+						<p><a href="../part-18/index.html">Last time</a>, we added support for LOD groups. Let's see whether they are compatible with GPU instancing. Create a new prefab with a LOD group that only contains one sphere with our white material. Set it to <em translate="no">Cross Fade</em> and configure it so LOD 0 gets culled at 3% with a transition width of 0.25. That gives us a nice transition range for our visibly small spheres.</p>
+						
+						<figure>
+							<img alt="inspector" src="mixing-material-properties/lod-sphere-inspector.png" width="320" height="330">
+							<img alt="hierarchy" src="mixing-material-properties/lod-sphere-hierarchy.png" width="116" height="66">
+							<figcaption>LOD sphere prefab.</figcaption>
+						</figure>
+						
+						<p>Assing this prefab to our test object, instead of the regular sphere. As this object doesn't have a mesh renderer itself, we will get errors when entering play mode at this point. We have to adjust <code>GPUInstancingTest.Start</code> so it accesses the renderer of the child objects, if the root object doesn't have a renderer itself. While we're at it, make sure that it works both with simple objects and LOD groups with an arbitrary amount of levels.</p>
+						
+						<pre translate="no"><del>//			t.GetComponent&lt;MeshRenderer>().SetPropertyBlock(properties);</del>
+
+			<ins>MeshRenderer r = t.GetComponent&lt;MeshRenderer>();</ins>
+			<ins>if (r) {</ins>
+				<ins>r.SetPropertyBlock(properties);</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>for (int ci = 0; ci &lt; t.childCount; ci++) {</ins>
+					<ins>r = t.GetChild(ci).GetComponent&lt;MeshRenderer>();</ins>
+					<ins>if (r) {</ins>
+						<ins>r.SetPropertyBlock(properties);</ins>
+					<ins>}</ins>
+				<ins>}</ins>
+			<ins>}</ins></pre>
+						
+						<figure>
+							<img src="mixing-material-properties/no-instanced-lod-fading.png" width="430" height="352">
+							<figcaption>Without instanced LOD fading, with shadows.</figcaption>
+						</figure>
+						
+						<p>We now get fading spheres, unfortunately without efficient batching. Unity is able to batch spheres that end up with the same LOD fade factor, but it would be better if they could be batched as usual. We could achieve this by replacing <code class="shader">unity_LODFade</code> with a buffered array. We can instruct Unity's shader code do this by adding the <em translate="no">lodfade</em> instancing option for each pass that supports instancing.</p>
+						
+						<pre translate="no" class="shader">			#pragma multi_compile_instancing
+			<ins>#pragma instancing_options lodfade</ins></pre>
+						
+						<figure>
+							<img src="mixing-material-properties/instanced-lod-fading.png" width="438" height="352">
+							<figcaption>With instanced LOD fading.</figcaption>
+						</figure>
+						
+						<p>Now our shaders support both optimal instancing and LOD fading at the same time.</p>
+						
+						<p>The next tutorial is <a href="../part-20/index.html">Parallax</a>.</p>
+					</section>
+					
+					<a href="mixing-material-properties/mixing-material-properties.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Rendering-19.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

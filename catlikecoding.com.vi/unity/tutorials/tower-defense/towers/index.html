@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/tower-defense/towers/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/tower-defense/towers/tutorial-image.jpg">
+		<meta property="og:title" content="Towers">
+		<meta property="og:description" content="A Unity Tower Defense tutorial about adding towers and shooting enemies.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Towers</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/tower-defense/towers/#article",
+				"headline": "Towers",
+				"alternativeHeadline": "Shooting Enemies",
+				"datePublished": "2019-06-22",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Tower Defense tutorial about adding towers and shooting enemies.",
+				"image": "https://catlikecoding.com/unity/tutorials/tower-defense/towers/tutorial-image.jpg",
+				"dependencies": "Unity 2018.3.0f2",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/tower-defense/", "name": "Tower Defense" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				Direction: 1,
+				DirectionChange: 1,
+				DirectionExtensions: 1,
+				Enemy: 1,
+				EnemyCollection: 1,
+				EnemyFactory: 1,
+				FloatRange: 1,
+				FloatRangeSliderAttribute: 1,
+				FloatRangeSliderDrawer: 1,
+				Game: 1,
+				GameBoard: 1,
+				GameObjectFactory: 1,
+				GameTile: 1,
+				GameTileContent: 1,
+				GameTileContentFactory: 1,
+				GameTileContentType: 1,
+				T: 1,
+				TargetPoint: 1,
+				Tower: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Tower Defense</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Towers</h1>
+					<p>Shooting Enemies</p>
+					<ul>
+						<li>Put towers on the board.</li>
+						<li>Target enemies with the aid of physics.</li>
+						<li>Keep track of them for as long as possible.</li>
+						<li>Shoot them with a laser beam.</li>
+					</ul>
+				</header>
+				
+				<p>This is the third installment of a tutorial series about creating a simple <a href="../index.html">tower defense</a> game. It covers the creations of towers and how they target and shoot enemies.</p>
+				
+				<p>This tutorial is made with Unity 2018.3.0f2.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Enemies are feeling the heat.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Building a Tower</h2>
+					
+					<p>Walls only slow enemies down by increasing the length of the path that they have to travel. But the goal of the game is to eliminate the enemies before they reach their destination. That's done by placing towers on the board that shoot them.</p>
+					
+					<section>
+						<h3>Tile Content</h3>
+						
+						<p>Towers are yet another type of tile content, so add an entry for them to <code>GameTileContent</code>.</p>
+						
+						<pre>public enum GameTileContentType {
+	Empty, Destination, Wall, SpawnPoint<ins>, Tower€</ins>
+}</pre>
+						
+						<p>We'll only support one kind of tower in this tutorial, so we can make do by giving <code>GameTileContentFactory</code> one reference to a tower prefab, which can also be instantiated via <code>Get</code>.</p>
+						
+						<pre>	<ins>[SerializeField]</ins>
+	<ins>GameTileContent towerPrefab = default;</ins>
+
+	public GameTileContent Get (GameTileContentType type) {
+		switch (type) {
+			&hellip;
+			<ins>case GameTileContentType.Tower€: return Get(towerPrefab);</ins>
+		}
+		&hellip;
+	}</pre>
+						
+						<p>But towers need to shoot, so they will need to get updated and require their own code. Create a <code>Tower</code> class for this purpose that extends <code>GameTileContent</code>.</p>
+						
+						<pre>using UnityEngine;
+
+<ins>public class Tower : GameTileContent {}</ins></pre>
+						
+						<p>We can enforce that the tower prefab has this component by chancing the type of the factory's field to <code>Tower</code>. As it still counts as <code>GameTileContent</code> we don't need to change anything else.</p>
+						
+						<pre>	<ins>Tower</ins> towerPrefab = default;</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Prefab</h3>
+						
+						<p>Create a prefab for the tower. You can begin by duplicating the wall prefab and replacing its <code>GameTileContent</code> component with a <code>Tower</code> component and settings its type to <em>Tower</em>. To make the tower fit in with the walls, keep the existing wall cube as the tower's base. Then place another cube on top of it to represent the tower. I set its scale to 0.5. Put yet another cube of the same size on top of that, to represent the turret, which is the part that aims and shoots.</p>
+						
+						<figure>
+							<img src="building-a-tower/prefab-cubes.png" width="190" height="260" alt="scene"><br>
+							<img src="building-a-tower/prefab-inspector.png" width="320" height="120" alt="inspector">
+							<figcaption>Three cubes form a tower.</figcaption>
+						</figure>
+						
+						<p>The turret will rotate, and because it has a collider the physics engine will have to keep track of it. But we don't really need to be so precise, because all we use the tower colliders for is selecting cells. We can make do with an approximation. Remove the collider of the turret cube and adjust the collider of the tower cube so it covers both cubes.</p>
+						
+						<figure>
+							<img src="building-a-tower/prefab-collider.png" width="190" height="260" alt="scene"><br>
+							<img src="building-a-tower/prefab-collider-inspector.png" width="320" height="152" alt="inspector">
+							<figcaption>Tower cube collider.</figcaption>
+						</figure>
+						
+						<p>Our tower will shoot a laser beam. There are many ways to visualize that, but we'll simply use a semitransparent cube that we stretch to form the beam. Each tower will need one of its own, so add it to the tower prefab. Place it inside the turret so it's hidden by default and give it a smaller scale, like 0.2. Make it a child of the prefab root, not of the turret cube.</p>
+						
+						<figure>
+							<img src="building-a-tower/prefab-laser-beam.png" width="190" height="260" alt="laser beam"><br>
+							<img src="building-a-tower/prefab-hierarchy.png" width="226" height="108" alt="hierarchy">
+							<figcaption>Hidden laser beam cube.</figcaption>
+						</figure>
+						
+						<p>Give the laser beam an appropriate material. I simply used a standard semitransparent black material and turned off all reflections while giving it a red emissive color.</p>
+						
+						<figure>
+							<img src="building-a-tower/material-laser-beam.png" width="320" height="284" alt="color"><br>
+							<img src="building-a-tower/material-no-reflections.png" width="320" height="56" alt="no reflections">
+							<figcaption>Laser beam material.</figcaption>
+						</figure>
+						
+						<p>Make sure that the laser beam cube doesn't have a collider, and also turn off shadow casting and receiving for it.</p>
+						
+						<figure>
+							<img src="building-a-tower/laser-beam-no-shadows.png" width="320" height="162">
+							<figcaption>Laser beam doesn't interact with shadows.</figcaption>
+						</figure>
+						
+						<p>Once the tower prefab is finished, add it to the factory.</p>
+						
+						<figure>
+							<img src="building-a-tower/factory.png" width="320" height="114">
+							<figcaption>Factory with tower.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Placing Towers</h3>
+						
+						<p>We'll add and remove towers via another toggle method. We can simply duplicate <code>GameBoard.ToggleWall</code> and change the method's name and content type.</p>
+						
+						<pre>	public void <ins>ToggleTower</ins> (GameTile tile) {
+		if (tile.Content.Type == GameTileContentType.<ins>Tower€</ins>) {
+			tile.Content = contentFactory.Get(GameTileContentType.Empty);
+			FindPaths();
+		}
+		else if (tile.Content.Type == GameTileContentType.Empty) {
+			tile.Content = contentFactory.Get(GameTileContentType.<ins>Tower€</ins>);
+			if (!FindPaths()) {
+				tile.Content = contentFactory.Get(GameTileContentType.Empty);
+				FindPaths();
+			}
+		}
+	}</pre>
+						
+						<p>In <code>Game.HandleTouch</code>, toggle a tower instead of a wall if the player is holding down the shift key.</p>
+						
+						<pre>	void HandleTouch () {
+		GameTile tile = board.GetTile(TouchRay);
+		if (tile != null) {
+			<ins>if (Input.GetKey(KeyCode.LeftShift)) {</ins>
+				<ins>board.ToggleTower(tile);</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				board.ToggleWall(tile);
+			<ins>}</ins>
+		}
+	}</pre>
+						
+						<figure>
+							<img src="building-a-tower/non-blocking-towers.png" width="230" height="230">
+							<figcaption>Towers on the board.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Blocking the Path</h3>
+						
+						<p>Currently only walls block pathfinding, so enemies move through towers. Let's add a convenient property to <code>GameTileContent</code> that  indicates whether it blocks the path or not. It does so if it's either a wall or a tower.</p>
+						
+						<pre>	<ins>public bool BlocksPath =></ins>
+		<ins>Type == GameTileContentType.Wall || Type == GameTileContentType.Tower€;</ins></pre>
+						
+						<p>Use this property in <code>GameTile.GrowPathTo</code>, instead of checking the exact content type.</p>
+						
+						<pre>	GameTile GrowPathTo (GameTile neighbor, Direction direction) {
+		&hellip;
+		return
+			<del>//neighbor.Content.Type != GameTileContentType.Wall ? neighbor : null;</del>
+			<ins>neighbor.Content.BlocksPath ? null : neighbor;</ins>
+	}</pre>
+						
+						<figure>
+							<img src="building-a-tower/blocking-towers.png" width="230" height="230">
+							<figcaption>Both towers and walls block the path.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Replacing Walls</h3>
+						
+						<p>It is likely that a player will end up replacing walls with towers a lot. Having to remove the wall first is inconvenient, and it's possible for enemies to sneak through the temporary gap. We can make a direct replacement possible by having <code>GameBoard.ToggleTower</code> also check whether the tile currently has a wall in it. If so, directly replace it with a tower. In this case we do not have to find new paths, since the tile is still blocking them.</p>
+						
+						<pre>	public void ToggleTower (GameTile tile) {
+		if (tile.Content.Type == GameTileContentType.Tower) {
+			tile.Content = contentFactory.Get(GameTileContentType.Empty);
+			FindPaths();
+		}
+		else if (tile.Content.Type == GameTileContentType.Empty) {
+			&hellip;
+		}
+		<ins>else if (tile.Content.Type == GameTileContentType.Wall) {</ins>
+			<ins>tile.Content = contentFactory.Get(GameTileContentType.Tower);</ins>
+		<ins>}</ins>
+	}</pre>
+						
+					</section>
+				</section>
+				
+				<section>
+					<h2>Targeting Enemies</h2>
+					
+					<p>A tower can only do its job if it can find an enemy. Once an enemy is found, it must also decide which part of the enemy to aim at.</p>
+					
+					<section>
+						<h3>Target Point</h3>
+						
+						<p>We'll use the physics engine to detect targets. Just like with the tower collider, we don't need the enemy's collider to exactly match its shape. We can make do with the simplest collider, which is a sphere. Once detected, we'll use the position of the game object with the collider attached to it as the point to aim at.</p>
+						
+						<p>We cannot attach a collider to the enemy's root object, because it doesn't match its model's position all the time and would make the tower aim at the ground. So we have to put the collider somewhere in the model. The physics engine will give us a reference to that object, which we can use for targeting, but we'll also need to access the <code>Enemy</code> component on the root object. Let's create a <code>TargetPoint</code> component to make this easy. Give it a property to privately set and publicly get the <code>Enemy</code> component, and another property to get its world position.</p>
+													
+						<pre><ins>using UnityEngine;</ins>
+
+<ins>public class TargetPoint : MonoBehaviour {</ins>
+
+	<ins>public Enemy Enemy€ { get; private set; }</ins>
+
+	<ins>public Vector3 Position => transform.position;</ins>
+<ins>}</ins></pre>
+						
+						<p>Give it an <code>Awake</code> method that sets the reference to its <code>Enemy</code> component. We can go directly to its root object via <code>transform.root</code>. If the <code>Enemy</code> component doesn't exist then we made a design mistake, so let's add an assertion for that.</p>
+						
+						<pre>	<ins>void Awake () {</ins>
+		<ins>Enemy€ = transform.root.GetComponent&lt;Enemy>();</ins>
+		<ins>Debug.Assert(Enemy€ != null, "Target point without Enemy root!", this);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Also, the collider should be attached to the same game object that <code>TargetPoint</code> is attached to.</p>
+						
+						<pre>		Debug.Assert(Enemy€ != null, "Target point without Enemy root!", this);
+		<ins>Debug.Assert(</ins>
+			<ins>GetComponent&lt;SphereCollider>() != null,</ins>
+			<ins>"Target point without sphere collider!", this</ins>
+		<ins>);</ins></pre>
+						
+						<p>Add the component and collider to the cube of our enemy prefab. That will make towers aim at the center of the cube. Use a sphere collider with a radius of 0.25. As the cube has a scale of 0.5, the collider's effective radius is 0.125. That will make it so the enemy must have visually penentrated a tower's range at bit before it becomes a valid target. The collider's size is also affected by the random scale of the enemy, so its in-game size will vary as well.</p>
+						
+						<figure>
+							<img src="targeting-enemies/enemy-scene.png" width="176" height="176" alt="scene">
+							<img src="targeting-enemies/enemy-inspector.png" width="320" height="176" alt="inspector">
+							<figcaption>Enemy with target point and collider on its cube.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Enemy Layer</h3>
+						
+						<p>Towers only care about enemies and shouldn't target anything else, so we'll put all enemies on a dedicated layer. We'll use layer 9. Set its named to <em>Enemy</em> via the <em>Layers &amp; Tags</em> window, which can be opened via the <em>Edit Layers</em> option in the <em>Layers</em> dropdown menu at the top right corner of the editor.</p>
+						
+						<figure>
+							<img src="targeting-enemies/enemy-layer.png" width="320" height="308">
+							<figcaption>Layer 9 is for enemies.</figcaption>
+						</figure>
+						
+						<p>This layer is only for detecting enemies, not for physics interactions. Let's indicate that by disabling it in the <em>Layer Collision Matrix</em>, which you can find under the <em>Physics</em> panel in the project settings.</p>
+						
+						<figure>
+							<img src="targeting-enemies/layer-collision-matrix.png" width="200" height="200">
+							<figcaption>Layer collision matrix.</figcaption>
+						</figure>
+						
+						<p>Make sure that the target point's game object is on the correct layer. The rest of the enemy prefab can be on other layers, but it's easiest to be consistent and place the entire prefab on the enemy layer. If you'll change the root object's layer you get the option to change all its child objects as well.</p>
+						
+						<figure>
+							<img src="targeting-enemies/enemy-on-layer.png" width="320" height="44">
+							<figcaption>Enemy on the correct layer.</figcaption>
+						</figure>
+						
+						<p>Let's assert that <code>TargetPoint</code> is indeed on the correct layer.</p>
+						
+						<pre>	void Awake () {
+		&hellip;
+		<ins>Debug.Assert(gameObject.layer == 9, "Target point on wrong layer!", this);</ins>
+	}</pre>
+						
+						<p>Also, the player interaction should ignore enemy colliders. We can do that by adding a layer mask argument to <code>Physics.Raycast</code> in <code>GameBoard.GetTile</code>. It has a variant that takes the ray distance and the layer mask as additional arguments. Provide the maximum range and the layer mask for the default layer, which is 1.</p>
+						
+						<pre>	public GameTile GetTile (Ray ray) {
+		if (Physics.Raycast(ray, out RaycastHit hit<ins>, float.MaxValue, 1</ins>)) {
+			&hellip;
+		}
+		return null;
+	}</pre>
+						
+						<aside>
+							<h3>Shouldn't the layer mask be zero?</h3>
+							<div>
+								<p>The default layer's index is zero, but we're providing a layer mask. The mask works by setting individual bits of an integer to 1 if the layer should be included. In this case, only the first bit must be set, which means its least significant bit, which defines the number 2<sup>0</sup>, which is 1.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Updating Tile Content</h3>
+						
+						<p>Towers can only do their work if they get updated. This is also true for tile content in general, even though our other content currently does nothing. So let's add a virtual <code>GameUpdate</code> method to <code>GameTileContent</code> that does nothing by default.</p> 
+						
+						<pre>	<ins>public virtual void GameUpdate () {}</ins></pre>
+						
+						<p>Have <code>Tower</code> override it, initially just logging that it's looking for a target.</p>
+						
+						<pre>	<ins>public override void GameUpdate () {</ins>
+		<ins>Debug.Log("Searching for target...");</ins>
+	<ins>}</ins></pre>
+						
+						<p><code>GameBoard</code> is in charge of the tiles and their content, so it will also keep track of which content needs to get updated. Give it a list for that purpose, plus a public <code>GameUpdate</code> method that updates everything in that list.</p>
+						
+						<pre>	<ins>List&lt;GameTileContent> updatingContent = new List&lt;GameTileContent>();</ins>
+	
+	&hellip;
+	
+	<ins>public void GameUpdate () {</ins>
+		<ins>for (int i = 0; i &lt; updatingContent.Count; i++) {</ins>
+			<ins>updatingContent[i].GameUpdate();</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>In this tutorial only towers need to be updated. Adjust <code>ToggleTower</code> so it adds and removes the content as appropriate. If other content would require updating as well then we'd need a more general approach, but for now this suffices.</p>
+						
+						<pre>	public void ToggleTower (GameTile tile) {
+		if (tile.Content.Type == GameTileContentType.Tower) {
+			<ins>updatingContent.Remove(tile.Content);</ins>
+			tile.Content = contentFactory.Get(GameTileContentType.Empty);
+			FindPaths();
+		}
+		else if (tile.Content.Type == GameTileContentType.Empty) {
+			tile.Content = contentFactory.Get(GameTileContentType.Tower);
+			<del>//if (!FindPaths()) {</del>
+			<ins>if (FindPaths()) {</ins>
+				<ins>updatingContent.Add(tile.Content);</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				tile.Content = contentFactory.Get(GameTileContentType.Empty);
+				FindPaths();
+			}
+		}
+		else if (tile.Content.Type == GameTileContentType.Wall) {
+			tile.Content = contentFactory.Get(GameTileContentType.Tower);
+			<ins>updatingContent.Add(tile.Content);</ins>
+		}
+	}</pre>
+						
+						<p>To make this work we now also have to update the board in <code>Game.Update</code>. Update the board after the enemies. That way the towers will aim where the enemies currently are. If we did it the other way around then towers would aim where their targets were one frame earlier.</p>
+						
+						<pre>	void Update () {
+		&hellip;
+		enemies.GameUpdate();
+		<ins>board.GameUpdate();</ins>
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Targeting Range</h3>
+						
+						<p>Towers only have a limiting targeting range. Make that configurable by adding a field to <code>Tower</code>. Distance is measured from the center of the tower's tile, so a range of 0.5 only covers its own tile. Thus a reasonable minimum and default range would be 1.5, covering most of the neighboring tiles.</p>
+						
+						<pre>	<ins>[SerializeField, Range(1.5f, 10.5f)]</ins>
+	<ins>float targetingRange = 1.5f;</ins></pre>
+						
+						<figure>
+							<img src="targeting-enemies/targeting-range.png" width="320" height="74">
+							<figcaption>Targeting range set to 2.5.</figcaption>
+						</figure>
+						
+						<p>Let's visualize the range with a gizmo. We don't need to see it all the time, so let's create an <code>OnDrawGizmosSelected</code> method, which only gets invoked for selected objects. Draw a yellow wire sphere with the range as its radius, centered on the tower. Position it a bit above the ground so it's always clearly visible.</p>
+						
+						<pre>	<ins>void OnDrawGizmosSelected () {</ins>
+		<ins>Gizmos.color = Color.yellow;</ins>
+		<ins>Vector3 position = transform.localPosition;</ins>
+		<ins>position.y += 0.01f;</ins>
+		<ins>Gizmos.DrawWireSphere(position, targetingRange);</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="targeting-enemies/targeting-range-gizmo.png" width="230" height="230">
+							<figcaption>Targeting range gizmo.</figcaption>
+						</figure>
+						
+						<p>We can now see which enemies are valid targets for each tower. But selecting towers in the scene window is inconvenient, because we end up selecting one of the child cubes and then have to change the selection to the tower root object. Other tile content suffers from the same problem. We can enforce selection of the content root in the scene window by adding the <code>SelectionBase</code> attribute to <code>GameTileContent</code>.</p>
+						
+						<pre><ins>[SelectionBase]</ins>
+public class GameTileContent : MonoBehaviour { &hellip; }</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Acquiring a Target</h3>
+						
+						<p>Add a <code>TargetPoint</code> field to <code>Tower</code> so it can keep track of its acquired target. Then change <code>GameUpdate</code> so it invokes a new <code>AquireTarget</code> method that returns whether it found a target. If so, log this fact.</p>
+						
+						<pre>	<ins>TargetPoint target;</ins>
+
+	public override void GameUpdate () {
+		<ins>if (AcquireTarget()) {</ins>
+			Debug.Log(<ins>"Acquired target!"</ins>);
+		<ins>}</ins>
+	}</pre>
+						
+						<p>In <code>AcquireTarget</code>, retrieve all valid targets by invoking <code>Physics.OverlapSphere</code> with the tower's position and range as arguments. The result is a <code>Collider</code> array containing all colliders that overlap the described sphere. If the array's length is positive then there is at least a single target point and we'll simply pick the first one. Grab its <code>TargetPoint</code> component which should always exist, assign it to the target field, and indicate success. Otherwise clear the target and indicate failure.</p>
+						
+						<pre>	<ins>bool AcquireTarget () {</ins>
+		<ins>Collider[] targets = Physics.OverlapSphere(</ins>
+			<ins>transform.localPosition, targetingRange</ins>
+		<ins>);</ins>
+		<ins>if (targets.Length > 0) {</ins>
+			<ins>target = targets[0].GetComponent&lt;TargetPoint>();</ins>
+			<ins>Debug.Assert(target != null, "Targeted non-enemy!", targets[0]);</ins>
+			<ins>return true;</ins>
+		<ins>}</ins>
+		<ins>target = null;</ins>
+		<ins>return false;</ins>
+	<ins>}</ins></pre>
+						
+						<p>We're only guaranteed to get a valid target point if we only consider colliders on the enemy layer. That's layer 9, so provide the corresponding layer mask.</p>
+												
+						<pre>	<ins>const int enemyLayerMask = 1 &lt;&lt; 9;</ins>
+
+	&hellip;
+
+	bool AcquireTarget () {
+		Collider[] targets = Physics.OverlapSphere(
+			transform.localPosition, targetingRange<ins>, enemyLayerMask</ins>
+		);
+		&hellip;
+	}</pre>
+						
+						<aside>
+							<h3>How does that bit mask work?</h3>
+							<div>
+								<p>As the enemy layer has index nine, the bit mask must have its tenth bit set to 1. The corresponding integer is 2<sup>9</sup>, which is 512. But that isn't an intuitive way to write a bit mask. We could also write a binary literal, like <code>0b10_0000_0000</code> but then we have to count zeros. In this case the most convenient notation is to use the left-shift operator <code>&lt;&lt;</code> to shift bits leftwards, representing a power-of-two number if we apply it to <code>1</code>.</p>
+							</div>
+						</aside>
+						
+						<p>We can visualize the acquired target by drawing a gizmo line between the positions of the tower and the target.</p>
+						
+						<pre>	void OnDrawGizmosSelected () {
+		&hellip;
+		<ins>if (target != null) {</ins>
+			<ins>Gizmos.DrawLine(position, target.Position);</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<img src="targeting-enemies/targeting-gizmo.png" width="230" height="230">
+							<figcaption>Visualizing targets.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why not use methods like <code>OnTriggerEnter</code>?</h3>
+							<div>
+								<p>The advantage of manually checking for overlapping targets is that we only have to do it when necessary. There is no reason to check for targets if a tower already has one. Also, by fetching all potential targets at once we don't have to manage a list of potential targets per tower, which change all the time.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Target Locking</h3>
+						
+						<p>Which target gets acquired depends on the order in which the physics engine presents them, which is effectively arbitrary. As a result the acquired target seems to change without reason. Once a tower has a target, it makes sense that it keeps tracking that one instead of switching to another. Add a <code>TrackTarget</code> method that does this tracking and returns whether it was successful. Begin by only indicating whether a target has already been acquired.</p>
+						
+						<pre>	<ins>bool TrackTarget () {</ins>
+		<ins>if (target == null) {</ins>
+			<ins>return false;</ins>
+		<ins>}</ins>
+		<ins>return true;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Invoke this method in <code>GameUpdate</code> and only if it fails invoke <code>AcquireTarget</code>. If either succeeds then we have a target. We can do that by putting both method invocations in the <code>if</code> check with an OR operator, because if the first operand yields <code>true</code> then the second operand is not evaluated, so its invocation is skipped. The AND operator behaves in a similar way.</p>
+						
+						<pre>	public override void GameUpdate () {
+		if (<ins>TrackTarget() ||</ins> AcquireTarget()) {
+			Debug.Log(<ins>"Locked on target!"</ins>);
+		}
+	}</pre>
+						
+						<figure>
+							<img src="targeting-enemies/tracking-targets.png" width="230" height="230">
+							<figcaption>Tracking targets.</figcaption>
+						</figure>
+						
+						<p>The result is that towers lock on to a target until it reaches a destination and gets destroyed. If you're reusing enemies then you'd have to check for a valid reference instead, like how shape references handled in the <a href="../../object-management/index.html">Object Management </a> series.</p>
+						
+						<p>To only track targets while they are in range, <code>TrackTarget</code> has to check the distance between the tower and target. If it goes out of range then clear the target and return failure. We can use the <code>Vector3.Distance</code> method for the check.</p>
+						
+						<pre>	bool TrackTarget () {
+		if (target == null) {
+			return false;
+		}
+		<ins>Vector3 a = transform.localPosition;</ins>
+		<ins>Vector3 b = target.Position;</ins>
+		<ins>if (Vector3.Distance(a, b) > targetingRange) {</ins>
+			<ins>target = null;</ins>
+			<ins>return false;</ins>
+		<ins>}</ins>
+		return true;
+	}</pre>
+						
+						<p>However, this doesn't take the collider's radius into consideration. So a tower can end up failing to track a target, then immediately acquiring it again, only to stop tracking it the next frame, and so on. We can prevent that by adding the radius of the collider to the range.</p>
+						
+						<pre>		if (Vector3.Distance(a, b) > targetingRange <ins>+ 0.125f</ins>) { &hellip; }</pre>
+						
+						<p>That gives us the correct results, but only when the enemy's scale is unchanged. As we give each enemy a random scale, we should factor that into the range adjustment. To do so we must remember the scale we gave <code>Enemy</code> and expose it via a getter property.</p>
+						
+						<pre>	<ins>public float Scale { get; private set; }</ins>
+
+	&hellip;
+
+	public void Initialize (float scale, float speed, float pathOffset) {
+		<ins>Scale = scale;</ins>
+		&hellip;
+	}</pre>
+						
+						<p>Now we can check the appropriate distance in <code>Tower.TrackTarget</code>.</p>
+						
+						<pre>		if (Vector3.Distance(a, b) > targetingRange + 0.125f <ins>* target.Enemy€.Scale</ins>) { &hellip; }</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Synchronizing Physics</h3>
+						
+						<p>All seems to work fine, except towers that can target the center of the board are able to acquire targets that should be out of range. They will fail to track those targets, so they only lock on for a single frame per target.</p>
+						
+						<figure>
+							<img src="targeting-enemies/unsynchronized-targeting.png" width="230" height="230">
+							<figcaption>Incorrect targeting.</figcaption>
+						</figure>
+						
+						<p>This happens because the state of the physics engine is not perfectly synchronized with our game state. All enemies are instantiated at the world origin, which coincides with the center of the board. We then move them to their spawn point, but the physics engine isn't immediately aware of that.</p>
+						
+						<p>It's possible to force immediate synchronization as soon as an object's transformation changes, by setting <code>Physics.autoSyncTransforms</code> to <code>true</code>. But it's turned off by default because it's much more efficient to only synchronize everything at once, when needed. In our case, we only need to be synchronized when updating the towers. We can enfore that by invoking <code>Physics.SyncTransforms</code> in between updating the enemies and board in <code>Game.Update</code>.</p>
+						
+						<pre>	void Update () {
+		&hellip;
+		enemies.GameUpdate();
+		<ins>Physics.SyncTransforms();</ins>
+		board.GameUpdate();
+	}</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Ignoring Elevation</h3>
+						
+						<p>Our gameplay is essentially 2D. So let's change <code>Tower</code> so it only takes the X and Z dimensions into consideration when targeting and tracking. The physics engine works in 3D space, but we can make the check in <code>AcquireTarget</code> effectively 2D by extruding the sphere upward so it should cover all colliders regardless of their vertical position. This can be done by using a capsule instead, with its second point a few units above the ground, let's say three.</p>
+						
+						<pre>	bool AcquireTarget () {
+		<ins>Vector3 a = transform.localPosition;</ins>
+		<ins>Vector3 b = a;</ins>
+		<ins>b.y += 3f;</ins>
+		Collider[] targets = Physics.<ins>OverlapCapsule</ins>(
+			<ins>a, b</ins>, targetingRange, enemyLayerMask
+		);
+		&hellip;
+	}</pre>
+						
+						<aside>
+							<h3>Can't we use the 2D physics engine?</h3>
+							<div>
+								<p>The problem is that our game is defined in the XZ plane, while the 2D physics engine works in the XY plane. You could make it work, by either reorienting the entire game or creating a separate 2D representation for physics purposes only. But it's simpler to just use 3D physics.</p>
+							</div>
+						</aside>
+						
+						<p>We have to adjust <code>TrackTarget</code> as well. While we could create 2D vectors and use <code>Vector2.Distance</code>, let's do the math ourselves and compare square distances instead, which is all that we need. That eliminates a square root operation.</p>
+						
+						<pre>	bool TrackTarget () {
+		if (target == null) {
+			return false;
+		}
+		<ins>Vector3 a = transform.localPosition;</ins>
+		<ins>Vector3 b = target.Position;</ins>
+		<ins>float x = a.x - b.x;</ins>
+		<ins>float z = a.z - b.z;</ins>
+		<ins>float r = targetingRange + 0.125f * target.Enemy€.Scale;</ins>
+		if (<ins>x * x + z * z > r * r</ins>) {
+			target = null;
+			return false;
+		}
+		return true;
+	}</pre>
+						
+						<aside>
+							<h3>How does that math work?</h3>
+							<div>
+								<p>It relies on the Pythagorean theorem to calculate the 2D distance, but leaves out the square root. Instead it squares the radius so we end up comparing square lengths. That suffices because we only need to check for relative length and don't need an exact difference.</p>
+							</div>
+						</aside>
+						
+					</section>
+					
+					<section>
+						<h3>Avoiding Memory Allocations</h3>
+						
+						<p>A downside of using <code>Physics.OverlapCapsule</code> is that it allocates a new array per invocation. That can be avoided by allocating an array once and invoking the alternative <code>OverlapCapsuleNonAlloc</code> method, with the array as an extra argument, after the radius. The length of the provided array limits how many results we get. Any potential targets beyond the limit are omitted. As we're only using the first element anyway, we can make do with an array of length 1.</p>
+						
+						<p>Instead of an array, <code>OverlapCapsuleNonAlloc</code> returns how many hits occured&mdash;up to the maximum allowed&mdash;which we have to check instead of the array's length.</p>
+						
+						<pre>	<ins>static Collider[] targetsBuffer = new Collider[1];</ins>
+
+	&hellip;
+
+	bool AcquireTarget () {
+		Vector3 a = transform.localPosition;
+		Vector3 b = a;
+		b.y += 2f;
+		<ins>int hits</ins> = Physics.<ins>OverlapCapsuleNonAlloc</ins>(
+			a, b, targetingRange, <ins>targetsBuffer,</ins> enemyLayerMask
+		);
+		if (<ins>hits</ins> > 0) {
+			target = <ins>targetsBuffer</ins>[0].GetComponent&lt;TargetPoint>();
+			Debug.Assert(target != null, "Targeted non-enemy!", <ins>targetsBuffer</ins>[0]);
+			return true;
+		}
+		target = null;
+		return false;
+	}</pre>
+						
+					</section>
+					
+				</section>
+				
+				<section>
+					<h2>Shooting Enemies</h2>
+					
+					<p>Now that we have a valid target, it's time to shoot it. This involves aiming the turret, firing the laser, and dealing damage.</p>
+					
+					<section>
+						<h3>Aiming the Turret</h3>
+						
+						<p>In order to point the turret at the target, <code>Tower</code> needs to have a reference to the turret's <code>Transform</code> component. Add a configuration field for that and hook it up in the tower prefab.</p>
+						
+						<pre>	<ins>[SerializeField]</ins>
+	<ins>Transform turret = default;</ins></pre>
+						
+						<figure>
+							<img src="shooting-enemies/turret-connected.png" width="320" height="90">
+							<figcaption>Turret hooked up.</figcaption>
+						</figure>
+
+						<p>In <code>GameUpdate</code>, if we have a valid target we should shoot it. Put the code for that in a separate method. Have it rotate the turret to face the target by invoking its <code>Transform.LookAt</code> method with the target point as an argument.</p>
+						
+						<pre>	public override void GameUpdate () {
+		if (TrackTarget() || AcquireTarget()) {
+			<del>//Debug.Log("Locked on target!");</del>
+			<ins>Shoot();</ins>
+		}
+	}
+
+	<ins>void Shoot () {</ins>
+		<ins>Vector3 point = target.Position;</ins>
+		<ins>turret.LookAt(point);</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="shooting-enemies/aiming.png" width="230" height="230">
+							<figcaption>Just aiming.</figcaption>
+						</figure>
+						
+					</section>
+					
+					<section>
+						<h3>Shining the Laser</h3>
+						
+						<p>To position the laser beam <code>Tower</code> needs a reference to it as well.</p>
+						
+						<pre>	[SerializeField]
+	Transform turret = default<ins>, laserBeam = default</ins>;</pre>
+						
+						<figure>
+							<img src="shooting-enemies/laser-beam-connected.png" width="320" height="110">
+							<figcaption>Laser beam connected.</figcaption>
+						</figure>
+						
+						<p>Turning a cube into a correct laser beam requires three steps. First, its orientation must match the turret's. We can do that by copying the rotation.</p>
+						
+						<pre>	void Shoot () {
+		Vector3 point = target.Position;
+		turret.LookAt(point);
+		<ins>laserBeam.localRotation = turret.localRotation;</ins>
+	}</pre>
+						
+						<p>Second, we scale the laser beam so it's as long as the distance between the turret's local origin and the target point. We scale its Z dimension, which is the local axis that's pointed at the target. To keep the original XY scale, store the original scale when the turret awakens.
+						
+						<pre>	<ins>Vector3 laserBeamScale;</ins>
+
+	<ins>void Awake () {</ins>
+		<ins>laserBeamScale = laserBeam.localScale;</ins>
+	<ins>}</ins>
+
+	&hellip;
+
+	void Shoot () {
+		Vector3 point = target.Position;
+		turret.LookAt(point);
+		laserBeam.localRotation = turret.localRotation;
+
+		<ins>float d = Vector3.Distance(turret.position, point);</ins>
+		<ins>laserBeamScale.z = d;</ins>
+		<ins>laserBeam.localScale = laserBeamScale;</ins>
+	}</pre>
+						
+						<p>Third, position the laser beam halfway between the turret and target point.</p>
+						
+						<pre>		laserBeam.localScale = laserBeamScale;
+		<ins>laserBeam.localPosition =</ins>
+			<ins>turret.localPosition + 0.5f * d * laserBeam.forward;</ins></pre>
+						
+						
+						<figure>
+							<img src="shooting-enemies/shooting-laser-beams.png" width="230" height="230">
+							<figcaption>Shooting laser beams.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Can't we make the laser beam a child of the turret?</h3>
+							<div>
+								<p>If we did that then we wouldn't need to rotate the laser beam separately and also wouldn't need its forward vector. However, the turret's scale would also affect it, so we'd have to compensate for that. It's easier to keep them separate.</p>
+							</div>
+						</aside>
+						
+						<p>This works as long as a turret remains locked on a target. But when no target is available the laser remains active. We can visually turn off the laser by setting its scale to zero in <code>GameUpdate</code> if we're not shooting.</p>
+						
+						<pre>	public override void GameUpdate () {
+		if (TrackTarget() || AcquireTarget()) {
+			Shoot();
+		}
+		<ins>else {</ins>
+			<ins>laserBeam.localScale = Vector3.zero;</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<img src="shooting-enemies/idle-towers.png" width="230" height="230">
+							<figcaption>Idle towers don't shoot.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Enemy Health</h3>
+						
+						<p>Currently our laser beams are just pointing out enemies and have no effect beyond that. The idea is that the enemies are hurt by the laser beams. We don't want to instantaneously destroy enemies, so give <code>Enemy</code> a health property. We can use an arbitrary amount to represent a healthy enemy, so let's use 100. But it makes sense that bigger enemies should be able to take more punishment, so let's factor in the scale.</p>
+						
+						<pre>	<ins>float Health { get; set; }</ins>
+	
+	&hellip;
+
+	public void Initialize (float scale, float speed, float pathOffset) {
+		&hellip;
+		<ins>Health = 100f * scale;</ins>
+	}</pre>
+						
+						<p>To support taking damage, add a public <code>ApplyDamage</code> method that subtracts its parameter from health. We assume that the damage isn't negative, so assert that.</p>
+						
+						<pre>	<ins>public void ApplyDamage (float damage) {</ins>
+		<ins>Debug.Assert(damage >= 0f, "Negative damage applied.");</ins>
+		<ins>Health -= damage;</ins>
+	<ins>}</ins></pre>
+						
+						<p>We won't immediately get rid of an enemy when its health reaches zero. Instead, we check whether health has run out at the start of <code>GameUpdate</code> and terminate if so.</p>
+													
+						<pre>	public bool GameUpdate () {
+		<ins>if (Health &lt;= 0f) {</ins>
+			<ins>OriginFactory.Reclaim(this);</ins>
+			<ins>return false;</ins>
+		<ins>}</ins>
+
+		&hellip;
+	}</pre>
+						
+						<p>Doing it like that makes it so all towers effectively fire at the same time, instead of in a sequence that allows them to switch targets in case a previous tower destroyed an enemy they were also targeting.</p>
+					</section>
+					
+					<section>
+						<h3>Damage per Second</h3>
+						
+						<p>Now we must determine how much damage the laser beam deals. Add a configuration field to <code>Tower</code> for that. As the laser beam causes continuous damage, we express it as damage per second. In <code>Shoot</code>, apply it to the target's <code>Enemy</code> component, multiplied by the time delta.</p>
+						
+						<pre>	<ins>[SerializeField, Range(1f, 100f)]</ins>
+	<ins>float damagePerSecond = 10f;</ins>
+
+	&hellip;
+	
+	void Shoot () {
+		&hellip;
+
+		<ins>target.Enemy.ApplyDamage(damagePerSecond * Time.deltaTime);</ins>
+	}</pre>
+						
+						<figure>
+							<img src="shooting-enemies/damage-per-second.png" width="320" height="128" alt="inspector"><br>
+							<video width="230" height="230" controls loop muted>
+								<source src="shooting-enemies/damage-per-second.mp4" type="video/mp4">
+							</video>
+							<figcaption>20 damage per second per tower.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Targeting at Random</h3>
+						
+						<p>Because we're always picking the first available target per tower, the targeting behavior depends on the order in which the physics engine checks for overlapping colliders. This dependency isn't good because we don't know the details, have no control over it, and it can also look weird and inconsistent. It often results in focused fire, but not always.</p>
+						
+						<p>Instead of completely being at the mercy of the physics engine, let's add some randomness to it. We do this by increasing the amount of hits that we can receive to a large number, let's say 100. That might not be enough to get all potential targets on a very crowded board, but should give us more than enough room to improve targeting behavior.</p>
+						
+						<pre>	static Collider[] targetsBuffer = new Collider[<ins>100</ins>];</pre>
+						
+						<p>Now instead of always picking the first potential target, pick a random element from the array.</p>
+						
+						<pre>	bool AcquireTarget () {
+		&hellip;
+		if (hits > 0) {
+			target =
+				targetsBuffer[<ins>Random.Range(0, hits)</ins>].GetComponent&lt;TargetPoint>();
+			&hellip;
+		}
+		target = null;
+		return false;
+	}</pre>
+						
+						<figure>
+							<video width="230" height="230" controls loop muted>
+								<source src="shooting-enemies/random-targeting.mp4" type="video/mp4">
+							</video>
+							<figcaption>Random targeting.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Can we also use other target selection criteria?</h3>
+							<div>
+								<p>Yes, you could for example select the one with the lowest or highest health. Or Keep track of how many towers target each enemy, to either focus fire or spread out. Or combine multiple criteria. However, it is hard to come up with good targeting criteria that consistently beat simply picking a random target per tower.</p>
+							</div>
+						</aside>
+						
+						<p>The next tutorial is <a href="../ballistics/index.html">Ballistics</a>.</p>
+					</section>
+					
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/tower-defense-03-towers/" class="repository">repository</a>
+					<a href="Towers.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/rendering/part-10/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/rendering/part-10/tutorial-image.jpg">
+		<meta property="og:title" content="Rendering 10">
+		<meta property="og:description" content="A Unity Rendering tutorial about increasingly more complex materials. Part 10 of 20.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Rendering 10</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/rendering/part-10/#article",
+				"headline": "Rendering 10",
+				"alternativeHeadline": "More Complexity",
+				"datePublished": "2016-11-30",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Rendering tutorial about increasingly more complex materials. Part 10 of 20.",
+				"image": "https://catlikecoding.com/unity/tutorials/rendering/part-10/tutorial-image.jpg",
+				"dependencies": "Unity 5.4.1f3",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/rendering/", "name": "Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				MyLightingShaderGUI: 1,
+				SmoothnessSource: 1,
+				TangentSpaceVisualizer: 1
+			};
+			
+			var hasAnimations = false;
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Rendering 10</h1>
+					<p>More Complexity</p>
+					<ul>
+						<li>Bake self-shadowing into a material.</li>
+						<li>Add details to part of a surface.</li>
+						<li>Support more efficient shader variants.</li>
+						<li>Edit multiple materials at once.</li>
+					</ul>
+				</header>
+
+				<p>This is the tenth part of a tutorial series about rendering. <a href="../part-9.1.html">Last time</a>, we used multiple textures to create complex materials. We'll add some more complexity this time, and also support multi-material editing.</p>
+				
+				<p>This tutorial was made with Unity 5.4.3f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Complex materials are often a mess.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Occluded Areas</h2>
+					
+					<p>Even through we can create materials that appear complex, it is just an illusion. The triangles are still flat. Normal maps can give the impression of depth, but that only works for direct light. There is no self-shadowing. Parts that are supposedly higher, should casts shadows on areas that are lower. But this doesn't happen. This is most obvious when the normal map would suggest that there are small holes, dents, or cracks.</p>
+					
+					<p>For example, let's say that someone has been shooting at our circuit board. The shots didn't go through the board, but left significant dents. Here's an adjusted normal map for that.</p>
+					
+					<figure>
+						<img src="occluded-areas/circuitry-normals.png" width="256" height="256">
+						<figcaption>Dented circuitry normal map.</figcaption>
+					</figure>
+					
+					<p>When using this normal map, the circuitry material indeed appears dented. But the deepest parts of the dents are lit just as well as the undented surface. There isn't any self-shadowing going on in the dents. As as result, they do not appear to be very deep.</p>
+					
+					<figure>
+						<img src="occluded-areas/dented-circuitry.png" width="320" height="230">
+						<figcaption>Dented circuitry.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Occlusion Map</h3>
+						
+						<p>To add self-shadowing, we can use what's known as an occlusion map. You can think of this as a fixed shadow map that's part of the material. Here is such a map for the dented circuitry, as a grayscale image.</p>
+						
+						<figure>
+							<img src="occluded-areas/circuitry-occlusion.png" width="256" height="256">
+							<figcaption>Occlusion map.</figcaption>
+						</figure>
+						
+						<p>To use this map, add a texture property for this map to our shader. Also add an occlusion strength slider property, so we can fine-tune it.</p>
+						
+						<pre translate="no" class="shader">		<ins>[NoScaleOffset] _OcclusionMap ("Occlusion", 2D) = "white" {}</ins>
+		<ins>_OcclusionStrength("Occlusion Strength", Range(0, 1)) = 1</ins></pre>
+						
+						<p>Just like with the metallic map, let's use a shader feature to only sample the occlusion map when it is set. Add the feature to the base pass only, don't worry about additional lights now.</p>
+						
+						<pre translate="no" class="shader">			#pragma shader_feature _ _SMOOTHNESS_ALBEDO _SMOOTHNESS_METALLIC
+			<ins>#pragma shader_feature _OCCLUSION_MAP</ins>
+			#pragma shader_feature _EMISSION_MAP</pre>
+					</section>
+					
+					<section>
+						<h3>Occlusion UI</h3>
+						
+						<p>Because we have a custom shader GUI, we have to manually add the new properties to our shader's UI. So add a <code>DoOcclusion</code> step to <code>MyLightingShaderGUI.DoMain</code>.</p>
+						
+						<pre translate="no">	void DoMain () {
+		&hellip;
+		DoNormals();
+		<ins>DoOcclusion();</ins>
+		DoEmission();
+		editor.TextureScaleOffsetProperty(mainTex);
+	}</pre>
+						
+						<p>This new method is nearly identical do <code>DoMetallic</code>, which is also about a map, a slider, and a keyword. So duplicate that method and make the required changes. While <code>DoMetallic</code> shows the slider when there is no map, we have to do the opposite here. Also, Unity's standard shader uses the G color channel of the occlusion map, so we'll do this as well. Indicate this in the tooltip.</p>
+						
+						<pre translate="no">	void <ins>DoOcclusion</ins> () {
+		MaterialProperty map = FindProperty(<ins>"_OcclusionMap"</ins>);
+		EditorGUI.BeginChangeCheck();
+		editor.TexturePropertySingleLine(
+			MakeLabel(map, <ins>"Occlusion (G)"</ins>), map,
+			map.textureValue ? <ins>FindProperty("_OcclusionStrength") : null</ins>
+		);
+		if (EditorGUI.EndChangeCheck()) {
+			SetKeyword(<ins>"_OCCLUSION_MAP"</ins>, map.textureValue);
+		}
+	}</pre>
+						<figure>
+							<img alt="without" src="occluded-areas/without-occlusion.png" width="320" height="62">
+							<img alt="with" src="occluded-areas/with-occlusion.png" width="320" height="230">
+							<figcaption>Inspector without and with occlusion map.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Adding Shadows</h3>
+						
+						<p>To access the map in our include file, add a sampler and float variable.</p>
+						
+						<pre translate="no" class="shader"><ins>sampler2D _OcclusionMap;</ins>
+<ins>float _OcclusionStrength;</ins></pre>
+						
+						<p>Create a function to take care of sampling the map, if it exists. If not, the light should not be modulated, so the result is simply 1.</p>
+						
+						<pre translate="no" class="shader"><ins>float GetOcclusion (Interpolators i) {</ins>
+	<ins>#if defined(_OCCLUSION_MAP)</ins>
+		<ins>return tex2D(_OcclusionMap, i.uv.xy).g;</ins>
+	<ins>#else</ins>
+		<ins>return 1;</ins>
+	<ins>#endif</ins>
+<ins>}</ins></pre>
+						
+						<p>When the occlusion strength is zero, the map should't affect the light at all. Thus, the function should return 1. When at full strength, the result is exactly what's in the map. We can do this by interpolating between 1 and the map, based on the slider.</p>
+						
+						<pre translate="no" class="shader">		return <ins>lerp(1,</ins> tex2D(_OcclusionMap, i.uv.xy).g<ins>, _OcclusionStrength)</ins>;</pre>
+						
+						<p>To apply the shadows to the light, we have to factor the occlusion into the light attention inside <code>CreateLight</code>.</p>
+						
+						<pre translate="no" class="shader">UnityLight CreateLight (Interpolators i) {
+	&hellip;
+
+	UNITY_LIGHT_ATTENUATION(attenuation, i, i.worldPos);
+	<ins>attenuation *= GetOcclusion(i);</ins>
+	light.color = _LightColor0.rgb * attenuation;
+	light.ndotl = DotClamped(i.normal, light.dir);
+	return light;
+}</pre>
+						
+						<figure>
+							<img alt="without" src="occluded-areas/dented-circuitry.png" width="320" height="230">
+							<img alt="with" src="occluded-areas/occluded-direct.png" width="320" height="230">
+							<figcaption>Without and with occlusion at full strength.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Shadowing Indirect Light</h3>
+						
+						<p>The dents have become darker, but overall not by much. That's because a lot of the light is actually indirect light in this scene. As our occlusion map is not specific to any light, we can apply it to indirect light as well. This is done by modulating both the diffuse and specular indirect light.</p>
+						
+						<pre translate="no" class="shader">UnityIndirect CreateIndirectLight (Interpolators i, float3 viewDir) {
+	&hellip;
+
+	#if defined(FORWARD_BASE_PASS)
+		&hellip;
+
+		<ins>float occlusion = GetOcclusion(i);</ins>
+		<ins>indirectLight.diffuse *= occlusion;</ins>
+		<ins>indirectLight.specular *= occlusion;</ins>
+	#endif
+
+	return indirectLight;
+}</pre>
+						
+						<figure>
+							<img alt="without" src="occluded-areas/dented-circuitry.png" width="320" height="230">
+							<img alt="with" src="occluded-areas/occluded-both.png" width="320" height="230">
+							<figcaption>Without and with full occlusion.</figcaption>
+						</figure>
+						
+						<p>This produces much stronger shadows. In fact, they might be too strong. As the occlusion map is based on the surface shape and not on a specific light, it makes sense that it is only applied to indirect light. Light coming from all directions is reduced the deeper you go into a dent. But when a light shines directly in it, the dent should be fully lit. So let's remove occlusion from direct lights.</p>
+						
+						<pre translate="no" class="shader">UnityLight CreateLight (Interpolators i) {
+	&hellip;
+
+	UNITY_LIGHT_ATTENUATION(attenuation, i, i.worldPos);
+<del>//	attenuation *= GetOcclusion(i);</del>
+	light.color = _LightColor0.rgb * attenuation;
+	light.ndotl = DotClamped(i.normal, light.dir);
+	return light;
+}
+</pre>
+						
+						<figure>
+							<img alt="without" src="occluded-areas/dented-circuitry.png" width="320" height="230">
+							<img alt="with" src="occluded-areas/occluded-indirect.png" width="320" height="230">
+							<figcaption>Without and with indirect occlusion only.</figcaption>
+						</figure>
+						
+						<p>As far as occlusion maps go, this is as realistic as it can get. Having said that, you'll often find games where occlusion maps are applied to direct lights as well. Unity's older shaders did this too. While that is not realistic, it does give artist more control over lighting.</p>
+						
+						<aside>
+							<h3>What about screen-space ambient occlusion?</h3>
+							<div>
+								<p>SSAO is a post-processing image effect that uses the depth buffer to create an occlusion map for an entire frame on the fly. It is used to enhance the feeling of depth in a scene. Because it is a post-processing effect, it is applied to the image after all lights have been rendered. This means that the shadowing is applied to both the indirect and direct light. As a result, this effect is also not realistic.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Merging Maps</h3>
+						
+						<p>We're only using one channel of the occlusion map, the G channel. The metallic map for circuitry is stored in the R channel, and the smoothness is stored in the alpha channel. This means that we could combine all three maps into a single texture. Here is such a map.</p>
+						
+						<figure>
+							<img alt="texture" src="occluded-areas/circuitry-metallic-occlusion-smoothness.png" width="256" height="256">
+							<img alt="inspector" src="occluded-areas/mos-inspector.png" width="320" height="156">
+							<figcaption>Combining metallic, occlusion, and smoothness in a single map.</figcaption>
+						</figure>
+						
+						<p>The shader doesn't know that we're reusing the texture, so it will still sample it a second time for the occlusion map. But using a single texture does reduce memory and storage requirements. By using DXT5 compression, our three 512&times;512 maps only require 341KB. This does mean that the metallic and occlusion maps are combined into a single gradient, potentially reducing quality. Fortunately, these maps usually aren't that detailed and don't need to be very accurate. So the results are often acceptable.</p>
+						
+						<aside>
+							<h3>Could we reduce it to a single texture sample?</h3>
+							<div>
+								<p>Yes, you'll have to adjust the shader to sample everything from the same map. If you're doing this optimization, you can get rid of the extra texture property as well.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="occluded-areas/occluded-areas.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Masking Details</h2>
+					
+					<p>Our circuitry material is lacking details. Let's do something about that. Here is a detail albedo map and normal map.</p>
+					
+					<figure>
+						<img alt="albedo" src="masking-details/circuitry-detail-albedo.png" width="256" height="256">
+						<img alt="normal" src="masking-details/circuitry-detail-normal.png" width="256" height="256">
+						<figcaption>Detail albedo and normal map.</figcaption>
+					</figure>
+					
+					<p>Import then and set the texture to fade out mipmap. Assign the textures and use full-strength normals. These details shouldn't be too small, a 3 by 3 tiling works well.</p>
+					
+					<figure>
+						<img alt="scene" src="masking-details/circuitry-detailed.png" width="320" height="230">
+						<img alt="inspector" src="masking-details/inspector-detailed.png" width="320" height="94">
+						<figcaption>Detailed circuitry.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Detail Mask</h3>
+						
+						<p>The details cover the entire surface, but this doesn't look so good. It's better is the details don't cover the metal parts. We could use a mask texture to control where details show up. This works like a binary splat map, like we used in <a href="../part-3.1.html">part 3, Combining Textures</a>. The difference is that a value of 0 means no details, and a value of 1 means full details.</p>
+						
+						<p>Here is a detail mask that prevents details from showing up on the metal parts. For added variety, it also reduces and even eliminates them from the lower regions of the circuit board. And the details got wiped out wherever dents were punched into the board.</p>
+						
+						<figure>
+							<img src="masking-details/circuitry-detail-mask.png" width="256" height="256">
+							<figcaption>Detail mask.</figcaption>
+						</figure>
+						
+						<p>Unity's standard shader uses the alpha channel of the detail mask, so we use that channel as well. The image above has all four color channels set to the same value.</p>
+						
+						<p>Add a property for this map to our shader.</p>
+						
+						<pre translate="no" class="shader">		<ins>[NoScaleOffset] _DetailMask ("Detail Mask", 2D) = "white" {}</ins></pre>
+						
+						<p>As many materials won't have a detail mask, give it a shader feature as well. It's needed in both the base and the additive passes.</p>
+						
+						<pre translate="no" class="shader">			<ins>#pragma shader_feature _DETAIL_MASK</ins></pre>
+						
+						<p>Add the requires variable and a function to get the mask data to our include file.</p>
+						
+						<pre translate="no" class="shader">sampler2D _MainTex, _DetailTex<ins>, _DetailMask</ins>;
+
+&hellip;
+
+<ins>float GetDetailMask (Interpolators i) {</ins>
+	<ins>#if defined (_DETAIL_MASK)</ins>
+		<ins>return tex2D(_DetailMask, i.uv.xy).a;</ins>
+	<ins>#else</ins>
+		<ins>return 1;</ins>
+	<ins>#endif</ins>
+<ins>}</ins></pre>
+						
+						<p>Add the map to our UI as well, below the emission map and color. In this case, it's a single texture property combined with a shader keyword.</p>
+						
+						<pre translate="no">	void DoMain () {
+		&hellip;
+		DoEmission();
+		<ins>DoDetailMask();</ins>
+		editor.TextureScaleOffsetProperty(mainTex);
+	}
+	
+	&hellip;
+	
+	<ins>void DoDetailMask () {</ins>
+		<ins>MaterialProperty mask = FindProperty("_DetailMask");</ins>
+		<ins>EditorGUI.BeginChangeCheck();</ins>
+		<ins>editor.TexturePropertySingleLine(</ins>
+			<ins>MakeLabel(map, "Detail Mask (A)"), mask</ins>
+		<ins>);</ins>
+		<ins>if (EditorGUI.EndChangeCheck()) {</ins>
+			<ins>SetKeyword("_DETAIL_MASK", mask.textureValue);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="masking-details/inspector-mask.png" width="320" height="176">
+							<figcaption>Using a detail mask.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Albedo Details</h3>
+						
+						<p>To mask the details, we'll have to adjust our include file again. Instead of always multiplying albedo with the details, we have to interpolate between the unmodified and modified albedo, based on the mask. While we're at it, let's put the retrieval of the albedo into its own function, just like for all the other properties.</p>
+						
+						
+						<pre translate="no" class="shader"><ins>float3 GetAlbedo (Interpolators i) {</ins>
+	<ins>float3 albedo = tex2D(_MainTex, i.uv.xy).rgb * _Tint.rgb;</ins>
+	<ins>float3 details = tex2D(_DetailTex, i.uv.zw) * unity_ColorSpaceDouble;</ins>
+	<ins>albedo = lerp(albedo, albedo * details, GetDetailMask(i));</ins>
+	<ins>return albedo;</ins>
+<ins>}</ins>
+
+&hellip;
+
+float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+	&hellip;
+
+<del>//	float3 albedo = tex2D(_MainTex, i.uv.xy).rgb * _Tint.rgb;</del>
+<del>//	albedo *= tex2D(_DetailTex, i.uv.zw) * unity_ColorSpaceDouble;</del>
+
+	float3 specularTint;
+	float oneMinusReflectivity;
+	<ins>float3</ins> albedo = DiffuseAndSpecularFromMetallic(
+		<ins>GetAlbedo(i)</ins>, GetMetallic(i), specularTint, oneMinusReflectivity
+	);
+
+	&hellip;
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Normal Details</h3>
+						
+						<p>We have to make the same adjustment for the normal vector. In this case, no details corresponds with an unmodified upward-facing tangent-space normal vector. So we replace the original detail normal by an interpolation between that vector and its original value, once again based on the detail mask.</p>
+						
+						<pre translate="no" class="shader">void InitializeFragmentNormal(inout Interpolators i) {
+	float3 mainNormal =
+		UnpackScaleNormal(tex2D(_NormalMap, i.uv.xy), _BumpScale);
+	float3 detailNormal =
+		UnpackScaleNormal(tex2D(_DetailNormalMap, i.uv.zw), _DetailBumpScale);
+	<ins>detailNormal = lerp(float3(0, 0, 1), detailNormal, GetDetailMask(i));</ins>
+	float3 tangentSpaceNormal = BlendNormals(mainNormal, detailNormal);
+
+	&hellip;
+}
+</pre>
+						<figure>
+							<img src="masking-details/masked-details.png" width="320" height="230">
+							<figcaption>Masked details.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="masking-details/masking-details.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>More Keywords</h2>
+					
+					<p>We've been using shader features to enable shader code that samples and includes various maps into our lighting equation. Unity's standard shader does this as well. That's the idea of an uber shader. It can do many things, but has variants for many flavors of use.</p>
+					
+					<p>The standard shader also has shader features to toggle the use of normal and detail maps. Normal maps are enabled when either a main or detail normal map is assigned. And details are enabled when either a detail albedo or normal is set.</p>
+					
+					<p>Let's add these features to our shader as well. But let's keep it simple and toggle each map independently. First, let's set a keyword based on the existence of a detail albedo map.</p>
+					
+					<pre translate="no">	void DoSecondary () {
+		GUILayout.Label("Secondary Maps", EditorStyles.boldLabel);
+
+		MaterialProperty detailTex = FindProperty("_DetailTex");
+		<ins>EditorGUI.BeginChangeCheck();</ins>
+		editor.TexturePropertySingleLine(
+			MakeLabel(detailTex, "Albedo (RGB) multiplied by 2"), detailTex
+		);
+		<ins>if (EditorGUI.EndChangeCheck()) {</ins>
+			<ins>SetKeyword("_DETAIL_ALBEDO_MAP", detailTex.textureValue);</ins>
+		<ins>}</ins>
+		DoSecondaryNormals();
+		editor.TextureScaleOffsetProperty(detailTex);
+	}</pre>
+					
+					<p>Next, a keyword based on the main normal map.</p>
+					
+					<pre translate="no">	void DoNormals () {
+		MaterialProperty map = FindProperty("_NormalMap");
+		<ins>EditorGUI.BeginChangeCheck();</ins>
+		editor.TexturePropertySingleLine(
+			MakeLabel(map), map,
+			map.textureValue ? FindProperty("_BumpScale") : null
+		);
+		<ins>if (EditorGUI.EndChangeCheck()) {</ins>
+			<ins>SetKeyword("_NORMAL_MAP", map.textureValue);</ins>
+		<ins>}</ins>
+	}</pre>
+					
+					<p>And similar for the detail normal map.</p>
+					
+					<pre translate="no">	void DoSecondaryNormals () {
+		MaterialProperty map = FindProperty("_DetailNormalMap");
+		<ins>EditorGUI.BeginChangeCheck();</ins>
+		editor.TexturePropertySingleLine(
+			MakeLabel(map), map,
+			map.textureValue ? FindProperty("_DetailBumpScale") : null
+		);
+		<ins>if (EditorGUI.EndChangeCheck()) {</ins>
+			<ins>SetKeyword("_DETAIL_NORMAL_MAP", map.textureValue);</ins>
+		<ins>}</ins>
+	}</pre>
+					
+					<section>
+						<h3>More Shader Variants</h3>
+						
+						<p>To make this work, add a new shader features for each keyword to our shader passes. First, the base pass.</p>
+						
+						<pre translate="no" class="shader">			#pragma shader_feature _METALLIC_MAP
+			#pragma shader_feature _ _SMOOTHNESS_ALBEDO _SMOOTHNESS_METALLIC
+			<ins>#pragma shader_feature _NORMAL_MAP</ins>
+			#pragma shader_feature _OCCLUSION_MAP
+			#pragma shader_feature _EMISSION_MAP
+			#pragma shader_feature _DETAIL_MASK
+			<ins>#pragma shader_feature _DETAIL_ALBEDO_MAP</ins>
+			<ins>#pragma shader_feature _DETAIL_NORMAL_MAP</ins></pre>
+						
+						<p>Then, the additive pass.</p>
+						
+						<pre translate="no" class="shader">			#pragma shader_feature _METALLIC_MAP
+			#pragma shader_feature _ _SMOOTHNESS_ALBEDO _SMOOTHNESS_METALLIC
+			<ins>#pragma shader_feature _NORMAL_MAP</ins>
+			#pragma shader_feature _DETAIL_MASK
+			<ins>#pragma shader_feature _DETAIL_ALBEDO_MAP</ins>
+			<ins>#pragma shader_feature _DETAIL_NORMAL_MAP</ins></pre>
+						
+						<p>The amount of shader variants has now increased a lot. However, to activate the keywords in a material, you'll have to change all the relevant maps via the inspector. Otherwise the shader GUI will not properly set the keywords. This isn't an issue when creating new materials, but existing ones need to be refreshed after this change.</p>
+					</section>
+					
+					<section>
+						<h3>Using the Keywords</h3>
+						
+						<p>Now we have to change the include file to take advantage of the new keywords. First, <code class="shader">GetAlbedo</code> might be able to leave out the detail map part.</p>
+						
+						<pre translate="no" class="shader">float3 GetAlbedo (Interpolators i) {
+	float3 albedo = tex2D(_MainTex, i.uv.xy).rgb * _Tint.rgb;
+	<ins>#if defined (_DETAIL_ALBEDO_MAP)</ins>
+		float3 details = tex2D(_DetailTex, i.uv.zw) * unity_ColorSpaceDouble;
+		albedo = lerp(albedo, albedo * details, GetDetailMask(i));
+	<ins>#endif</ins>
+	return albedo;
+}</pre>
+						
+						<aside>
+							<h3>How can you test whether this actually works?</h3>
+							<div>
+								<p>When you're not using a detail albedo map, of course you won't get albedo details. But is that because the code is really omitted, or because the shader is sampling the default texture?</p>
+								
+								<p>There are two ways you can verify that the keywords work as expected. First, temporarily change the default texture to something obvious, like white for the detail albedo map. If the material becomes too bright after removing the map, that means the code is still included. Alternatively, add a temporary <code class="shader">#else</code> block to the code which changes something obvious.</p>
+							</div>
+						</aside>
+						
+						<p>Next, we have to deal with the normal maps. In this case, we have four possible configurations. Either no normal maps, only a main map, only a detail map, or both maps. Let's isolate the code that samples these maps, moving it to a new function.</p>
+						
+						<pre translate="no" class="shader"><ins>float3 GetTangentSpaceNormal (Interpolators i) {</ins>
+	<ins>float3 mainNormal =</ins>
+		<ins>UnpackScaleNormal(tex2D(_NormalMap, i.uv.xy), _BumpScale);</ins>
+	<ins>float3 detailNormal =</ins>
+		<ins>UnpackScaleNormal(tex2D(_DetailNormalMap, i.uv.zw), _DetailBumpScale);</ins>
+	<ins>detailNormal = lerp(float3(0, 0, 1), detailNormal, GetDetailMask(i));</ins>
+	<ins>return BlendNormals(mainNormal, detailNormal);</ins>
+<ins>}</ins>
+
+&hellip;
+
+void InitializeFragmentNormal(inout Interpolators i) {
+<del>//	float3 mainNormal =</del>
+<del>//		UnpackScaleNormal(tex2D(_NormalMap, i.uv.xy), _BumpScale);</del>
+<del>//	float3 detailNormal =</del>
+<del>//		UnpackScaleNormal(tex2D(_DetailNormalMap, i.uv.zw), _DetailBumpScale);</del>
+<del>//	detailNormal = lerp(float3(0, 0, 1), detailNormal, GetDetailMask(i));</del>
+<del>//	float3 tangentSpaceNormal = BlendNormals(mainNormal, detailNormal);</del>
+	
+	<ins>float3 tangentSpaceNormal = GetTangentSpaceNormal(i);</ins>
+	&hellip;
+}</pre>
+						
+						<p>Now rewrite <code class="shader">GetTangentSpaceNormal</code> so it can deal with all four situation efficiently. Thanks to the shader compiler's optimizations, we can do this with two define checks.</p>
+						
+						<pre translate="no" class="shader">float3 GetTangentSpaceNormal (Interpolators i) {
+	float3 <ins>normal</ins> = <ins>float3(0, 0, 1);</ins>
+	<ins>#if defined(_NORMAL_MAP)</ins>
+		<ins>normal =</ins> UnpackScaleNormal(tex2D(_NormalMap, i.uv.xy), _BumpScale);
+	<ins>#endif</ins>
+	<ins>#if defined(_DETAIL_NORMAL_MAP)</ins>
+		float3 detailNormal =
+			UnpackScaleNormal(
+				tex2D(_DetailNormalMap, i.uv.zw), _DetailBumpScale
+			);
+		detailNormal = lerp(float3(0, 0, 1), detailNormal, GetDetailMask(i));
+		<ins>normal =</ins> BlendNormals(<ins>normal</ins>, detailNormal);
+	<ins>#endif</ins>
+	return <ins>normal</ins>;
+}</pre>
+						<aside>
+							<h3>What about the albedo map, and colors?</h3>
+							<div>
+								<p>Unity's standard shader assumes that there is always an albedo map, so doesn't reserve a keyword for it. As the vast majority of materials use albedo maps, it is a reasonable assumption. So I don't bother with an albedo keyword either. Of course you're free to add it yourself.</p>
+								
+								<p>The standard shader also always applies the albedo tint. This assumption is more questionable, as many materials do not utilize a tint, sticking with the default white color. You could add a keyword for the tint, enabling it only if the tint is set to something other than white. I prefer not to do this, because a choice of color isn't as binary as using or not using a texture is. It is prone to unexpected issues, like animated colors not being applied, because they're initially white.</p>
+								
+								<p>The standard shader does set its emission keyword based on the emission color. It leaves it out when the color is set to black. Indeed, this is the cause of quite a few people having trouble animating the emission color. So I don't do this.</p>
+								
+								<p>Ubershaders are a neat idea. But when working on a specific project, you have the opportunity to create shaders that support exactly &ndash; and only &ndash; the features that you need, with as few keywords as possible. Take advantage of that, once you get serious about optimizing your shaders.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="more-keywords/more-keywords.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Editing Multiple Materials</h2>
+					
+					<p>So far, we've only considered editing a single material at a time. But Unity allows us to have multiple materials selected. If those materials all use our shader, then the shader GUI can be used to edit all of them at once. You'll also see the entire selection in the preview panel.</p>
+					
+					<figure>
+						<img src="editing-multiple-materials/multi-selection.png" width="320" height="234">
+						<figcaption>Preview of two selected materials.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Setting Too Few Keywords</h3>
+
+						<p>So editing multiple materials at the same time already works! However, there is a problem. You'll see this when creating two new materials that use our shader. Select both, then assign a normal map to them. Even though both materials now have a normal map, only the first material ends up using them.</p>
+
+						<figure>
+							<img src="editing-multiple-materials/normal-map-incorrect.png" width="320" height="160">
+							<figcaption>Only the first material with normals.</figcaption>
+						</figure>
+
+						<p>This happens because our shader gui only sets the keyword of one material. This is the editor's target, which is the first material in the selection.</p>
+
+						<aside>
+							<h3>What determines the order of the selected materials?</h3>
+							<div>
+								<p>For all practical purposes, the order is arbitrary, but consistent. So you cannot rely on a certain material being the first in the selection.</p>
+							</div>
+						</aside>
+
+						<p>We can solve this problem by adjusting the keywords of all materials in the selection. To do this, we have to adjust our shader GUI's <code>SetKeyword</code> method. Instead of using the <code>target</code> field, we have to iterate through all the material in the editor's <code>targets</code> array. Let's use a <code>foreach</code> loop to do this, as it's concise code, and we don't need to worry about performance here.</p>
+						
+						<pre translate="no">	void SetKeyword (string keyword, bool state) {
+		if (state) {
+			<ins>foreach (Material m in editor.targets) {</ins>
+				<ins>m</ins>.EnableKeyword(keyword);
+			<ins>}</ins>
+		}
+		else {
+			<ins>foreach (Material m in editor.targets) {</ins>
+				<ins>m</ins>.DisableKeyword(keyword);
+			<ins>}</ins>
+		}
+	}</pre>
+
+						<aside>
+							<h3>How does <code>foreach</code> work?</h3>
+							<div>
+								<p><code>foreach</code> is a convenient alternative for a <code>for</code> loop. It has some overhead compared to a regular <code>for</code> loop, because it creates a temporary iterator object. So I never use it in app code, or editor code that gets executed very often.</p>
+
+								<p>You could replace them with regular <code>for</code> loops, if you like.</p>
+
+								<pre translate="no">Object[] targets = editor.targets;
+for (int i = 0; i &lt; targets.Length; i++) {
+	Material m = targets[i] as Material;
+	&hellip;
+}</pre>
+
+								<p>Note that the above code uses a temporary variable to cache the <code>editor.targets</code> property. The <code>foreach</code> loop doesn't need that, because the array is referenced only once directly, to get its iterator. Also, <code>editor.targets</code> is an object array, so we have to explicitly cast each item to a material. The <code>foreach</code> loop performs this cast implicitly.</p>
+							</div>
+						</aside>
+
+						<p>With this change, the normals will show up in all materials, after changing the map or the bump scale.</p>
+
+						<figure>
+							<img src="editing-multiple-materials/normal-map-correct.png" width="320" height="160">
+							<figcaption>Both materials with normals.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Setting Too Many Keywords</h3>
+						
+						<p>Unfortunately, we just created another problem. Consider a selection of two materials. The first material uses a normal map, while the second does not. In this case, the bump scale is shown by the UI, because that is based on the first material. This is not a problem, as the second material will just ignore the bump scale. However, when the bump scale is changed, the UI will update the keywords of both materials. The result will be that both materials have the <em translate="no">_NORMAL_MAP</em> keyword set. So the second material ends up with the <em translate="no">_NORMAL_MAP</em> keyword enabled, even though it doesn't use a normal map!</p>
+
+						<p>This problem wouldn't exist if we only updated the keywords when the texture property is changed. Unfortunately, because <code>TexturePropertySingleLine</code> combines two properties, we cannot distinguish between them with the <code>BeginChangeCheck</code> and <code>EndChangeCheck</code> methods. This was fine before, but no longer.</p>
+
+						<p>To fix this problem, we have to keep track of the map's texture reference before it can be changed. Then we only set the keyword if a change was made, and it's the map that's different.</p>
+
+						<pre translate="no">	void DoNormals () {
+		MaterialProperty map = FindProperty("_NormalMap");
+		<ins>Texture tex = map.textureValue;</ins>
+		EditorGUI.BeginChangeCheck();
+		editor.TexturePropertySingleLine(
+			MakeLabel(map), map,
+			<ins>tex</ins> ? FindProperty("_BumpScale") : null
+		);
+		if (EditorGUI.EndChangeCheck() <ins>&amp;&amp; tex != map.textureValue</ins>) {
+			SetKeyword("_NORMAL_MAP", map.textureValue);
+		}
+	}</pre>
+
+						<p>This solves the problem for <code>DoNormals</code>. But it also affects <code>DoMetallic</code>, <code>DoOcclusion</code>, <code>DoEmission</code>, and <code>DoSecondaryNormals</code>. Adjust all these methods like we fixed <code>DoNormals</code>. Now our shader GUI properly supports multi-material editing!</p>
+						
+						<p>The next tutorial is <a href="../part-11.1.html">Transparency</a>.</p>
+					</section>
+					
+					<a href="editing-multiple-materials/editing-multiple-materials.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Rendering-10.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

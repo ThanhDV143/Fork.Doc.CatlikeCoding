@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/custom-srp/shadow-masks/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/custom-srp/shadow-masks/tutorial-image.jpg">
+		<meta property="og:title" content="Shadow Masks">
+		<meta property="og:description" content="A Unity Custom SRP tutorial about baking shadows while still using realtime lighting.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Shadow Masks</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/custom-srp/shadow-masks/#article",
+				"headline": "Shadow Masks",
+				"alternativeHeadline": "Baking Direct Occlusion",
+				"datePublished": "2020-02-27",
+				"dateModified": "2023-08-03",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Custom SRP tutorial about baking shadows while still using realtime lighting.",
+				"image": "https://catlikecoding.com/unity/tutorials/custom-srp/shadow-masks/tutorial-image.jpg",
+				"dependencies": "Unity 2022.3.5f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/custom-srp/", "name": "Custom SRP" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				CameraRenderer: 1,
+				CascadeBlendMode: 1,
+				CustomRenderPipeline: 1,
+				CustomRenderPipelineAsset: 1,
+				CustomShaderGUI: 1,
+				Directional: 1,
+				DirectionalShadowData: 1,
+				FilterMode: 1,
+				Lighting: 1,
+				MeshBall: 1,
+				PerObjectMaterialProperties: 1,
+				ShadowedDirLight: 1,
+				ShadowData: 1,
+				Shadows: 1,
+				ShadowMask: 1,
+				ShadowMode: 1,
+				ShadowSettings: 1,
+				TextureSize: 1
+			};
+			
+			var defaultCodeClass = "shader";
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../../scriptable-render-pipeline/reflections/index.html">Custom SRP</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Shadow Masks</h1>
+					<p>Baking Direct Occlusion</p>
+					<ul>
+						<li>Bake static shadows.</li>
+						<li>Combine realtime lighting with baked shadows.</li>
+						<li>Mix realtime and baked shadows.</li>
+						<li>Support up to four shadow mask lights.</li>
+					</ul>
+				</header>
+				
+				<p>This is the sixth part of a tutorial series about creating a <a href="../../scriptable-render-pipeline/reflections/index.html">custom scriptable render pipeline</a>. It uses shadow masks to bake shadows while still calculating realtime lighting.</p>
+				
+				<p>This tutorial is made with Unity 2019.2.21f1 and upgraded to 2022.3.5f1.</p>
+								
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Realtime shadows nearby, baked shadows farther away.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Baking Shadows</h2>
+					
+					<p>The advantage of using a light map is that we're not limited to a max shadow distance. Baked shadows don't get culled, but they also cannot change. Ideally, we could use realtime shadows up to the max shadow distance and baked shadows beyond that. Unity's shadow mask mixed lighting mode makes this possible.</p>
+					
+					<section>
+						<h3>Distance Shadow Mask</h3>
+						
+						<p>Let's consider the same scene from the previous tutorial, but with the max shadow distance reduced such that part of the structure's interior doesn't get shadowed. This makes it very clear where realtime shadows end. We start with only a single light source.</p>
+						
+						<figure>
+							<img src="baking-shadows/max-distance-11.png" width="440" height="220">
+							<figcaption>Baked indirect mixed lighting, max distance 11.</figcaption>
+						</figure>
+						
+						<p>Switch the mixed lighting mode to <em translate="no">Shadowmask</em>. This will invalidate the lighting data so it'll have to get baked again.</p>
+						
+						<figure>
+							<img src="baking-shadows/shadow-mask-lighting-mode.png" width="390" height="110">
+							<figcaption><em translate="no">Shadowmask</em> mixed lighting mode.</figcaption>
+						</figure>
+						
+						<p>There are two ways to use shadow mask mixed lighting, which can be configured via the <em translate="no">Quality</em> project settings. We'll use the <em translate="no">Distance Shadowmask</em> mode. The other mode is known as just <em translate="no">Shadowmask</em>, which we'll cover later.</p>
+						
+						<figure>
+							<img src="baking-shadows/shadow-mask-mode.png" width="376" height="42">
+							<figcaption>Shadow mask mode set to distance.</figcaption>
+						</figure>
+						
+						<p>The two flavors of shadow mask mode use the same baked lighting data. In both cases the light map ends up containing the indirect lighting, exactly the same as the <em translate="no">Baked Indirect</em> mixed lighting mode. What's different is that there's now also a baked shadow mask map, which you can inspect via the baked light map preview window.</p>
+						
+						<p>In Unity 2022 you can see the shadow mask map by disabling <em translate="no">Auto Generate</em> of the lighting, manually generating it, and then inspecting the generated texture asset.</p>
+						
+						<figure>
+							<img src="baking-shadows/baked-indirect-light.png" width="350" height="140" alt="indirect light"><br>
+							<img src="baking-shadows/baked-shadow-mask.png" width="350" height="140" alt="shadow mask">
+							<figcaption>Baked indirect light and shadow mask.</figcaption>
+						</figure>
+						
+						<p>The shadow mask map contains the shadow attenuation of our single mixed directional light, representing the shadows cast by all static objects that contribute to global illumination. The data is stored in the red channel so the map is black and red.</p>
+						
+						<p>Just like the baked indirect lighting the baked shadows cannot change at runtime. However, the shadows will remain valid no matter the intensity or color of the light. But the light should not be rotated otherwise its shadows won't make sense. Also, you shoudn't vary the light too much if its indirect lighting is baked. For example, it would be obviously wrong if indirect lighting remained after a light is turned off. If a light changes a lot then you could set its <em translate="no">Indirect Multiplier</em> to zero so no indirect light gets baked for it.</p>
+					</section>
+					
+					<section>
+						<h3>Detecting a Shadow Mask</h3>
+						
+						<p>To use the shadow mask our pipeline must first know that it exists. As it's all about shadows that's the job of our <code class="csharp">Shadows</code> class. We'll use shader keywords to control whether shadow masks are used. As there are two modes we'll introduce another static keyword array, even though it contains just one keyword for now: <em translate="no">_SHADOW_MASK_DISTANCE</em>.</p>
+						
+						<pre class="csharp">	<ins>static string[] shadowMaskKeywords = {</ins>
+		<ins>"_SHADOW_MASK_DISTANCE"</ins>
+	<ins>};</ins></pre>
+						
+						<p>Add a boolean field to track whether we're using a shadow mask. We re-evaluate this each frame so initialize it to <code>false</code> in <code>Setup</code>.</p>
+						
+						<pre class="csharp">	<ins>bool useShadowMask;</ins>
+
+	public void Setup (&hellip;) {
+		&hellip;
+		<ins>useShadowMask = false;</ins>
+	}</pre>
+						
+						<p>Enable or distable the keyword at the end of <code class="csharp">Render</code>. We have to do this even if we end up not rendering any realtime shadows, because the shadow mask isn't realtime.</p>
+						
+						<pre class="csharp">	public void Render () {
+		&hellip;
+		<ins>buffer.BeginSample(bufferName);</ins>
+		<ins>SetKeywords(shadowMaskKeywords, useShadowMask ? 0 : -1);</ins>
+		<ins>buffer.EndSample(bufferName);</ins>
+		<ins>ExecuteBuffer();</ins>
+	}</pre>
+						
+						<p>To know whether a shadow mask is needed we have to check if there is a light that uses it. We'll do this in <code class="csharp">ReserveDirectionalShadows</code>, when we end up with a valid shadow-casting light.</p>
+						
+						<p>Each light contains information about its baked data. It's stored in a <code class="csharp">LightBakingOutput</code> struct that can be retrieved via the <code class="csharp">Light.bakingOutput</code> property. If we encounter a light with its light map bake type set to mixed and its mixed lighting mode set to shadow mask then we're using the shadow mask.</p>
+						
+						<pre class="csharp">	public Vector3 ReserveDirectionalShadows (
+		Light light, int visibleLightIndex
+	) {
+		if (&hellip;) {
+			<ins>LightBakingOutput lightBaking = light.bakingOutput;</ins>
+			<ins>if (</ins>
+				<ins>lightBaking.lightmapBakeType == LightmapBakeType.Mixed &&</ins>
+				<ins>lightBaking.mixedLightingMode == MixedLightingMode.Shadowmask</ins>
+			<ins>) {</ins>
+				<ins>useShadowMask = true;</ins>
+			<ins>}</ins>
+
+			&hellip;
+		}
+		return Vector3.zero;
+	}</pre>
+						
+						<p>That enables the shader keyword when needed. Add a corresponding multi-compile directive for it to the <em translate="no">CustomLit</em> pass of the <em translate="no">Lit</em> shader.</p>
+						
+						<pre translate="no">			#pragma multi_compile _ _CASCADE_BLEND_SOFT _CASCADE_BLEND_DITHER
+			<ins>#pragma multi_compile _ _SHADOW_MASK_DISTANCE</ins>
+			#pragma multi_compile _ LIGHTMAP_ON</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Shadow Mask Data</h3>
+						
+						<p>On the shader side we have to know whether a shadow mask is in use and if so what the baked shadows are. Let's add a <code>ShadowMask</code> struct to <em translate="no">Shadows</em> to keep track of both, with a boolean and a float vector field. Name the boolean <code>distance€</code> to indicate whether distance shadow mask mode is enabled. Then add this struct to the global <code>ShadowData</code> struct as a field.</p>
+						
+						<pre translate="no"><ins>struct ShadowMask {</ins>
+	<ins>bool distance€;</ins>
+	<ins>float4 shadows;</ins>
+<ins>};</ins>
+
+struct ShadowData {
+	int cascadeIndex;
+	float cascadeBlend;
+	float strength;
+	<ins>ShadowMask shadowMask;</ins>
+};</pre>
+						
+						<p>Initialize the shadow mask to not-in-use by default in <code>GetShadowData</code>.</p>
+						
+						<pre translate="no">ShadowData GetShadowData (Surface surfaceWS) {
+	ShadowData data;
+	<ins>data.shadowMask.distance€ = false;</ins>
+	<ins>data.shadowMask.shadows = 1.0;</ins>
+	&hellip;
+}</pre>
+						
+						<p>Although the shadow mask is used for shadowing it is part of the baked lighting data of the scene. As such retrieving it is the responsibility of <em translate="no">GI</em>. So add a shadow mask field to the <code>GI</code> struct as well and also initialize it to not-in-use in <code>GetGI</code>.</p>
+						
+						<pre translate="no">struct GI {
+	float3 diffuse;
+	<ins>ShadowMask shadowMask;</ins>
+};
+
+&hellip;
+
+GI GetGI (float2 lightMapUV, Surface surfaceWS) {
+	GI gi;
+	gi.diffuse = SampleLightMap(lightMapUV) + SampleLightProbe(surfaceWS);
+	<ins>gi.shadowMask.distance€ = false;</ins>
+	<ins>gi.shadowMask.shadows = 1.0;</ins>
+	return gi;
+}</pre>
+						
+						<p>Unity makes the shadow mask map available to the shader via a <code>unity_ShadowMask</code> texture and accompanying sampler state. Define those in <em translate="no">GI</em> along with the other light map texture and sampler state.</p>
+						
+						<pre translate="no">TEXTURE2D(unity_Lightmap);
+SAMPLER(samplerunity_Lightmap);
+
+<ins>TEXTURE2D(unity_ShadowMask);</ins>
+<ins>SAMPLER(samplerunity_ShadowMask);</ins></pre>
+						
+						<p>Then add a <code>SampleBakedShadows</code> function that samples the map, using the light map UV coordinates. Just like for the regular light map this only makes sense for lightmapped geometry, so when <em translate="no">LIGHTMAP_ON</em> is defined. Otherwise there are no baked shadows and the attenuation is always 1.</p>
+						
+						
+						<pre translate="no"><ins>float4 SampleBakedShadows (float2 lightMapUV) {</ins>
+	<ins>#if defined(LIGHTMAP_ON)</ins>
+		<ins>return SAMPLE_TEXTURE2D(</ins>
+			<ins>unity_ShadowMask, samplerunity_ShadowMask, lightMapUV</ins>
+		<ins>);</ins>
+	<ins>#else</ins>
+		<ins>return 1.0;</ins>
+	<ins>#endif</ins>
+<ins>}</ins></pre>
+						
+						<p>Now we can adjust <code>GetGI</code> so it enables the distance shadow mask mode and samples the baked shadows if <em translate="no">_SHADOW_MASK_DISTANCE</em> is defined. Note that this makes the <code>distance€</code> boolean a compile-time constant so its usage won't result in dynamic branching.</p>
+						
+						<pre translate="no">GI GetGI (float2 lightMapUV, Surface surfaceWS) {
+	GI gi;
+	gi.diffuse = SampleLightMap(lightMapUV) + SampleLightProbe(surfaceWS);
+	gi.shadowMask.distance€ = false;
+	gi.shadowMask.shadows = 1.0;
+
+	<ins>#if defined(_SHADOW_MASK_DISTANCE)</ins>
+		<ins>gi.shadowMask.distance€ = true;</ins>
+		<ins>gi.shadowMask.shadows = SampleBakedShadows(lightMapUV);</ins>
+	<ins>#endif</ins>
+	return gi;
+}</pre>
+						
+						<p>It's up to <em translate="no">Lighting</em> to copy the shadow mask data from <code>GI</code> to <code>ShadowData</code>, in <code>GetLighting</code> before looping through the lights. At this point we can also debug the shadow mask data by directly returning it as the final lighting color.</p>
+						
+						<pre translate="no">float3 GetLighting (Surface surfaceWS, BRDF brdf, GI gi) {
+	ShadowData shadowData = GetShadowData(surfaceWS);
+	<ins>shadowData.shadowMask = gi.shadowMask;</ins>
+	<ins>return gi.shadowMask.shadows.rgb;</ins>
+	
+	&hellip;
+}</pre>
+						
+						<p>Initially it doesn't appear to work, as everything ends up white. We have to instruct Unity to send the relevant data to the GPU, just like we did in the previous tutorial for the light map and probes in <code class="csharp">CameraRenderer.DrawVisibleGeometry</code>. In this case we have to add <code class="csharp">PerObjectData.ShadowMask€</code> to the per-object data.</p>
+						
+						<pre class="charp">			perObjectData =
+				PerObjectData.Lightmaps | <ins>PerObjectData.ShadowMask€ |</ins>
+				PerObjectData.LightProbe |
+				PerObjectData.LightProbeProxyVolume</pre>
+						
+						<figure>
+							<img src="baking-shadows/sampled-shadow-mask.png" width="440" height="220">
+							<figcaption>Sampling shadow mask.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why does Unity bake lighting each time we change shader code?</h3>
+							<div>
+								<p>That happens when we change HLSL files that are included by a meta pass. You can prevent needless baking by temporarily disabling <em translate="no">Auto Generate</em>.</p>
+							</div>
+						</aside>
+						
+					</section>
+					
+					<section>
+						<h3>Occlusion Probes</h3>
+						
+						<p>We can see that the shadow mask gets applied to lightmapped objects correctly. We also see that dynamic objects have no shadow mask data, as expected. They use light probes instead of light maps. However, Unity also bakes shadow mask data into light probes, referring to it as occlusion probes. We can access this data by adding a <code>unity_ProbesOcclusion</code> vector to the <code>UnityPerDraw</code> buffer in <em translate="no">UnityInput</em>. Place it in between the world transform parameters and light map UV transformation vector.</p>
+						
+						<pre translate="no">	real4 unity_WorldTransformParams;
+
+	<ins>float4 unity_ProbesOcclusion;</ins>
+
+	float4 unity_LightmapST;</pre>
+						
+						<p>Now we can simply return that vector in <code>SampleBakedShadows</code> for dynamic objects.</p>
+						
+						<pre translate="no">float4 SampleBakedShadows (float2 lightMapUV) {
+	#if defined(LIGHTMAP_ON)
+		&hellip;
+	#else
+		return <ins>unity_ProbesOcclusion;</ins>
+	#endif
+}</pre>
+						
+						<p>Again, we have to instruct Unity to send this data to the GPU, this time by enabling the <code class="csharp">PerObjectData.OcclusionProbe</code> flag.</p>
+						
+						<pre class="csharp">			perObjectData =
+				PerObjectData.Lightmaps | PerObjectData.ShadowMask€ |
+				PerObjectData.LightProbe | <ins>PerObjectData.OcclusionProbe |</ins>
+				PerObjectData.LightProbeProxyVolume€</pre>
+						
+						<figure>
+							<img src="baking-shadows/sampled-occlusion-probes.png" width="440" height="220">
+							<figcaption>Sampling occlusion probes.</figcaption>
+						</figure>
+						
+						<p>Unused channels of the shadow mask are set to white for probes, so dynamic objects end up white when fully lit and cyan when fully shadowed, instead of red and black.</p>
+						
+						<p>Although this is enough to get shadow masks working via probes, it breaks GPU instancing. The occlusion data can get instanced automatically, but <em translate="no">UnityInstancing</em> only does this when <em translate="no">SHADOWS_SHADOWMASK</em> is defined. So define it when needed in <em translate="no">Common</em> before including <em translate="no">UnityInstancing</em>. This is the only other place where we have to explicitly check whether <em translate="no">_SHADOW_MASK_DISTANCE</em> is defined.</p> 
+						
+						<pre translate="no"><ins>#if defined(_SHADOW_MASK_DISTANCE)</ins>
+	<ins>#define SHADOWS_SHADOWMASK</ins>
+<ins>#endif</ins>
+
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/UnityInstancing.hlsl"</pre>
+						
+					</section>
+					
+					<section>
+						<h3>LPPVs</h3>
+						
+						<p>Light probe proxy volumes can also work with shadow masks. Again we have to enable this by setting a flag, this time <code class="csharp">PerObjectData.OcclusionProbeProxyVolume</code>.</p>
+						
+						<pre class="csharp">			perObjectData =
+				PerObjectData.Lightmaps | PerObjectData.ShadowMask€ |
+				PerObjectData.LightProbe | PerObjectData.OcclusionProbe |
+				PerObjectData.LightProbeProxyVolume€ <ins>|</ins>
+				<ins>PerObjectData.OcclusionProbeProxyVolume</ins></pre>
+						
+						<p>Retrieving the LPPV occlusion data works the same as retrieving its light data, except that we have to invoke <code>SampleProbeOcclusion</code> instead of <code>SampleProbeVolumeSH4</code>. It's stored in the same texture and requires the same arguments, with the sole exception that a normal vector isn't needed. Add a branch for this to <code>SampleBakedShadows</code>, along with a surface parameter for the now required world position.</p>
+						
+						<pre translate="no">float4 SampleBakedShadows (float2 lightMapUV<ins>, Surface surfaceWS</ins>) {
+	#if defined(LIGHTMAP_ON)
+		&hellip;
+	#else
+		<ins>if (unity_ProbeVolumeParams.x) {</ins>
+			<ins>return SampleProbeOcclusion(</ins>
+				<ins>TEXTURE3D_ARGS(unity_ProbeVolumeSH, samplerunity_ProbeVolumeSH),</ins>
+				<ins>surfaceWS.position, unity_ProbeVolumeWorldToObject,</ins>
+				<ins>unity_ProbeVolumeParams.y, unity_ProbeVolumeParams.z,</ins>
+				<ins>unity_ProbeVolumeMin.xyz, unity_ProbeVolumeSizeInv.xyz</ins>
+			<ins>);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			return unity_ProbesOcclusion;
+		<ins>}</ins>
+	#endif
+}</pre>
+						
+						<p>Add the new surface argument when invoking the function in <code>GetGI</code>.</p>
+						
+						<pre translate="no">		gi.shadowMask.shadows = SampleBakedShadows(lightMapUV<ins>, surfaceWS</ins>);</pre>
+						
+						<figure>
+							<img src="baking-shadows/sampled-lppv-occlusion.png" width="440" height="220">
+							<figcaption>Sampling LPPV occlusion.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Mesh Ball</h3>
+						
+						<p>If our mesh ball uses an LPPV it already supports shadow masks. But when it interpolates light probes itself we have to add the occlusion probe data in <code class="csharp">MeshBall.Update</code>. That's done by using a temporary <code class="csharp">Vector4</code> array for the last argument of <code class="csharp">CalculateInterpolatedLightAndOcclusionProbes</code> and passing it to the property block via the <code class="csharp">CopyProbeOcclusionArrayFrom</code> method.</p>
+						
+						<pre class="csharp">				var lightProbes = new SphericalHarmonicsL2[1023];
+				<ins>var occlusionProbes = new Vector4[1023];</ins>
+				LightProbes.CalculateInterpolatedLightAndOcclusionProbes(
+					positions, lightProbes, <ins>occlusionProbes</ins>
+				);
+				block.CopySHCoefficientArraysFrom(lightProbes);
+				<ins>block.CopyProbeOcclusionArrayFrom(occlusionProbes);</ins></pre>
+						
+						<p>After verifying that the shadow mask data is correctly sent to the shader we can remove its debug visualization from <code>GetLighting</code>.</p>
+						
+						<pre translate="no">	<del>//return gi.shadowMask.shadows.rgb;</del></pre>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Mixing Shadows</h2>
+					
+					<p>Now that we have the shadow mask available the next step is to use it when realtime shadows aren't, which is the case when a fragment ends up beyond the max shadow distance.</p>
+					
+					<section>
+						<h3>Use Baked when Available</h3>
+						
+						<p>Mixing baked and realtime shadows will make the work of <code>GetDirectionalShadowAttenuation</code> more complicated. Let's begin by isolating all realtime shadow sampling code, moving it to a new <code>GetCascadedShadow</code> function in <em translate="no">Shadows</em>.</p>
+						
+						<pre translate="no"><ins>float GetCascadedShadow (</ins>
+	<ins>DirectionalShadowData directional, ShadowData global, Surface surfaceWS</ins>
+<ins>) {</ins>
+	float3 normalBias = surfaceWS.normal *
+		(directional.normalBias * _CascadeData[global.cascadeIndex].y);
+	float3 positionSTS = mul(
+		_DirectionalShadowMatrices[directional.tileIndex],
+		float4(surfaceWS.position + normalBias, 1.0)
+	).xyz;
+	float shadow = FilterDirectionalShadow(positionSTS);
+	if (global.cascadeBlend &lt; 1.0) {
+		normalBias = surfaceWS.normal *
+			(directional.normalBias * _CascadeData[global.cascadeIndex + 1].y);
+		positionSTS = mul(
+			_DirectionalShadowMatrices[directional.tileIndex + 1],
+			float4(surfaceWS.position + normalBias, 1.0)
+		).xyz;
+		shadow = lerp(
+			FilterDirectionalShadow(positionSTS), shadow, global.cascadeBlend
+		);
+	}
+	<ins>return shadow;</ins>
+<ins>}</ins>
+
+float GetDirectionalShadowAttenuation (
+	DirectionalShadowData directional, ShadowData global, Surface surfaceWS
+) {
+	#if !defined(_RECEIVE_SHADOWS)
+		return 1.0;
+	#endif
+	
+	<ins>float shadow;</ins>
+	if (directional.strength &lt;= 0.0) {
+		<ins>shadow =</ins> 1.0;
+	}
+	<ins>else {</ins>
+		<ins>shadow = GetCascadedShadow(directional, global, surfaceWS);</ins>
+		<ins>shadow =</ins> lerp(1.0, shadow, directional.strength);
+	<ins>}</ins>
+	return <ins>shadow</ins>;
+}</pre>
+						
+						<p>Then add a new <code>GetBakedShadow</code> function that returns the baked shadow attenuation for a given shadow mask. If the mask's distance mode is enabled then we need the first component of its shadows vector, otherwise there is no attenuation available and the result is 1.</p>
+						
+						<pre translate="no"><ins>float GetBakedShadow (ShadowMask mask) {</ins>
+	<ins>float shadow = 1.0;</ins>
+	<ins>if (mask.distance€) {</ins>
+		<ins>shadow = mask.shadows.r;</ins>
+	<ins>}</ins>
+	<ins>return shadow;</ins>
+<ins>}</ins></pre>
+						
+						<p>Next, create a <code>MixBakedAndRealtimeShadows</code> function with a <code>ShadowData</code>, realtime shadow, and shadow strength parameter. It simply applies the strength to the shadow, except when there is a distance shadow mask. If so, replace the realtime shadow with the baked one.</p>
+						
+						<pre translate="no"><ins>float MixBakedAndRealtimeShadows (</ins>
+	<ins>ShadowData global, float shadow, float strength</ins>
+<ins>) {</ins>
+	<ins>float baked = GetBakedShadow(global.shadowMask);</ins>
+	<ins>if (global.shadowMask.distance€) {</ins>
+		<ins>shadow = baked;</ins>
+	<ins>}</ins>
+	<ins>return lerp(1.0, shadow, strength);</ins>
+<ins>}</ins></pre>
+						
+						<p>Have <code>GetDirectionalShadowAttenuation</code> use that function instead of applying the strength itself.</p>
+						
+						<pre translate="no">		shadow = GetCascadedShadow(directional, global, surfaceWS);
+		shadow = <ins>MixBakedAndRealtimeShadows(global, shadow, directional.strength)</ins>;</pre>
+						
+						<figure>
+							<img src="mixing-shadows/faded-baked-shadows.png" width="440" height="220">
+							<figcaption>Faded baked shadows.</figcaption>
+						</figure>
+						
+						<p>The result is that we now always use the shadow mask, so we can see that it works. However, the baked shadows fade with distance exactly like the realtime shadows.</p>
+					</section>
+					
+					<section>
+						<h3>Transitioning to Baked</h3>
+						
+						<p>To transition from realtime to baked shadows based on depth we have to interpolate between them based on the global shadow strength. However, we also have to apply the light's shadow strength, which we have to do after the interpolation. So we can no longer immediately combine both strengths in <code>GetDirectionalShadowData</code>.</p>
+						
+						<pre translate="no">	data.strength =
+		_DirectionalLightShadowData[lightIndex].x; <del>// * shadowData.strength;</del></pre>
+						
+						<p>In <code>MixBakedAndRealtimeShadows</code> perform the interpolation between baked and realtime based on the global strength and after that apply the light's shadow strength. But when there isn't a shadow mask apply the combined strengths to the realtime shadow only, as we did before.</p>
+						
+						<pre translate="no">float MixBakedAndRealtimeShadows (
+	ShadowData global, float shadow, float strength
+) {
+	float baked = GetBakedShadow(global.shadowMask);
+	if (global.shadowMask.distance€) {
+		shadow = <ins>lerp(baked, shadow, global.strength)</ins>;
+		<ins>return lerp(1.0, shadow, strength);</ins>
+	}
+	return lerp(1.0, shadow, strength <ins>* global.strength</ins>);
+}</pre>
+						
+						<figure>
+							<img src="mixing-shadows/mixed-shadows.png" width="440" height="220">
+							<figcaption>Mixed shadows.</figcaption>
+						</figure>
+						
+						<p>The result is that shadows cast by dynamic objects fade as usual, while shadows cast by static objects transition to the shadow mask.</p>
+					</section>
+					
+					<section>
+						<h3>Only Baked Shadows</h3>
+						
+						<p>Currently our approach only works when there are realtime shadows to render. If there aren't then the shadow mask disappears as well. This can be verified by zooming out the scene view until everything lies beyond the max shadow distance.
+						
+						<figure>
+							<img src="mixing-shadows/neither-realtime-nor-baked.png" width="220" height="120">
+							<figcaption>Neither realtime nor baked shadows.</figcaption>
+						</figure>
+						
+						<p>We have to support the case when there is a shadow mask but no realtime shadows. Let's begin by creating a <code>GetBakedShadow</code> function variant that also has a strength parameter, so we can conveniently get a strength-modulated baked shadow.</p>
+						
+						<pre translate="no"><ins>float GetBakedShadow (ShadowMask mask, float strength) {</ins>
+	<ins>if (mask.distance€) {</ins>
+		<ins>return lerp(1.0, GetBakedShadow(mask), strength);</ins>
+	<ins>}</ins>
+	<ins>return 1.0;</ins>
+<ins>}</ins></pre>
+						
+						<p>Next, in <code>GetDirectionalShadowAttenuation</code> check whether the combined strengths end up as zero or less. If so, rather than always returning 1 return the modulated baked shadow only, still skipping realtime shadow sampling.</p>
+						
+						<pre translate="no">	if (directional.strength <ins>* global.strength</ins> &lt;= 0.0) {
+		shadow = <ins>GetBakedShadow(global.shadowMask, directional.strength)</ins>;
+	}</pre>
+						
+						<p>Besides that, we have to change <code class="csharp">Shadows.ReserveDirectionalShadows</code> so it doesn't immediately skip lights that end up with no realtime shadow casters. Instead, first determine whether the light uses the shadow mask. After that check whether there aren't realtime shadow casters, in which case only the shadow strength is relevant.</p>
+						
+						<pre class="csharp">		if (
+			shadowedDirLightCount &lt; maxShadowedDirLightCount &amp;&amp;
+			light.shadows != LightShadows.None && light.shadowStrength > 0f <del>//&amp;&amp;</del>
+			<del>//cullingResults.GetShadowCasterBounds(visibleLightIndex, out Bounds b)</del>
+		) {
+			LightBakingOutput lightBaking = light.bakingOutput;
+			if (
+				lightBaking.lightmapBakeType == LightmapBakeType.Mixed &&
+				lightBaking.mixedLightingMode == MixedLightingMode.Shadowmask
+			) {
+				useShadowMask = true;
+			}
+
+			<ins>if (!cullingResults.GetShadowCasterBounds(</ins>
+				<ins>visibleLightIndex, out Bounds b</ins>
+			<ins>)) {</ins>
+				<ins>return new Vector3(light.shadowStrength, 0f, 0f);</ins>
+			<ins>}</ins>
+
+			&hellip;
+		}</pre>
+						
+						<p>But when the shadow strength is greater than zero the shader will sample the shadow map, even though that would be incorrect. We can make this work by negating the shadow strength in this case.</p>
+						
+						<pre class="csharp">				return new Vector3(<ins>-</ins>light.shadowStrength, 0f, 0f);</pre>
+						
+						<p>Then pass the absolute strength to <code>GetBakedShadow</code> in <code>GetDirectionalShadowAttenuation</code> when we skip realtime shadows. That way it works both when there aren't realtime shadow casters and when we're beyond the max shadow distance.</p>
+						
+						<pre translate="no">		shadow = GetBakedShadow(global.shadowMask, <ins>abs(</ins>directional.strength<ins>)</ins>);</pre>
+					
+					<figure>
+							<img src="mixing-shadows/baked-only.png" width="220" height="120">
+							<figcaption>Only baked shadows.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Always use the Shadow Mask</h3>
+						
+						<p>There is another shadow mask mode, which is simply known as <em translate="no">Shadowmask</em>. It works exactly the same as the distance mode, except that Unity will omit static shadow casters for lights that use the shadow mask.
+						
+						<figure>
+							<img src="mixing-shadows/shadow-mask-mode-always.png" width="376" height="42" alt="project settings">
+							<img src="mixing-shadows/no-static-shadows.png" width="440" height="220" alt="scene">
+							<figcaption>No realtime shadows cast by static geometry.</figcaption>
+						</figure>
+						
+						<p>The idea is that because the shadow mask is available everywhere we could use it for static shadows everywhere as well. That means less realtime shadows, which makes rendering faster, at the cost of lower-quality static shadows up close.</p>
+						
+						<p>To support this mode, add a <em translate="no">_SHADOW_MASK_ALWAYS</em> keyword as the first element of the shadow mask keyword array in <code class="csharp">Shadows</code>. We can determe which should be enabled in <code class="csharp">Render</code> by checking the <code class="csharp">QualitySettings.shadowmaskMode</code> property.</p>
+						
+						<pre class="csharp">	static string[] shadowMaskKeywords = {
+		<ins>"_SHADOW_MASK_ALWAYS",</ins>
+		"_SHADOW_MASK_DISTANCE"
+	};
+	
+	&hellip;
+	
+	public void Render () {
+		&hellip;
+		buffer.BeginSample(bufferName);
+		SetKeywords(shadowMaskKeywords, useShadowMask ?
+			<ins>QualitySettings.shadowmaskMode == ShadowmaskMode.Shadowmask ? 0 : 1</ins> :
+			-1
+		);
+		buffer.EndSample(bufferName);
+		ExecuteBuffer();
+	}</pre>
+						
+						<p>Add the keyword to the multi-compile directive in our shader.</p>
+						
+						<pre translate="no">			#pragma multi_compile _ <ins>_SHADOW_MASK_ALWAYS</ins> _SHADOW_MASK_DISTANCE</pre>
+						
+						<p>And also check for it in <em translate="no">Common</em> when deciding to define <em translate="no">SHADOWS_SHADOWMASK</em>.</p>
+						
+						<pre translate="no">#if <ins>defined(_SHADOW_MASK_ALWAYS) ||</ins> defined(_SHADOW_MASK_DISTANCE)
+	#define SHADOWS_SHADOWMASK
+#endif</pre>
+						
+						<p>Give the <code>ShadowMask</code> struct a separate boolean field to indicate whether the shadow mask should always be used.</p>
+						
+						<pre translate="no">struct ShadowMask {
+	<ins>bool always;</ins>
+	bool distance€;
+	float4 shadows;
+};
+
+&hellip;
+
+ShadowData GetShadowData (Surface surfaceWS) {
+	ShadowData data;
+	<ins>data.shadowMask.always = false;</ins>
+	&hellip;
+}</pre>
+						
+						<p>Then set it when appropriate in <code>GetGI</code>, along with its shadow data.</p>
+						
+						<pre translate="no">GI GetGI (float2 lightMapUV, Surface surfaceWS) {
+	GI gi;
+	gi.diffuse = SampleLightMap(lightMapUV) + SampleLightProbe(surfaceWS);
+	<ins>gi.shadowMask.always = false;</ins>
+	gi.shadowMask.distance€ = false;
+	gi.shadowMask.shadows = 1.0;
+
+	#if <ins>defined(_SHADOW_MASK_ALWAYS)</ins>
+		<ins>gi.shadowMask.always = true;</ins>
+		<ins>gi.shadowMask.shadows = SampleBakedShadows(lightMapUV, surfaceWS);</ins>
+	<ins>#elif</ins> defined(_SHADOW_MASK_DISTANCE)
+		gi.shadowMask.distance€ = true;
+		gi.shadowMask.shadows = SampleBakedShadows(lightMapUV, surfaceWS);
+	#endif
+	return gi;
+}</pre>
+						
+						<p>Both versions of <code>GetBakedShadow</code> should select the mask when either mode is in use.</p>
+						
+						<pre translate="no">float GetBakedShadow (ShadowMask mask) {
+	float shadow = 1.0;
+	if (<ins>mask.always ||</ins> mask.distance€) {
+		shadow = mask.shadows.r;
+	}
+	return shadow;
+}
+
+float GetBakedShadow (ShadowMask mask, float strength) {
+	if (<ins>mask.always ||</ins> mask.distance€) {
+		return lerp(1.0, GetBakedShadow(mask), strength);
+	}
+	return 1.0;
+}</pre>
+						
+						<p>Finally, <code>MixBakedAndRealtimeShadows</code> must now use a different approach when the shadow mask is always active. First, the realtime shadow must be modulated by the global strength to fade it based on depth. Then the baked and realtime shadows are combined, by taking their minimum. After that the light's shadow strength is applied to the merged shadows.</p>
+						
+						<pre translate="no">float MixBakedAndRealtimeShadows (
+	ShadowData global, float shadow, float strength
+) {
+	float baked = GetBakedShadow(global.shadowMask);
+	<ins>if (global.shadowMask.always) {</ins>
+		<ins>shadow = lerp(1.0, shadow, global.strength);</ins>
+		<ins>shadow = min(baked, shadow);</ins>
+		<ins>return lerp(1.0, shadow, strength);</ins>
+	<ins>}</ins>
+	if (global.shadowMask.distance€) {
+		shadow = lerp(baked, shadow, global.strength);
+		return lerp(1.0, shadow, strength);
+	}
+	return lerp(1.0, shadow, strength * global.strength);
+}</pre>
+						
+						<figure>
+							<img src="mixing-shadows/baked-static-shadows.png" width="440" height="220">
+							<figcaption>Baked static shadows mixed with realtime dynamic shadows.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Multiple Lights</h2>
+					
+					<p>Because the shadow mask map has four channels it can support up to four mixed lights. The most important light while baking gets the red channel, the second light gets the green channel, and so on. Let's try this out by duplicating our single directional light, rotating it a bit, and reducing its intensity so the new light ends up using the green channel.</p>
+					
+					<aside>
+						<h3>What happens when there are more than four mixed-mode lights?</h3>
+						<div>
+							<p>Unity will convert all mixed-mode lights beyond first four to fully-baked lights. That's assuming that all lights are directional, which is the only light type that we currently support. Other light types have a limited area of influence, which could make it possible to use the same channel for more that one light.</p>
+						</div>
+					</aside>
+					
+					<figure>
+						<img src="multiple-lights/lights-sharing-baked-shadows.png" width="440" height="220">
+						<figcaption>Two lights sharing the same baked shadows.</figcaption>
+					</figure>
+					
+					<p>The realtime shadows of the second light work as expected, but it ends up using the mask of the first light for baked shadows, which is clearly wrong. This is easiest to see when using the always-shadow-mask mode.
+					
+					<section>
+						<h3>Shadow Mask Channels</h3>
+						
+						<p>Inspecting the baked shadow mask map reveals that the shadows are baked correctly. Areas lit by only the first light are red, areas lit by only the second light are green, and areas lit by both are yellow. This works for up to four lights, although the fourth wouldn't be visible in the preview because the alpha channel isn't shown.</p>
+						
+						<figure>
+							<img src="multiple-lights/baked-shadows-two-lights.png" width="350" height="140">
+							<figcaption>Baked shadows for two lights.</figcaption>
+						</figure>
+						
+						<p>Both lights use the same baked shadows because we always use the red channel. To make this work we have to send the light's channel index to the GPU. We cannot rely on the light order because it can vary at runtime, as lights can be changed and even disabled.</p>
+						
+						<p>We can retrieve a light's mask channel index in <code class="csharp">Shadows.ReserveDirectionalShadows</code> via the <code class="csharp">LightBakingOutput.occlusionMaskChannel</code> field. As we're sending a 4D vectors to the GPU we can store it in the fourth channel of the vector that we return, changing the return type to <code class="csharp">Vector4</code>. And when the light doesn't use a shadow mask we indicate that by setting its index to &minus;1.</p>
+						
+						<pre class="csharp">	public <ins>Vector4</ins> ReserveDirectionalShadows (
+		Light light, int visibleLightIndex
+	) {
+		if (
+			shadowedDirLightCount &lt; maxShadowedDirLightCount &amp;&amp;
+			light.shadows != LightShadows.None &amp;&amp; light.shadowStrength > 0f
+		) {
+			<ins>float maskChannel = -1;</ins>
+			LightBakingOutput lightBaking = light.bakingOutput;
+			if (
+				lightBaking.lightmapBakeType == LightmapBakeType.Mixed &amp;&amp;
+				lightBaking.mixedLightingMode == MixedLightingMode.Shadowmask
+			) {
+				useShadowMask = true;
+				<ins>maskChannel = lightBaking.occlusionMaskChannel;</ins>
+			}
+
+			if (!cullingResults.GetShadowCasterBounds(
+				visibleLightIndex, out Bounds b
+			)) {
+				return new <ins>Vector4</ins>(-light.shadowStrength, 0f, 0f<ins>, maskChannel</ins>);
+			}
+
+			shadowedDirectionalLights[shadowedDirLightCount] =
+				new ShadowedDirectionalLight {
+					visibleLightIndex = visibleLightIndex,
+					slopeScaleBias = light.shadowBias,
+					nearPlaneOffset = light.shadowNearPlane
+				};
+			return new <ins>Vector4</ins>(
+				light.shadowStrength,
+				settings.directional.cascadeCount * shadowedDirLightCount++,
+				light.shadowNormalBias<ins>, maskChannel</ins>
+			);
+		}
+		return <ins>new Vector4(0f, 0f, 0f, -1f)</ins>;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Selecting the Appropriate Channel</h3>
+						
+						<p>On the shader size, add the shadow mask channel as an additional integer field to the <code>DirectionalShadowData</code> struct defined in <em translate="no">Shadows</em>.</p>
+						
+						<pre translate="no">struct DirectionalShadowData {
+	float strength;
+	int tileIndex;
+	float normalBias;
+	<ins>int shadowMaskChannel;</ins>
+};</pre>
+						
+						<p><em translate="no">GI</em> then has to set the channel, in <code>GetDirectionalShadowData</code>.</p>
+						
+						<pre translate="no">DirectionalShadowData GetDirectionalShadowData (
+	int lightIndex, ShadowData shadowData
+) {
+	&hellip;
+	<ins>data.shadowMaskChannel = _DirectionalLightShadowData[lightIndex].w;</ins>
+	return data;
+}</pre>
+						
+						<p>Add a channel parameter to both versions of <code>GetBakedShadow</code> and use it to return the appropriate shadow mask data. But only do this if the light uses the shadow mask, so when the channel is at least zero.</p>
+						
+						<pre translate="no">float GetBakedShadow (ShadowMask mask<ins>, int channel</ins>) {
+	float shadow = 1.0;
+	if (mask.always || mask.distance€) {
+		<ins>if (channel >= 0) {</ins>
+			shadow = mask.shadows<ins>[channel]</ins>;
+		<ins>}</ins>
+	}
+	return shadow;
+}
+
+float GetBakedShadow (ShadowMask mask, <ins>int channel,</ins> float strength) {
+	if (mask.always || mask.distance€) {
+		return lerp(1.0, GetBakedShadow(mask<ins>, channel</ins>), strength);
+	}
+	return 1.0;
+}</pre>
+						
+						<aside>
+							<h3>Isn't a dot product better than indexing a channel?</h3>
+							<div>
+								<p>Yes, but the shader compiler will take care of that for us. It will use the channel to index a static buffer of vectors with the appropriate components set to 1, which it will then use to perform a dot product with the mask to filter it. We could also send the dot products to the GPU to skip the lookup step, but that would require sending an additional vector array which would have to be indexed anyway.</p>
+							</div>
+						</aside>
+						
+						<p>Adjust <code>MixBakedAndRealtimeShadows</code> so it passes along the required shadow mask channel.</p>
+						
+						<pre translate="no">float MixBakedAndRealtimeShadows (
+	ShadowData global, float shadow, <ins>int shadowMaskChannel,</ins> float strength
+) {
+	float baked = GetBakedShadow(global.shadowMask<ins>, shadowMaskChannel</ins>);
+	&hellip;
+}</pre>
+						
+						<p>Finally, add the needed channel arguments in <code>GetDirectionalShadowAttenuation</code>.</p>
+						
+						<pre translate="no">float GetDirectionalShadowAttenuation (
+	DirectionalShadowData directional, ShadowData global, Surface surfaceWS
+) {
+	#if !defined(_RECEIVE_SHADOWS)
+		return 1.0;
+	#endif
+	
+	float shadow;
+	if (directional.strength * global.strength &lt;= 0.0) {
+		shadow = GetBakedShadow(
+			global.shadowMask, <ins>directional.shadowMaskChannel,</ins>
+			abs(directional.strength)
+		);
+	}
+	else {
+		shadow = GetCascadedShadow(directional, global, surfaceWS);
+		shadow = MixBakedAndRealtimeShadows(
+			global, shadow, <ins>directional.shadowMaskChannel,</ins> directional.strength
+		);
+	}
+	return shadow;
+}</pre>
+						
+						<figure>
+							<img src="multiple-lights/two-lights-two-channels.png" width="440" height="220">
+							<figcaption>Both lights using their own channel.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What about the <em translate="no">Subtractive</em> mixed lighting mode?</h3>
+							<div>
+								<p>Subtractive lighting is an alternative way to combine baked lighting and shadows, using only a single light map. The idea is that you fully bake a light but also use it for realtime lighting. You then calculate realtime diffuse lighting for that light, sample realtime shadows, and use that to determine how much diffuse light was shadowed, which you subtract from the diffuse GI.</p>
+								
+								<p>So you end up with static objects that use baked lighting&mdash;even though diffuse realtime lighting is calculated for them&mdash;that can receive realtime shadows. Dynamic objects have to rely on occlusion probes to receive static shadows.</p>
+								
+								<p>It is a budget approach that is severely limited. It only works for a single directional light that cannot change. All indirect lighting or any other baked light produces incorrect results, which is mitigated by constraining the darkening via a configurable shadow color, which should match the average indirect GI color of the scene.</p>
+								
+								<p>I won't include support for the subtractive mode in this series. If you have space for a shadow mask map then always-shadow-mask mode is superior to subtractive. If not then consider going fully-baked, which allows a more complex lighting setup.</p>
+							</div>
+						</aside>
+						
+						<p>The next tutorial is <a href="../lod-and-reflections.1.html">LOD and Reflections</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/custom-srp-06-shadow-masks/" class="repository">repository</a>
+					<a href="Shadow-Masks.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

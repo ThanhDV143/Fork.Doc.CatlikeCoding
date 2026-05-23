@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html>
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/procedural-grid/">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/procedural-grid/tutorial-image.jpg">
+		<meta property="og:image:width" content="750">
+		<meta property="og:image:height" content="438">
+		<meta property="og:description" content="A Unity C# scripting tutorial in which we'll create a simple grid of vertices and triangles.">
+		<meta name="description" content="A Unity C# scripting tutorial in which we'll create a simple grid of vertices and triangles.">
+		<meta property="og:title" content="Procedral Grid, a Unity C# Tutorial">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Procedural Grid, a Unity C# Tutorial</title>
+		<link href="tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../apple-touch-icon.png">
+		<link rel="manifest" href="../../site.webmanifest.html">
+
+
+		<script>
+			var customTypes = {
+				Grid: 1
+			};
+			
+			var hasAnimations = true;
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../products/utilities/frame-rate-counter/index.html"><img src="../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<p><a href="../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></p>
+			<p class="category"><a href="index.html">Unity C# Tutorials</a></p>
+		</header>
+		
+		<main>
+			<article itemscope itemtype="http://schema.org/TechArticle">
+				<header>
+					<h1 itemprop="name headline">Procedural Grid</h1>
+					<p>Programming Form</p>
+					<ul>
+						<li>Create a grid of points.</li>
+						<li>Use a coroutine to analyze their placement.</li>
+						<li>Define a surface with triangles.</li>
+						<li>Automatically generate normals.</li>
+						<li>Add texture coordinates and tangents.</li>
+					</ul>
+				</header>
+
+				<p itemprop="about description">In this tutorial we'll create a simple grid of vertices and triangles.</p>
+
+				<p itemprop="dependencies">This tutorial assumes that you are familiar with the basics of Unity scripting. See <a href="https://catlikecoding.com/unity/tutorials/clock/">Clock</a> for these basics. <a href="https://catlikecoding.com/unity/tutorials/constructing-a-fractal/">Constructing a Fractal</a> provides an introduction to coroutines. This tutorial has been made for Unity 5.0.1 and up.</p>
+
+				<figure>
+					<img src="procedural-grid/tutorial-image.jpg" width="375" height="219" itemprop="image">
+					<figcaption>Beneath complex appearance lies simple geometry.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Rendering Things</h2>
+					
+					<p>If you want to visualize something in Unity, you use a mesh. It could be a 3D model exported from another program. It could be a procedurally generated mesh. It could be a sprite, UI element, or particle system, for which Unity uses meshes as well. Even screen effects are rendered with a mesh.</p>
+					
+					<p>So what is a mesh? Conceptually, a mesh is a construct used by the graphics hardware to draw complex stuff. It contains at least a collection of vertices that define points in 3D space, plus a set of triangles &ndash; the most basic 2D shapes &ndash; that connect these points. The triangles form the surface of whatever the mesh represents.</p>
+					
+					<p>As triangles are flat and have straight edges, they can be used to perfectly visualize flat and straight things, like the faces of a cube. Curved or round surfaces can only be approximated by using many small triangles. If the triangles appear small enough &ndash; no larger than a single pixel &ndash; then you won't notice the approximation. Typically that's not feasible for realtime performance, so the surfaces will always appear jagged to some degree.</p>
+					
+					<figure>
+						<img alt="shaded" src="procedural-grid/01-shaded.png" width="425" height="225">
+						<img alt="wireframe" src="procedural-grid/01-wireframe.png" width="425" height="225">
+						<figcaption>Unity's default capsule, cube, and sphere, shaded vs. wireframe.</figcaption>
+					</figure>
+					
+					<aside>
+						<h3>How to show the wireframe?</h3>
+						<div>
+							<p>You can select the display mode of the scene view on the left side of its toolbar. The first three options are Shaded, Wireframe, and Shaded Wireframe.</p>
+						</div>
+					</aside>
+					
+					<p>If you want to have a game object display a 3D model, it needs to have two components. The first is a mesh filter. This component holds a reference to the mesh you wish to show. The second is a mesh renderer. You use it to configure how the mesh is rendered. Which material should be used, whether it should cast or receive shadows, and so on.</p>
+					
+					<figure>
+						<img src="procedural-grid/01-cube-object.png" width="320" height="296">
+						<figcaption>Unity's default cube game object.</figcaption>
+					</figure>
+					
+					<aside>
+						<h3>Why is there an array of materials?</h3>
+						<div>
+							<p>A mesh renderer can have multiple materials. This is mostly used for rendering meshes that have multiple separate triangle sets, know as submeshes. These are mostly used with imported 3D models and won't be covered in this tutorial.</p>
+						</div>
+					</aside>
+					
+					<p>You can completely change the appearance of a mesh by adjusting its material. Unity's default material is simply solid white. You can replace it with your own by creating a new material asset via <i>Assets / Create / Material</i> and dragging it onto your game object. New materials use Unity's Standard shader by default, which gives you a set of controls to tweak how your surface behaves visually.</p>
+					
+					<p>A quick way to add lots of detail to your mesh is by providing an albedo map. This is a texture that represents the basic color of a material. Of course we need to know how to project this texture onto the triangles of the mesh. This is done by adding 2D texture coordinates to the vertices. The two dimensions of texture space are referred to as <b>U</b> and <b>V</b>, which is why they're know as UV coordinates. These coordinates typically lie between <b>(0, 0)</b> and <b>(1, 1)</b>, which covers the entire texture. Coordinates outside that range are either clamped or cause tiling, depending on the texture settings.</p>
+					
+					<figure>
+						<img alt="uv texture" src="procedural-grid/01-uv-texture.png" width="128" height="128">
+						<img alt="material" src="procedural-grid/01-material.png" width="320" height="410">
+						<img alt="textured meshes" src="procedural-grid/01-textured.png" width="425" height="225">
+						<figcaption>A UV test texture applied to Unity's meshes.</figcaption>
+					</figure>
+					
+					<a href="procedural-grid/pg-01-rendering-things.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Creating a Grid of Vertices</h2>
+					
+					<p>So how do you make your own mesh? Let's find out, by generating a simple rectangular grid. The grid will consist of square tiles &ndash; quads &ndash; of unit length. Create a new C# script and turn it into a grid component that has a horizontal and vertical size.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+<ins>using System.Collections;</ins>
+
+<ins>public class Grid : MonoBehaviour {</ins>
+
+	<ins>public int xSize, ySize;</ins>
+<ins>}</ins></pre>
+					
+					<aside>
+						<h3>Do we need <code>System.Collections</code>?</h3>
+						<div>
+							<p>We won't need it to generate our mesh. I included it because we'll use a coroutine later.</p>
+						</div>
+					</aside>
+					
+					<p>When we add this component to a game object, we need to give it a mesh filter and mesh renderer as well. We can add an attribute to our class to have Unity automatically add them for us.</p>
+					
+					<pre translate="no"><ins>[RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]</ins>
+public class Grid : MonoBehaviour {
+
+	public int xSize, ySize;
+}</pre>
+					
+					<p>Now you can create a new empty game object, add the grid component to it, and it will have the other two components as well. Set the material of the renderer and leave the filter's mesh undefined. I set the grid's size to 10 by 5.</p>
+					
+					<figure>
+						<img src="procedural-grid/02-grid.png" width="320" height="352">
+						<figcaption>A grid object.</figcaption>
+					</figure>
+					
+					<p>We generate the actual mesh as soon as the object awakens, which happens when we enter play mode.</p>
+					
+					<pre translate="no">	<ins>private void Awake () {</ins>
+		<ins>Generate();</ins>
+	<ins>}</ins></pre>
+					
+					<p>Let's focus on the vertex positions first and leave the triangles for later. We need to hold an array of 3D vectors to store the points. The amount of vertices depends on the size of the grid. We need a vertex at the corners of every quad, but adjacent quads can share the same vertex. So we need one more vertex than we have tiles in each dimension.</p>
+					
+					<p class="formula">`(#x + 1)(#y + 1)`</p>
+					
+					<figure>
+						<img src="procedural-grid/02-grid-indices.png" width="250" height="150">
+						<figcaption>Vertex and quad indices for a 4 by 2 grid.</figcaption>
+					</figure>
+					
+					<pre translate="no">	<ins>private Vector3[] vertices;</ins>
+
+	<ins>private void Generate () {</ins>
+		<ins>vertices = new Vector3[(xSize + 1) * (ySize + 1)];</ins>
+	<ins>}</ins></pre>
+					
+					<p>Let's visualize these vertices so we can check that we position them correctly. We can do so by adding an <code>OnDrawGizmos</code> method and drawing a small black sphere in the scene view for every vertex.</p>
+					
+					<pre translate="no">	<ins>private void OnDrawGizmos () {</ins>
+		<ins>Gizmos.color = Color.black;</ins>
+		<ins>for (int i = 0; i &lt; vertices.Length; i++) {</ins>
+			<ins>Gizmos.DrawSphere(vertices[i], 0.1f);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<aside>
+						<h3>What are gizmos?</h3>
+						<div>
+							<p>Gizmos are visual cues that you can use in the editor. By default they're visible in the scene view and not in the game view, but you can adjust this via their toolbars. The <code>Gizmos</code> utility class allows you to draw icons, lines, and some other things.</p>
+							
+							<p>Gizmos can be drawn inside an <code>OnDrawGizmos</code> method, which is automatically invoked by the Unity editor. An alternative method is <code>OnDrawGizmosSelected</code>, which is only invoked for selected objects.</p>
+						</div>
+					</aside>
+					
+					<p>This will produce errors when we are not in play mode, because <code>OnDrawGizmos</code> methods are also invoked while Unity is in edit mode, when we don't have any vertices. To prevent this error, check whether the array exists and jump out of the method if it isn't.</p>
+					
+					<pre translate="no">	private void OnDrawGizmos () {
+		<ins>if (vertices == null) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+		&hellip;
+	}</pre>
+					
+					<figure>
+						<img src="procedural-grid/02-gizmo.png" width="200" height="150">
+						<figcaption>A gizmo.</figcaption>
+					</figure>
+					
+					<p>While in play mode, we see only a single sphere at the origin. This is because we haven't positioned the vertices yet, so they all overlap at that position. We have to iterate through all positions, using a double loop.</p>
+					
+					<pre translate="no">	private void Generate () {
+		vertices = new Vector3[(xSize + 1) * (ySize + 1)];
+		<ins>for (int i = 0, y = 0; y &lt;= ySize; y++) {</ins>
+			<ins>for (int x = 0; x &lt;= xSize; x++, i++) {</ins>
+				<ins>vertices[i] = new Vector3(x, y);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	}</pre>
+					
+					<figure>
+						<img src="procedural-grid/02-vertices.png" width="350" height="200">
+						<figcaption>A grid of vertices.</figcaption>
+					</figure>
+					
+					<aside>
+						<h3>Why won't the gizmos move with the object?</h3>
+						<div>
+							<p>Gizmos are drawn directly in world space, not in the object's local space. If you want them to respect your objects transform, you'll have to explicitly apply it by using <code>transform.TransformPoint(vertices[i])</code> instead of just <code>vertices[i]</code>.</p>
+						</div>
+					</aside>
+					
+					<p>We now see the vertices, but the order in which they were placed isn't visible. We could use color to show this, but we can also slow down the process, by using a coroutine. This is why I included <code>using System.Collections</code> in the script.</p>
+					
+					<pre translate="no">	private void Awake () {
+		<ins>StartCoroutine(</ins>Generate()<ins>)</ins>;
+	}
+
+	private <ins>IEnumerator</ins> Generate () {
+		<ins>WaitForSeconds wait = new WaitForSeconds(0.05f);</ins>
+		vertices = new Vector3[(xSize + 1) * (ySize + 1)];
+		for (int i = 0, y = 0; y &lt;= ySize; y++) {
+			for (int x = 0; x &lt;= xSize; x++, i++) {
+				vertices[i] = new Vector3(x, y);
+				<ins>yield return wait;</ins>
+			}
+		}
+	}</pre>
+					
+					<figure>
+						<video width="350" height="200" controls loop muted>
+							<source src="procedural-grid/02-watching-vertices-appear.mp4" type="video/mp4">
+						</video>
+						<figcaption>Watching the vertices appear.</figcaption>
+					</figure>
+					
+					<a href="procedural-grid/pg-02-creating-a-grid-of-vertices.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Creating the Mesh</h2>
+					
+					<p>Now that we know that the vertices are positioned correctly, we can deal with the actual mesh. Besides holding a reference to it in our own component, we must also assign it to the mesh filter. Then once we dealt with the vertices, we can give them to our mesh.</p>
+					
+					<pre translate="no">	<ins>private Mesh mesh;</ins>
+
+	private IEnumerator Generate () {
+		WaitForSeconds wait = new WaitForSeconds(0.05f);
+		
+		<ins>GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();</ins>
+		<ins>mesh.name = "Procedural Grid";</ins>
+
+		vertices = new Vector3[(xSize + 1) * (ySize + 1)];
+		&hellip;
+		<ins>mesh.vertices = vertices;</ins>
+	}</pre>
+					
+					<aside>
+						<h3>Does our component need to hold on to the mesh?</h3>
+						<div>
+							<p>We only really need a reference to the mesh inside the <code>Generate</code> method. As the mesh filter has a reference to it as well, it will stick around anyway. I made it a global variable because the next logical step beyond this tutorial would be to animate the mesh, which I encourage you to try.</p>
+						</div>
+					</aside>
+					
+					<figure>
+						<img src="procedural-grid/03-mesh.png" width="320" height="40">
+						<figcaption>Mesh appears in play mode.</figcaption>
+					</figure>
+					
+					<p>We now have a mesh in play mode, but it doesn't show up yet because we haven't given it any triangles. Triangles are defined via an array of vertex indices. As each triangle has three points, three consecutive indices describe one triangle. Let's start with just one triangle.</p>
+					
+					<pre translate="no">	private IEnumerator Generate () {
+		&hellip;
+
+		<ins>int[] triangles = new int[3];</ins>
+		<ins>triangles[0] = 0;</ins>
+		<ins>triangles[1] = 1;</ins>
+		<ins>triangles[2] = 2;</ins>
+		<ins>mesh.triangles = triangles;</ins>
+	}</pre>
+					
+					<p>We now have one triangle, but the three points that we are using all lie in a straight line. This produces a degenerate triangle, which isn't visible. The first two vertices are fine, but then we should jump to the first vertex of the next row.</p>
+					
+					<pre translate="no">		triangles[0] = 0;
+		triangles[1] = 1;
+		triangles[2] = <ins>xSize + 1</ins>;</pre>
+					
+					<p>This does give us a triangle, but it's visible from only one direction. In this case, it's only visible when looking in the opposite direction of the Z axis. So you might need to rotate the view to see it.</p>
+					
+					<p>Which side a triangle is visible from is determined by the orientation of its vertex indices. By default, if they are arranged in a clockwise direction the triangle is considered to be forward-facing and visible. Counter-clockwise triangles are discarded so we don't need to spend time rendering the insides of objects, which are typically not meant to be seen anyway.</p>
+					
+					<figure>
+						<img src="procedural-grid/03-triangle-sides.png" width="300" height="150">
+						<figcaption>The two sides of a triangle.</figcaption>
+					</figure>
+					
+					<p>So to make the triangle appear when we look down the Z axis, we have to change the order in which its vertices are traversed. We can do so by swapping the last two indices.</p>
+					
+					<pre translate="no">		triangles[0] = 0;
+		triangles[1] = <ins>xSize + 1</ins>;
+		triangles[2] = <ins>1</ins>;</pre>
+					
+					<figure>
+						<img src="procedural-grid/03-first-triangle.png" width="300" height="175">
+						<figcaption>The first triangle.</figcaption>
+					</figure>
+					
+					<p>We now have one triangle that covers half of the first tile of our grid. To cover the entire tile, all we need is a second triangle.</p>
+					
+					<pre translate="no">		int[] triangles = new int[<ins>6</ins>];
+		triangles[0] = 0;
+		triangles[1] = xSize + 1;
+		triangles[2] = 1;
+		<ins>triangles[3] = 1;</ins>
+		<ins>triangles[4] = xSize + 1;</ins>
+		<ins>triangles[5] = xSize + 2;</ins></pre>
+					
+					<figure>
+						<img src="procedural-grid/03-quad.png" width="150" height="150">
+						<figcaption>A quad made with two triangles.</figcaption>
+					</figure>
+					
+					<p>As these triangles share two vertices, we could reduce this to four lines of code, explicitly mentioning each vertex index only once.</p>
+					
+					<pre translate="no">		triangles[0] = 0;
+		<ins>triangles[3] = triangles[2] = 1;</ins>
+		<ins>triangles[4] = triangles[1] = xSize + 1;</ins>
+		triangles[5] = xSize + 2;</pre>
+					
+					<figure>
+						<img src="procedural-grid/03-first-quad.png" width="300" height="175">
+						<figcaption>The first quad.</figcaption>
+					</figure>
+					
+					<p>We can create the entire first row of tiles by turning this into a loop. As we're iterating over both vertex and triangle indices, we have to keep track of both. Let's also move the yield statement into this loop, so we no longer have to wait for the vertices to appear.</p>
+					
+					<pre translate="no">		int[] triangles = new int[<ins>xSize *</ins> 6];
+		<ins>for (int ti = 0, vi = 0, x = 0; x &lt; xSize; x++, ti += 6, vi++) {</ins>
+			triangles[<ins>ti</ins>] = <ins>vi</ins>;
+			triangles[<ins>ti +</ins> 3] = triangles[<ins>ti +</ins> 2] = <ins>vi +</ins> 1;
+			triangles[<ins>ti +</ins> 4] = triangles[<ins>ti +</ins> 1] = <ins>vi +</ins> xSize + 1;
+			triangles[<ins>ti +</ins> 5] = <ins>vi +</ins> xSize + 2;
+			<ins>yield return wait;</ins>
+		<ins>}</ins></pre>
+					
+					<p>The vertex gizmos now immediately appear, and the triangles all appear at once after a short wait. To see the tiles appear one by one, we have to update the mesh each iteration, instead of only after the loop.</p>
+					
+					<pre translate="no">			<ins>mesh.triangles = triangles;</ins>
+			yield return wait;
+</pre>
+					
+					<p>Now fill the entire grid by turning the single loop into a double loop. Note that moving to the next row requires incrementing the vertex index by one, because there's one more vertex than tiles per row.</p>
+					
+					<pre translate="no">		int[] triangles = new int[xSize * <ins>ySize *</ins> 6];
+		for (int ti = 0, vi = 0, <ins>y = 0; y &lt; ySize; y++, vi++) {</ins>
+			<ins>for (int x = 0</ins>; x &lt; xSize; x++, ti += 6, vi++) {
+				&hellip;
+			}
+		}</pre>
+					
+					<figure>
+						<img alt="filled grid" src="procedural-grid/03-full-grid.png" width="300" height="175"><br>
+						<video width="300" height="176" controls loop muted>
+							<source src="procedural-grid/03-filling-entire-grid.mp4" type="video/mp4">
+						</video>
+						<figcaption>Filling the entire grid.</figcaption>
+					</figure>
+					
+					<p>As you can see, the entire grid is now filled with triangles, one row at a time. Once you're satisfied with that, you can remove all the coroutine code so the mesh will be created without delay.</p>
+					
+					<pre translate="no">	private void Awake () {
+		Generate();
+	}
+
+	private void Generate () {
+		GetComponent&lt;MeshFilter>().mesh = mesh = new Mesh();
+		mesh.name = "Procedural Grid";
+
+		vertices = new Vector3[(xSize + 1) * (ySize + 1)];
+		for (int i = 0, y = 0; y &lt;= ySize; y++) {
+			for (int x = 0; x &lt;= xSize; x++, i++) {
+				vertices[i] = new Vector3(x, y);
+			}
+		}
+		mesh.vertices = vertices;
+
+		int[] triangles = new int[xSize * ySize * 6];
+		for (int ti = 0, vi = 0, y = 0; y &lt; ySize; y++, vi++) {
+			for (int x = 0; x &lt; xSize; x++, ti += 6, vi++) {
+				triangles[ti] = vi;
+				triangles[ti + 3] = triangles[ti + 2] = vi + 1;
+				triangles[ti + 4] = triangles[ti + 1] = vi + xSize + 1;
+				triangles[ti + 5] = vi + xSize + 2;
+			}
+		}
+		mesh.triangles = triangles;
+	}</pre>
+					
+					<aside>
+						<h3>Why not use a single quad?</h3>
+						<div>
+							<p>As we're creating a flat rectangular surface, we could suffice with just two triangles. This is absolutely true. The point of the more complex structure is that it allows more control and expression. Experiment!</p>
+						</div>
+					</aside>
+					
+					<a href="procedural-grid/pg-03-creating-the-mesh.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Generating Additonal Vertex Data</h2>
+					
+					<p>Our grid is currently lit in a peculiar way. That's because we haven't given any normals to the mesh yet. The default normal direction is <b>(0, 0, 1)</b> which is the exact opposite of what we need.</p>
+					
+					<aside>
+						<h3>How do normals work?</h3>
+						<div>
+							<p>A normal is vector that is perpendicular to a surface. We always use normals of unit length and they point to the outside of their surface, not to the inside.</p>
+							<p>Normals can be used to determine the angle at which a light ray hits a surface, if at all. The specifics of how it is used depends on the shader.</p>
+							<p>As a triangle is always flat, there shouldn't be a need to provide separate information about normals. However, by doing so we can cheat. In reality vertices don't have normals, triangles do. By attaching custom normals to vertices and interpolating between them across triangles, we can pretend that we have a smoothly curving surface instead of a bunch of flat triangles. This illusion is convincing, as long as you don't pay attention to the sharp silhouette of the mesh.</p>
+						</div>
+					</aside>
+					
+					<p>Normals are defined per vertex, so we have to fill another vector array. Alternatively, we can ask the mesh to figure out the normals itself based on its triangles. Let's be lazy this time and do that.</p>
+					
+					<pre translate="no">	private void Generate () {
+		&hellip;
+		mesh.triangles = triangles;
+		<ins>mesh.RecalculateNormals();</ins>
+	}</pre>
+					
+					<aside>
+						<h3>How are normals recalculated?</h3>
+						<div>
+							<p>The <code>Mesh.RecalculateNormals</code> method computes the normal of each vertex by figuring out which triangles connect with that vertex, determining the normals of those flat triangles, averaging them, and normalizing the result.</p>
+						</div>
+					</aside>
+					
+					<figure>
+						<img alt="no normals" src="procedural-grid/04-no-normals.png" width="300" height="175">
+						<img alt="with normals" src="procedural-grid/04-normals.png" width="300" height="175">
+						<figcaption>Without vs. with normals.</figcaption>
+					</figure>
+					
+					<p>Next up are the UV coordinates. You might have noticed that the grid currently has a uniform color, even though it uses a material with an albedo texture. This makes sense, because if we don't provide the UV coordinates ourselves then they're all zero.</p>
+					
+					<p>To make the texture to fit our entire grid, simply divide the position of the vertex by the grid dimensions.</p>
+					
+					<pre translate="no">		vertices = new Vector3[(xSize + 1) * (ySize + 1)];
+		<ins>Vector2[] uv = new Vector2[vertices.Length];</ins>
+		for (int i = 0, y = 0; y &lt;= ySize; y++) {
+			for (int x = 0; x &lt;= xSize; x++, i++) {
+				vertices[i] = new Vector3(x, y);
+				<ins>uv[i] = new Vector2(x / xSize, y / ySize);</ins>
+			}
+		}
+		mesh.vertices = vertices;
+		<ins>mesh.uv = uv;</ins></pre>
+					
+					<figure>
+						<img alt="clamp" src="procedural-grid/04-uv-wrong-clamp.png" width="300" height="175">
+						<img alt="wrap" src="procedural-grid/04-uv-wrong-wrap.png" width="300" height="175">
+						<figcaption>Incorrect UV coordinates, clamping vs. wrapping texture.</figcaption>
+					</figure>
+					
+					<p>The texture shows up now, but it's not covering the entire grid. Its exact appearance depends on whether the texture's wrap mode is set to clamp or repeat. This happens because we're currently dividing integers by integers, which results in another integer. To get the correct coordinates between zero and one across the entire grid, we have to make sure that we're using floats.</p>
+					
+					
+					<pre translate="no">				uv[i] = new Vector2(<ins>(float)</ins>x / xSize, <ins>(float)</ins>y / ySize);</pre>
+					
+					<p>The texture is now projected onto the entire grid. As I've set the grid's size to ten by five, the texture will appear stretched horizontally. This can be countered by adjusting the texture's tiling settings of the material. By settings it to <b>(2, 1)</b> the U coordinates will be doubled. If the texture is set to repeat, then we'll see two square tiles of it.</p>
+				
+					<figure>
+						<img alt="material" src="procedural-grid/04-tiling.png" width="320" height="38"><br>
+						<img alt="1-1 tiling" src="procedural-grid/04-uv-correct-1-1.png" width="300" height="175">
+						<img alt="1-2 tiling" src="procedural-grid/04-uv-correct-2-1.png" width="300" height="175">
+						<figcaption>Correct UV coordinates, tiling 1,1 vs. 2,1.</figcaption>
+					</figure>
+					
+					<p>Another way to add more apparent detail to a surface is to use a normal map. These maps contain normal vectors encoded as colors. Applying them to a surface will result in much more detailed light effects than could be created with vertex normals alone.</p>
+					
+					<figure>
+						<img alt="normal texture" src="procedural-grid/04-normal-map.png" width="256" height="256">
+						<img alt="material" src="procedural-grid/04-material.png" width="320" height="410">
+						<figcaption>A bumpy surface, made metallic for dramatic effect.</figcaption>
+					</figure>
+					
+					<p>Applying this material to our grid produces bumps, but they are incorrect. We need to add tangent vectors to our mesh to properly orient them.</p>
+					
+					<aside>
+						<h3>How do tangents work?</h3>
+						<div>
+							<p>Normal maps are defined in tangent space. This is a 3D space that flows around the surface of an object. This approach allows us to apply the same normal map in different places and orientations.</p>
+							<p>The surface normal represents upward in this space, but which way is right? That's defined by the tangent. Ideally, the angle between these two vectors is 90&deg;. The cross product of them yields the third direction needed to define 3D space. In reality the angle is often not 90&deg; but the results are still good enough.</p>
+							<p>So a tangent is a 3D vector, but Unity actually uses a 4D vector. Its fourth component is always either &minus;1 or 1, which is used to control the direction of the third tangent space dimension &ndash; either forward or backward. This facilitates mirroring of normal maps, which is often used in 3D models of things with bilateral symmetry, like people. The way Unity's shaders perform this calculation requires us to use &minus;1.</p>
+						</div>
+					</aside>
+					
+					<p>As we have a flat surface, all tangents simply point in the same direction, which is to the right.</p>
+					
+					<pre translate="no">		vertices = new Vector3[(xSize + 1) * (ySize + 1)];
+		Vector2[] uv = new Vector2[vertices.Length];
+		<ins>Vector4[] tangents = new Vector4[vertices.Length];</ins>
+		<ins>Vector4 tangent = new Vector4(1f, 0f, 0f, -1f);</ins>
+		for (int i = 0, y = 0; y &lt;= ySize; y++) {
+			for (int x = 0; x &lt;= xSize; x++, i++) {
+				vertices[i] = new Vector3(x, y);
+				uv[i] = new Vector2((float)x / xSize, (float)y / ySize);
+				<ins>tangents[i] = tangent;</ins>
+			}
+		}
+		mesh.vertices = vertices;
+		mesh.uv = uv;
+		<ins>mesh.tangents = tangents;</ins></pre>
+					
+					<figure>
+						<img src="procedural-grid/04-normal-mapped.png" width="300" height="175">
+						<figcaption>A flat surface pretending to be bumpy.</figcaption>
+					</figure>
+					
+					<p>Now you know how to create a simple mesh and make it look more complex with materials. Meshes need vertex positions and triangles, usually UV coordinates too &ndash; up to four sets &ndash; and often tangents as well. You can also add vertex colors, although Unity's standard shaders don't use those. You can create your own shaders that do use those colors, but that's something for another tutorial.</p>
+					
+					<p>Once you're satisfied with your grid, you can move on to the <a href="rounded-cube/index.html">Rounded Cube</a> tutorial.</p>
+					
+					<a href="procedural-grid/pg-04-generating-additional-vertex-data.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="procedural-grid/Procedural-Grid.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="tutorials.js"></script>
+	</body>
+</html>

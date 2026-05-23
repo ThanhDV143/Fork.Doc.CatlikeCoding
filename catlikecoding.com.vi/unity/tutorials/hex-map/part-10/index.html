@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/hex-map/part-10/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/hex-map/part-10/tutorial-image.jpg">
+		<meta property="og:title" content="Hex Map 10">
+		<meta property="og:description" content="A Unity Hex Map tutorial about placing walls between cells. Part 10 of 27.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hex Map 10</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/hex-map/part-10/#article",
+				"headline": "Hex Map 10",
+				"alternativeHeadline": "Walls",
+				"datePublished": "2016-10-14",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Hex Map tutorial about placing walls between cells. Part 10 of 27.",
+				"image": "https://catlikecoding.com/unity/tutorials/hex-map/part-10/tutorial-image.jpg",
+				"dependencies": "Unity 5.3.1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/hex-map/", "name": "Hex Map" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				EdgeVertices: 1,
+				HexCell: 1,
+				HexEdgeType: 1,
+				HexCoordinates: 1,
+				HexCoordinatesDrawer: 1,
+				HexDirection: 1,
+				HexDirectionExtensions: 1,
+				HexFeatureCollection: 1,
+				HexFeatureManager: 1,
+				HexGrid: 1,
+				HexGridChunk: 1,
+				HexHash: 1,
+				HexMapCamera: 1,
+				HexMapEditor: 1,
+				HexMesh: 1,
+				HexMetrics: 1,
+				ListPool: 1,
+				OptionalToggle: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Hex Map</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hex Map 10</h1>
+					<p>Walls</p>
+					<ul>
+						<li>Wall off cells.</li>
+						<li>Build walls along cell edges.</li>
+						<li>Let rivers and roads go through.</li>
+						<li>Avoid water and connect with cliffs.</li>
+					</ul>
+				</header>
+
+				<p>This tutorial is the tenth part of a series about <a href="../index.html">hexagon maps</a>. This time, we'll add walls in between cells.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Nothing says welcome like a big wall.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Editing Walls</h2>
+					
+					<p>To support walls, we have to know where to place them. We'll put them in between cells, along the edges that connects them. As our already existing features are placed in the central area of cells, we don't need to worry about walls cutting through those features.</p>
+					
+					<figure>
+						<img src="editing-walls/wall-placement.png" width="260" height="240">
+						<figcaption>Walls placed along edges.</figcaption>
+					</figure>
+					
+					<p>Walls are terrain features, although large ones. Like the other features, we don't edit them directly. Instead, we edit the cells. We're not going to place individual wall segments, we'll wall off entire cells.</p>
+					
+					<section>
+						<h3>Walled Property</h3>
+						
+						<p>To support walled cells, let's add a <code>Walled</code> property to <code>HexCell</code>. It's a simple toggle. Because the walls are placed in between cells, we have to refresh both the edited cell and its neighbors.</p>
+						
+						<pre translate="no">	<ins>public bool Walled {</ins>
+		<ins>get {</ins>
+			<ins>return walled;</ins>
+		<ins>}</ins>
+		<ins>set {</ins>
+			<ins>if (walled != value) {</ins>
+				<ins>walled = value;</ins>
+				<ins>Refresh();</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+	
+	<ins>bool walled;</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Editor Toggle</h3>
+						
+						<p>To adjust the walled state of cells, we have to add support for a toggle to <code>HexMapEditor</code>. So add another <code>OptionalToggle</code> field and a method to set it.</p>
+						
+						<pre translate="no">	OptionalToggle riverMode, roadMode<ins>, walledMode</ins>;
+	
+	&hellip;
+	
+	<ins>public void SetWalledMode (int mode) {</ins>
+		<ins>walledMode = (OptionalToggle)mode;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Unlike rivers and roads, walls don't go from cell to cell. They're in between them. So we don't need to worry about dragging. When the wall toggle is active, just set the the current cell's walled state based on the toggle.</p>
+						
+						<pre translate="no">	void EditCell (HexCell cell) {
+		if (cell) {
+			&hellip;
+			if (roadMode == OptionalToggle.No) {
+				cell.RemoveRoads();
+			}
+			<ins>if (walledMode != OptionalToggle.Ignore) {</ins>
+				<ins>cell.Walled = walledMode == OptionalToggle.Yes;</ins>
+			<ins>}</ins>
+			if (isDrag) {
+				&hellip;
+			}
+		}
+	}</pre>
+						
+						<p>Duplicate one of the other toggle's UI elements and adjust them so they control the walled state. I put them in the UI panel with the other features.</p>
+						
+						<figure>
+							<img src="editing-walls/ui.png" width="108" height="214">
+							<figcaption>Walled Toggle.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="editing-walls/editing-walls.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Creating Walls</h2>
+					
+					<p>Because walls follow the contours of cells, they don't have a fixed shape. So we cannot simply use a prefab for them, like we do for the other features. Instead, we have to construct a mesh, as we do for the terrain. This means that our chunk prefab needs another <code>HexMesh</code> child. Duplicate one of its other mesh children, and make sure the new <em translate="no">Walls</em> objects cast shadows. It doesn't need anything besides vertices and triangles, so all <code>HexMesh</code> options should be disabled.</p>
+					
+					<figure>
+						<img alt="hierarchy" src="creating-walls/walls-hierarchy.png" width="140" height="160">
+						<img alt="inspector" src="creating-walls/walls-inspector.png" width="320" height="386">
+						<figcaption>Walls prefab child.</figcaption>
+					</figure>
+					
+					<p>It makes sense that walls are an urban feature, so I used the red urban material for them.</p>
+					
+					<section>
+						<h3>Managing Walls</h3>
+						
+						<p>Because walls are features, they are the responsibility of <code>HexFeatureManager</code>. So give the feature manager a reference to the <em translate="no">Walls</em> object, and have it invoke the <code>Clear</code> and <code>Apply</code> methods.</p>
+					
+						<pre translate="no">	<ins>public HexMesh walls;</ins>
+
+	&hellip;
+
+	public void Clear () {
+		&hellip;
+		<ins>walls.Clear();</ins>
+	}
+
+	public void Apply () {
+		<ins>walls.Apply();</ins>
+	}</pre>
+						
+						<figure>
+							<img src="creating-walls/walls-features.png" width="320" height="112">
+							<figcaption>Walls connected to the feature manager.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Shouldn't <em translate="no">Walls</em> be a child of <em translate="no">Features</em>?</h3>
+							<div>
+								<p>You could arrange the objects like that, but it's not necessary. Because the hierarchy view only shows the direct children of prefab root objects, I prefer to keep <em translate="no">Walls</em> a direct child of <em translate="no">Hex Grid Chunk</em>.</p>
+							</div>
+						</aside>
+						
+						<p>Now we have to add a method to the manager so walls can be added to it. As walls exists along the edges between cells, it needs to know the relevant edge vertices and cells. <code>HexGridChunk</code> will invoke it via <code>TriangulateConnection</code>, so with the cell currently being triangulated, and one of its neighbors. From this point of view, the current cell is on the near side of the wall, and the other cells is on the far side.</p>
+						
+						<pre translate="no">	<ins>public void AddWall (</ins>
+		<ins>EdgeVertices near, HexCell nearCell,</ins>
+		<ins>EdgeVertices far, HexCell farCell</ins>
+	<ins>) {</ins>
+	<ins>}</ins></pre>
+						
+						<p>Invoke this new method in <code>HexGridChunk.TriangulateConnection</code> after all other connection work is done, right before we move on to the corner triangle. We'll leave it to the feature manager to decide whether a wall should actually be placed.</p>
+						
+						<pre translate="no">	void TriangulateConnection (
+		HexDirection direction, HexCell cell, EdgeVertices e1
+	) {
+		&hellip;
+
+		if (cell.GetEdgeType(direction) == HexEdgeType.Slope) {
+			&hellip;
+		}
+		else {
+			&hellip;
+		}
+
+		<ins>features.AddWall(e1, cell, e2, neighbor);</ins>
+
+		HexCell nextNeighbor = cell.GetNeighbor(direction.Next());
+		if (direction &lt;= HexDirection.E &amp;&amp; nextNeighbor != null) {
+			&hellip;
+		}
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Building a Wall Segment</h3>
+						
+						<p>An entire wall will snake through multiple cell edges. Each edge contains just a single segment of the wall. From the point of view of the near cell, the segment begins at the left side of the edge, and ends at the right side. Let's add a separate method to <code>HexFeatureManager</code> that creates a single segment, based on the four vertices at the corners of an edge.</p>
+						
+						<pre translate="no">	<ins>void AddWallSegment (</ins>
+		<ins>Vector3 nearLeft, Vector3 farLeft, Vector3 nearRight, Vector3 farRight</ins>
+	<ins>) {</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="creating-walls/near-far.png" width="190" height="130">
+							<figcaption>Near and far sides.</figcaption>
+						</figure>
+						
+						<p><code>AddWall</code> can invoke this method with the first and last vertices of the edges. But walls should only be added when we have a connection between a walled cell and one that is not walled. It doesn't matter which cell is on the inside or the outside, only that their state is different.</p>
+						
+						<pre translate="no">	public void AddWall (
+		EdgeVertices near, HexCell nearCell,
+		EdgeVertices far, HexCell farCell
+	) {
+		<ins>if (nearCell.Walled != farCell.Walled) {</ins>
+			<ins>AddWallSegment(near.v1, far.v1, near.v5, far.v5);</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>The simplest possible wall segment is a single quad that stands in the middle of the edge. We find its bottom vertices by interpolating halfway from the near to the far vertices.</p>
+						
+						<pre translate="no">	void AddWallSegment (
+		Vector3 nearLeft, Vector3 farLeft, Vector3 nearRight, Vector3 farRight
+	) {
+		<ins>Vector3 left = Vector3.Lerp(nearLeft, farLeft, 0.5f);</ins>
+		<ins>Vector3 right = Vector3.Lerp(nearRight, farRight, 0.5f);</ins>
+	}</pre>
+						
+						<p>How high should our walls be? Let's define this in <code>HexMetrics</code>. I made them as high as a single elevation level.</p>
+						
+						<pre translate="no">	<ins>public const float wallHeight = 3f;</ins></pre>
+						
+						<p><code>HexFeatureManager.AddWallSegment</code> can use this height to position the third and fourth vertices of our quad, and add it to the <code>walls</code> mesh.</p>
+						
+						<pre translate="no">		Vector3 left = Vector3.Lerp(nearLeft, farLeft, 0.5f);
+		Vector3 right = Vector3.Lerp(nearRight, farRight, 0.5f);
+
+		<ins>Vector3 v1, v2, v3, v4;</ins>
+		<ins>v1 = v3 = left;</ins>
+		<ins>v2 = v4 = right;</ins>
+		<ins>v3.y = v4.y = left.y + HexMetrics.wallHeight;</ins>
+		<ins>walls.AddQuad(v1, v2, v3, v4);</ins></pre>
+						
+						<p>You can now edit walls and they will show up as strips of quads. However, you won't see an unbroken wall. Each quad is only visible from one side. Its face is oriented towards the cell it was added from.</p>
+						
+						<figure>
+							<img src="creating-walls/single-sided.png" width="250" height="180">
+							<figcaption>Single-sided wall quads.</figcaption>
+						</figure>
+						
+						<p>We can quickly solve this by adding a second quad that's facing the other side.</p>
+						
+						<pre translate="no">		walls.AddQuad(v1, v2, v3, v4);
+		<ins>walls.AddQuad(v2, v1, v4, v3);</ins></pre>
+						
+						<figure>
+							<img src="creating-walls/two-sided.png" width="250" height="180">
+							<figcaption>Two-sided walls.</figcaption>
+						</figure>
+						
+						<p>The entire walls are now visible, although there are still gaps at the cell corners, where three cells meet. We'll fill those later.</p>
+					</section>
+					
+					<section>
+						<h3>Thick Walls</h3>
+						
+						<p>Although the walls are visible from both sides, they don't have any thickness. The walls are effectively as thin as paper, making them nearly invisible from certain view angles. So let's make them solid by adding thickness. Let's define how thick they are in <code>HexMetrics</code>. I picked 0.75 units as an arbitrary value that looked good to me.</p>
+						
+						<pre translate="no">	<ins>public const float wallThickness = 0.75f;</ins></pre>
+						
+						<p>To make the walls thick, we have to pull the two quads apart. They have to move in opposite directions. One side should move towards the near edge, the other towards the far edge. The offset vector to do this is simply <code>far - near</code>, but to keep the top of the wall flat, we should set its Y component to zero.</p>
+						
+						<p>Because we have to do this for both the left and right part of the wall segment, let's add a method to <code>HexMetrics</code> to compute this offset vector.</p>
+						
+						<pre translate="no">	<ins>public static Vector3 WallThicknessOffset (Vector3 near, Vector3 far) {</ins>
+		<ins>Vector3 offset;</ins>
+		<ins>offset.x = far.x - near.x;</ins>
+		<ins>offset.y = 0f;</ins>
+		<ins>offset.z = far.z - near.z;</ins>
+		<ins>return offset;</ins>
+	<ins>}</ins></pre>
+						
+						<p>To keep the wall at the center of the edge, the actual distance to move along this vector is equal to half the thickness per side. And to make sure we indeed move the desired distance, normalize the offset vector before scaling it.</p>
+						
+						<pre translate="no">		return offset<ins>.normalized * (wallThickness * 0.5f)</ins>;</pre>
+						
+						<p>Use this method in <code>HexFeatureManager.AddWallSegment</code> to adjust the position of the quads. As the offset vector goes from near to far, subtract it from the near quad, and add it to the far quad.</p>
+						
+						<pre translate="no">		Vector3 left = Vector3.Lerp(nearLeft, farLeft, 0.5f);
+		Vector3 right = Vector3.Lerp(nearRight, farRight, 0.5f);
+		
+		<ins>Vector3 leftThicknessOffset =</ins>
+			<ins>HexMetrics.WallThicknessOffset(nearLeft, farLeft);</ins>
+		<ins>Vector3 rightThicknessOffset =</ins>
+			<ins>HexMetrics.WallThicknessOffset(nearRight, farRight);</ins>
+
+		Vector3 v1, v2, v3, v4;
+		v1 = v3 = left <ins>- leftThicknessOffset</ins>;
+		v2 = v4 = right <ins>- rightThicknessOffset</ins>;
+		v3.y = v4.y = left.y + HexMetrics.wallHeight;
+		walls.AddQuad(v1, v2, v3, v4);
+
+		<ins>v1 = v3 = left + leftThicknessOffset;</ins>
+		<ins>v2 = v4 = right + rightThicknessOffset;</ins>
+		<ins>v3.y = v4.y = left.y + HexMetrics.wallHeight;</ins>
+		walls.AddQuad(v2, v1, v4, v3);</pre>
+						
+						<figure>
+							<img src="creating-walls/offset-walls.png" width="250" height="180">
+							<figcaption>Walls with offsets.</figcaption>
+						</figure>
+						
+						<p>The quads are now offset, although it isn't that obvious. The shadows give it away.</p>
+						
+						<aside>
+							<h3>Is the wall thickness really uniform?</h3>
+							<div>
+								<p>It would be, if the near&ndash;far offset vectors would all point in the exact same direction. As the walls curve around cells, this clearly isn't the case. The vectors points away from or towards each other. As a result, the wall segment's base is a trapezoid, instead of a rectangle. Thus it ends up somewhat thinner than our configured thickness. Also, because the cells are perturbed, the angle between the vectors varies, which leads to nonuniform thickness. We'll improve this later.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Wall Tops</h3>
+						
+						<p>To made the thickness of the walls visible from above, we have to add a quad on top of the wall. A simple way to add it is to remember the top two vertices of the first quad, and connect them with the top two of the second quad.</p>
+						
+						<pre translate="no">		Vector3 v1, v2, v3, v4;
+		v1 = v3 = left - leftThicknessOffset;
+		v2 = v4 = right - rightThicknessOffset;
+		v3.y = v4.y = left.y + HexMetrics.wallHeight;
+		walls.AddQuad(v1, v2, v3, v4);
+
+		<ins>Vector3 t1 = v3, t2 = v4;</ins>
+
+		v1 = v3 = left + leftThicknessOffset;
+		v2 = v4 = right + rightThicknessOffset;
+		v3.y = v4.y = left.y + HexMetrics.wallHeight;
+		walls.AddQuad(v2, v1, v4, v3);
+
+		<ins>walls.AddQuad(t1, t2, v3, v4);</ins></pre>
+						
+						<figure>
+							<img src="creating-walls/wall-tops.png" width="250" height="180">
+							<figcaption>Walls with tops.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Turning Corners</h3>
+						
+						<p>The remaining gaps are those at the corners of cells. To fill those, we have to add a segment in the triangular area between the cells. Each corner connects three cells. Each cell can be either walled or not. So there are eight possible configurations.</p>
+						
+						<figure>
+							<img src="creating-walls/corner-configurations.png" width="530" height="470">
+							<figcaption>Corner configurations.</figcaption>
+						</figure>
+						
+						<p>We only place walls in between cells with different walled states. That reduces the number of relevant configurations to six. In each of those, one of the cells lies on the inside of the wall curve. Let's consider this cell the pivot around which the wall curves. From the point of view of this cell, the wall starts at the edge shared with the left cell and ends at the edge shared with the right cell.</p>
+						
+						<figure>
+							<img src="creating-walls/pivot.png" width="180" height="170">
+							<figcaption>Cell roles.</figcaption>
+						</figure>
+						
+						<p>So we have to create an <code>AddWallSegment</code> method which has the three corner vertices as parameters. While we could write the code to triangulate this segment, it's actually a special case of the other <code>AddWallSegment</code> method. The pivot plays the role of both near vertices.</p>
+						
+						<pre translate="no">	<ins>void AddWallSegment (</ins>
+		<ins>Vector3 pivot, HexCell pivotCell,</ins>
+		<ins>Vector3 left, HexCell leftCell,</ins>
+		<ins>Vector3 right, HexCell rightCell</ins>
+	<ins>) {</ins>
+		<ins>AddWallSegment(pivot, left, pivot, right);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Next, create an <code>AddWall</code> method variant for three corner vertices and their cells. The job of this method is to figure out which corner is the pivot, if there is one. So it has to account for all eight possible configurations, and invoke <code>AddWallSegment</code> for six of them.</p>
+						
+						<pre translate="no">	<ins>public void AddWall (</ins>
+		<ins>Vector3 c1, HexCell cell1,</ins>
+		<ins>Vector3 c2, HexCell cell2,</ins>
+		<ins>Vector3 c3, HexCell cell3</ins>
+	<ins>) {</ins>
+		<ins>if (cell1.Walled) {</ins>
+			<ins>if (cell2.Walled) {</ins>
+				<ins>if (!cell3.Walled) {</ins>
+					<ins>AddWallSegment(c3, cell3, c1, cell1, c2, cell2);</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+			<ins>else if (cell3.Walled) {</ins>
+				<ins>AddWallSegment(c2, cell2, c3, cell3, c1, cell1);</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>AddWallSegment(c1, cell1, c2, cell2, c3, cell3);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>else if (cell2.Walled) {</ins>
+			<ins>if (cell3.Walled) {</ins>
+				<ins>AddWallSegment(c1, cell1, c2, cell2, c3, cell3);</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>AddWallSegment(c2, cell2, c3, cell3, c1, cell1);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>else if (cell3.Walled) {</ins>
+			<ins>AddWallSegment(c3, cell3, c1, cell1, c2, cell2);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>To add the corner segments, invoke this method at the end of <code>HexGridChunk.TriangulateCorner</code>.</p>
+						
+						<pre translate="no">	void TriangulateCorner (
+		Vector3 bottom, HexCell bottomCell,
+		Vector3 left, HexCell leftCell,
+		Vector3 right, HexCell rightCell
+	) {
+		&hellip;
+		
+		<ins>features.AddWall(bottom, bottomCell, left, leftCell, right, rightCell);</ins>
+	}</pre>
+						
+						<figure>
+							<img src="creating-walls/wall-corners.png" width="250" height="180">
+							<figcaption>Walls with corners, but still gaps.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Closing the Gaps</h3>
+						
+						<p>There are still gaps in the walls, because the elevation of the wall segments is inconsistent. While segments along edges have constant elevation, corner segments sit between two different edges. As each edge can have a different elevation, gaps appear at the corners.</p>
+						
+						<p>To fix this, adjust <code>AddWallSegment</code> so it keeps the Y coordinates of the left and right top vertices separate.</p>
+						
+						<pre translate="no">		<ins>float leftTop = left.y + HexMetrics.wallHeight;</ins>
+		<ins>float rightTop = right.y + HexMetrics.wallHeight;</ins>
+
+		Vector3 v1, v2, v3, v4;
+		v1 = v3 = left - leftThicknessOffset;
+		v2 = v4 = right - rightThicknessOffset;
+		v3.y = <ins>leftTop;</ins>
+		v4.y = <ins>rightTop</ins>;
+		walls.AddQuad(v1, v2, v3, v4);
+
+		Vector3 t1 = v3, t2 = v4;
+
+		v1 = v3 = left + leftThicknessOffset;
+		v2 = v4 = right + rightThicknessOffset;
+		v3.y = <ins>leftTop;</ins>
+		v4.y = <ins>rightTop</ins>;
+		walls.AddQuad(v2, v1, v4, v3);</pre>
+						
+						<figure>
+							<img src="creating-walls/wall-closed.png" width="250" height="180">
+							<figcaption>Closed walls.</figcaption>
+						</figure>
+						
+						<p>The walls are now closed, but it is likely that you still see gaps in the wall's shadows. This is causes by the <em translate="no">Normal Bias</em> of the directional light's shadow settings. When larger than zero, the triangles of shadow casters are pushed along the surface normal. This prevents self-shadowing, but also creates gaps where triangles face away from each other. This can produce visible gaps in the shadows of thin geometry, like our walls.</p>
+						
+						<p>You can get rid of these shadow artifacts by reducing the normal bias to zero. Alternatively, change the <em translate="no">Cast Shadows</em> mode of the wall's mesh renderer to <em translate="no">Two Sided</em>. That forces the shadow caster pass to render both sides of each wall triangle, which covers up the holes.</p>
+						
+						<figure>
+							<img src="creating-walls/no-normal-bias.png" width="250" height="180">
+							<figcaption>No more shadow gaps.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="creating-walls/creating-walls.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Walls on Terraces</h2>
+					
+					<p>Currently, our walls are rather straight. This isn't so bad on flat terrain, but it looks weird when walls coincide with terraces. This happens when there is a one-level elevation difference between cells on opposite sides of a wall.</p>
+					
+					<figure>
+						<img src="walls-on-terraces/straight.png" width="320" height="230">
+						<figcaption>Straight walls on terraces.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Following the Edge</h3>
+						
+						<p>Instead of creating a single segment for an entire edge, let's create one for each part of an edge strip. We can do this by invoking <code>AddWallSegment</code> four times in the <code>AddWall</code> version for edges.</p>
+						
+						<pre translate="no">	public void AddWall (
+		EdgeVertices near, HexCell nearCell,
+		EdgeVertices far, HexCell farCell
+	) {
+		if (nearCell.Walled != farCell.Walled) {
+			AddWallSegment(near.v1, far.v1, near.<ins>v2</ins>, far.<ins>v2</ins>);
+			<ins>AddWallSegment(near.v2, far.v2, near.v3, far.v3);</ins>
+			<ins>AddWallSegment(near.v3, far.v3, near.v4, far.v4);</ins>
+			<ins>AddWallSegment(near.v4, far.v4, near.v5, far.v5);</ins>
+		}
+	}</pre>
+						
+						<figure>
+							<img src="walls-on-terraces/twisting.png" width="320" height="230">
+							<figcaption>Twisting walls.</figcaption>
+						</figure>
+						
+						<p>The walls now follow the shape of the perturbed edges. This looks much better in combination with terraces. It also produces more interesting walls on flat terrain.</p>
+					</section>
+					
+					<section>
+						<h3>Placing Walls on the Ground</h3>
+						
+						<p>When taking a closer look at walls on terraces, we find that there is a problem. The walls end up floating above the ground! This is true for slanted flat edges as well, but that's usually not as noticeable.</p>
+						
+						<figure>
+							<img src="walls-on-terraces/floating.png" width="350" height="150">
+							<figcaption>Floating walls.</figcaption>
+						</figure>
+						
+						<p>To solve this, we have to lower the walls. Simplest is just to lower the entire wall, so its top remains flat. This will cause part of the wall on the higher side to sink into the terrain, which is fine.</p>
+						
+						<p>To lower the wall, we first have to determine which side is lowest, the near or the far side. We could just use the elevation of the lowest side, but we don't need to go that low. We can interpolate from the low to the high Y coordinate with an offset that's somewhere below 0.5. As our walls only rarely extend beyond the lowest terrace step, we can use the vertical terrace step size as our offset. A different wall thickness of terrace configuration might require another offset.</p>
+						
+						<figure>
+							<img src="walls-on-terraces/lowered-wall.png" width="265" height="215">
+							<figcaption>Lowered wall.</figcaption>
+						</figure>
+						
+						<p>Let's add a <code>WallLerp</code> method to <code>HexMetrics</code> which takes care of this interpolation, in addition to averaging the X and Z coordinates of the near and far vertices. It's based on the <code>TerraceLerp</code> method.</p>
+						
+						<pre translate="no">	<ins>public const float wallElevationOffset = verticalTerraceStepSize;</ins>
+						
+	&hellip;
+						
+	<ins>public static Vector3 WallLerp (Vector3 near, Vector3 far) {</ins>
+		<ins>near.x += (far.x - near.x) * 0.5f;</ins>
+		<ins>near.z += (far.z - near.z) * 0.5f;</ins>
+		<ins>float v =</ins>
+			<ins>near.y &lt; far.y ? wallElevationOffset : (1f - wallElevationOffset);</ins>
+		<ins>near.y += (far.y - near.y) * v;</ins>
+		<ins>return near;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Have <code>HexFeatureManager</code> use this method to determine the left and right vertices.</p>
+						
+						<pre translate="no">	void AddWallSegment (
+		Vector3 nearLeft, Vector3 farLeft, Vector3 nearRight, Vector3 farRight
+	) {
+		Vector3 left = <ins>HexMetrics.WallLerp(nearLeft, farLeft)</ins>;
+		Vector3 right = <ins>HexMetrics.WallLerp(nearRight, farRight)</ins>;
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="walls-on-terraces/grounded.png" width="350" height="150">
+							<figcaption>Grounded walls.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Adjusting Wall Perturbation</h3>
+						
+						<p>Our walls now play nice with elevation differences. But they still don't exactly match the perturbed edges, although it is close. That's because we first figure out the wall vertices, and then perturb them. As these vertices sit somewhere in between the near and far edge vertices, their perturbation will be slightly different.</p>
+						
+						<p>That the walls don't exactly follow the edges isn't a problem. However, perturbing the wall's vertices disturbs its otherwise relatively uniform thickness. If we position the walls using perturbed vertices, and then add unperturbed quads, its thickness shouldn't vary as much.</p>
+						
+						<pre translate="no">	void AddWallSegment (
+		Vector3 nearLeft, Vector3 farLeft, Vector3 nearRight, Vector3 farRight
+	) {
+		<ins>nearLeft = HexMetrics.Perturb(nearLeft);</ins>
+		<ins>farLeft = HexMetrics.Perturb(farLeft);</ins>
+		<ins>nearRight = HexMetrics.Perturb(nearRight);</ins>
+		<ins>farRight = HexMetrics.Perturb(farRight);</ins>
+
+		&hellip;
+		walls.<ins>AddQuadUnperturbed</ins>(v1, v2, v3, v4);
+
+		&hellip;
+		walls.<ins>AddQuadUnperturbed</ins>(v2, v1, v4, v3);
+
+		walls.<ins>AddQuadUnperturbed</ins>(t1, t2, v3, v4);
+	}</pre>
+						
+						<figure>
+							<img src="walls-on-terraces/unperturbed-vertices.png" width="350" height="150">
+							<figcaption>Unperturbed wall vertices.</figcaption>
+						</figure>
+						
+						<p>Using this approach, our walls no longer follow the edges as close as they did. But in return, they're less jagged and have much more consistent thickness.</p>
+						
+						<figure>
+							<img src="walls-on-terraces/consistent-thickness.png" width="320" height="230">
+							<figcaption>More consistent wall thickness.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="walls-on-terraces/walls-on-terraces.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Wall Openings</h2>
+					
+					<p>Up to this point, we have ignored the possibility that a river or road might cross a wall. When that happens, we should make a gap in the wall, so the river or road can pass through.</p>
+					
+					<p>To support this, add two boolean parameters to <code>AddWall</code> to indicate whether there's a river or road going through the edge. While we could treat them differently, let's just remove the middle two segments in both cases.</p>
+					
+					<pre translate="no">	public void AddWall (
+		EdgeVertices near, HexCell nearCell,
+		EdgeVertices far, HexCell farCell<ins>,</ins>
+		<ins>bool hasRiver, bool hasRoad</ins>
+	) {
+		if (nearCell.Walled != farCell.Walled) {
+			AddWallSegment(near.v1, far.v1, near.v2, far.v2);
+			<ins>if (hasRiver || hasRoad) {</ins>
+				<ins>// Leave a gap.</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				AddWallSegment(near.v2, far.v2, near.v3, far.v3);
+				AddWallSegment(near.v3, far.v3, near.v4, far.v4);
+			<ins>}</ins>
+			AddWallSegment(near.v4, far.v4, near.v5, far.v5);
+		}
+	}</pre>
+					
+					<p>Now <code>HexGridChunk.TriangulateConnection</code> has to provide the necessary data. Because it already needed the same information earlier, let's cache it in boolean variables and write the relevant method invocations only once.</p>
+					
+					<pre translate="no">	void TriangulateConnection (
+		HexDirection direction, HexCell cell, EdgeVertices e1
+	) {
+		&hellip;
+
+		<ins>bool hasRiver = cell.HasRiverThroughEdge(direction);</ins>
+		<ins>bool hasRoad = cell.HasRoadThroughEdge(direction);</ins>
+
+		if (<ins>hasRiver</ins>) {
+			&hellip;
+		}
+
+		if (cell.GetEdgeType(direction) == HexEdgeType.Slope) {
+			TriangulateEdgeTerraces(e1, cell, e2, neighbor, <ins>hasRoad</ins>);
+		}
+		else {
+			TriangulateEdgeStrip(e1, cell.Color, e2, neighbor.Color, <ins>hasRoad</ins>);
+		}
+
+		features.AddWall(e1, cell, e2, neighbor<ins>, hasRiver, hasRoad</ins>);
+		&hellip;
+	}</pre>
+					
+					<figure>
+						<img src="wall-openings/gaps.png" width="320" height="230">
+						<figcaption>Gaps in the walls, to let rivers and roads through.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Capping the Walls</h3>
+						
+						<p>The new gaps have introduced places where the walls end. We have to cap these endpoints with quads, so we don't end up looking through the sides of the wall. Create an <code>AddWallCap</code> method in <code>HexFeatureManager</code> for this purpose. It works like <code>AddWallSegment</code>, except that it needs only one pair of near&ndash;far vertices. Have it add a quad that goes from the near to the far side of the wall.</p>
+						
+						<pre translate="no">	<ins>void AddWallCap (Vector3 near, Vector3 far) {</ins>
+		<ins>near = HexMetrics.Perturb(near);</ins>
+		<ins>far = HexMetrics.Perturb(far);</ins>
+
+		<ins>Vector3 center = HexMetrics.WallLerp(near, far);</ins>
+		<ins>Vector3 thickness = HexMetrics.WallThicknessOffset(near, far);</ins>
+
+		<ins>Vector3 v1, v2, v3, v4;</ins>
+
+		<ins>v1 = v3 = center - thickness;</ins>
+		<ins>v2 = v4 = center + thickness;</ins>
+		<ins>v3.y = v4.y = center.y + HexMetrics.wallHeight;</ins>
+		<ins>walls.AddQuadUnperturbed(v1, v2, v3, v4);</ins>
+	<ins>}</ins></pre>
+						
+						<p>When <code>AddWall</code> determines that we need a gap, add a cap between the second and fourth edge vertex pairs. We have to switch orientation for the fourth vertex pair, otherwise that quad would end up facing inwards.</p>
+						
+						<pre translate="no">	public void AddWall (
+		EdgeVertices near, HexCell nearCell,
+		EdgeVertices far, HexCell farCell,
+		bool hasRiver, bool hasRoad
+	) {
+		if (nearCell.Walled != farCell.Walled) {
+			AddWallSegment(near.v1, far.v1, near.v2, far.v2);
+			if (hasRiver || hasRoad) {
+				<ins>AddWallCap(near.v2, far.v2);</ins>
+				<ins>AddWallCap(far.v4, near.v4);</ins>
+			}
+			&hellip;
+		}
+	}</pre>
+						<figure>
+							<img src="wall-openings/capped.png" width="320" height="230">
+							<figcaption>Capped wall gaps.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What about gaps at the edge of the map?</h3>
+							<div>
+								<p>You could take measure to caps walls there as well. Personally, I avoid putting walls at the edge of the map. You don't want your gameplay to happen too close to the edge.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="wall-openings/wall-openings.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Avoiding Cliffs and Water</h2>
+					
+					<p>Finally, let's consider edges that contain cliffs or water. Because cliffs are effectively huge walls, it makes little sense to place an additional wall halfway up them. And it looks bad. Also, underwater walls make little sense. Walling off the coastline doesn't look good either.</p>
+					
+					<figure>
+						<img src="avoiding-cliffs-and-water/cliffs-and-water.png" width="420" height="250">
+						<figcaption>Walls on cliffs and in water.</figcaption>
+					</figure>
+					
+					<p>We can eliminate walls from these inappropriate edges with additional checks in <code>AddWall</code>. Neither cell can be underwater, and their shared edge cannot be a cliff.</p>
+					
+					<pre translate="no">	public void AddWall (
+		EdgeVertices near, HexCell nearCell,
+		EdgeVertices far, HexCell farCell,
+		bool hasRiver, bool hasRoad
+	) {
+		if (
+			nearCell.Walled != farCell.Walled <ins>&amp;&amp;</ins>
+			<ins>!nearCell.IsUnderwater &amp;&amp; !farCell.IsUnderwater &amp;&amp;</ins>
+			<ins>nearCell.GetEdgeType(farCell) != HexEdgeType.Cliff</ins>
+		) {
+			&hellip;
+		}
+	}</pre>
+					
+					<figure>
+						<img src="avoiding-cliffs-and-water/removed-walls.png" width="420" height="250">
+						<figcaption>Removed offending walls along edges, but corners still remain.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Removing Wall Corners</h3>
+						
+						<p>Eliminating unwanted corner segments requires a little more work. The easiest case to avoid is when the pivot cell is underwater. That guarantees there aren't any adjacent wall segments to connect.</p>
+						
+						<pre translate="no">	void AddWallSegment (
+		Vector3 pivot, HexCell pivotCell,
+		Vector3 left, HexCell leftCell,
+		Vector3 right, HexCell rightCell
+	) {
+		<ins>if (pivotCell.IsUnderwater) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+
+		AddWallSegment(pivot, left, pivot, right);
+	}</pre>
+						
+						<figure>
+							<img src="avoiding-cliffs-and-water/underwater-pivot.png" width="420" height="250">
+							<figcaption>No more underwater pivots.</figcaption>
+						</figure>
+						
+						<p>Now we have to look at the other two cells. If one of them is underwater, or is connected to the pivot via a cliff, then there is no wall along that edge. If this is true for at least one side, then there shouldn't be a wall segment in this corner.</p>
+						
+						<p>Determine whether there's a left or right wall independently. Put the results in boolean variables, so they're easier to reason with.</p>
+						
+						<pre translate="no">		if (pivotCell.IsUnderwater) {
+			return;
+		}
+
+		<ins>bool hasLeftWall = !leftCell.IsUnderwater &amp;&amp;</ins>
+			<ins>pivotCell.GetEdgeType(leftCell) != HexEdgeType.Cliff;</ins>
+		<ins>bool hasRighWall = !rightCell.IsUnderwater &amp;&amp;</ins>
+			<ins>pivotCell.GetEdgeType(rightCell) != HexEdgeType.Cliff;</ins>
+
+		<ins>if (hasLeftWall &amp;&amp; hasRighWall) {</ins>
+			AddWallSegment(pivot, left, pivot, right);
+		<ins>}</ins>
+</pre>
+						
+						<figure>
+							<img src="avoiding-cliffs-and-water/removed-corners.png" width="420" height="250">
+							<figcaption>Removed all offending corners.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Capping Corners</h3>
+						
+						<p>When both the left and the right edge don't have a wall, we're done. But when there's a wall in just one direction, it means that we have another gap in the wall. So we must cap it.</p>
+						
+						<pre translate="no">		if (hasLeftWall<ins>) {</ins>
+			<ins>if (</ins>hasRighWall) {
+				AddWallSegment(pivot, left, pivot, right);
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>AddWallCap(pivot, left);</ins>
+			<ins>}</ins>
+		}
+		<ins>else if (hasRighWall) {</ins>
+			<ins>AddWallCap(right, pivot);</ins>
+		<ins>}</ins></pre>
+						
+						<figure>
+							<img src="avoiding-cliffs-and-water/capped.png" width="420" height="250">
+							<figcaption>Capped the walls.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Fusing Walls with Cliffs</h3>
+						
+						<p>There is one situation in which our walls look less than ideal. When a wall reaches the bottom of a cliff, it ends. Because cliffs aren't perfectly vertical, this leaves a narrow gap between the wall and the cliff face. This problem doesn exist at the top of a cliff.</p>
+						
+						<figure>
+							<img src="avoiding-cliffs-and-water/wall-cliff-gap.png" width="330" height="190">
+							<figcaption>Gaps between walls and cliff faces.</figcaption>
+						</figure>
+						
+						<p>It would be much nicer if a wall continued all the way to the cliff face, leaving no gap. We can do this by adding an extra wall segment between the current end of the wall and the cliff's corner vertex. Because a large part of this segment ends up hidden inside the cliff, we can get away with reducing the wall thickness to zero inside the cliff. Thus, we only need to create a wedge shape. Two quads coming to a point, and a triangle on top. Create an <code>AddWallWedge</code> method for this purpose. You can do so by copying <code>AddWallCap</code> and adding the wedge's point. I've marked the differences.</p>
+						
+						<pre translate="no">	void <ins>AddWallWedge</ins> (Vector3 near, Vector3 far<ins>, Vector3 point</ins>) {
+		near = HexMetrics.Perturb(near);
+		far = HexMetrics.Perturb(far);
+		<ins>point = HexMetrics.Perturb(point);</ins>
+
+		Vector3 center = HexMetrics.WallLerp(near, far);
+		Vector3 thickness = HexMetrics.WallThicknessOffset(near, far);
+
+		Vector3 v1, v2, v3, v4;
+		<ins>Vector3 pointTop = point;</ins>
+		<ins>point.y = center.y;</ins>
+
+		v1 = v3 = center - thickness;
+		v2 = v4 = center + thickness;
+		v3.y = v4.y = <ins>pointTop.y =</ins> center.y + HexMetrics.wallHeight;
+
+<del>//		walls.AddQuadUnperturbed(v1, v2, v3, v4);</del>
+		<ins>walls.AddQuadUnperturbed(v1, point, v3, pointTop);</ins>
+		<ins>walls.AddQuadUnperturbed(point, v2, pointTop, v4);</ins>
+		<ins>walls.AddTriangleUnperturbed(pointTop, v3, v4);</ins>
+	}</pre>
+						
+						<p>In <code>AddWallSegment</code> for corners, invoke this method when there's a wall in only one direction, and that wall is at a lower elevation than the other side. That's when we're running into a cliff face.</p>
+						
+						<pre translate="no">		if (hasLeftWall) {
+			if (hasRighWall) {
+				AddWallSegment(pivot, left, pivot, right);
+			}
+			<ins>else if (leftCell.Elevation &lt; rightCell.Elevation) {</ins>
+				<ins>AddWallWedge(pivot, left, right);</ins>
+			<ins>}</ins>
+			else {
+				AddWallCap(pivot, left);
+			}
+		}
+		else if (hasRighWall) {
+			<ins>if (rightCell.Elevation &lt; leftCell.Elevation) {</ins>
+				<ins>AddWallWedge(right, pivot, left);</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				AddWallCap(right, pivot);
+			<ins>}</ins>
+		}</pre>
+						
+						<figure>
+							<img src="avoiding-cliffs-and-water/wall-wedges.png" width="330" height="190">
+							<figcaption>Wall wedges connecting to cliffs.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../part-11/index.html">More Features</a>.</p>
+					</section>
+					
+					<a href="avoiding-cliffs-and-water/avoiding-cliffs-and-water.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Hex-Map-10.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

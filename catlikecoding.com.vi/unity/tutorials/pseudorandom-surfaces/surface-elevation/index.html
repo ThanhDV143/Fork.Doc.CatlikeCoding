@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/pseudorandom-surfaces/surface-elevation/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/pseudorandom-surfaces/surface-elevation/tutorial-image.jpg">
+		<meta property="og:title" content="Surface Elevation">
+		<meta property="og:description" content="A Unity C# Pseudorandom Surfaces tutorial about creating a surface with varying elevation.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Surface Elevation</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/pseudorandom-surfaces/surface-elevation/#article",
+				"headline": "Surface Elevation",
+				"alternativeHeadline": "Applying Noise to a Mesh",
+				"datePublished": "2022-07-28",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity C# Applied Noise tutorial about creating a plane mesh with varying elevation.",
+				"image": "https://catlikecoding.com/unity/tutorials/pseudorandom-surfaces/surface-elevation/tutorial-image.jpg",
+				"dependencies": "Unity 2020.3.35f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/pseudorandom-surfaces/", "name": "Pseudorandom Surfaces" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				AdvancedMeshJobScheduleDelegate: 1,
+				G: 1,
+				IMeshGenerator: 1,
+				IMeshStreams: 1,
+				INoise: 1,
+				Job: 1,
+				LatticeNormal: 1,
+				Lattice2D: 1,
+				MaterialMode: 1,
+				MathExtensions: 1,
+				MeshJob: 1,
+				MultiStream: 1,
+				N: 1,
+				Noise: 1,
+				Perlin: 1,
+				PositionStream: 1,
+				ProceduralMesh: 1,
+				ProceduralSurface: 1,
+				S: 1,
+				Settings: 1,
+				SharedSquareGrid: 1,
+				SingleStream: 1,
+				SmallXXHash4: 1,
+				SurfaceJob: 1,
+				SmallXXHash: 1,
+				SpaceTRS: 1,
+				Stream0: 1,
+				Vertex4: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Pseudorandom Surfaces</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Surface Elevation</h1>
+					<p>Applying Noise to a Mesh</p>
+					<ul>
+						<li>Modify vertex positions of a generated mesh.</li>
+						<li>Use noise to determine elevation.</li>
+						<li>Recalculate normal and tangent vectors.</li>
+					</ul>
+				</header>
+				
+				<p>This is the first tutorial in a series about <a href="../index.html">pseudorandom surfaces</a>. It takes what we made in the <a href="../../pseudorandom-noise/index.html">Pseudorandom Noise</a> and <a href="../../procedural-meshes/index.html">Procedural Meshes</a> series and uses it to create a mesh with varying elevation.</p>
+				
+				<p>This tutorial is made with Unity 2020.3.35f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A flattened sphere displaced with 2D Perlin noise.</figcaption>
+				</figure>
+				
+				<aside>
+					<h3>Explicit Aggressive Inlining</h3>
+					<div>
+						<p>Due to changes in inlining behavior across Burst versions some large methods are no longer automatically inlined. This affects some of the <code>GetNoise4</code> methods. To avoid needless call invocations in jobs I have added the <code>MethodImpl(MethodImplOptions.AggressiveInlining)</code> attribute to all <code>GetNoise4</code> method implementations of the <code>Noise</code> types.</p>
+					</div>
+				</aside>
+				
+				<section>
+					<h2>Project Setup</h2>
+					
+					<p>This series directly follows the series about <a href="../../pseudorandom-noise/index.html">pseudorandom noise</a> and <a href="../../procedural-meshes/index.html">procedural meshes</a>. We'll use what we created in those series to generate pseudorandom surfaces. So we'll copy what we need from the final tutorials of those series.</p>
+					
+					<section>
+						<h3>Procedural Meshes</h3>
+						
+						<p>We use a copy of the <a href="../../procedural-meshes/icosphere/index.html">Icosphere</a> tutorial as our starting point. Either use your own project or download the tutorial's repository. Keep everything in that project, except for the scene and code assets used for the quad example, which can be removed.</p>
+						
+						<p>Rename <code>ProceduralMesh</code> to <code>ProceduralSurface</code> and let's put it in a <em translate="no">Surface</em> folder to keep it separate. Rename the scene and adjust the game object in it to match this change.</p>
+						
+						<pre translate="no">public class <ins>ProceduralSurface</ins> : MonoBehaviour { &hellip; }</pre>
+						
+						<p>Remove the <em translate="no">Procedural Mesh</em> shader graph and the <em translate="no">ProceduralMesh</em> HLSL asset that it relied on. Remove the <em translate="no">Ripple</em> material and change the <em translate="no">Flat</em> and <em translate="no">LatLon Map</em> materials to use the <em translate="no">Universal Render Pipeline / Lit</em> shader instead. Also remove <code>Ripple</code> from the <code>ProceduralSurface.MaterialMode</code> enum and the materials configuration.</p>
+						
+						<pre translate="no">	<del>//public enum MaterialMode { Flat, Ripple, LatLonMap, CubeMap }</del>
+	<ins>public enum MaterialMode { Flat, LatLonMap, CubeMap }</ins></pre>
+						
+						<figure>
+							<img src="project-setup/materials-array.png" width="320" height="116">
+							<figcaption>Configured materials array.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Noise</h3>
+						
+						<p>We're also going to use noise, so copy the code from the <a href="../../pseudorandom-noise/simplex-noise/index.html">Simplex Noise</a> tutorial and put it in a <em translate="no">Noise</em> folder. Include all <code>Noise</code> code assets, <code>MathExtensions</code>, and <code>SpaceTRS</code>. Exclude the assets dealing with noise visualization and shapes from it.</p>
+						
+						<figure>
+							<img src="project-setup/asset-folders.png" width="180" height="180">
+							<figcaption>Asset folders.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Modifying Vertices</h2>
+					
+					<p>The goal of this tutorial is to create a mesh surface that gets displaced by pseudorandom noise, baked into the mesh. We'll do this by first generating a base mesh via an existing mesh job and then displacing its vertices with noise, for which we'll create a new surface job.</p>
+					
+					<section>
+						<h3>Surface Job</h3>
+						
+						<p>Create a new <code>SurfaceJob</code> in the <em translate="no">Surfaces</em> folder. Make it a standard <code>IJobFor</code> implementation, which modifies an array of positions, initially without any vectorization. We begin with a simple job that would turn a flat surface into a wedge, by making the Y coordinates equal to the absolute of the X coordinates.</p>
+						
+						<pre translate="no"><ins>using Unity.Burst;</ins>
+<ins>using Unity.Collections;</ins>
+<ins>using Unity.Jobs;</ins>
+<ins>using Unity.Mathematics;</ins>
+<ins>using UnityEngine;</ins>
+
+<ins>using static Unity.Mathematics.math;</ins>
+
+<ins>[BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = true)]</ins>
+<ins>public struct SurfaceJob : IJobFor {</ins>
+
+	<ins>NativeArray&lt;float3> positions;</ins>
+
+	<ins>public void Execute (int i) {</ins>
+		<ins>float3 p = positions[i];</ins>
+		<ins>p.y = abs(p.x);</ins>
+		<ins>positions[i] = p;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Also give it a static <code>ScheduleParallel</code> method, which naively invokes <code>GetVetexData&lt;float3></code> on some mesh data to supply the positions to the job.</p>
+						
+						<pre translate="no">	<ins>public static JobHandle ScheduleParallel (</ins>
+		<ins>Mesh.MeshData meshData, int resolution, JobHandle dependency</ins>
+	<ins>) => new SurfaceJob() {</ins>
+		<ins>positions = meshData.GetVertexData&lt;float3>()</ins>
+	<ins>}.ScheduleParallel(meshData.vertexCount, resolution, dependency);</ins></pre>
+						
+						<p>Currently <code>ProceduralSurface.GenerateMesh</code> only generates the configure mesh shape. To also modify its vertices we can run <code>SurfaceJob</code> directly after generating the base mesh.</p>
+						
+						<pre translate="no">		jobs[(int)meshType](mesh, meshData, resolution, default).Complete();
+		<ins>SurfaceJob.ScheduleParallel(meshData, resolution, default).Complete();</ins></pre>
+						
+						<p>We don't need to complete both jobs explicitly, we can chain them by passing the handle of the mesh job to the surface job as a dependency. This way we only have a single point where we have to wait for completion.</p>
+						
+						<pre translate="no">		<del>//jobs[(int)meshType](mesh, meshData, resolution, default).Complete();</del>
+		SurfaceJob.ScheduleParallel(
+			meshData, resolution,
+			<ins>jobs[(int)meshType](mesh, meshData, resolution, default)</ins>
+		).Complete();</pre>
+						
+						<p>Let's try this for the shared square grid.</p>
+						
+						<figure>
+							<img src="modifying-vertices/mesh-incorrect.png" width="260" height="190">
+							<figcaption>Incorrect mesh; shared square grid; resolution 6.</figcaption>
+						</figure>
+						
+						<p>This naive approach doesn't work. The shared square grid uses <code>SingleStream</code> to manage its vertex data, which contains more than just positions in a single vertex stream. The job runs without throwing an error because the <code>SingleStream.Stream0</code> struct contains twelve floats, so it always aligns with a multiple of <code>float3</code>. But those <code>float3</code> values cut the stream into portions that cover all vertex data, not just the positions. Thus the jobs ends up modifying only a portion of the data, changing positions, normals, tangents, and UV coordinates.</p>
+						
+						<p>The quickest way to fix this issue is to change the <code>ProceduralSurface.jobs</code> array so that the shared square grid uses <code>MultiStream</code> instead. That way the first vertex stream only contains <code>float3</code> position data and <code>SurfaceJob</code> correctly interprets that data.</p>
+						
+						<pre translate="no">		MeshJob&lt;SharedSquareGrid, <ins>MultiStream</ins>>.ScheduleParallel,</pre>
+						
+						<figure>
+							<img src="modifying-vertices/mesh-correct.png" width="270" height="240">
+							<figcaption>Correct mesh.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Vertex Data</h3>
+						
+						<p>Although switching to <code>MultiStream</code> works, we shouldn't make our mesh less efficient to render just to make our job run without issues. We should instead adjust our approach to work with efficient mesh data. So let's switch back to using <code>SingleStream</code>.</p>
+						
+						<pre translate="no">		MeshJob&lt;SharedSquareGrid, <ins>SingleStream</ins>>.ScheduleParallel,</pre>
+						
+						<p>What we'll do instead is adjust our job to retrieve the correct vertex data. Begin by making the <code>SingleStream.Stream0</code> type publicly accessible.</p>
+						
+						<pre translate="no">    public struct SingleStream : IMeshStreams {
+
+		[StructLayout(LayoutKind.Sequential)]
+		<ins>public</ins> struct Stream0 {
+			public float3 position, normal;
+			public float4 tangent;
+			public float2 texCoord0;
+		}
+		
+		&hellip;
+	}</pre>
+						
+						<p>Now we can adjust <code>SurfaceJob</code> so it retrieves the vertex data in the correct format. It now has to retrieve the position from the vertex data in <code>Execute</code> instead of directly working with an array of position.</p>
+						
+						<pre translate="no"><ins>using ProceduralMeshes.Streams;</ins>
+
+using static Unity.Mathematics.math;
+
+[BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = true)]
+public struct SurfaceJob : IJobFor {
+
+	NativeArray&lt;<ins>SingleStream.Stream0</ins>> <ins>vertices</ins>;
+
+	public void Execute (int i) {
+		<ins>SingleStream.Stream0 v = vertices[i];</ins>
+		float3 p = <ins>v.position</ins>;
+		p.y = abs(p.x);
+		<ins>v.position</ins> = p;
+		<ins>vertices[i] = v;</ins>
+	}
+
+	public static JobHandle ScheduleParallel (
+		Mesh.MeshData meshData, int resolution, JobHandle dependency
+	) => new SurfaceJob() {
+		vertices = meshData.GetVertexData&lt;<ins>SingleStream.Stream0</ins>>()
+	}.ScheduleParallel(meshData.vertexCount, resolution, dependency);
+}</pre>
+						
+						<p>We could come up with a way to support multiple stream formats, but to keep things simple for now we'll exclusively work with <code>SingleStream</code>. To make sure that all mesh shapes are supported change all entries in the <code>jobs</code> array to use <code>SingleStream</code>, even though some of the spheres only use positions.</p>
+					</section>
+					
+					<section>
+						<h3>Vectorization</h3>
+						
+						<p>Our noise code is designed for vectorization, so <code>SurfaceJob</code> should be vectorized as well. This means that it needs to work on four vertices at once. Give it a <code>Vertex4</code> struct to package four vertices and use that for the vertices array, dividing the job count by four. Then adjust all four positions in <code>Execute</code> instead of one.</p>
+						
+						<pre translate="no">	<ins>struct Vertex4 {</ins>
+		<ins>public SingleStream.Stream0 v0, v1, v2, v3;</ins>
+	<ins>}</ins>
+
+	NativeArray&lt;<ins>Vertex4</ins>> vertices;
+
+	public void Execute (int i) {
+		<ins>Vertex4</ins> v = vertices[i];
+		<ins>v.v0.position.y = abs(v.v0.position.x);</ins>
+		<ins>v.v1.position.y = abs(v.v1.position.x);</ins>
+		<ins>v.v2.position.y = abs(v.v2.position.x);</ins>
+		<ins>v.v3.position.y = abs(v.v3.position.x);</ins>
+		vertices[i] = v;
+	}
+
+	public static JobHandle ScheduleParallel (
+		Mesh.MeshData meshData, int resolution, JobHandle dependency
+	) => new SurfaceJob() {
+		vertices =
+			meshData.GetVertexData&lt;SingleStream.Stream0>()<ins>.Reinterpret&lt;Vertex4>(12 * 4)</ins>
+	}.ScheduleParallel(meshData.vertexCount <ins>/ 4</ins>, resolution, dependency);</pre>
+						
+						<p>This only works if the vertex count is divisible by four, so a resolution 6 shared square grid doesn't work, but a resolution 5 grid does.</p>
+						
+						<p>Of course the point of vectorization is to vectorize the actual work done. We can use the same approach that we used in <code>Noise.Job</code>: putting all positions in a 3&times;4 matrix and transposing it to a 4&times;3 matrix. Then we can vectorize the absolute operation, after which we have to extract the Y coordinates to update the separate positions. In this case that generates a lot of overhead, but it will be worth it once we start calculating complex noise.</p>
+						
+						<pre translate="no">		<ins>float4x3 p = transpose(float3x4(</ins>
+			<ins>v.v0.position, v.v1.position, v.v2.position, v.v3.position</ins>
+		<ins>));</ins>
+		<ins>p.c1 = abs(p.c0);</ins>
+		v.v0.position.y = <ins>p.c1.x</ins>;
+		v.v1.position.y = <ins>p.c1.y</ins>;
+		v.v2.position.y = <ins>p.c1.z</ins>;
+		v.v3.position.y = <ins>p.c1.w</ins>;</pre>
+					</section>
+					
+					<section>
+						<h3>Modifying Vertex Count</h3>
+						
+						<p>As mentioned before, vectorization is only possible when the vertex count is a multiple of four, but the meshes generated by <code>MeshJob</code> don't guarantee this.</p>
+						
+						<p>We can add support for vectorization to <code>MeshJob</code> by adding an optional boolean parameter that is <code>false</code> by default to its <code>ScheduleParallel</code> method to indicate whether support for vectorization is needed. We'll adjust the vertex count based on this parameter. Initially just store the vertex count in a variable before configuring the streams.</p>
+						
+						<pre translate="no">		public static JobHandle ScheduleParallel (
+			Mesh mesh, Mesh.MeshData meshData, int resolution, JobHandle dependency<ins>,</ins>
+			<ins>bool supportVectorization = false</ins>
+		) {
+			var job = new MeshJob&lt;G, S>();
+			job.generator.Resolution = resolution;
+
+			<ins>int vertexCount = job.generator.VertexCount;</ins>
+			
+			job.streams.Setup(
+				meshData,
+				mesh.bounds = job.generator.Bounds,
+				<ins>vertexCount</ins>,
+				job.generator.IndexCount
+			);
+			return job.ScheduleParallel(
+				job.generator.JobLength, 1, dependency
+			);
+		}</pre>
+						
+						<p>However, delegate types cannot handle optional parameters, they need explicit parameter lists. So to keep the existing code working the parameter cannot be optional so instead we add a version without the parameter that forwards to the other one.</p>
+						
+						<pre translate="no">		<ins>public static JobHandle ScheduleParallel (</ins>
+			<ins>Mesh mesh, Mesh.MeshData meshData, int resolution, JobHandle dependency</ins>
+		<ins>) => ScheduleParallel(mesh, meshData, resolution, dependency, false);</ins>
+
+		public static JobHandle ScheduleParallel (
+			Mesh mesh, Mesh.MeshData meshData, int resolution, JobHandle dependency,
+			bool supportVectorization <del>//= false</del>
+		) { &hellip; }</pre>
+						
+						<p>If vectorization must be supported and the vertex count is not a multiple four, then we need to add more vertices. This is the case when the two least-significant bits of the vertex count are not zero, because that's the remainder of an integer division by four. If so, add four vertices minus that. Thus we end up with at most three extra unused vertices, which is an insignificant bit of extra data.</p>
+						
+						<pre translate="no">			int vertexCount = job.generator.VertexCount;
+			<ins>if (supportVectorization &amp;&amp; (vertexCount &amp; 0b11) != 0) {</ins>
+				<ins>vertexCount += 4 - (vertexCount &amp; 0b11);</ins>
+			<ins>}</ins></pre>
+						
+						<p>Now add a second delegate type that includes the extra parameter. Let's name it <code>AdvancedMeshJobScheduleDelegate</code> because it contains more options.</p>
+						
+						<pre translate="no">	public delegate JobHandle MeshJobScheduleDelegate (
+		Mesh mesh, Mesh.MeshData meshData, int resolution, JobHandle dependency
+	);
+	
+	<ins>public delegate JobHandle AdvancedMeshJobScheduleDelegate (</ins>
+		<ins>Mesh mesh, Mesh.MeshData meshData, int resolution, JobHandle dependency,</ins>
+		<ins>bool supportVectorization</ins>
+	<ins>);</ins></pre>
+						
+						<p>Change the <code>ProceduralSurface.jobs</code> array so it contains the advanced delegates.</p>
+						
+						<pre translate="no">	static <ins>AdvancedMeshJobScheduleDelegate</ins>[] jobs = { &hellip; };</pre>
+						
+						<p>And indicate that we need support for vectorization when scheduling the job in <code>GenerateMesh</code>.</p>
+						
+						<pre translate="no">		SurfaceJob.ScheduleParallel(
+			meshData, resolution,
+			jobs[(int)meshType](
+				mesh, meshData, resolution, default<ins>, true</ins>
+			)
+		).Complete();</pre>
+						
+						<p>Now our code should work with all mesh types and resolutions. Note that if we generate a sphere it will be flattened, becoming a two-sided disk.</p>
+					</section>
+					
+					<section>
+						<h3>Modiying Bounds</h3>
+						
+						<p>Like we modify the vertex count, we should also be able to modify the mesh bounds, because we will be displacing vertices. We'll do this by also adding a parameter for extra bounds extents to <code>MeshJob.ScheduleParallel</code>. It is a <code>Vector3</code> parameter with the zero vector as its default, which we add to the extents of the bounds. This allows us to increase the mesh bounds depending on how we modify it.</p>
+						
+						<pre translate="no">	public struct MeshJob&lt;G, S> : IJobFor
+		where G : struct, IMeshGenerator
+		where S : struct, IMeshStreams {
+		
+		&hellip;
+		
+		public static JobHandle ScheduleParallel (
+			Mesh mesh, Mesh.MeshData meshData, int resolution, JobHandle dependency
+		) =>
+			ScheduleParallel(mesh, meshData, resolution, dependency, <ins>Vector3.zero,</ins> false);
+
+		public static JobHandle ScheduleParallel (
+			Mesh mesh, Mesh.MeshData meshData, int resolution, JobHandle dependency,
+			<ins>Vector3 extraBoundsExtents,</ins> bool supportVectorization
+		) {
+			&hellip;
+
+			<ins>Bounds bounds = job.generator.Bounds€;</ins>
+			<ins>bounds.extents += extraBoundsExtents;</ins>
+
+			job.streams.Setup(
+				meshData,
+				mesh.bounds = <ins>bounds</ins>,
+				vertexCount,
+				job.generator.IndexCount
+			);
+			&hellip;
+		}
+	}
+
+	&hellip;
+
+	public delegate JobHandle AdvancedMeshJobScheduleDelegate (
+		Mesh mesh, Mesh.MeshData meshData, int resolution, JobHandle dependency,
+		<ins>Vector3 extraBoundsExtents,</ins> bool supportVectorization
+	);</pre>
+						
+						<p>We assume that we're modifying a flat surface by displacing vertices either up or down by at most one unit. Thus we'll pass the up vector as the extra extents in <code>ProceduralSurface.GenerateMesh</code>. This would change the bounds of the shared square grid from (1,0,1) to (1,2,1).</p>
+						
+						<pre translate="no">			jobs[(int)meshType](
+				mesh, meshData, resolution, default, <ins>Vector3.up,</ins> true
+			)</pre>
+					</section>
+					
+					<section>
+						<h3>Applying Noise</h3>
+						
+						<p>Now that everything functions correctly the next step is to use noise to vertically displace the vertices. Add a generic <code>INoise</code> struct type parameter to <code>SurfaceJob</code> and give it a field for noise settings, initially simply using its default configuration.</p>
+						
+						<pre translate="no">using static Unity.Mathematics.math;
+<ins>using static Noise;</ins>
+
+[BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = true)]
+public struct SurfaceJob<ins>&lt;N></ins> : IJobFor <ins>where N : struct, INoise</ins> 
+
+	&hellip;
+
+	<ins>Settings settings;</ins>
+
+	&hellip;
+
+	public static JobHandle ScheduleParallel (
+		Mesh.MeshData meshData, int resolution, JobHandle dependency
+	) => new SurfaceJob<ins>&lt;N></ins>() {
+		vertices =
+			meshData.GetVertexData&lt;SingleStream.Stream0>().Reinterpret&lt;Vertex4>(12 * 4)<ins>,</ins>
+		<ins>settings = Settings.Default</ins>
+	}.ScheduleParallel(meshData.vertexCount / 4, resolution, dependency);
+}</pre>
+						
+						<p>Then copy the code that generates fractal noise from <code>Noise.Job.Execute</code>, base it on the vectorized vertex positions, and use the result for the final Y coordinates.</p>
+						
+						<pre translate="no">		<del>//p.c1 = abs(p.c0);</del>
+		<ins>var hash = SmallXXHash4.Seed(settings.seed);</ins>
+		<ins>int frequency = settings.frequency;</ins>
+		<ins>float amplitude = 1f, amplitudeSum = 0f;</ins>
+		<ins>float4 sum = 0f;</ins>
+
+		<ins>for (int o = 0; o &lt; settings.octaves; o++) {</ins>
+			<ins>sum += amplitude * default(N).GetNoise4(p, hash + o, frequency);</ins>
+			<ins>amplitudeSum += amplitude;</ins>
+			<ins>frequency *= settings.lacunarity;</ins>
+			<ins>amplitude *= settings.persistence;</ins>
+		<ins>}</ins>
+		<ins>float4 noise = sum / amplitudeSum;</ins>
+
+		v.v0.position.y = <ins>noise</ins>.x;
+		v.v1.position.y = <ins>noise</ins>.y;
+		v.v2.position.y = <ins>noise</ins>.z;
+		v.v3.position.y = <ins>noise</ins>.w;</pre>
+						
+						<p>Then invoke an explicit noise version of <code>SurfaceJob</code> in <code>ProceduralSurface.GenerateMesh</code>. In this tutorial we'll limit ourselves to normal 2D Perlin noise.</p>
+						
+						<pre translate="no"><ins>using static Noise;</ins>
+
+[RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
+public class ProceduralSurface : MonoBehaviour {
+	
+	&hellip;
+	
+	void GenerateMesh () {
+		&hellip;
+		
+		SurfaceJob<ins>&lt;Lattice2D&lt;LatticeNormal, Perlin>></ins>.ScheduleParallel(
+			meshData, resolution,
+			jobs[(int)meshType](
+				mesh, meshData, resolution, default, Vector3.up, true
+			)
+		).Complete();
+		
+		&hellip;
+	}
+}</pre>
+						
+						<figure>
+							<img src="modifying-vertices/applied-noise.png" width="260" height="280">
+							<figcaption>Applied noise; resolution 20.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Noise Configuration</h3>
+						
+						<p>Let's make the settings and domain of the noise configurable, just like we did for the noise visualization. Add configuration fields for noise settings and a domain to <code>ProceduralSurface</code>, in this case with the scale set to 1.</p>
+						
+						<pre translate="no">	[SerializeField, Range(1, 50)]
+	int resolution = 1;
+
+	<ins>[SerializeField]</ins>
+	<ins>Settings noiseSettings = Settings.Default;</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>SpaceTRS domain = new SpaceTRS {</ins>
+		<ins>scale = 1f</ins>
+	<ins>};</ins></pre>
+						
+						<figure>
+							<img src="modifying-vertices/settings-domain.png" width="320" height="282">
+							<figcaption>Settings and domain configuration.</figcaption>
+						</figure>
+						
+						<p>Pass both to the surface job when scheduling it.</p>
+						
+						
+						<pre translate="no">		SurfaceJob&lt;Lattice2D&lt;LatticeNormal, Perlin>>.ScheduleParallel(
+			meshData, resolution, <ins>noiseSettings, domain,</ins>
+			jobs[(int)meshType](
+				mesh, meshData, resolution, default, Vector3.up, true
+			)
+		).Complete();</pre>
+						
+						<p>And add the required parameters for both to <code>SurfaceJob.ScheduleParallel</code>. Also add a field for the domain TRS matrix and use it to transform the input positions in <code>Execute</code>.</p>
+						
+						<pre translate="no">	<ins>float3x4 domainTRS;</ins>
+
+	public void Execute (int i) {
+		Vertex4 v = vertices[i];
+		float4x3 p = <ins>domainTRS.TransformVectors(</ins>transpose(float3x4(
+			v.v0.position, v.v1.position, v.v2.position, v.v3.position
+		))<ins>)</ins>;
+
+		&hellip;
+	}
+
+	public static JobHandle ScheduleParallel (
+		Mesh.MeshData meshData, int resolution, <ins>Settings settings, SpaceTRS domain,</ins>
+		JobHandle dependency
+	) => new SurfaceJob&lt;N>() {
+		vertices =
+			meshData.GetVertexData&lt;SingleStream.Stream0>().Reinterpret&lt;Vertex4>(12 * 4),
+		settings = <ins>settings,</ins>
+		<ins>domainTRS = domain.Matrix</ins>
+	}.ScheduleParallel(meshData.vertexCount / 4, resolution, dependency);</pre>
+					</section>
+					
+					<section>
+						<h3>Surface Displacement</h3>
+						
+						<p>In the procedural noise series we also made the amount of displacement configurable. Let's do this here as well, adding another field and parameter to control the maximum displacement, using it to scale the final noise.</p>
+						
+						<pre translate="no">	<ins>float displacement;</ins>
+
+	public void Execute (int i) {
+		&hellip;
+		float4 noise = sum / amplitudeSum;
+		<ins>noise *= displacement;</ins>
+
+		&hellip;
+	}
+
+	public static JobHandle ScheduleParallel (
+		Mesh.MeshData meshData, int resolution, Settings settings, SpaceTRS domain,
+		<ins>float displacement,</ins>
+		JobHandle dependency
+	) => new SurfaceJob&lt;N>() {
+		vertices =
+			meshData.GetVertexData&lt;SingleStream.Stream0>().Reinterpret&lt;Vertex4>(12 * 4),
+		settings = settings,
+		domainTRS = domain.Matrix<ins>,</ins>
+		<ins>displacement = displacement</ins>
+	}.ScheduleParallel(meshData.vertexCount / 4, resolution, dependency);</pre>
+						
+						<p>Add a configuration option for it to <code>ProceduralSurface</code>, with a &minus;1&ndash;1 range and a default of &frac12;. Adjust the extra extents to match the maximum displacement.</p>
+						
+						<pre translate="no">	[SerializeField, Range(1, 50)]
+	int resolution = 1;
+
+	<ins>[SerializeField, Range(-1f, 1f)]</ins>
+	<ins>float displacement = 0.5f;</ins>
+
+	&hellip;
+
+	void GenerateMesh () {
+		&hellip;
+
+		SurfaceJob&lt;Lattice2D&lt;LatticeNormal, Perlin>>.ScheduleParallel(
+			meshData, resolution, noiseSettings, domain, <ins>displacement,</ins>
+			jobs[(int)meshType](
+				mesh, meshData, resolution, default,
+				<ins>new Vector3(0f, Mathf.Abs(displacement))</ins>, true
+			)
+		).Complete();
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="modifying-vertices/displacement-inspector.png" width="320" height="62" alt="inspector"><br>
+							<img src="modifying-vertices/displacement-scene.png" width="250" height="220" alt="scene">
+							<figcaption>Displacement reduced to 0.5.</figcaption>
+						</figure>
+						
+						<p>And let's also introduce a material option to colorize the mesh based on the displacement, similar to how we colored the noise visualization: black at zero elevation, increasing to white on the positive side and to red on the negative side, based on the object-space Y coordinate. Create a <em translate="no">Displacement</em> shader graph for this, with an extra displacement scale configuration and saturation of the final value so we can tune the strength of the coloration.</p>
+						
+						<figure>
+							<img src="modifying-vertices/displacement-shader-graph.png" width="636" height="346">
+							<figcaption>Displacement shader graph.</figcaption>
+						</figure>
+						
+						<p>Add an option for it at the start of <code>ProceduralSurface.MaterialMode</code>, create a material, and add it to the materials array. I set the displacement scale to 2 so it reaches maximum strength at a displacement of &frac12;.</p>
+						
+						<pre translate="no">	public enum MaterialMode { <ins>Displacement</ins>, Flat, LatLonMap, CubeMap }</pre>
+						
+						<figure>
+							<img src="modifying-vertices/displacement-material-configuration.png" width="320" height="154" alt="configuration"><br>
+							<img src="modifying-vertices/displacement-material.png" width="320" height="84" alt="material"><br>
+							<img src="modifying-vertices/displacement-material-scene.png" width="250" height="220" alt="scene">
+							<figcaption>Displacement material.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Normals and Tangents</h2>
+					
+					<p>Although we now generate a surface with varying elevation it is still shaded as if it were flat, because we only modify vertex positions. The normal and tangent vectors still match the base shape, which is flat for the shared square grid. The simplest way to fix this is by using Unity's basic Mesh API to recalculate these vectors after modifying the mesh. We'll add support for this approach now and will add a different approach in the next tutorial.</p>
+					
+					<section>
+						<h3>Recalculating Normal Vectors</h3>
+						
+						<p>If we visualize the normal vectors it becomes very obvious that they match the base mesh shape. In the case of the shared square grid they all point straight up.</p>
+						
+						<figure>
+							<img src="normals-and-tangents/normals-unmodified.png" width="260" height="250">
+							<figcaption>Unmodified normal vectors.</figcaption>
+						</figure>
+						
+						<p>We can ask Unity to recalculate the normal vectors by invoking <code>RecalculateNormals</code> on the mesh. We have to do this in <code>GenerateMesh</code> after applying the mesh data.</p>
+						
+						<pre translate="no">		Mesh.ApplyAndDisposeWritableMeshData(meshDataArray, mesh);
+		
+		<ins>mesh.RecalculateNormals();</ins></pre>
+						
+						<figure>
+							<img src="normals-and-tangents/normals-recalculated.png" width="310" height="250">
+							<figcaption>Recalculated normal vectors.</figcaption>
+						</figure>
+						
+						<p>Unity determines the normal vectors by taking normalized cross products of the two triangle edge vectors adjacent to each vertex. When vertices are shared these normal vectors are averaged, which produces the appearance of a smooth surface. If vertices aren't shared then there will be visible seams along triangle edges. For example, the square grid surface only shares vertices per quad and not with adjacent quads, so it will have a faceted appearance.</p>
+						
+						<figure>
+							<img src="normals-and-tangents/normals-square-grid.png" width="240" height="210" alt="square grid">
+							<img src="normals-and-tangents/normals-on.png" width="240" height="210" alt="shared square grid">
+							<figcaption>Square grid and shared square grid.</figcaption>
+						</figure>
+						
+						<p>Likewise for the hexagon grids, which only share vertices per hexagon.</p>
+						
+						<figure>
+							<img src="normals-and-tangents/normals-pointy-hexagon-grid.png" width="200" height="180">
+							<figcaption>Pointy hexagon grid.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Recalculating Tangent Vectors</h3>
+						
+						<p>The tangent vectors have the same problem as the normal vectors.</p>
+						
+						<figure>
+							<img src="normals-and-tangents/tangents-unmodified.png" width="270" height="230">
+							<figcaption>Unmodified tangents vectors.</figcaption>
+						</figure>
+						
+						<p>These can be generated by invoking <code>RecalculateTangents</code>. This has to be done after recalculating the normals, because it uses the relationship between normal vectors and texture coordinates transformed to object space vectors to find the tangent vectors.</p>
+						
+						<pre translate="no">		mesh.RecalculateNormals();
+		<ins>mesh.RecalculateTangents();</ins></pre>
+						
+						<figure>
+							<img src="normals-and-tangents/tangents-recalculated.png" width="270" height="250">
+							<figcaption>Recalculated tangents vectors.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Optional Recalculation</h3>
+						
+						<p>We wrap up this tutorial by making the recalculation of normal and tangent vectors optional, to make comparison between with and without easier. Add toggle options for both.</p>
+						
+						<pre translate="no">	[SerializeField]
+	MeshType meshType;
+
+	<ins>[SerializeField]</ins>
+	<ins>bool recalculateNormals, recalculateTangents;</ins>
+
+	&hellip;
+
+	void GenerateMesh () {
+		&hellip;
+
+		<ins>if (recalculateNormals) {</ins>
+			mesh.RecalculateNormals();
+		<ins>}</ins>
+		<ins>if (recalculateTangents) {</ins>
+			mesh.RecalculateTangents();
+		<ins>}</ins>
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="normals-and-tangents/recalculation-settings.png" width="320" height="60">
+							<figcaption>Recalculation settings; both enabled.</figcaption>
+						</figure>
+						
+						<p>Whether recalculation of normals is on or off is immediately obvious.</p>
+						
+						<figure>
+							<img src="normals-and-tangents/normals-on.png" width="240" height="210" alt="on">
+							<img src="normals-and-tangents/normals-off.png" width="240" height="210" alt="off">
+							<figcaption>Recalculating normals on and off.</figcaption>
+						</figure>
+						
+						<p>It is less obvious for tangent vectors, and requires the use of a tangent-space normal map to be visible. Although the normal map might appear functional with incorrect tangent vectors, the result does not match the orientation of the surface.</p>
+						
+						<figure>
+							<img src="normals-and-tangents/tangents-on.png" width="240" height="210" alt="on">
+							<img src="normals-and-tangents/tangents-off.png" width="240" height="210" alt="off">
+							<figcaption>Recalculating tangents on and off.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../simplex-derivatives/index.html">Simplex Derivatives</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/pseudorandom-surfaces-01-surface-elevation/" class="repository">repository</a>
+					<a href="Surface-Elevation.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

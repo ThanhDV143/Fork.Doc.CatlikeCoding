@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/hex-map/3-4-0/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/hex-map/3-4-0/tutorial-image.jpg">
+		<meta property="og:title" content="Hex Map 3.4.0">
+		<meta property="og:description" content="Unity Hex Map 3.4.0 tutorial, about replacing the cell class with a struct.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hex Map 3.4.0</title>
+		<meta name="description" content="Unity Hex Map 3.4.0 tutorial, about replacing the cell class with a struct.">
+		<link href="../../tutorials/tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../apple-touch-icon.png">
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/hex-map/3-4-0/#article",
+				"headline": "Hex Map 3.4.0",
+				"alternativeHeadline": "Cell Struct",
+				"datePublished": "2024-04-09",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"image": "https://catlikecoding.com/unity/tutorials/hex-map/3-4-0/tutorial-image.jpg",
+				"dependencies": "Unity 2022.3.38f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/hex-map/", "name": "Hex Map" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				Bezier: 1,
+				Biome: 1,
+				ClimateData: 1,
+				EdgeVertices: 1,
+				HemisphereMode: 1,
+				HexCell: 1,
+				HexCellData: 1,
+				HexCellPriorityQueue: 1,
+				HexCellSearchData: 1,
+				HexCellShaderData: 1,
+				HexCoordinates: 1,
+				HexDirection: 1,
+				HexDirectionExtensions: 1,
+				HexEdgeType: 1,
+				HexFeatureCollection: 1,
+				HexFeatureManager: 1,
+				HexFlags: 1,
+				HexGameUI: 1,
+				HexGrid: 1,
+				HexGridChunk: 1,
+				HexGridData: 1,
+				HexHash: 1,
+				HexMapCamera: 1,
+				HexMapEditor: 1,
+				HexMapGenerator: 1,
+				HexMesh: 1,
+				HexMetrics: 1,
+				HexUnit: 1,
+				HexValues: 1,
+				ListPool: 1,
+				MapRegion: 1,
+				NewMapMenu: 1,
+				OptionalToggle: 1,
+				SaveLoadItem: 1,
+				SaveLoadMenu: 1
+			};
+			
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../products/utilities/frame-rate-counter/index.html"><img src="../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../index.html">Unity</a></li>
+					<li><a href="../index.html">Hex Map</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hex Map 3.4.0</h1>
+					<p>Cell Struct</p>
+				</header>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Made without cell objects.</figcaption>
+				</figure>
+				
+				<p>This tutorial is made with Unity 2022.3.38f1 and follows <a href="../3-3-0/index.html">Hex Map 3.3.0</a>.</p>
+				
+				<section>
+					<h2>Moving Responsibilities</h2>
+					
+					<p>We continue our quest to get rid of the cell objects. This time we will achieve that goal, although we don't completely remove the <code>HexCell</code> type.</p>
+					
+					<section>
+						<h3>Flags and Values</h3>
+						
+						<p>To reduce the code size of <code>HexCell</code> we will get rid of all the properties that now simply forward to the flags and values. Other code should just access those directly. To allow this the <code>Flags€</code> and <code>Values</code> properties of <code>HexCell</code> must become public.</p>
+						
+						<pre translate="no">	<ins>public</ins> HexFlags Flags€ { &hellip; }
+	
+	<ins>public</ins> HexValues Values { &hellip; }</pre>
+						
+						<p>To make this more convenient an <code>HasRiver</code> method to <code>HexFlags</code> that indicates whether a river exists in a given direction.</p>
+						
+						<pre translate="no">	<ins>public static bool HasRiver(</ins>
+		<ins>this HexFlags flags, HexDirection direction) =></ins>
+		<ins>flags.HasRiverIn(direction) || flags.HasRiverOut(direction);</ins></pre>
+						
+						<p>Also add <code>ViewElevation</code> and <code>IsUnderwater</code> properties to <code>HexValues</code>. We'll simply use <code>Mathf.Max</code> to determine the view elevation.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+&hellip;
+	
+	<ins>public readonly int ViewElevation => Mathf.Max(Elevation, WaterLevel);</ins>
+
+	<ins>public readonly bool IsUnderwater => WaterLevel > Elevation;</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Moving Remaining Data to Grid</h3>
+						
+						<p>We're going to remove nearly all remaining data from the cell. Like we did earlier with other cell data we'll store it in arrays in <code>HexGrid</code> instead.</p>
+						
+						<p>Add a publicly-accessible <code>CellUnits</code> array to the grid.</p>
+						
+						<pre translate="no">	<ins>public HexUnit[] CellUnits</ins>
+	<ins>{ get; private set; }</ins></pre>
+						
+						<p>Also give it arrays for the cell references to their chunk and their UI rect. But we keep these private because we'll make sure that nothing besides the grid needs to access these.</p>
+						
+						<pre translate="no">	<ins>HexGridChunk[] cellGridChunks;</ins>
+
+	<ins>RectTransform[] cellUIRects;</ins></pre>
+						
+						<p>Create these arrays in <code>CreateCells</code> along with the other arrays. Let's also use the length of <code>CellData</code> as a reference for all lengths instead of the <code>cells</code> array length, because we're going to remove the latter later.</p>
+						
+						<pre translate="no">		CellData = new HexCellData[<ins>CellCountZ * CellCountX</ins>];
+		CellPositions = new Vector3[<ins>CellData.Length</ins>];
+		<ins>cellUIRects = new RectTransform[CellData.Length];</ins>
+		<ins>cellGridChunks = new HexGridChunk[CellData.Length];</ins>
+		<ins>CellUnits = new HexUnit[CellData.Length];</ins>
+		searchData = new HexCellSearchData[<ins>CellData.Length</ins>];
+		cellVisibility = new int[<ins>CellData.Length</ins>];</pre>
+						
+						<p>Now we're going to modify <code>CreateCell</code> so it directly set the cell's explorable flag and elevation, and stores the UI rect and chunk reference in the array instead of the cell. We also merge the method with <code>AddCellToChunk</code> directly below it.</p>
+						
+						<pre translate="no">	void CreateCell(int x, int z, int i)
+	{
+		&hellip;
+		<del>// if (Wrapping) { &hellip; } else { &hellip; }</del>
+
+		<ins>bool explorable = Wrapping ?</ins>
+			<ins>z > 0 &amp;&amp; z &lt; CellCountZ - 1 :</ins>
+			<ins>x > 0 &amp;&amp; z > 0 &amp;&amp; x &lt; CellCountX - 1 &amp;&amp; z &lt; CellCountZ - 1;</ins>
+		<ins>cell.Flags€ = explorable ?</ins>
+			<ins>cell.Flags€.With(HexFlags.Explorable) :</ins>
+			<ins>cell.Flags€.Without(HexFlags.Explorable);</ins>
+
+		Text label = Instantiate(cellLabelPrefab);
+		label.rectTransform.anchoredPosition =
+			new Vector2(position.x, position.z);
+		<ins>RectTransform rect = cellUIRects[i]</ins> = label.rectTransform;
+		
+		<del>//cell.Elevation = 0;</del>
+		<ins>cell.Values = cell.Values.WithElevation(0);</ins>
+
+		<del>//AddCellToChunk(x, z, cell);</del>
+	<del>//}</del>
+
+	<del>//void AddCellToChunk(int x, int z, HexCell cell)</del>
+	<del>//{</del>
+		int chunkX = x / HexMetrics.chunkSizeX;
+		int chunkZ = z / HexMetrics.chunkSizeZ;
+		HexGridChunk chunk = chunks[chunkX + chunkZ * chunkCountX];
+
+		int localX = x - chunkX * HexMetrics.chunkSizeX;
+		int localZ = z - chunkZ * HexMetrics.chunkSizeZ;
+		<ins>cellGridChunks[i]</ins> = chunk;
+		chunk.AddCell(localX + localZ * HexMetrics.chunkSizeX, <ins>i</ins>, <ins>rect</ins>);
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Refreshing</h3>
+						
+						<p>Setting the cell elevation should also refresh the cell position. We copy the method responsible for this from the cell to the grid, adapting it to directly access the arrays. So it only needs a cell index parameter. We make it public so others can trigger a refresh as well.</p>
+						
+						<pre translate="no">	<ins>public void RefreshCellPosition (int cellIndex)</ins>
+	<ins>{</ins>
+		<ins>Vector3 position = CellPositions[cellIndex];</ins>
+		<ins>position.y = CellData[cellIndex].Elevation * HexMetrics.elevationStep;</ins>
+		<ins>position.y +=</ins>
+			<ins>(HexMetrics.SampleNoise(position).y * 2f - 1f) *</ins>
+			<ins>HexMetrics.elevationPerturbStrength;</ins>
+		<ins>CellPositions[cellIndex] = position;</ins>
+
+		<ins>RectTransform rectTransform = cellUIRects[cellIndex];</ins>
+		<ins>Vector3 uiPosition = rectTransform.localPosition;</ins>
+		<ins>uiPosition.z = -position.y;</ins>
+		<ins>rectTransform.localPosition = uiPosition;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Invoke it in <code>CreateCell</code> after setting the elevation.</p>
+						
+						<pre translate="no">		cell.Values = cell.Values.WithElevation(0);
+		<ins>RefreshCellPosition(i);</ins></pre>
+						
+						<p>Let's also add public methods to trigger a refresh for a whole cell a for a cell with its dependents, with are its neighbors and its unit.</p>
+						
+						<pre translate="no">	<ins>public void RefreshCell(int cellIndex) =></ins>
+		<ins>cellGridChunks[cellIndex].Refresh();</ins>
+
+	<ins>public void RefreshCellWithDependents (int cellIndex)</ins>
+	<ins>{</ins>
+		<ins>HexGridChunk chunk = cellGridChunks[cellIndex];</ins>
+		<ins>chunk.Refresh();</ins>
+		<ins>HexCoordinates coordinates = CellData[cellIndex].coordinates;</ins>
+		<ins>for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++)</ins>
+		<ins>{</ins>
+			<ins>if (TryGetCellIndex(coordinates.Step(d), out int neighborIndex))</ins>
+			<ins>{</ins>
+				<ins>HexGridChunk neighborChunk = cellGridChunks[neighborIndex];</ins>
+				<ins>if (chunk != neighborChunk)</ins>
+				<ins>{</ins>
+					<ins>neighborChunk.Refresh();</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>HexUnit unit = CellUnits[cellIndex];</ins>
+		<ins>if (unit)</ins>
+		<ins>{</ins>
+			<ins>unit.ValidateLocation();</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>And finally also a new <code>RefreshAllCells</code> methods that performs a complete refresh of all cells.</p>
+						
+						<pre translate="no">	<ins>public void RefreshAllCells()</ins>
+	<ins>{</ins>
+		<ins>for (int i = 0; i &lt; CellData.Length; i++)</ins>
+		<ins>{</ins>
+			<ins>SearchData[i].searchPhase = 0;</ins>
+			<ins>RefreshCellPosition(i);</ins>
+			<ins>ShaderData.RefreshTerrain(i);</ins>
+			<ins>ShaderData.RefreshVisibility(i);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						<p>This methods is for <code>HexMapGenerator.GenerateMap</code>, which has to refresh all cells and can now do so by simply invoking the new method.</p>
+						
+						<pre translate="no">		<del>//for (int i = 0; i &lt; cellCount; i++)</del>
+		<del>//{</del>
+			<del>//grid.SearchData[i].searchPhase = 0;</del>
+			<del>//grid.GetCell(i).RefreshAll();</del>
+		<del>//}</del>
+		<ins>grid.RefreshAllCells();</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Saving and Loading</h3>
+						
+						<p>We also move the responsibility for saving and loading cells to the grid. In <code>Save</code> we simply write the values and flags of each cell. We now loop based on the length of <code>CellData</code> instead of the length of <code>cells</code>.</p>
+						
+						<pre translate="no">		for (int i = 0; i &lt; <ins>CellData</ins>.Length; i++)
+		{
+			<del>//cells[i].Save(writer);</del>
+			<ins>HexCellData data = CellData[i];</ins>
+			<ins>data.values.Save(writer);</ins>
+			<ins>data.flags.Save(writer);</ins>
+		}</pre>
+						
+						<p>Adjust <code>Load</code> in the same way. Here we also have to refresh the position, terrain, and visibility.</p>
+						
+						<pre translate="no">		for (int i = 0; i &lt; <ins>CellData</ins>.Length; i++)
+		{
+			<del>//cells[i].Load(reader, header);</del>
+			<ins>HexCellData data = CellData[i];</ins>
+			<ins>data.values = HexValues.Load(reader, header);</ins>
+			<ins>data.flags = data.flags.Load(reader, header);</ins>
+			<ins>CellData[i] = data;</ins>
+			<ins>RefreshCellPosition(i);</ins>
+			<ins>ShaderData.RefreshTerrain(i);</ins>
+			<ins>ShaderData.RefreshVisibility(i);</ins>
+		}</pre>
+					</section>
+					
+					<section>
+						<h3>Label and Highlight</h3>
+						
+						<p>The cell will become oblivious to its label and highlight, because they're part of the separate UI. Copy the <code>SetLabel</code>, <code>DisableHighlight</code>, and <code>EnableHighlight</code> methods to <code>HexGrid</code> and adapt them to work with a cell index parameter and the UI rect array. These methods can remain private as only the grid needs to use them.</p>
+						
+						<pre translate="no">	<ins>void SetLabel(int cellIndex, string text) =></ins>
+		<ins>cellUIRects[cellIndex].GetComponent&lt;Text>().text = text;</ins>
+
+	<ins>void DisableHighlight(int cellIndex) =></ins>
+		<ins>cellUIRects[cellIndex].GetChild(0).GetComponent&lt;Image>().enabled =</ins>
+			<ins>false;</ins>
+
+	<ins>void EnableHighlight(int cellIndex, Color color)</ins>
+	<ins>{</ins>
+		<ins>Image highlight =</ins>
+			<ins>cellUIRects[cellIndex].GetChild(0).GetComponent&lt;Image>();</ins>
+		<ins>highlight.color = color;</ins>
+		<ins>highlight.enabled = true;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Next, adjust <code>ClearPath</code> and <code>ShowPath</code> so they use the methods of the grid itself. This also means that they no longer need to retrieve cells and can work with cell indices exclusively, no longer needing to retrieve cells.</p>
+						
+						<pre translate="no">	public void ClearPath()
+	{
+		if (currentPathExists)
+		{
+			<del>//HexCell current = cells[currentPathToIndex];</del>
+			int currentIndex = currentPathToIndex;
+			while (<ins>currentIndex</ins> != currentPathFromIndex)
+			{
+				<del>current.SetLabel(null);</del>
+				<del>current.DisableHighlight();</del>
+				<del>current = cells[searchData[current.Index].pathFrom];</del>
+				<ins>SetLabel(currentIndex, null);</ins>
+				<ins>DisableHighlight(currentIndex);</ins>
+				<ins>currentIndex = searchData[currentIndex].pathFrom;</ins>
+			}
+			<del>//current.DisableHighlight();</del>
+			<ins>DisableHighlight(currentIndex);</ins>
+			currentPathExists = false;
+		}
+		else if (currentPathFromIndex >= 0)
+		{
+			<del>//cells[currentPathFromIndex].DisableHighlight();</del>
+			<del>//cells[currentPathToIndex].DisableHighlight();</del>
+			<ins>DisableHighlight(currentPathFromIndex);</ins>
+			<ins>DisableHighlight(currentPathToIndex);</ins>
+		}
+		currentPathFromIndex = currentPathToIndex = -1;
+	}
+
+	void ShowPath(int speed)
+	{
+		if (currentPathExists)
+		{
+			<del>//HexCell current = cells[currentPathToIndex];</del>
+			<ins>int currentIndex = currentPathToIndex;</ins>
+			while (<ins>currentIndex</ins> != currentPathFromIndex)
+			{
+				int turn = (searchData[<ins>currentIndex</ins>].distance - 1) / speed;
+				<del>//current.SetLabel(turn.ToString());</del>
+				<del>//current.EnableHighlight(Color.white);</del>
+				<ins>SetLabel(currentIndex, turn.ToString());</ins>
+				<ins>EnableHighlight(currentIndex, Color.white);</ins>
+				currentIndex = searchData[currentIndex].pathFrom;
+			}
+		}
+		EnableHighlight(currentPathFromIndex, Color.blue);
+		EnableHighlight(currentPathToIndex, Color.red);
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Visibility</h3>
+						
+						<p>We're also going to make a few slight changes to the visibility code. First, <code>IncreaseVisibility</code> will set the explored flag directly.</p>
+						
+						<pre translate="no">				<del>//cells[i].MarkAsExplored();</del>
+				<ins>HexCell c = cells[i];</ins>
+				<ins>c.Flags€ = c.Flags€.With(HexFlags.Explored);</ins>
+				cellShaderData.RefreshVisibility(cellIndex);</pre>
+						
+						<p>Second, <code>ResetVisibility</code> will loop based on the length of <code>cellVisibility</code>.</p>
+						
+						<pre translate="no">		for (int i = 0; i &lt; <ins>cellVisibility</ins>.Length; i++) { &hellip; }</pre>
+						
+						<p>Third, <code>GetVisibibleCells</code> will now also use access values and flags directly.</p>
+						
+						<pre translate="no">		range += fromCell.<ins>Values.</ins>ViewElevation;
+		&hellip;
+				if (currentData.searchPhase > searchFrontierPhase ||
+					//<del>!neighbor.Explorable</del>
+					<ins>neighbor.Flags€.HasNone(HexFlags.Explorable)</ins>)
+				&hellip;
+				if (distance + neighbor.<ins>Values.</ins>ViewElevation > range ||
+					distance > fromCoordinates.DistanceTo(neighbor.Coordinates))</pre>
+					</section>
+					
+					<section>
+						<h3>Unit</h3>
+						
+						<p>Moving on to <code>HexUnit</code>, thanks to a recent change that we made, we can get the column index from the cell's coordinates in the <code>Location</code> setter, instead of from the cell itself.</p>
+						
+						<pre translate="no">			Grid.MakeChildOfColumn(transform, value.<ins>Coordinates.</ins>ColumnIndex);</pre>
+						
+						<p>This is also the case for <code>TravelPath</code>.</p>
+						
+						<pre translate="no">		int currentColumn = currentTravelLocation.<ins>Coordinates.</ins>ColumnIndex;
+		&hellip;
+			int nextColumn = currentTravelLocation.<ins>Coordinates.</ins>ColumnIndex;</pre>
+						
+						<p>Adjust <code>IsValidDestination</code> so it accesses the cell flags and values.</p>
+						
+						<pre translate="no">	public bool IsValidDestination(HexCell cell) =>
+		cell.<ins>Flags€.HasAll(HexFlags.Explored | HexFlags.Explorable)</ins> &amp;&amp;
+		!cell.<ins>Values.</ins>IsUnderwater &amp;&amp; !cell.Unit;</pre>
+						
+						<p>And do the same for <code>GetMoveCost</code>. We'll also directly go to <code>HexMetrics</code> to get the edge type, instead of asking a cell for it.</p>
+						
+						<pre translate="no">		HexEdgeType edgeType = <ins>HexMetrics</ins>.GetEdgeType(
+			<ins>fromCell.Values.Elevation, toCell.Values.Elevation</ins>);
+		if (edgeType == HexEdgeType.Cliff)
+		{
+			return -1;
+		}
+		int moveCost;
+		if (fromCell.<ins>Flags€.HasRoad</ins>(direction))
+		{
+			moveCost = 1;
+		}
+		else if (fromCell.<ins>Flags€.HasAny(HexFlags.Walled)</ins> !=
+			toCell.<ins>Flags€.HasAny(HexFlags.Walled)</ins>)
+		{
+			return -1;
+		}
+		else
+		{
+			moveCost = edgeType == HexEdgeType.Flat ? 5 : 10;
+			<ins>HexValues v = toCell.Values;</ins>
+			moveCost += <ins>v</ins>.UrbanLevel + <ins>v</ins>.FarmLevel + <ins>v</ins>.PlantLevel;
+		}</pre>
+					</section>
+				</section>
+					
+				<section>
+					<h2>Downsizing Cells</h2>
+					
+					<p>We have moved data out of the cells and eliminated responsibilities from it. Now it's time to clean up <code>HexCell</code>, getting rid of what is no longer needed and restructuring the rest a bit.</p>
+					
+					<section>
+						<h3>Cell Refactoring</h3>
+						
+						<p>First, we keep the <code>Unit</code> property but make it forward to the grid's array so the cell no longer contains a direct reference to its unit.</p>
+						
+						<pre translate="no">	public HexUnit Unit
+	{
+		<ins>get => Grid.CellUnits[index];</ins>
+		<ins>set => Grid.CellUnits[index] = value;</ins>
+	}</pre>
+						
+						<p>Keep the <code>Grid</code>, <code>Index</code>, <code>Position</code>, <code>Unit</code>, <code>Flags€</code>, and <code>Values</code> properties, but remove all other getters as they are no longer needed. We refactor all setters into methods with a value parameter. First is <code>SetElevation</code>, which replaces the <code>Elevation</code> setter.</p>
+						
+						<pre translate="no">	<ins>public void SetElevation (int elevation)</ins>
+	<ins>{</ins>
+		<ins>if (Values.Elevation != elevation)</ins>
+		<ins>{</ins>
+			<ins>Values = Values.WithElevation(elevation);</ins>
+			<ins>Grid.ShaderData.ViewElevationChanged(index);</ins>
+			<ins>Grid.RefreshCellPosition(index);</ins>
+			<ins>ValidateRivers();</ins>
+			<ins>HexFlags flags = Flags€;</ins>
+			<ins>for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++)</ins>
+			<ins>{</ins>
+				<ins>if (flags.HasRoad(d))</ins>
+				<ins>{</ins>
+					<ins>HexCell neighbor = GetNeighbor(d);</ins>
+					<ins>if (Mathf.Abs(elevation - neighbor.Values.Elevation) > 1)</ins>
+					<ins>{</ins>
+						<ins>RemoveRoad(d);</ins>
+					<ins>}</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+			<ins>Grid.RefreshCellWithDependents(index);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Then comes <code>SetWaterLevel</code>.</p>
+						
+						<pre translate="no">	<ins>public void SetWaterLevel (int waterLevel)</ins>
+	<ins>{</ins>
+		<ins>if (Values.WaterLevel != waterLevel)</ins>
+		<ins>{</ins>
+			<ins>Values = Values.WithWaterLevel(waterLevel);</ins>
+			<ins>Grid.ShaderData.ViewElevationChanged(index);</ins>
+			<ins>ValidateRivers();</ins>
+			<ins>Grid.RefreshCellWithDependents(index);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Followed by <code>SetUrbanLevel</code>.</p>
+						
+						<pre translate="no">	<ins>public void SetUrbanLevel (int urbanLevel)</ins>
+	<ins>{</ins>
+		<ins>if (Values.UrbanLevel != urbanLevel)</ins>
+		<ins>{</ins>
+			<ins>Values = Values.WithUrbanLevel(urbanLevel);</ins>
+			<ins>Refresh();</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Along with <code>SetFarmLevel</code> and <code>SetPlantLevel</code>, which look similar. After that comes <code>SetSpecialIndex</code>.</p>
+						
+						<pre translate="no">	<ins>public void SetSpecialIndex (int specialIndex)</ins>
+	<ins>{</ins>
+		<ins>if (Values.SpecialIndex != specialIndex &amp;&amp;</ins>
+			<ins>Flags.HasNone(HexFlags.River))</ins>
+		<ins>{</ins>
+			<ins>Values = Values.WithSpecialIndex(specialIndex);</ins>
+			<ins>RemoveRoads();</ins>
+			<ins>Refresh();</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Then <code>SetWalled</code>.</p>
+						
+						<pre translate="no">	<ins>public void SetWalled (bool walled)</ins>
+	<ins>{</ins>
+		<ins>HexFlags flags = Flags€;</ins>
+		<ins>HexFlags newFlags = walled ?</ins>
+			<ins>flags.With(HexFlags.Walled) : flags.Without(HexFlags.Walled);</ins>
+		<ins>if (flags != newFlags)</ins>
+		<ins>{</ins>
+			<ins>Flags€ = newFlags;</ins>
+			<ins>Grid.RefreshCellWithDependents(index);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>And finally <code>SetTerrainTypeIndex</code>.</p>
+						
+						<pre translate="no">	<ins>public void SetTerrainTypeIndex (int terrainTypeIndex)</ins>
+	<ins>{</ins>
+		<ins>if (Values.TerrainTypeIndex != terrainTypeIndex)</ins>
+		<ins>{</ins>
+			<ins>Values = Values.WithTerrainTypeIndex(terrainTypeIndex);</ins>
+			<ins>Grid.ShaderData.RefreshTerrain(index);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>We keep these setting functionality in <code>HexCell</code> because they take care of inter-cell dependencies when changing something of a cell. Only the map editor does that, but potential gameplay code that changes cells could rely on it as well.</p>
+						
+						
+						<p>The <code>MarkAsExplored</code>, <code>GetEdgeType</code>, and <code>HasRiverThroughEdge</code> methods will no longer be used, so remove them.</p>
+						
+						<p>Next, adjust <code>RemoveIncomingRiver</code> and <code>RemoveOutgoingRiver</code> to directly work with flags. Also, we no longer have a reference to the cell's chunk because refreshing will be done by the grid. We'll instead invoke the simple <code>Refresh</code> method on the cells, which we'll change later.</p>
+						
+						<pre translate="no">	void RemoveIncomingRiver()
+	{
+		<del>//if (!HasIncomingRiver) { &hellip; }</del>
+		<ins>if (Flags€.HasAny(HexFlags.RiverIn))</ins>
+		<ins>{</ins>
+			HexCell neighbor = GetNeighbor(<ins>Flags€.RiverInDirection()</ins>);
+			Flags€ = Flags€.Without(HexFlags.RiverIn);
+			neighbor.Flags€ = neighbor.Flags€.Without(HexFlags.RiverOut);
+			neighbor.<ins>Refresh</ins>();
+			<ins>Refresh</ins>();
+		<ins>}</ins>
+	}
+	
+	void RemoveOutgoingRiver()
+	{
+		<del>//if (!HasOutgoingRiver) { &hellip; }</del>
+		<ins>if (Flags€.HasAny(HexFlags.RiverOut))</ins>
+		<ins>{</ins>
+			HexCell neighbor = GetNeighbor(<ins>Flags€.RiverOutDirection()</ins>);
+			Flags = Flags.Without(HexFlags.RiverOut);
+			neighbor.Flags = neighbor.Flags.Without(HexFlags.RiverIn);
+			neighbor.<ins>Refresh</ins>();
+			<ins>Refresh</ins>();
+		<ins>}</ins>
+	}</pre>
+						
+						<p>We need to know whether a river can flow from and cell to another in multiple places, so let's add a private static <code>CanRiverFlow</code> method to check this, given the values of two cells.</p>
+						
+						<pre translate="no">	<ins>static bool CanRiverFlow (HexValues from, HexValues to) =></ins>
+		<ins>from.Elevation >= to.Elevation || from.WaterLevel == to.Elevation;</ins></pre>
+						
+						<p>Adjust <code>SetOutgoingRiver</code> to use that method and also directly work with values.</p>
+						
+						<pre translate="no">	public void SetOutgoingRiver (HexDirection direction)
+	{
+		if (Flags.HasRiverOut(direction))
+		{
+			return;
+		}
+
+		HexCell neighbor = GetNeighbor(direction);
+		if (!<ins>CanRiverFlow</ins>(<ins>Values,</ins> neighbor<ins>.Values</ins>))
+		{
+			return;
+		}
+
+		RemoveOutgoingRiver();
+		if (Flags.HasRiverIn(direction))
+		{
+			RemoveIncomingRiver();
+		}
+
+		Flags€ = Flags€.WithRiverOut(direction);
+		<del>//SpecialIndex = 0;</del>
+		<ins>Values = Values.WithSpecialIndex(0);</ins>
+		neighbor.RemoveIncomingRiver();
+		neighbor.Flags = neighbor.Flags.WithRiverIn(direction.Opposite());
+		<del>//neighbor.SpecialIndex = 0;</del>
+		<ins>neighbor.Values = neighbor.Values.WithSpecialIndex(0);</ins>
+
+		RemoveRoad(direction);
+	}</pre>
+						
+						<p>Adapt <code>AddRoad</code>, <code>RemoveRoads</code>, and <code>RemoveRoad</code> similarly.</p>
+						
+						<pre translate="no">	public void AddRoad(HexDirection direction)
+	{
+		<ins>HexFlags flags = Flags€;</ins>
+		<ins>HexCell neighbor = GetNeighbor(direction);</ins>
+		if (
+			!<ins>flags</ins>.HasRoad(direction) &amp;&amp; !<ins>flags.HasRiver</ins>(direction) &amp;&amp;
+			<ins>Values.SpecialIndex == 0</ins> &amp;&amp; <ins>neighbor.Values.SpecialIndex == 0</ins> &amp;&amp;
+			<ins>Mathf.Abs(Values.Elevation - neighbor.Values.Elevation)</ins> &lt;= 1
+		)
+		{
+			Flags€ = <ins>flags</ins>.WithRoad(direction);
+			neighbor.Flags€ = neighbor.Flags.WithRoad(direction.Opposite());
+			neighbor.<ins>Refresh</ins>();
+			<ins>Refresh</ins>();
+		}
+	}
+	
+	public void RemoveRoads()
+	{
+		<ins>HexFlags flags = Flags€;</ins>
+		for (HexDirection d = HexDirection.NE; d &lt;= HexDirection.NW; d++)
+		{
+			if (<ins>flags</ins>.HasRoad(d))
+			{
+				RemoveRoad(d);
+			}
+		}
+	}
+
+	void RemoveRoad(HexDirection direction)
+	{
+		Flags€ = Flags.WithoutRoad(direction);
+		HexCell neighbor = GetNeighbor(direction);
+		neighbor.Flags = neighbor.Flags.WithoutRoad(direction.Opposite());
+		neighbor.<ins>Refresh</ins>();
+		<ins>Refresh</ins>();
+	}</pre>
+						
+						<p>Adjust <code>ValidateRivers</code> to work with flags as well.</p>
+						
+						<pre translate="no">	void ValidateRivers()
+	{
+		<ins>HexFlags flags = Flags€;</ins>
+		if (<ins>flags.HasAny(HexFlags.RiverOut)</ins> &amp;&amp;
+			!<ins>CanRiverFlow(Values,</ins> GetNeighbor(<ins>flags.RiverOutDirection()</ins>)<ins>.Values</ins>)
+		)
+		{
+			RemoveOutgoingRiver();
+		}
+		if (<ins>flags.HasAny(HexFlags.RiverIn)</ins> &amp;&amp;
+			!<ins>CanRiverFlow(</ins>GetNeighbor(<ins>flags.RiverInDirection()</ins>)<ins>.Values, Values)</ins>)
+		{
+			RemoveIncomingRiver();
+		}
+	}</pre>
+						
+						<p>From now on <code>Refresh</code> will simply forward to the grid's <code>RefreshCell</code> method.</p>
+						
+						<pre translate="no">	void Refresh() <ins>=> grid.RefreshCell(Index);</ins></pre>
+						
+						<p>Finally, remove <code>RefreshPosition</code>, <code>RefreshAll</code>, <code>Save</code>, <code>Load</code>, <code>SetLabel</code>, <code>DisableHighlight</code>, and <code>EnableHighlight</code> as that functionality is now part of the grid.</p>
+					</section>
+					
+					<section>
+						<h3>Map Editor</h3>
+						
+						<p>We have to make a few changes to <code>HexMapEditor</code>. First, instead of setting the cell's <code>TerrainTypeIndex</code> property in <code>EditCell</code> we now have to invoke the cell's <code>SetTerrainTypeIndex</code> method, passing it the active terrain type index.</p>
+						
+						<pre translate="no">				<del>//cell.TerrainTypeIndex = activeTerrainTypeIndex;</del>
+				<ins>cell.SetTerrainTypeIndex(activeTerrainTypeIndex);</ins></pre>
+						
+						<p>We have to make similar changes for all other editing cases.</p>
+						
+						<p>Besides that, in <code>UpdateCellHighlightData</code> we still compare the cell with <code>null</code> to see whether it is an invalid edit target. We should change this to check whether the cell evaluates as <code>false</code>, like we do everywhere else.</p>
+						
+						<pre translate="no">		<del>//if (cell == null)</del>
+		<ins>if (!cell)</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Conversion to Struct</h3>
+						
+						<p>We are now finally going to eliminate the <code>HexCell</code> object. However, we keep its type, changing it to a struct type.</p>
+						
+						<pre translate="no">public <ins>struct</ins> HexCell</pre>
+						
+						<p>This will keep the current code that still relies on <code>HexCell</code> functional, providing a convenient facade for the data stored in the grid. The only data that we still need to store in the cell is its index and a reference to its grid. We introduce fields for these to make it clear what exactly gets stored.</p>
+						
+						<pre translate="no"><ins>#pragma warning disable IDE0044 // Add readonly modifier</ins>
+	<ins>int index;</ins>
+
+	<ins>HexGrid grid;</ins>
+<ins>#pragma warning restore IDE0044 // Add readonly modifier</ins></pre>
+						
+						<aside>
+							<h3>Why not make the grid globally accessible?</h3>
+							<div>
+								<p>Keeping the reference makes it possible to support multiple grids in the future. For example for multiple disconnected regions or world layers.</p>
+							</div>
+						</aside>
+						
+						<p>Give it a constructor method to initialize both.</p>
+						
+						<pre translate="no">	<ins>public HexCell(int index, HexGrid grid)</ins>
+	<ins>{</ins>
+		<ins>this.index = index;</ins>
+		<ins>this.grid = grid;</ins>
+	<ins>}</ins></pre>
+						
+						<p>All of the cell's code that references the <code>Index</code> property can now directly access the <code>index</code> field instead. We do keep the public getter though, so the index is still accessible by other code. It now becomes a readonly property.</p>
+						
+						<pre translate="no">	public <ins>readonly</ins> int Index <ins>=> index;</ins></pre>
+						
+						<p>No code outside the cell needs to access its grid, so remove the <code>Grid</code> property. All cell code should directly access the <code>grid</code> field instead.</p>
+						
+						<p>Now that the cell is no longer an object the implicit conversion to boolean has to change. Instead of checking whether the cell is <code>null</code> we check its grid instead. The idea is that an invalid cell matches the default struct value, which has no grid.</p>
+						
+						<pre translate="no">	public static implicit operator bool(HexCell cell) => cell<ins>.grid</ins> != null;</pre>
+						
+						<p>Finally, mark everything besides the two fields as readonly. The fields themselves cannot be readonly because of Unity's hot reloading limitation. For the same reason the <code>values</code> field in <code>HexValues</code> isn't readonly either.</p>
+					</section>
+					
+					<section>
+						<h3>Cell Equality</h3>
+						
+						<p>Some code relies on checking whether cells are equal. To keep that code working with cell structs we have to include custom <code>==</code> and <code>!=</code> operators. Cells are equal if both their index and their grid are the same.</p>
+						
+						
+						<pre translate="no">	<ins>public static bool operator ==(HexCell a, HexCell b) =></ins>
+		<ins>a.index == b.index &amp;&amp; a.grid == b.grid;</ins>
+	
+	<ins>public static bool operator !=(HexCell a, HexCell b) =></ins>
+		<ins>a.index != b.index || a.grid != b.grid;</ins></pre>
+						
+						<p>If we overload these operators the compiler insists that we also override the <code>Equals</code> method that has an <code>object</code> parameter, in case an equality check is done with boxed values.
+						
+						<pre translate="no">	<ins>public readonly override bool Equals(object obj) =></ins>
+		<ins>obj is HexCell cell &amp;&amp; this == cell;</ins></pre>
+						
+						<aside>
+							<h3>How does that unboxing code work?</h3>
+							<div>
+								<p>It's shorthand code for <code>obj is HexCell ? this == (HexCell)obj : false</code>.</p>
+							</div>
+						</aside>
+						
+						<p>We are also asked to override the <code>GetHashCode</code> method. We simply take the hashes of the index and grid and binary XOR them.</p>
+						
+						<pre translate="no">	<ins>public readonly override int GetHashCode() =></ins>
+		<ins>grid != null ? index.GetHashCode() ^ grid.GetHashCode() : 0;</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Grid</h3>
+						
+						<p>Now that cells are no longer objects the grid doesn't need to keep track of them anymore, so remove its <code>cells</code> array.</p>
+						
+						<pre translate="no">	<del>//HexCell[] cells;</del>
+	
+	&hellip;
+	
+	void CreateCells()
+	{
+		<del>//cells = new HexCell[CellCountZ * CellCountX];</del>
+		&hellip;
+	}</pre>
+						
+						<p>We can no longer return <code>null</code> when a cell isn't found in the <code>GetCell</code> method with a <code>Ray</code> parameter. So we instead return the default struct value, which implicitly evaluates as <code>false</code> because it has no grid.</p>
+						
+						<pre translate="no">	public HexCell GetCell(Ray ray)
+	{
+		&hellip;
+		return <ins>default</ins>;
+	}</pre>
+						
+						<p>The same goes for the <code>GetCell</code> method with an <code>HexCoordinates</code> parameter. Also, instead of returning a cell from the array we return a new struct value with the cell index and a reference to the grid.</p>
+						
+						<pre translate="no">	public HexCell GetCell(HexCoordinates coordinates)
+	{
+		&hellip;
+		if (z &lt; 0 || z >= CellCountZ || x &lt; 0 || x >= CellCountX)
+		{
+			return <ins>default</ins>;
+		}
+		return <ins>new HexCell(</ins>x + z * CellCountX<ins>, this)</ins>;
+	}</pre>
+						
+						<p>Adjust <code>TryGetCell</code> with <code>HexCoordinates</code> in the same way.</p>
+						
+						<pre translate="no">	public bool TryGetCell(HexCoordinates coordinates, out HexCell cell)
+	{
+		&hellip;
+		if (z &lt; 0 || z >= CellCountZ || x &lt; 0 || x >= CellCountX)
+		{
+			cell = <ins>default</ins>;
+			return false;
+		}
+		cell = <ins>new HexCell(</ins>x + z * CellCountX<ins>, this)</ins>;
+		return true;
+	}</pre>
+						
+						<p>And <code>GetCell</code> with a cell index too.</p>
+						
+						<pre translate="no">	public HexCell GetCell(int cellIndex) => <ins>new(</ins>cellIndex<ins>, this)</ins>;</pre>
+						
+						<p><code>CreateCell</code> also has to work with a new struct value now.</p>
+						
+						<pre translate="no">		<del>//var cell = cells[i] = new HexCell();</del>
+		<ins>var cell = new HexCell(i, this);</ins></pre>
+						
+						<p>And so do both <code>Search</code> and <code>GetVisibleCells</code>.</p>
+						
+						<pre translate="no">			<del>//HexCell current = cells[currentIndex];</del>
+			<ins>var current = new HexCell(currentIndex, this);</ins></pre>
+						
+						<p>The <code>HexCell</code> object is now finally gone. All we have left is a small <code>HexCell</code> struct that is used in a few places.</p>
+						
+						<p>The next tutorial is <a href="../4-0-0/index.html">Hex Map 4.0.0</a>.</p>
+					</section>
+					
+					<a href="../../tutorials/license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecoding-projects/hex-map-project/src/2399393cdf64ad7d83eaff456f1207aa214356e2/?at=release%2F3.4.0" class="repository">repository</a>
+					<a href="Hex-Map-3-4-0.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../tutorials/index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../tutorials/become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../tutorials/donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials/tutorials.js"></script>
+	</body>
+</html>

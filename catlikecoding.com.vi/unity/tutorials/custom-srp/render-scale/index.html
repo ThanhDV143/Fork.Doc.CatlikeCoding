@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/custom-srp/render-scale/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/custom-srp/render-scale/tutorial-image.jpg">
+		<meta property="og:title" content="Render Scale">
+		<meta property="og:description" content="A Unity Custom SRP tutorial about decoupling the render resolution from the target buffer size.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Render Scale</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/custom-srp/render-scale/#article",
+				"headline": "Render Scale",
+				"alternativeHeadline": "Scaling Up and Down",
+				"datePublished": "2020-12-30",
+				"dateModified": "2023-08-03",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Custom SRP tutorial about decoupling the render resolution from the target buffer size",
+				"image": "https://catlikecoding.com/unity/tutorials/custom-srp/render-scale/tutorial-image.jpg",
+				"dependencies": "Unity 2022.3.5f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/custom-srp/", "name": "Custom SRP" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				BicubicRescalingMode: 1,
+				BloomSettings: 1,
+				CameraBufferSettings: 1,
+				CameraRenderer: 1,
+				CameraSettings: 1,
+				CascadeBlendMode: 1,
+				ChannelMixerSettings: 1,
+				ColorAdjustmentsSettings: 1,
+				ColorLUTResolution: 1,
+				CustomLightEditor: 1,
+				CustomRenderPipeline: 1,
+				CustomRenderPipelineAsset: 1,
+				CustomRenderPipelineCamera: 1,
+				CustomShaderGUI: 1,
+				Directional: 1,
+				DirectionalShadowData: 1,
+				FilterMode: 1,
+				FinalBlendMode: 1,
+				InputConfig: 1,
+				IntFloat: 1,
+				Lighting: 1,
+				MeshBall: 1,
+				Mode: 1,
+				Other: 1,
+				OtherShadowData: 1,
+				Pass: 1,
+				ReinterpretExtensions: 1,
+				RenderScaleMode: 1,
+				RenderingLayerMaskDrawer: 1,
+				RenderingLayerMaskField : 1,
+				RenderingLayerMaskFieldAttribute: 1,
+				PerObjectMaterialProperties: 1,
+				PostFXSettings: 1,
+				PostFXStack: 1,
+				ShadowedDirLight: 1,
+				ShadowedOtherLight: 1,
+				ShadowData: 1,
+				Shadows: 1,
+				ShadowsMidtonesHighlightsSettings: 1,
+				ShadowMask: 1,
+				ShadowMode: 1,
+				ShadowSettings: 1,
+				SplitToningSettings: 1,
+				TextureSize: 1,
+				ToneMappingSettings: 1,
+				WhiteBalanceSettings: 1
+			};
+			
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../../scriptable-render-pipeline/reflections/index.html">Custom SRP</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Render Scale</h1>
+					<p>Scaling Up and Down</p>
+					<ul>
+						<li>Adjust the render scale via a slider.</li>
+						<li>Support different render scales per camera.</li>
+						<li>Rescale to the final target after all post FX.</li>
+					</ul>
+				</header>
+				
+				<p>This is the 16th part of a tutorial series about creating a <a href="../../scriptable-render-pipeline/reflections/index.html">custom scriptable render pipeline</a>. It's about decoupling the render resolution from the target buffer size.</p>
+				
+				<p>This tutorial is made with Unity 2019.4.16f1 and upgraded to 2022.3.5f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Comparing different render scales, zoomed in.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Variable Resolution</h2>
+					
+					<p>An app runs at a fixed resolution. Some apps allow the resolution to be changed via a settings menu, but this requires a complete reinitialization of the graphics. A more flexible approach is to keep the app's resolution fixed but change the size of the buffers that the camera uses for rendering. This affects the entire rendering process except the final draw to the frame buffer, at which point the result gets rescaled to match the app's resolution.</p>
+					
+					<p>Scaling the buffer size can be used to improve performance, by reducing the amount of fragments that have to be processed. This could for example be done for all 3D rendering, while keeping the UI crisp at full resolution. The scale could also be adjusted dynamically, to keep the frame rate acceptable. Finally, we could also increase the buffer size to supersample, which lessens aliasing artifacts caused by a finite resolution. This last approach is also known as SSAA, which stands for supersampling antialiasing.</p>
+					
+					<section>
+						<h3>Buffer Settings</h3>
+						
+						<p>Adjusting the scale at which we render affects the buffer size, so we'll add a configurable slider for the render scale to <code>CameraBufferSettings</code>. There should be a minimum scale, for which we'll use 0.1. We also use 2 as a maximum, because going higher than that won't improve the image quality if we rescale with a single bilinear interpolation step. Going above 2 would worsen the quality because we'd end up skipping many pixels entirely when downsampling to the final target resolution.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+[System.Serializable]
+public struct CameraBufferSettings {
+
+	&hellip;
+
+	<ins>[Range(0.1f, 2f)]</ins>
+	<ins>public float renderScale;</ins>
+}</pre>
+						
+						<p>The default render scale should be set to 1 in <code>CustomRenderPipelineAsset</code>.</p>
+						
+						<pre translate="no">	CameraBufferSettings cameraBuffer = new CameraBufferSettings {
+		allowHDR = true<ins>,</ins>
+		<ins>renderScale = 1f</ins>
+	};</pre>
+						
+						<figure>
+							<img src="variable-resolution/render-scale-slider.png" width="320" height="142">
+							<figcaption>Render scale slider.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Scaled Rendering</h3>
+						
+						<p>From now on we'll also keep track of whether we're using scaled rendering in <code>CameraRenderer</code>.</p>
+						
+						<pre translate="no">	bool useHDR<ins>, useScaledRendering</ins>;</pre>
+						
+						<p>We don't want the configured render scale to affect scene windows, because they're used for editing. Enforce this by turning scaled rendering off in <code>PrepareForSceneWindow</code> when appropriate.</p>
+						
+						<pre translate="no">	partial void PrepareForSceneWindow () {
+		if (camera.cameraType == CameraType.SceneView) {
+			ScriptableRenderContext.EmitWorldGeometryForSceneView(camera);
+			<ins>useScaledRendering = false;</ins>
+		}
+	}</pre>
+						
+						<p>We determine whether scaled rendering should be used before invoking <code>PrepareForSceneWindow</code> in <code>Render</code>. Keep track of the current render scale in a variable and check whether it is not 1.</p>
+						
+						<pre translate="no">		<ins>float renderScale = bufferSettings.renderScale;</ins>
+		<ins>useScaledRendering = renderScale != 1f;</ins>
+		PrepareBuffer();
+		PrepareForSceneWindow();</pre>
+						
+						<p>We should be a bit more fuzzy than this though, because very slight deviations from 1 will have neither visual nor performance differences that matter. So let's only use scaled rendering if there is at least a 1% difference.</p>
+						
+						<pre translate="no">		useScaledRendering = renderScale <ins>&lt; 0.99f || renderScale > 1.01f</ins>;</pre>
+						
+						<p>From now on we also have to use an intermediate buffer when scaled rendering is used. So check for it in <code>Setup</code>.</p>
+						
+						<pre translate="no">		useIntermediateBuffer = <ins>useScaledRendering ||</ins>
+			useColorTexture || useDepthTexture || postFXStack.IsActive;</pre>
+					</section>
+					
+					<section>
+						<h3>Buffer Size</h3>
+						
+						<p>Because our camera's buffer size can now differ from the one indicated by the <code>Camera</code> component we have to keep track of the buffer size that we end up using. We can use a single <code>Vector2Int</code> field for this.</p>
+						
+						<pre translate="no">	<ins>Vector2Int bufferSize;</ins></pre>
+						
+						<p>Set the appropriate buffer size in <code>Render</code>, after culling succeeded. If scaled rendering applies scale the camera's pixel width and height and cast the results to integers, rounding down.</p>
+						
+						<pre translate="no">		if (!Cull(shadowSettings.maxDistance)) {
+			return;
+		}
+		
+		useHDR = bufferSettings.allowHDR && camera.allowHDR;
+		<ins>if (useScaledRendering) {</ins>
+			<ins>bufferSize.x = (int)(camera.pixelWidth * renderScale);</ins>
+			<ins>bufferSize.y = (int)(camera.pixelHeight * renderScale);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>bufferSize.x = camera.pixelWidth;</ins>
+			<ins>bufferSize.y = camera.pixelHeight;</ins>
+		<ins>}</ins></pre>
+						
+						<p>Use this buffer size when getting render textures for the camera attachments in <code>Setup</code>.</p>
+						
+						<pre translate="no">			buffer.GetTemporaryRT(
+				colorAttachmentId, <ins>bufferSize.x</ins>, <ins>bufferSize.y</ins>,
+				0, FilterMode.Bilinear, useHDR ?
+					RenderTextureFormat.DefaultHDR : RenderTextureFormat.Default
+			);
+			buffer.GetTemporaryRT(
+				depthAttachmentId, <ins>bufferSize.x</ins>, <ins>bufferSize.y</ins>,
+				32, FilterMode.Point, RenderTextureFormat.Depth
+			);</pre>
+						
+						<p>And also for the color and depth textures, if they are needed.</p>
+						
+						<pre translate="no">	void CopyAttachments () {
+		if (useColorTexture) {
+			buffer.GetTemporaryRT(
+				colorTextureId, <ins>bufferSize.x</ins>, <ins>bufferSize.y</ins>,
+				0, FilterMode.Bilinear, useHDR ?
+					RenderTextureFormat.DefaultHDR : RenderTextureFormat.Default
+			);
+			&hellip;
+		}
+		if (useDepthTexture) {
+			buffer.GetTemporaryRT(
+				depthTextureId, <ins>bufferSize.x</ins>, <ins>bufferSize.y</ins>,
+				32, FilterMode.Point, RenderTextureFormat.Depth
+			);
+			&hellip;
+		}
+		&hellip;
+	}</pre>
+						
+						<p>Initially try this out with without any post FX. You can zoom in the game window so you can better see individual pixels, which makes an adjusted render scale more obvious.</p>
+						
+						<figure>
+							<img src="variable-resolution/scale-100.png" width="280" height="280">
+							<figcaption>No post FX; render scale 1; game window zoomed in.</figcaption>
+						</figure>
+						
+						<p>A reduced render scale will speed up rendering while lowering image quality. An increased render scale does the opposite. Do keep in mind that when not using post FX an adjusted render scale requires an intermediate buffer and extra draw, so this adds some extra work.</p>
+						
+						<figure>
+							<img src="variable-resolution/scale-025.png" width="280" height="280" alt="0.25">
+							<img src="variable-resolution/scale-050.png" width="280" height="280" alt="0.50">
+							<img src="variable-resolution/scale-150.png" width="280" height="280" alt="1.5">
+							<img src="variable-resolution/scale-200.png" width="280" height="280" alt="2">
+							<figcaption>Render scale 0.25, 0.5, 1.5, and 2.</figcaption>
+						</figure>
+						
+						<p>The rescaling to the target buffer size is done automatically by the final draw. We end up with a simple bilinear upscaling or downscaling operation. The only weird results involve HDR values, which appear to break interpolation. You can see this happen with the highlight on the yellow sphere in the center of the above screenshots. We'll deal with this problem later.</p>
+					</section>
+					
+					<section>
+						<h3>Fragment Screen UV</h3>
+						
+						<p>Adjusting the render scale introduces a bug: sampling the color and depth textures goes wrong. You can see this with particle distortion, which clearly ends up using incorrect screen-space UV coordinates.</p>
+						
+						<figure>
+							<img src="variable-resolution/distortion-incorrect.png" width="320" height="220">
+							<figcaption>Incorrect distortion, render scale 1.5.</figcaption>
+						</figure>
+						
+						<p>This happens because the values Unity puts in <code class="shader">_ScreenParams</code> match the camera's pixel dimensions, not the dimensions of the buffer we are targeting. We fix this by introducing an alternative <em translate="no">_CameraBufferSize</em> vector that contains the data for the camera's adjusted size.</p>
+						
+						<pre translate="no">	static int
+		<ins>bufferSizeId = Shader.PropertyToID("_CameraBufferSize"),</ins>
+		colorAttachmentId = Shader.PropertyToID("_CameraColorAttachment"),</pre>
+						
+						<p>We send the values to the GPU in <code>Render</code>, after determining the buffer size. We'll use the same format as Unity uses for <em translate="no">_TexelSize</em> vectors, so the inverse of the width and height followed by the width and height.</p>
+						
+						<pre translate="no">		if (useScaledRendering) {
+			bufferSize.x = (int)(camera.pixelWidth * renderScale);
+			bufferSize.y = (int)(camera.pixelHeight * renderScale);
+		}
+		else {
+			bufferSize.x = camera.pixelWidth;
+			bufferSize.y = camera.pixelHeight;
+		}
+
+		buffer.BeginSample(SampleName);
+		<ins>buffer.SetGlobalVector(bufferSizeId, new Vector4(</ins>
+			<ins>1f / bufferSize.x, 1f / bufferSize.y,</ins>
+			<ins>bufferSize.x, bufferSize.y</ins>
+		<ins>));</ins>
+		ExecuteBuffer();</pre>
+						
+						<p>Add the vector to <em translate="no">Fragment</em>.</p>
+						
+						<pre class="shader" translate="no">TEXTURE2D(_CameraColorTexture);
+TEXTURE2D(_CameraDepthTexture);
+
+<ins>float4 _CameraBufferSize;</ins></pre>
+						
+						<p>Then use it instead of <code class="shader">_ScreenParams</code> in <code class="shader">GetFragment</code>. Now we can also use a multiplication instead of a division.</p>
+						
+						<pre class="shader" translate="no">	f.screenUV = f.positionSS <ins>* _CameraBufferSize.xy</ins>;</pre>
+						
+						<figure>
+							<img src="variable-resolution/distortion-correct.png" width="320" height="220">
+							<figcaption>Correct distortion, render scale 1.5.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Does't <code class="shader">_ScreenParams</code> also contain the inverse size?</h3>
+							<div>
+								<p>Almost. It contains the inverse plus 1 in its last two components. The extra 1 saves an addition for some specific uses, but in our case would've required an extra subtraction so I didn't use it.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Scaled Post FX</h3>
+						
+						<p>Adjusting the render scale should also affect post FX, otherwise we end up with unintended scaling. The most robust approach is to consistently use the same buffer size, so we'll pass it as a new third argument to <code>PostFXStack.Setup</code> in <code>CameraRenderer.Render</code>.</p>
+						
+						<pre translate="no">		postFXStack.Setup(
+			context, camera, <ins>bufferSize,</ins> postFXSettings, useHDR, colorLUTResolution,
+			cameraSettings.finalBlendMode
+		);</pre>
+						
+						<p><code>PostFXStack</code> now has to keep track of the buffer size.</p>
+						
+						<pre translate="no">	<ins>Vector2Int bufferSize;</ins>
+
+	&hellip;
+	
+	public void Setup (
+		ScriptableRenderContext context, Camera camera, <ins>Vector2Int bufferSize,</ins>
+		PostFXSettings settings, bool useHDR, int colorLUTResolution,
+		CameraSettings.FinalBlendMode finalBlendMode
+	) {
+		<ins>this.bufferSize = bufferSize;</ins>
+		&hellip;
+	}</pre>
+						
+						<p>Which has to be used in <code>DoBloom</code> instead of directly using the camera's pixel size.</p>
+						
+						<pre translate="no">	bool DoBloom (int sourceId) {
+		BloomSettings bloom = settings.Bloom;
+		int width = <ins>bufferSize.x</ins> / 2, height = <ins>bufferSize.y</ins> / 2;
+		
+		&hellip;
+		buffer.GetTemporaryRT(
+			bloomResultId, <ins>bufferSize.x</ins>, <ins>bufferSize.y</ins>, 0,
+			FilterMode.Bilinear, format
+		);
+		&hellip;
+	}</pre>
+						
+						<p>Because bloom is a resolution-dependent effect adjusting the render scale will change how it looks. This is easiest to see with just a few iterations of bloom. Decreasing the render scale will make the effect larger while increasing the render scale will make it smaller. Bloom with max iterations doesn't seem to change much, but can appear to pulse while adjusting the render scale due to the shifting resolution.</p>
+						
+						<figure>
+							<img src="variable-resolution/bloom-050.png" width="160" height="160" alt="0.5">
+							<img src="variable-resolution/bloom-100.png" width="160" height="160" alt="1">
+							<img src="variable-resolution/bloom-200.png" width="160" height="160" alt="2">
+							<figcaption>Two iterations of additive bloom; render scale 0.5, 1, and 2.</figcaption>
+						</figure>
+						
+						<p>Especially if the render scale is adjusted gradually it might be desirable to keep the bloom as consistent as possible. This could be done by basing the starting size of the bloom pyramid on the camera instead of the buffer size. Let's make this configurable by adding a toggle to ignore the render scale to <code>BloomSettings</code>.</p>
+						
+						<pre translate="no">	public struct BloomSettings {
+
+		<ins>public bool ignoreRenderScale;</ins>
+		
+		&hellip;
+	}</pre>
+						
+						<p>If the render scale should be ignored <code>PostFXStack.DoBloom</code> will start at half the camera pixel size, as before. This means that it no longer performs a default downsample to half resolution and instead depends on the render scale. The final bloom result should still match the scaled buffer size, so that will introduce another automatic downsample or upsample step at the end.</p>
+						
+						<pre translate="no">	bool DoBloom (int sourceId) {
+		BloomSettings bloom = settings.Bloom;
+		int width<ins>, height;</ins>
+		<ins>if (bloom.ignoreRenderScale) {</ins>
+			<ins>width = camera.pixelWidth / 2;</ins>
+			<ins>height = camera.pixelHeight / 2;</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>width = bufferSize.x / 2;</ins>
+			<ins>height = bufferSize.y / 2;</ins>
+		<ins>}</ins>
+		
+		&hellip;
+	}</pre>
+						
+						<p>When ignoring the render scale bloom is now much more consistent, although at very low scales it still looks different simply because there's so little data to work with.</p>
+						
+						<figure>
+							<img src="variable-resolution/bloom-ignore-render-scale.png" width="320" height="58" alt="inspector"><br>
+							<img src="variable-resolution/bloom-ignore-050.png" width="160" height="160" alt="game 0.5">
+							<img src="variable-resolution/bloom-100.png" width="160" height="160" alt="game 1">
+							<img src="variable-resolution/bloom-ignore-200.png" width="160" height="160" alt="game 2">
+							<figcaption>Bloom ignoring render scale; render scale 0.5, 1, and 2.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Render Scale per Camera</h3>
+						
+						<p>Let's also make it possible to use a different render scale per camera. For example, a single camera could always render at half or double resolution. This could either be fixed&mdash;overriding the global render scale of the RP&mdash;or applied on top so it's relative to the global render scale.</p>
+						
+						<p>Add a render scale slider to <code>CameraSettings</code>, with the same range as the RP asset. Also add a render scale mode that can be set to inherit, multiply, or override, via a new inner <code>RenderScaleMode</code> enum type.</p>
+						
+						<pre translate="no">	<ins>public enum RenderScaleMode { Inherit, Multiply, Override }</ins>
+
+	<ins>public RenderScaleMode renderScaleMode = RenderScaleMode.Inherit;</ins>
+
+	<ins>[Range(0.1f, 2f)]</ins>
+	<ins>public float renderScale = 1f;</ins></pre>
+						
+						<figure>
+							<img src="variable-resolution/render-scale-mode.png" width="320" height="124">
+							<figcaption>Render scale mode.</figcaption>
+						</figure>
+						
+						<p>To apply the per-camera render scale also give <code>CameraSettings</code> a public <code>GetRenderScale</code> method that has a render scale parameter and return the final scale. So it either returns the same scale, the camera' scale, or both multiplied, depending on the mode.</p>
+						
+						<pre translate="no">	<ins>public float GetRenderScale (float scale) {</ins>
+		<ins>return</ins>
+			<ins>renderScaleMode == RenderScaleMode.Inherit ? scale :</ins>
+			<ins>renderScaleMode == RenderScaleMode.Override ? renderScale :</ins>
+			<ins>scale * renderScale;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Invoke that method in <code>CameraRenderer.Render</code> to get the final render scale, passing it the scale from the buffer settings.</p>
+						
+						<pre translate="no">		float renderScale = <ins>cameraSettings.GetRenderScale(</ins>bufferSettings.renderScale<ins>)</ins>;</pre>
+						
+						<p>Let's also clamp the final render scale so it stays within the 0.1&ndash;2 range, if needed. That way we prevent scales that are too small or large in case it gets multiplied.</p>
+						
+						<pre translate="no">		if (useScaledRendering) {
+			<ins>renderScale = Mathf.Clamp(renderScale, 0.1f, 2f);</ins>
+			bufferSize.x = (int)(camera.pixelWidth * renderScale);
+			bufferSize.y = (int)(camera.pixelHeight * renderScale);
+		}</pre>
+						
+						<p>As we're using the same minimum and maximum for all render scales let's define them as public constants of <code>CameraRenderer</code>. I only show the definition of the constants, not the replacement of the <code>0.1f</code> and <code>2f</code> values in <code>CameraRenderer</code>, <code>CameraBufferSettings</code>, and <code>CameraSettings</code>.</p>
+						
+						<pre translate="no">	<ins>public const float renderScaleMin = 0.1f, renderScaleMax = 2f;</ins></pre>
+						
+						<figure>
+							<img src="variable-resolution/different-render-scale-per-camera.png" width="280" height="280">
+							<figcaption>Different render scale per camera.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Rescaling</h2>
+					
+					<p>When a render scale other than 1 is used everything happens at that scale, except for the final draw to the camera's target buffer. If no post FX are used this is a simple copy that rescales to the final size. When post FX are active it is the final draw that also implicitly performs the rescaling. However, rescaling during the final draw has some downsides.</p>
+					
+					<section>
+						<h3>Current Approach</h3>
+						
+						<p>Our current approach to rescaling produces undesired side effects. First, as we already noticed earlier both when upscaling or downscaling HDR colors brighter than 1 are always aliased. Interpolation only produces smooth results when performed in LDR. HDR interpolation can produce results that are still greater than 1 which won't appear blended at all. For example the average of zero and ten is five. In LDR it would appear as if the average of 0 and 1 is 1, while we would've expected it to be 0.5 instead.</p>
+						
+						<figure>
+							<img src="rescaling/hdr-050.png" width="320" height="270" alt="hdr 0.5">
+							<img src="rescaling/hdr-200.png" width="320" height="270" alt="hdr 2">
+							<img src="rescaling/ldr-050.png" width="320" height="270" alt="ldr 0.5">
+							<img src="rescaling/ldr-200.png" width="320" height="270" alt="without">
+							<figcaption>Color interpolation with and without HDR; render scale 0.5 and 2.</figcaption>
+						</figure>
+						
+						<p>A second problem of rescaling during the final pass is that color correction is applied to the interpolated colors instead of the original colors. This can introduce undesired color bands. The most obvious is the appearance of midtones when interpolating between shadows and highlights. This can be made extremely obvious by applying a very strong color adjustment to midtones, for example making them red.</p>
+						
+						<figure>
+							<img src="rescaling/midtones-render-scale-050.png" width="200" height="270" alt="0.5">
+							<img src="rescaling/midtones-render-scale-100.png" width="200" height="270" alt="1">
+							<img src="rescaling/midtones-render-scale-200.png" width="200" height="270" alt="2">
+							<figcaption>Strong red midtones; render scale 0.5, 1, and 2.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Rescaling in LDR</h3>
+						
+						<p>The sharp HDR edges and color correction artifacts are both caused by interpolating HDR colors before color correction and tone mapping. Thus the solution is to do both at the adjusted render scale, followed by another copy pass that rescaled the LDR colors. Add a new final rescale pass to the <em translate="no">PostFXStack</em> shader to take care of this final step. It's simply a copy pass that also has configurable blend modes. Also add an entry for it to the <code>PostFXStack.Pass</code> enum, as usual.</p>
+						
+						<pre class="shader" translate="no">		<ins>Pass {</ins>
+			<ins>Name "Final Rescale"</ins>
+
+			<ins>Blend [_FinalSrcBlend] [_FinalDstBlend]</ins>
+			
+			<ins>HLSLPROGRAM</ins>
+				<ins>#pragma target 3.5</ins>
+				<ins>#pragma vertex DefaultPassVertex</ins>
+				<ins>#pragma fragment CopyPassFragment</ins>
+			<ins>ENDHLSL</ins>
+		<ins>}</ins></pre>
+						
+						<p>Now we have two final passes, which requires us to add a pass parameter to <code>DrawFinal</code>.</p>
+						
+						<pre translate="no">	void DrawFinal (RenderTargetIdentifier from<ins>, Pass pass</ins>) {
+		&hellip;
+		buffer.DrawProcedural(
+			Matrix4x4.identity, settings.Material,
+			(int)<ins>pass</ins>, MeshTopology.Triangles, 3
+		);
+	}</pre>
+						
+						<p>Which approach we have to use in <code>DoColorGradingAndToneMapping</code> now depends on whether we're working with an adjusted render scale. We can check this by comparing the buffer size with the camera's pixel size. Checking the width is enough. If they're equal we draw the final pass as before, now explicitly with <code>Pass.Final</code> as an argument.</p>
+						
+						<pre translate="no">	void DoColorGradingAndToneMapping (int sourceId) {
+		&hellip;
+
+		<ins>if (bufferSize.x == camera.pixelWidth) {</ins>
+			DrawFinal(sourceId<ins>, Pass.Final</ins>);
+		<ins>}</ins>
+		<ins>else {}</ins>
+		
+		buffer.ReleaseTemporaryRT(colorGradingLUTId);
+	}</pre>
+						
+						<p>But if we need to rescale then we have to draw twice. First get a new temporary render texture matching the current buffer size. As we store LDR colors in there we can suffice with the default render texture format. Then perform a regular draw with the final pass, with the final blend mode set to <code class="shader">One Zero</code>. After that perform the final draw with the final rescale pass, follow by the release of the intermediate buffer.</p>
+						
+						<pre translate="no">		if (bufferSize.x == camera.pixelWidth) {
+			DrawFinal(sourceId, Pass.Final);
+		}
+		else {
+			<ins>buffer.SetGlobalFloat(finalSrcBlendId, 1f);</ins>
+			<ins>buffer.SetGlobalFloat(finalDstBlendId, 0f);</ins>
+			<ins>buffer.GetTemporaryRT(</ins>
+				<ins>finalResultId, bufferSize.x, bufferSize.y, 0,</ins>
+				<ins>FilterMode.Bilinear, RenderTextureFormat.Default</ins>
+			<ins>);</ins>
+			<ins>Draw(sourceId, finalResultId, Pass.Final);</ins>
+			<ins>DrawFinal(finalResultId, Pass.FinalRescale);</ins>
+			<ins>buffer.ReleaseTemporaryRT(finalResultId);</ins>
+		}</pre>
+						
+						<p>With these changes HDR colors also appear to interpolate correctly.</p>
+						
+						<figure>
+							<img src="rescaling/rescaling-ldr-050.png" width="320" height="270" alt="0.5">
+							<img src="rescaling/rescaling-ldr-200.png" width="320" height="270" alt="2">
+							<figcaption>Rescaling in LDR; render scale 0.5 and 2.</figcaption>
+						</figure>
+						
+						<p>And color grading no longer introduces color bands that don't exist at render scale 1.</p>
+						
+						<figure>
+							<img src="rescaling/rescaling-after-cc-midtones-050.png" width="200" height="270" alt="0.5">
+							<img src="rescaling/rescaling-after-cc-midtones-200.png" width="200" height="270" alt="2">
+							<figcaption>Rescaling after color correction; strong red midtones; render scale 0.5 and 2.</figcaption>
+						</figure>
+						
+						<p>Note that this only fixes the problem when post FX are used. There is no color grading otherwise, and we assume no HDR either.</p>
+					</section>
+					
+					<section>
+						<h3>Bicubic Sampling</h3>
+						
+						<p>When the render scale is lowered the image becomes blocky. We added an option to use bicubic upsampling for bloom to improve its quality and we can do the same when rescaling to the final render target. Add a toggle for this to <code>CameraBufferSettings</code>.</p>
+						
+						<pre translate="no">	<ins>public bool bicubicRescaling;</ins></pre>
+						
+						<figure>
+							<img src="rescaling/bicubic-rescaling-toggle.png" width="320" height="42">
+							<figcaption>Bicubic rescaling toggle.</figcaption>
+						</figure>
+						
+						<p>Add a new <code class="shader">FinalPassFragmentRescale</code> function to <em translate="no">PostFXStackPasses</em>, along with a <em translate="no">_CopyBicubic</em> property to control whether it uses bicubic or regular sampling.</p>
+						
+						<pre class="shader" translate="no"><ins>bool _CopyBicubic;</ins>
+
+<ins>float4 FinalPassFragmentRescale (Varyings input) : SV_TARGET {</ins>
+	<ins>if (_CopyBicubic) {</ins>
+		<ins>return GetSourceBicubic(input.screenUV);</ins>
+	<ins>}</ins>
+	<ins>else {</ins>
+		<ins>return GetSource(input.screenUV);</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Change the final rescale pass to use this function instead of the copy function.</p>
+						
+						<pre class="shader" translate="no">				#pragma fragment <ins>FinalPassFragmentRescale</ins></pre>
+						
+						<p>Add the property identifier to <code>PostFXStack</code> and make it keep track of whether bicubic rescaling is enabled, which is configured via a new parameter of <code>Setup</code>.</p>
+						
+						<pre translate="no">	int
+		<ins>copyBicubicId = Shader.PropertyToID("_CopyBicubic"),</ins>
+		finalResultId = Shader.PropertyToID("_FinalResult"),
+		&hellip;
+	
+	<ins>bool bicubicRescaling;</ins>
+
+	&hellip;
+
+	public void Setup (
+		ScriptableRenderContext context, Camera camera, Vector2Int bufferSize,
+		PostFXSettings settings, bool useHDR, int colorLUTResolution,
+		CameraSettings.FinalBlendMode finalBlendMode<ins>, bool bicubicRescaling</ins>
+	) {
+		<ins>this.bicubicRescaling = bicubicRescaling;</ins>
+		&hellip;
+	}</pre>
+						
+						<p>Pass the buffer settings along in <code>CameraRenderer.Render</code>.</p>
+						
+						<pre translate="no">		postFXStack.Setup(
+			context, camera, bufferSize, postFXSettings, useHDR, colorLUTResolution,
+			cameraSettings.finalBlendMode<ins>, bufferSettings.bicubicRescaling</ins>
+		);</pre>
+						
+						<p>And set the shader property appropriately in <code>PostFXStack.DoColorGradingAndToneMapping</code> before performing the final rescale.</p>
+						
+						<pre translate="no">			<ins>buffer.SetGlobalFloat(copyBicubicId, bicubicRescaling ? 1f : 0f);</ins>
+			DrawFinal(finalResultId, Pass.FinalRescale);</pre>
+						
+						<figure>
+								<img src="rescaling/bilinear-rescaling-0.25.png" width="280" height="280" alt="bilinear">
+							<img src="rescaling/bicubic-rescaling-025.png" width="280" height="280" alt="bicubic">
+							<figcaption>Bilinear and bicubic rescaling; render scale 0.25.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Only Bicubic Upscaling</h3>
+						
+						<p>Bicubic rescaling always improves quality when upscaling, but when downscaling the difference is must less noticeable. It is always useless for render scale 2, because each final pixel is the average of four pixels, exactly the same as bilinear interpolation. So let's replace our toggle in <code>BufferSettings</code> with a selection between three modes: off, up only, and both up and down.</p>
+						
+						<pre translate="no">	<ins>public enum BicubicRescalingMode { Off, UpOnly, UpAndDown }</ins>
+
+	public <ins>BicubicRescalingMode</ins> bicubicRescaling;</pre>
+						
+						<p>Change the type in <code>PostFXStack</code> to match.</p>
+						
+						<pre translate="no">	<ins>CameraBufferSettings.BicubicRescalingMode</ins> bicubicRescaling;
+
+	&hellip;
+
+	public void Setup (
+		&hellip;
+		<ins>CameraBufferSettings.BicubicRescalingMode</ins> bicubicRescaling
+	) { &hellip; }</pre>
+						
+						<p>And finally change <code>DoColorGradingAndToneMapping</code> so bicubic sampling is only used for the up-and-down mode or the up-only mode if we're working with a reduced render scale.</p>
+						
+						<pre translate="no">			<ins>bool bicubicSampling =</ins>
+				<ins>bicubicRescaling == CameraBufferSettings.BicubicRescalingMode.UpAndDown ||</ins>
+				<ins>bicubicRescaling == CameraBufferSettings.BicubicRescalingMode.UpOnly &amp;&amp;</ins>
+				<ins>bufferSize.x &lt; camera.pixelWidth;</ins>
+			buffer.SetGlobalFloat(copyBicubicId, <ins>bicubicSampling</ins> ? 1f : 0f);</pre>
+						
+						<figure>
+							<img src="rescaling/bicubic-rescaling-up-only.png" width="320" height="42">
+							<figcaption>Only bicubic rescaling for upsampling.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../fxaa/index.html">FXAA</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/custom-srp-16-render-scale/" class="repository">repository</a>
+					<a href="Render-Scale.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

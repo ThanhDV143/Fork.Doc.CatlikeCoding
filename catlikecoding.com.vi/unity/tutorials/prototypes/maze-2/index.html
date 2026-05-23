@@ -1,0 +1,1887 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/prototypes/maze-2/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/prototypes/maze-2/tutorial-image.jpg">
+		<meta property="og:title" content="Maze 2">
+		<meta property="og:description" content="A Unity C# Prototypes tutorial about creating a grid-based maze.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Maze 2</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/prototypes/maze-2/#article",
+				"headline": "Maze 2",
+				"alternativeHeadline": "Building and Navigating Passages",
+				"datePublished": "2023-04-29",
+				"dateModified": "2023-06-08",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity C# Prototypes tutorial about creating a grid-based maze.",
+				"image": "https://catlikecoding.com/unity/tutorials/prototypes/maze-2/tutorial-image.jpg",
+				"dependencies": "Unity 2021.3.23f1",
+				"proficiencyLevel": "Advanced"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/prototypes/", "name": "Prototypes" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				Agent: 1,
+				DisperseScentJob: 1,
+				FindDiagonalPassagesJob: 1,
+				Game: 1,
+				GenerateMazeJob: 1,
+				Maze: 1,
+				MazeFlags: 1,
+				MazeFlagsExtensions: 1,
+				MazeCellObject: 1,
+				MazeVisualization: 1,
+				Player : 1,
+				Scent : 1,
+				ScentJob: 1
+			};
+			
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Prototypes</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Maze 2</h1>
+					<p>Building and Navigating Passages</p>
+					<ul>
+						<li>Generate and visualize a grid-based maze.</li>
+						<li>Move through the maze.</li>
+						<li>Disperse the player's scent.</li>
+						<li>Have agents chase or flee from the player.</li>
+					</ul>
+				</header>
+				
+				<p>This is the fourth tutorial in a series about <a href="../index.html">prototypes</a>. In it we will create a grid-based maze which we'll navigate via a first-person point of view, while being chased by agents and seeking a goal.</p>
+				
+				<p>This tutorial is made with Unity 2021.3.23f1 and upgraded to 2022.3.1f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Navigating a maze while being chased by glowing cubes.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Game Scene</h2>
+					
+					<p>The game that we'll clone in this tutorial is <em translate="no">3D Monster Maze</em>, or any other similar maze game. It supersedes of the old <em translate="no">Maze</em> tutorial, so we'll name it <em translate="no">Maze 2</em>.</p>
+					
+					<section>
+						<h3>Visuals</h3>
+						
+						<p>Once again we'll use the same graphics settings as <a href="../paddle-square/index.html">Paddle Square</a>, so we can copy that project and remove all scripts and the components that use them. Also remove everything except the main camera from the game scene. We'll only reuse the <em translate="no">Particles</em> material and a text object.</p>
+						
+						<p>Because we're creating a closed maze there will be no environmental lighting. So we start with no lights and set the global environmental lighting and reflection intensity to zero. To see what we're creating turn off the scene lighting in the scene window.</p>
+					</section>
+					
+					<section>
+						<h3>Maze Cells</h3>
+						
+						<p>We generate the maze at runtime by populating the scene with prefab instances for each cell in the maze grid. We'll make these instances reusable using the approach that we introduced in the <a href="../runner-2/index.html">Runner 2 </a> tutorial, but this time we name the component type <code>MazeCellObject</code>.</p>
+						
+						<pre translate="no"><ins>using System.Collections.Generic;</ins>
+<ins>using UnityEngine;</ins>
+
+<ins>public class MazeCellObject : MonoBehaviour</ins>
+<ins>{</ins>
+<ins>#if UNITY_EDITOR</ins>
+	<ins>static List&lt;Stack&lt;MazeCellObject>> pools;</ins>
+
+	<ins>[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]</ins>
+	<ins>static void ClearPools ()</ins>
+	<ins>{</ins>
+		<ins>if (pools == null)</ins>
+		<ins>{</ins>
+			<ins>pools = new();</ins>
+		<ins>}</ins>
+		<ins>else</ins>
+		<ins>{</ins>
+			<ins>for (int i = 0; i &lt; pools.Count; i++)</ins>
+			<ins>{</ins>
+				<ins>pools[i].Clear();</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+<ins>#endif</ins>
+
+	<ins>[System.NonSerialized]</ins>
+	<ins>System.Collections.Generic.Stack&lt;MazeCellObject> pool;</ins>
+
+	<ins>public MazeCellObject GetInstance ()</ins>
+	<ins>{</ins>
+		<ins>if (pool == null)</ins>
+		<ins>{</ins>
+			<ins>pool = new();</ins>
+<ins>#if UNITY_EDITOR</ins>
+			<ins>pools.Add(pool);</ins>
+<ins>#endif</ins>
+		<ins>}</ins>
+		<ins>if (pool.TryPop(out MazeCellObject instance))</ins>
+		<ins>{</ins>
+			<ins>instance.gameObject.SetActive(true);</ins>
+		<ins>}</ins>
+		<ins>else</ins>
+		<ins>{</ins>
+			<ins>instance = Instantiate(this);</ins>
+			<ins>instance.pool = pool;</ins>
+		<ins>}</ins>
+		<ins>return instance;</ins>
+	<ins>}</ins>
+
+	<ins>public void Recycle ()</ins>
+	<ins>{</ins>
+		<ins>pool.Push(this);</ins>
+		<ins>gameObject.SetActive(false);</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>We'll give everything the same dull white material, with its <em translate="no">Environment Reflections</em> and <em translate="no">Specular Reflections</em> disabled. That way the walls, floor, and ceiling look like they're plastered instead of made from plastic.</p>
+						
+						<p>Each cell will fill a 2&times;2&times;2 cube. They're empty except for the walls between cells. As usual for this series we limit our visualization to cubes, however because we always see a single side of floors, ceilings, and walls we'll use the default quad object to model them. Keep the colliders of the quads so we can use PhysX to navigate the maze later.</p>
+						
+						<p>Let's start with a cell that has open passages on all four sides, which functions as an X junction. We assume that its neighboring cells do have walls, so this cell will have a portion of the walls at its corners. We design these as square pillars that extend 0.25 units into the cells. That makes the passages 1.5 units wide and the total wall thickness across two cells 0.5 units.</p>
+						
+						<p>Each pillar is made with two quads. The floor and ceiling can be made with three quads each.</p>
+
+						<figure>
+							<img src="game-scene/x-junction-top-orthographic.png" width="200" height="200" alt="top orthographic">
+							<img src="game-scene/x-junction-top-perspective.png" width="200" height="200" alt="top perspective">
+							<img src="game-scene/x-junction-side-perspective.png" width="200" height="200" alt="side perspective">
+							<figcaption>X junction prefab; top orthographic, top perspective, and side perspective view.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Can't we use single quads for the floor and ceiling?</h3>
+							<div>
+								<p>Yes, then they would extend into the pillars. However, by exactly modeling the actual open space we can see the maze layout in a top-down scene window.</p>
+							</div>
+						</aside>
+						
+						<p>Next, create prefabs for cells with less than four open passages. As we can rotate instances we only have to create four additional prefabs. We'll always use the order north, east, south, west. First, a dead-end cell with only a single open passage, which leads north. Second, a cell with a straight north-south passage. Third, a north-east corner cell. Fourth, a T junction going north, east, and south.</p>
+						
+						<figure>
+							<img src="game-scene/dead-end.png" width="200" height="200" alt="dead end">
+							<img src="game-scene/straight.png" width="200" height="200" alt="straight"><br>
+							<img src="game-scene/corner.png" width="200" height="200" alt="corner">
+							<img src="game-scene/t-junction.png" width="200" height="200" alt="t junction">
+							<figcaption>Dead end, straight, corner, and T junction.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Visualizing the Maze</h3>
+					
+						<p>To show the maze we'll create a <code>MazeVisualization</code> scriptable object type that holds references to all maze cell prefabs. Create such a scriptable object asset and hook it up.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>[CreateAssetMenu]</ins>
+<ins>public class MazeVisualization : ScriptableObject</ins>
+<ins>{</ins>
+	<ins>[SerializeField]</ins>
+	<ins>MazeCellObject end, straight, corner, tJunction, xJunction;</ins>
+<ins>}</ins></pre>
+						
+						<p>To know the size of the maze and where to position cells we introduce a <code>Maze</code> struct type. It keep track of its size, which gets passed to it via its constructor method. Expose its total length via a getter property and include methods to convert from index to 2D coordinates, from coordinates to world position with configurable elevation, and directly from index to world position. This is based on 2&times;2 unit cells and with the maze centered on the origin.</p>
+						
+						<pre translate="no"><ins>using Unity.Collections;</ins>
+<ins>using Unity.Mathematics;</ins>
+<ins>using UnityEngine;</ins>
+
+<ins>using static Unity.Mathematics.math;</ins>
+
+<ins>public struct Maze</ins>
+<ins>{</ins>
+	<ins>int2 size;</ins>
+
+	<ins>public int Length => size.x * size.y;</ins>
+
+	<ins>public Maze (int2 size)</ins>
+	<ins>{</ins>
+		<ins>this.size = size;</ins>
+	<ins>}</ins>
+
+	<ins>public int2 IndexToCoordinates (int index)</ins>
+	<ins>{</ins>
+		<ins>int2 coordinates;</ins>
+		<ins>coordinates.y = index / size.x;</ins>
+		<ins>coordinates.x = index - size.x * coordinates.y;</ins>
+		<ins>return coordinates;</ins>
+	<ins>}</ins>
+
+	<ins>public Vector3 CoordinatesToWorldPosition (int2 coordinates, float y = 0f) =></ins>
+		<ins>new Vector3(</ins>
+			<ins>2f * coordinates.x + 1f - size.x,</ins>
+			<ins>y,</ins>
+			<ins>2f * coordinates.y + 1f - size.y</ins>
+		<ins>);</ins>
+
+	<ins>public Vector3 IndexToWorldPosition (int index, float y = 0f) =></ins>
+		<ins>CoordinatesToWorldPosition(IndexToCoordinates(index), y);</ins>
+<ins>}</ins></pre>
+						
+						<p>Now we can add a <code>Visualize</code> method to <code>MazeVisualization</code> that spawns and positions cell instances based on a maze. We begin by always spawning X junctions.</p>
+						
+						<pre translate="no">	<ins>public void Visualize (Maze maze)</ins>
+	<ins>{</ins>
+		<ins>for (int i = 0; i &lt; maze.Length; i++)</ins>
+		<ins>{</ins>
+			<ins>MazeCellObject instance = xJunction.GetInstance();</ins>
+			<ins>instance.transform.localPosition = maze.IndexToWorldPosition(i);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>We'll again introduce a single game object with a <code>Game</code> component that is responsible for controlling the entire game. It needs a configurable reference to a visualization and a maze size, set to 20&times;20 by default. When it awakens it creates and keep track of a maze and visualizes it.</p>
+						
+						<pre translate="no"><ins>using TMPro;</ins>
+<ins>using Unity.Jobs;</ins>
+<ins>using Unity.Mathematics;</ins>
+<ins>using UnityEngine;</ins>
+
+<ins>using static Unity.Mathematics.math;</ins>
+
+<ins>public class Game : MonoBehaviour</ins>
+<ins>{</ins>
+	<ins>[SerializeField]</ins>
+	<ins>MazeVisualization visualization;</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>int2 mazeSize = int2(20, 20);</ins>
+
+	<ins>Maze maze;</ins>
+
+	<ins>void Awake ()</ins>
+	<ins>{</ins>
+		<ins>maze = new Maze(mazeSize);</ins>
+		<ins>visualization.Visualize(maze);</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<figure>
+							<img src="game-scene/maze.png" width="260" height="260">
+							<figcaption>20&times;20 maze; top scene view without lighting.</figcaption>
+						</figure>
+						
+						<p>At this point the maze appears to be an open area filled with pillars.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Generating the Maze</h2>
+					
+					<p>To create an actual maze we have to close some of the passages of cells. We have to keep track of the cell state, generate a maze layout, and pick the correct visualizations.</p>
+					
+					<section>
+						<h3>Cell State</h3>
+						
+						<p>The only thing that we need to track per cell is whether each of its four passages is open or closed. The most compact way to do this is by using bit flags to mark open passages. So we introduce a <code>MazeFlags</code> enumeration type with values for each passage, along with entries for Empty and all passages. Using the NESW order, the least significant bit represents north, the second one east, and so on.</p>
+						
+						<pre translate="no"><ins>[System.Flags]</ins>
+<ins>public enum MazeFlags</ins>
+<ins>{</ins>
+	<ins>Empty = 0,</ins>
+	
+	<ins>PassageN = 0b0001,</ins>
+	<ins>PassageE = 0b0010,</ins>
+	<ins>PassageS = 0b0100,</ins>
+	<ins>PassageW = 0b1000,</ins>
+
+	<ins>PassageAll = 0b1111</ins>
+<ins>}</ins></pre>
+						
+						<p>Let's provide some convenient extension methods to make checking and changing the maze flags easier, like we did in the <a href="../minecomb/index.html">Minecomb</a> tutorial. Add methods to check whether the flags data has a given bit mask set, whether it has any of a mask set, and whether a mask is not set. Also include a check whether exactly one flag is set, regardless which. Finish with a method that returns the flags either with or without a bit mask set.</p>
+						
+						<pre translate="no"><ins>public static class MazeFlagsExtensions</ins>
+<ins>{</ins>
+	<ins>public static bool Has (this MazeFlags flags, MazeFlags mask) =></ins>
+		<ins>(flags &amp; mask) == mask;</ins>
+
+	<ins>public static bool HasAny (this MazeFlags flags, MazeFlags mask) =></ins>
+		<ins>(flags &amp; mask) != 0;</ins>
+
+	<ins>public static bool HasNot (this MazeFlags flags, MazeFlags mask) =></ins>
+		<ins>(flags &amp; mask) != mask;</ins>
+
+	<ins>public static bool HasExactlyOne (this MazeFlags flags) =></ins>
+		<ins>flags != 0 &amp;&amp; (flags &amp; (flags - 1)) == 0;</ins>
+
+	<ins>public static MazeFlags With (this MazeFlags flags, MazeFlags mask) =></ins>
+		<ins>flags | mask;</ins>
+
+	<ins>public static MazeFlags Without (this MazeFlags flags, MazeFlags mask) =></ins>
+		<ins>flags &amp; ~mask;</ins>
+<ins>}</ins></pre>
+						
+						<aside>
+							<h3>How does <code>HasExactlyOne</code> work?</h3>
+							<div>
+								<p>Subtracting one from a value with a single bit set always clears that bit. Conversely, subtracting one from a value with multiple bits set always keep the most significant bit. Consider a value that has exactly one bit set, for example <code>0b0100</code>. Subtracting 1 yields <code>0b0011</code>. The bitwise AND operation of those yields zero. Now consider a value that has more that one bit set, for example <code>0b1010</code>. Subtracting 1 yields <code>0b1001</code>. Note that the highest bit remains set, thus the bitwise AND operation of those is not zero. This only fails if the tested value is zero as that would produce a false positive.</p>
+							</div>
+						</aside>
+						
+						<p>We'll keep track of the cell states via a native array that we put in <code>Maze</code>. Create it in the constructor method and add a public method to dispose it, if it is created. Also disable the access restrictions for parallel jobs so such jobs could check cell neighbors.</p>
+						
+						<pre translate="no">	<ins>[NativeDisableParallelForRestriction]</ins>
+	<ins>NativeArray&lt;MazeFlags> cells;</ins>
+
+	public int Length => <ins>cells.Length</ins>;
+
+	public Maze (int2 size)
+	{
+		this.size = size;
+		<ins>cells = new NativeArray&lt;MazeFlags>(size.x * size.y, Allocator.Persistent);</ins>
+	}
+
+	<ins>public void Dispose ()</ins>
+	<ins>{</ins>
+		<ins>if (cells.IsCreated)</ins>
+		<ins>{</ins>
+			<ins>cells.Dispose();</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Rather than exposing the native array let's add an index property that forwards to it.</p>
+						
+						<pre translate="no">	<ins>public MazeFlags this[int index]</ins>
+	<ins>{</ins>
+		<ins>get => cells[index];</ins>
+		<ins>set => cells[index] = value;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Let's also give it convenient methods to directly set or unset a mask for a given cell index, without having to retrieve the cell state, because we don't always care about it.</p>
+						
+						<pre translate="no">	<ins>public MazeFlags Set (int index, MazeFlags mask) =></ins>
+		<ins>cells[index] = cells[index].With(mask);</ins>
+
+	<ins>public MazeFlags Unset (int index, MazeFlags mask) =></ins>
+		<ins>cells[index] = cells[index].Without(mask);</ins></pre>
+						
+						<p>Finally, include getter properties for the east-west and north-south size of the maze and the index offset steps in all four directions.</p>
+						
+						<pre translate="no">	<ins>public int SizeEW => size.x;</ins>
+
+	<ins>public int SizeNS => size.y;</ins>
+
+	<ins>public int StepN => size.x;</ins>
+
+	<ins>public int StepE => 1;</ins>
+
+	<ins>public int StepS => -size.x;</ins>
+
+	<ins>public int StepW => -1;</ins></pre>
+						
+						<p><code>Game</code> must now dispose the maze when it gets destroyed, which happens when we exit play mode in the editor.</p>
+						
+						<pre translate="no">	<ins>void OnDestroy ()</ins>
+	<ins>{</ins>
+		<ins>maze.Dispose();</ins>
+	<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Picking the Correct Visualization</h3>
+						
+						<p>To have <code>MazeVisualization</code> instantiate the correct prefab for a cell we give it a <code>GetPrefab</code> method that returns a prefab given the <code>MazeFlags</code> of a cell. Let's start by only picking the correct prefab and ignoring rotation. This can be done with a single switch expression. No cell should be empty, so we'll use the X junction for that case as well.</p>
+						
+						<pre translate="no">	<ins>MazeCellObject GetPrefab (MazeFlags flags) => flags switch</ins>
+	<ins>{</ins>
+		<ins>MazeFlags.PassageN => deadEnd,</ins>
+		<ins>MazeFlags.PassageE => deadEnd,</ins>
+		<ins>MazeFlags.PassageS => deadEnd,</ins>
+		<ins>MazeFlags.PassageW => deadEnd,</ins>
+
+		<ins>MazeFlags.PassageN | MazeFlags.PassageS => straight,</ins>
+		<ins>MazeFlags.PassageE | MazeFlags.PassageW => straight,</ins>
+
+		<ins>MazeFlags.PassageN | MazeFlags.PassageE => corner,</ins>
+		<ins>MazeFlags.PassageE | MazeFlags.PassageS => corner,</ins>
+		<ins>MazeFlags.PassageS | MazeFlags.PassageW => corner,</ins>
+		<ins>MazeFlags.PassageW | MazeFlags.PassageN => corner,</ins>
+
+		<ins>MazeFlags.PassageAll &amp; ~MazeFlags.PassageW => tJunction,</ins>
+		<ins>MazeFlags.PassageAll &amp; ~MazeFlags.PassageN => tJunction,</ins>
+		<ins>MazeFlags.PassageAll &amp; ~MazeFlags.PassageE => tJunction,</ins>
+		<ins>MazeFlags.PassageAll &amp; ~MazeFlags.PassageS => tJunction,</ins>
+
+		<ins>_ => xJunction</ins>
+	<ins>};</ins></pre>
+						
+						<p>To check whether this works let's loop through the 16 options.</p>
+						
+						<pre translate="no">			MazeCellObject instance = <ins>GetPrefab((MazeFlags)(i % 16))</ins>.GetInstance();</pre>
+						
+						<figure>
+							<img src="generating-the-maze/all-cells-without-rotation.png" width="260" height="260">
+							<figcaption>All cell types, without rotation.</figcaption>
+						</figure>
+						
+						<p>To also support rotation, add a static array with quaternions for the four needed rotations.</p>
+						
+						<pre translate="no">	<ins>static Quaternion[] rotations =</ins>
+	<ins>{</ins>
+		<ins>Quaternion.identity,</ins>
+		<ins>Quaternion.Euler(0f, 90f, 0f),</ins>
+		<ins>Quaternion.Euler(0f, 180f, 0f),</ins>
+		<ins>Quaternion.Euler(0f, 270f, 0f)</ins>
+	<ins>};</ins></pre>
+						
+						<p>Then have <code>GetPrefab</code> return both the prefab and the rotation and use that to correctly rotate the instance. Let's use a tuple struct to return them together.</p>
+						
+						<pre translate="no">	public void Visualize (Maze maze)
+	{
+		for (int i = 0; i &lt; maze.Length; i++)
+		{
+			<ins>(MazeCellObject, int) prefabWithRotation = GetPrefab((MazeFlags)(i % 16));</ins>
+			MazeCellObject instance = <ins>prefabWithRotation.Item1</ins>.GetInstance();
+			<del>//instance.transform.localPosition = maze.IndexToWorldPosition(i);</del>
+			<ins>instance.transform.SetPositionAndRotation(</ins>
+				<ins>maze.IndexToWorldPosition(i), rotations[prefabWithRotation.Item2]</ins>
+			<ins>);</ins>
+		}
+	}
+
+	<ins>(MazeCellObject, int)</ins> GetPrefab (MazeFlags flags) => flags switch
+	{
+		MazeFlags.PassageN => <ins>(deadEnd, 0)</ins>,
+		MazeFlags.PassageE => <ins>(deadEnd, 1)</ins>,
+		MazeFlags.PassageS => <ins>(deadEnd, 2)</ins>,
+		MazeFlags.PassageW => <ins>(deadEnd, 3)</ins>,
+
+		MazeFlags.PassageN | MazeFlags.PassageS => <ins>(straight, 0)</ins>,
+		MazeFlags.PassageE | MazeFlags.PassageW => <ins>(straight, 1)</ins>,
+
+		MazeFlags.PassageN | MazeFlags.PassageE => <ins>(corner, 0)</ins>,
+		MazeFlags.PassageE | MazeFlags.PassageS => <ins>(corner, 1)</ins>,
+		MazeFlags.PassageS | MazeFlags.PassageW => <ins>(corner, 2)</ins>,
+		MazeFlags.PassageW | MazeFlags.PassageN => <ins>(corner, 3)</ins>,
+
+		MazeFlags.PassageAll & ~MazeFlags.PassageW => <ins>(tJunction, 0)</ins>,
+		MazeFlags.PassageAll & ~MazeFlags.PassageN => <ins>(tJunction, 1)</ins>,
+		MazeFlags.PassageAll & ~MazeFlags.PassageE => <ins>(tJunction, 2)</ins>,
+		MazeFlags.PassageAll & ~MazeFlags.PassageS => <ins>(tJunction, 3)</ins>,
+
+		_ => <ins>(xJunction, 0)</ins>
+	};</pre>
+						
+						<aside>
+							<h3>How do those tuples work?</h3>
+							<div>
+								<p>These kind of tuples are anonymous structs. It is as if we defined a struct type with public <code>MazeCellObject Item1</code> and <code>int Item2</code> fields along with a constructor method with parameters for both. But this syntax is more concise. It's fine to do this internally in a type where the usage is local and clear. It is also possible to name the tuple fields if desired.</p>
+							</div>
+						</aside>
+						
+						<figure>
+							<img src="generating-the-maze/all-cells-with-rotation.png" width="260" height="260">
+							<figcaption>All cell types, with rotation.</figcaption>
+						</figure>
+						
+						<p>After we have confirmed that the visualization works correctly, pass the actual cell flags to <code>GetPrefab</code>. Currently this will again produce only X junctions because the maze is empty.</p>
+						
+						<pre translate="no">			(MazeCellObject, int) prefabWithRotation = GetPrefab(<ins>maze[i]</ins>);</pre>
+					</section>
+					
+					<section>
+						<h3>Growing a Maze</h3>
+						
+						<p>To build an actual maze with winding passages we'll create a <code>GenerateMazeJob</code> Burst job that builds the maze based on a seed value, which it uses to generate random values. Generating the maze is a sequential process of walking through it, so the job implements <code>IJob</code>.
+						
+						<pre translate="no"><ins>using Unity.Burst;</ins>
+<ins>using Unity.Collections;</ins>
+<ins>using Unity.Jobs;</ins>
+<ins>using Unity.Mathematics;</ins>
+
+<ins>[BurstCompile]</ins>
+<ins>public struct GenerateMazeJob : IJob</ins>
+<ins>{</ins>
+	<ins>public Maze maze;</ins>
+
+	<ins>public int seed;</ins>
+
+	<ins>public void Execute ()</ins>
+	<ins>{</ins>
+		<ins>var random = new Random((uint)seed);</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Each step of the algorithm will have to check whether the current cell has an empty neighbor so it can pick one of those at random to visit next. Create a <code>FindAvailablePassages</code> method for this that checks all four potential neighbors given a cell index and stores (neighbor index, passage direction, opposite passage direction) tuples in a temporary scratchpad, for which we'll pass it a native array. Finally, it returns the amount of available passages. Create the scratchpad in <code>Execute</code> with a length of 4.</p>
+						
+						<pre translate="no">	public void Execute ()
+	{
+		var random = new Random((uint)seed);
+		<ins>var scratchpad = new NativeArray&lt;(int, MazeFlags, MazeFlags)>(</ins>
+			<ins>4, Allocator.Temp, NativeArrayOptions.UninitializedMemory</ins>
+		<ins>);</ins>
+	}
+	
+	<ins>int FindAvailablePassages (</ins>
+		<ins>int index, NativeArray&lt;(int, MazeFlags, MazeFlags)> scratchpad</ins>
+	<ins>)</ins>
+	<ins>{</ins>
+		<ins>int2 coordinates = maze.IndexToCoordinates(index);</ins>
+		<ins>int count = 0;</ins>
+		<ins>if (coordinates.x + 1 &lt; maze.SizeEW)</ins>
+		<ins>{</ins>
+			<ins>int i = index + maze.StepE;</ins>
+			<ins>if (maze[i] == MazeFlags.Empty)</ins>
+			<ins>{</ins>
+				<ins>scratchpad[count++] = (i, MazeFlags.PassageE, MazeFlags.PassageW);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>if (coordinates.x > 0)</ins>
+		<ins>{</ins>
+			<ins>int i = index + maze.StepW;</ins>
+			<ins>if (maze[i] == MazeFlags.Empty)</ins>
+			<ins>{</ins>
+				<ins>scratchpad[count++] = (i, MazeFlags.PassageW, MazeFlags.PassageE);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>if (coordinates.y + 1 &lt; maze.SizeNS)</ins>
+		<ins>{</ins>
+			<ins>int i = index + maze.StepN;</ins>
+			<ins>if (maze[i] == MazeFlags.Empty)</ins>
+			<ins>{</ins>
+				<ins>scratchpad[count++] = (i, MazeFlags.PassageN, MazeFlags.PassageS);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>if (coordinates.y > 0)</ins>
+		<ins>{</ins>
+			<ins>int i = index + maze.StepS;</ins>
+			<ins>if (maze[i] == MazeFlags.Empty)</ins>
+			<ins>{</ins>
+				<ins>scratchpad[count++] = (i, MazeFlags.PassageS, MazeFlags.PassageN);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>return count;</ins>
+	<ins>}</ins></pre>
+						
+						<p>We'll let <code>Execute</code> use the depth-first-search algorithm to run through the maze. So we need to keep track of a list of active indices, which in the worst case would contain all indices of the maze. Also keep track of the first and last active indices, both initially zero, and pick a random index for the first active one.</p>
+						
+						<pre translate="no">	public void Execute ()
+	{
+		&hellip;
+		<ins>var activeIndices = new NativeArray&lt;int>(</ins>
+			<ins>maze.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory</ins>
+		<ins>);</ins>
+		<ins>int firstActiveIndex = 0, lastActiveIndex = 0;</ins>
+		<ins>activeIndices[firstActiveIndex] = random.NextInt(maze.Length);</ins>
+	}</pre>
+						
+						<p>Then as long as the first index isn't greater than the last index, grab the last active cell and find the available passages for it. If there is at most one passage then we're finished with this cell so decrement the last active index. Then open a random passage if there is one available and make that neighbor the last active cell.</p>
+						
+						<pre translate="no">		activeIndices[firstActiveIndex] = random.NextInt(maze.Length);
+
+		<ins>while (firstActiveIndex &lt;= lastActiveIndex)</ins>
+		<ins>{</ins>
+			<ins>int index = activeIndices[lastActiveIndex];</ins>
+			
+			<ins>int availablePassageCount = FindAvailablePassages(index, scratchpad);</ins>
+			<ins>if (availablePassageCount &lt;= 1)</ins>
+			<ins>{</ins>
+				<ins>lastActiveIndex -= 1;</ins>
+			<ins>}</ins>
+			<ins>if (availablePassageCount > 0)</ins>
+			<ins>{</ins>
+				<ins>(int, MazeFlags, MazeFlags) passage =</ins>
+					<ins>scratchpad[random.NextInt(0, availablePassageCount)];</ins>
+				<ins>maze.Set(index, passage.Item2);</ins>
+				<ins>maze[passage.Item1] = passage.Item3;</ins>
+				<ins>activeIndices[++lastActiveIndex] = passage.Item1;</ins>
+			<ins>}</ins>
+		<ins>}</ins></pre>
+						
+						<p>Give <code>Game</code> a configuration option for a seed and generate a maze when it awakens. If the seed is set to zero we'll use a random one. This tutorial will always use seed 123.</p>
+						
+						<pre translate="no"><ins>using Random = UnityEngine.Random;</ins>
+
+public class Game : MonoBehaviour
+{
+	&hellip;
+	
+	<ins>[SerializeField, Tooltip("Use zero for random seed.")]</ins>
+	<ins>int seed;</ins>
+
+	Maze maze;
+
+	void Awake ()
+	{
+		maze = new Maze(mazeSize);
+		<ins>new GenerateMazeJob</ins>
+		<ins>{</ins>
+			<ins>maze = maze,</ins>
+			<ins>seed = seed != 0 ? seed : Random.Range€(1, int.MaxValue)</ins>
+		<ins>}.Schedule().Complete();</ins>
+
+		visualization.Visualize(maze);
+	}</pre>
+						
+						<figure>
+							<img src="generating-the-maze/maze-generated.png" width="260" height="260">
+							<figcaption>Maze generated with seed 123.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Growing Tree Algorithm</h3>
+						
+						<p>The maze that we generated is the result of using a depth-first search, which always picks the last cell that was activated. We could change this to instead always pick the first one and increase the first active index when that cell is finished instead.
+						
+						<pre translate="no">			int index = activeIndices[<ins>firstActiveIndex</ins>];
+			int availablePassageCount = FindAvailablePassages(index, scratchpad);
+			if (availablePassageCount &lt;= 1)
+			{
+				<ins>firstActiveIndex +=</ins> 1;
+			}</pre>
+						
+						<figure>
+							<img src="generating-the-maze/maze-always-first.png" width="260" height="260">
+							<figcaption>Always picking first.</figcaption>
+						</figure>
+						
+						<p>Picking the first doesn't produce anything useful. Let's instead pick a random active cell. If that cell deactivates we replace its active index with the first one.</p>
+						
+						<pre translate="no">			<ins>int randomActiveIndex = random.NextInt(firstActiveIndex, lastActiveIndex + 1);</ins>
+			int index = activeIndices[<ins>randomActiveIndex</ins>];
+			
+			int availablePassageCount = FindAvailablePassages(index, scratchpad);
+			if (availablePassageCount &lt;= 1)
+			{
+				<del>//firstActiveIndex += 1;</del>
+				<ins>activeIndices[randomActiveIndex] = activeIndices[firstActiveIndex++];</ins>
+			}</pre>
+						
+						<figure>
+							<img src="generating-the-maze/maze-always-random.png" width="260" height="260">
+							<figcaption>Always picking random.</figcaption>
+						</figure>
+						
+						<p>The random approach produces a result that is somewhere in between always pick first and always picking last. If we make configurable which cell gets picked with what probability we'll have implemented the growing tree algorithm. Let's do this by adding a probability for picking the last active cell, then use that to either pick the last one or a random one.
+						
+						<pre translate="no">	<ins>public float pickLastProbability;</ins>
+
+	public void Execute ()
+	{
+		&hellip;
+
+		while (firstActiveIndex &lt;= lastActiveIndex)
+		{
+			<ins>bool pickLast = random.NextFloat() &lt; pickLastProbability;</ins>
+			<ins>int randomActiveIndex, index;</ins>
+			<ins>if (pickLast)</ins>
+			<ins>{</ins>
+				<ins>randomActiveIndex = 0;</ins>
+				<ins>index = activeIndices[lastActiveIndex];</ins>
+			<ins>}</ins>
+			<ins>else</ins>
+			<ins>{</ins>
+				<ins>randomActiveIndex</ins> = random.NextInt(firstActiveIndex, lastActiveIndex + 1);
+				<ins>index</ins> = activeIndices[randomActiveIndex];
+			<ins>}</ins>
+
+			int availablePassageCount = FindAvailablePassages(index, scratchpad);
+			if (availablePassageCount &lt;= 1)
+			{
+				<ins>if (pickLast)</ins>
+				<ins>{</ins>
+					<ins>lastActiveIndex -= 1;</ins>
+				<ins>}</ins>
+				<ins>else</ins>
+				<ins>{</ins>
+					activeIndices[randomActiveIndex] = activeIndices[firstActiveIndex++];
+				<ins>}</ins>
+			}
+			&hellip;
+		}
+	}</pre>
+						
+						<p>Add a configuration option for this to <code>Game</code>, set to 0.5 by default.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Range(0f, 1f)]</ins>
+	<ins>float pickLastProbability = 0.5f;</ins>
+
+	Maze maze;
+
+	void Awake ()
+	{
+		maze = new Maze(mazeSize);
+		new GenerateMazeJob
+		{
+			maze = maze,
+			seed = seed != 0 ? seed : Random.Range€(1, int.MaxValue)<ins>,</ins>
+			<ins>pickLastProbability = pickLastProbability</ins>
+		}.Schedule().Complete();
+
+		visualization.Visualize(maze);
+	}</pre>
+						
+						<figure>
+							<img src="generating-the-maze/maze-pick-last-half-the-time.png" width="260" height="260">
+							<figcaption>Picking last half the time, otherwise random.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Opening Dead Ends</h3>
+						
+						<p>The growing tree algorithm creates mazes with a lot of dead ends and without any loops. We could change that by breaking open all dead ends after the growing tree algorithm is finished.</p>
+						
+						<p>Create a variation of <code>FindAvailablePassages</code> named <code>FindClosedPassages</code> that finds all passages that are currently closed and could be opened, excluding one indicated passage.</p>
+						
+						<pre translate="no">	<ins>int FindClosedPassages (</ins>
+		<ins>int index, NativeArray&lt;(int, MazeFlags, MazeFlags)> scratchpad, MazeFlags exclude</ins>
+	<ins>)</ins>
+	<ins>{</ins>
+		<ins>int2 coordinates = maze.IndexToCoordinates(index);</ins>
+		<ins>int count = 0;</ins>
+		<ins>if (exclude != MazeFlags.PassageE &amp;&amp; coordinates.x + 1 &lt; maze.SizeEW)</ins>
+		<ins>{</ins>
+			<ins>scratchpad[count++] = (maze.StepE, MazeFlags.PassageE, MazeFlags.PassageW);</ins>
+		<ins>}</ins>
+		<ins>if (exclude != MazeFlags.PassageW &amp;&amp; coordinates.x > 0)</ins>
+		<ins>{</ins>
+			<ins>scratchpad[count++] = (maze.StepW, MazeFlags.PassageW, MazeFlags.PassageE);</ins>
+		<ins>}</ins>
+		<ins>if (exclude != MazeFlags.PassageN &amp;&amp; coordinates.y + 1 &lt; maze.SizeNS)</ins>
+		<ins>{</ins>
+			<ins>scratchpad[count++] = (maze.StepN, MazeFlags.PassageN, MazeFlags.PassageS);</ins>
+		<ins>}</ins>
+		<ins>if (exclude != MazeFlags.PassageS &amp;&amp; coordinates.y > 0)</ins>
+		<ins>{</ins>
+			<ins>scratchpad[count++] = (maze.StepS, MazeFlags.PassageS, MazeFlags.PassageN);</ins>
+		<ins>}</ins>
+		<ins>return count;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Then add an <code>OpenDeadEnds</code> method that looks for cells that have only one open passage, and if so open a random passage for it, with a configurable probability. Do this after generating the maze, if the probability is greater than zero. Have it return the random state that it needs, so code that will come after invoking it can correctly continue with the random state.</p>
+						
+						<pre translate="no">	public float pickLastProbability<ins>, openDeadEndProbability</ins>;
+
+	public void Execute ()
+	{
+		&hellip;
+
+		<ins>if (openDeadEndProbability > 0f)</ins>
+		<ins>{</ins>
+			<ins>random = OpenDeadEnds(random, scratchpad);</ins>
+		<ins>}</ins>
+	}
+	
+	<ins>Random OpenDeadEnds (</ins>
+		<ins>Random random, NativeArray&lt;(int, MazeFlags, MazeFlags)> scratchpad</ins>
+	<ins>)</ins>
+	<ins>{</ins>
+		<ins>for (int i = 0; i &lt; maze.Length; i++)</ins>
+		<ins>{</ins>
+			<ins>MazeFlags cell = maze[i];</ins>
+			<ins>if (cell.HasExactlyOne() &amp;&amp; random.NextFloat() &lt; openDeadEndProbability)</ins>
+			<ins>{</ins>
+				<ins>int availablePassageCount = FindClosedPassages(i, scratchpad, cell);</ins>
+				<ins>(int, MazeFlags, MazeFlags) passage =</ins>
+					<ins>scratchpad[random.NextInt(0, availablePassageCount)];</ins>
+				<ins>maze[i] = cell.With(passage.Item2);</ins>
+				<ins>maze.Set(i + passage.Item1, passage.Item3);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>return random;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Give <code>Game</code> a configuration option for this as well, which I won't show here.</p>
+						
+						<figure>
+							<img src="generating-the-maze/maze-open-dead-end-50.png" width="260" height="260" alt="50%">
+							<img src="generating-the-maze/maze-open-dead-end-100.png" width="260" height="260" alt="100%">
+							<figcaption>Opened dead ends, with probability 0.5 and 1.</figcaption>
+						</figure>
+						
+						<p>The resulting mazes have fewer dead ends and contain loops. These loops can be so short that they form little open areas in the maze, with some walls reduced to pillars.</p>
+					</section>
+					
+					<section>
+						<h3>Opening Arbitrary Passages</h3>
+						
+						<p>We can also open arbitrary passages, to create even more loops and larger open areas, again with a configurable probability provided via <code>Game</code>. Give <code>GenerateMazeJob</code> an <code>OpenArbitraryPassages</code> method that loops through all cells and opens the west and south passages at random if possible. We don't need to check whether they're already open because it is entirely random.</p>
+						
+						<pre translate="no">	public float pickLastProbability, openDeadEndProbability<ins>, openArbitraryProbability</ins>;
+
+	public void Execute ()
+	{
+		&hellip;
+
+		<ins>if (openArbitraryProbability > 0f)</ins>
+		<ins>{</ins>
+			<ins>random = OpenArbitraryPasssages(random);</ins>
+		<ins>}</ins>
+	}
+
+	&hellip;
+
+	<ins>Random OpenArbitraryPasssages (Random random)</ins>
+	<ins>{</ins>
+		<ins>for (int i = 0; i &lt; maze.Length; i++)</ins>
+		<ins>{</ins>
+			<ins>int2 coordinates = maze.IndexToCoordinates(i);</ins>
+			<ins>if (coordinates.x > 0 &amp;&amp; random.NextFloat() &lt; openArbitraryProbability)</ins>
+			<ins>{</ins>
+				<ins>maze.Set(i, MazeFlags.PassageW);</ins>
+				<ins>maze.Set(i + maze.StepW, MazeFlags.PassageE);</ins>
+			<ins>}</ins>
+			<ins>if (coordinates.y > 0 &amp;&amp; random.NextFloat() &lt; openArbitraryProbability)</ins>
+			<ins>{</ins>
+				<ins>maze.Set(i, MazeFlags.PassageS);</ins>
+				<ins>maze.Set(i + maze.StepS, MazeFlags.PassageN);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>return random;</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="generating-the-maze/maze-open-arbitrary.png" width="260" height="260">
+							<figcaption>Opened arbitrary passages with probability 0.5.</figcaption>
+						</figure>
+						
+						<p>From now on I'll set the pick-last probability to 0.5, open dead ends to 0.5, and open arbitrary to 0.25.</p>
+						
+						<figure>
+							<img src="generating-the-maze/maze-last-50-dead-ends-50-arbitrary-25.png" width="260" height="260">
+							<figcaption>Pick last 0.5, dead ends 0.5, arbitrary 0.25.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Diagonal Passages</h3>
+						
+						<p>Although the maze only contains the straight north, east, south, and west passages, when there is an open area it might be possible to move diagonally as well. So let's add entries for NE, SE, SW, and NW to <code>MazeFlags</code> so we can store this information, using the next four available bits. Rename <code>PassageAll</code> to <code>PassagesStraight</code> and also add a <code>PassagesDiagonal</code> bit mask.</p>
+						
+						<pre translate="no">	PassageN = 0b0001,
+	PassageE = 0b0010,
+	PassageS = 0b0100,
+	PassageW = 0b1000,
+
+	<ins>PassagesStraight</ins> = 0b1111<ins>,</ins>
+
+	<ins>PassageNE = 0b0001_0000,</ins>
+	<ins>PassageSE = 0b0010_0000,</ins>
+	<ins>PassageSW = 0b0100_0000,</ins>
+	<ins>PassageNW = 0b1000_0000,</ins>
+
+	<ins>PassagesDiagonal = 0b1111_0000</ins></pre>
+						
+						<p>Create a <code>FindDiagonalPassagesJob</code> parallel Burst job that checks the diagonal passages for a cell. There is a northeast passage if the cell's north and east passages are both open, and the south and east passages of its northeast neighbor are also open. Likewise for the other diagonal passages.</p>
+						
+						<pre translate="no"><ins>using Unity.Burst;</ins>
+<ins>using Unity.Collections;</ins>
+<ins>using Unity.Jobs;</ins>
+
+<ins>[BurstCompile]</ins>
+<ins>public struct FindDiagonalPassagesJob : IJobFor</ins>
+<ins>{</ins>
+	<ins>public Maze maze;</ins>
+
+	<ins>public void Execute (int i)</ins>
+	<ins>{</ins>
+		<ins>MazeFlags cell = maze[i];</ins>
+		<ins>if (</ins>
+			<ins>cell.Has(MazeFlags.PassageN | MazeFlags.PassageE) &amp;&amp;</ins>
+			<ins>maze[i + maze.StepN + maze.StepE].Has(MazeFlags.PassageS | MazeFlags.PassageW)</ins>
+		<ins>)</ins>
+		<ins>{</ins>
+			<ins>cell = cell.With(MazeFlags.PassageNE);</ins>
+		<ins>}</ins>
+		<ins>if (</ins>
+			<ins>cell.Has(MazeFlags.PassageN | MazeFlags.PassageW) &amp;&amp;</ins>
+			<ins>maze[i + maze.StepN + maze.StepW].Has(MazeFlags.PassageS | MazeFlags.PassageE)</ins>
+		<ins>)</ins>
+		<ins>{</ins>
+			<ins>cell = cell.With(MazeFlags.PassageNW);</ins>
+		<ins>}</ins>
+		<ins>if (</ins>
+			<ins>cell.Has(MazeFlags.PassageS | MazeFlags.PassageE) &amp;&amp;</ins>
+			<ins>maze[i + maze.StepS + maze.StepE].Has(MazeFlags.PassageN | MazeFlags.PassageW)</ins>
+		<ins>)</ins>
+		<ins>{</ins>
+			<ins>cell = cell.With(MazeFlags.PassageSE);</ins>
+		<ins>}</ins>
+		<ins>if (</ins>
+			<ins>cell.Has(MazeFlags.PassageS | MazeFlags.PassageW) &amp;&amp;</ins>
+			<ins>maze[i + maze.StepS + maze.StepW].Has(MazeFlags.PassageN | MazeFlags.PassageE)</ins>
+		<ins>)</ins>
+		<ins>{</ins>
+			<ins>cell = cell.With(MazeFlags.PassageSW);</ins>
+		<ins>}</ins>
+		<ins>maze[i] = cell;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Schedule this job in <code>Game</code> after generating the maze. Let's use the east-west side of the maze for the inner loop batch count.</p>
+						
+						<pre translate="no">		<ins>new FindDiagonalPassagesJob</ins>
+		<ins>{</ins>
+			<ins>maze = maze</ins>
+		<ins>}.ScheduleParallel(</ins>
+			<ins>maze.Length, maze.SizeEW,</ins> new GenerateMazeJob
+			{
+				maze = maze,
+				seed = seed != 0 ? seed : Random.Range€(1, int.MaxValue),
+				pickLastProbability = pickLastProbability,
+				openDeadEndProbability = openDeadEndProbability,
+				openArbitraryProbability = openArbitraryProbability
+			}.Schedule()
+		<ins>)</ins>.Complete();</pre>
+						
+						<p>This will break the visualization, because the diagonal bits will interfere with its comparisons. Add extension methods to <code>MazeFlags</code> to extract only the straight or the diagonal passage flags.</p>
+						
+						<pre translate="no">	<ins>public static MazeFlags StraightPassages (this MazeFlags flags) =></ins>
+		<ins>flags &amp; MazeFlags.PassagesStraight;</ins>
+
+	<ins>public static MazeFlags DiagonalPassages (this MazeFlags flags) =></ins>
+		<ins>flags &amp; MazeFlags.PassagesDiagonal;</ins></pre>
+						
+						<p>Then only check the straight passages in <code>MazeVisualization.GetPrefab</code>.</p>
+						
+						<pre translate="no">	(MazeCellObject, int) GetPrefab (MazeFlags flags) => flags<ins>.StraightPassages()</ins> switch
+	{
+		&hellip;
+	};</pre>
+					</section>
+					
+					<section>
+						<h3>Removing Pillars</h3>
+						
+						<p>Now that we are aware of diagonal passages we can use them to remove the pillars, emptying the open areas of the maze. The cell prefabs that we current have are for when all diagonal passages are closed, so let's rename the configuration fields to make that clear.</p>
+						
+						<pre translate="no">	MazeCellObject deadEnd, straight, <ins>cornerClosed</ins>, <ins>tJunctionClosed</ins>, <ins>xJunctionClosed</ins>;</pre>
+						
+						<p>We begin with the simplest case, which is the open corner. It is the same as the closed corner but with its pillar removed and the floor and ceiling extended to the now open corner.</p>
+						
+						<figure>
+							<img src="generating-the-maze/corner-open.png" width="200" height="200">
+							<figcaption>Open corner.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Can't we make modular cell prefabs?</h3>
+							<div>
+								<p>Yes, but I'll use separate prefabs for each unique permutation. This makes it possible to create unique 3D models for specific cases.</p>
+							</div>
+						</aside>
+						
+						<p>Add a configuration field for the open corner and pick the correct prefab in <code>GetPrefab</code> by forwarding to a new <code>GetCorner</code> method. This method only has to check whether there is any diagonal passage, because there can be at most one in a corner.</p>
+						
+						<pre translate="no">	MazeCellObject
+		deadEnd, straight,
+		cornerClosed, <ins>cornerOpen,</ins>
+		tJunctionClosed, xJunctionClosed;
+	
+	&hellip;
+	
+	(MazeCellObject, int) GetPrefab (MazeFlags flags) => flags.StraightPassages() switch
+	{
+		&hellip;
+		MazeFlags.PassageN | MazeFlags.PassageE => <ins>GetCorner(flags</ins>, 0),
+		MazeFlags.PassageE | MazeFlags.PassageS => <ins>GetCorner(flags</ins>, 1),
+		MazeFlags.PassageS | MazeFlags.PassageW => <ins>GetCorner(flags</ins>, 2),
+		MazeFlags.PassageW | MazeFlags.PassageN => <ins>GetCorner(flags</ins>, 3),
+		&hellip;
+	};
+
+	<ins>(MazeCellObject, int) GetCorner (MazeFlags flags, int rotation) => (</ins>
+		<ins>flags.HasAny(MazeFlags.PassagesDiagonal) ? cornerOpen : cornerClosed, rotation</ins>
+	<ins>);</ins></pre>
+						
+						<p>There are three new prefabs needed for T junctions: with NE open, with SE open, and with both open.</p>
+						
+						<figure>
+							<img src="generating-the-maze/t-junction-open-ne.png" width="200" height="200" alt="open NE">
+							<img src="generating-the-maze/t-junction-open-se.png" width="200" height="200" alt="open SE">
+							<img src="generating-the-maze/t-junction-open.png" width="200" height="200" alt="open">
+							<figcaption>T junction open NE, open SE, and fully open.</figcaption>
+						</figure>
+						
+						<p>There can be a lot of T-junction permutations, but we can simplify this by rotating the diagonal passage bits. Add a <code>RotatedDiagonalPassages</code> method to <code>MazeFlags</code> for this, which extracts and rotates the four diagonal flag bits rightward by at most four.</p>
+						
+						<pre translate="no">	<ins>public static MazeFlags RotatedDiagonalPassages (this MazeFlags flags, int rotation)</ins>
+	<ins>{</ins>
+		<ins>int bits = (int)(flags &amp; MazeFlags.PassagesDiagonal);</ins>
+		<ins>bits = (bits >> rotation) | (bits &lt;&lt; (4 - rotation));</ins>
+		<ins>return (MazeFlags)bits &amp; MazeFlags.PassagesDiagonal;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can add a <code>GetTJunction</code> method to <code>MazeVisualization</code> that only has to check the four unique permutations.</p>
+						
+						<pre translate="no">	[SerializeField]
+	MazeCellObject
+		&hellip;
+		tJunctionClosed, <ins>tJunctionOpenNE, tJunctionOpenSE, tJunctionOpen,</ins>
+		xJunctionClosed;
+
+	&hellip;
+
+	(MazeCellObject, int) GetPrefab (MazeFlags flags) => flags.StraightPassages() switch
+	{
+		&hellip;
+		MazeFlags.PassagesStraight & ~MazeFlags.PassageW => <ins>GetTJunction(flags</ins>, 0),
+		MazeFlags.PassagesStraight & ~MazeFlags.PassageN => <ins>GetTJunction(flags</ins>, 1),
+		MazeFlags.PassagesStraight & ~MazeFlags.PassageE => <ins>GetTJunction(flags</ins>, 2),
+		MazeFlags.PassagesStraight & ~MazeFlags.PassageS => <ins>GetTJunction(flags</ins>, 3),
+		&hellip;
+	};
+
+	<ins>(MazeCellObject, int) GetTJunction (MazeFlags flags, int rotation) => (</ins>
+		<ins>flags.RotatedDiagonalPassages(rotation) switch</ins>
+		<ins>{</ins>
+			<ins>MazeFlags.Empty => tJunctionClosed,</ins>
+			<ins>MazeFlags.PassageNE => tJunctionOpenNE,</ins>
+			<ins>MazeFlags.PassageSE => tJunctionOpenSE,</ins>
+			<ins>_ => tJunctionOpen</ins>
+		<ins>},</ins>
+		<ins>rotation</ins>
+	<ins>);</ins></pre>
+						
+						<p>Finally, the X junction has a total of six permutations: fully closed, only NE open, NE &amp; SE open, NE &amp; SW open, only NE closed, and fully open.</p>
+						
+						<figure>
+							<img src="generating-the-maze/x-junction-open-ne.png" width="200" height="200" alt="open NE">
+							<img src="generating-the-maze/x-junction-open-ne-se.png" width="200" height="200" alt="open NE SE">
+							<img src="generating-the-maze/x-junction-open-ne-sw.png" width="200" height="200" alt="open NE SW">
+							<img src="generating-the-maze/x-junction-closed-ne.png" width="200" height="200" alt="closed NE SW">
+							<img src="generating-the-maze/x-junction-open.png" width="200" height="200" alt="open">
+							<figcaption>X junction open NE, open NE &amp; SE, open NE &amp; SW, closed NE, and fully open.</figcaption>
+						</figure>
+						
+						<p>Introduce a <code>GetXJuction</code> method for this, which checks all diagonal cases like <code>GetPrefab</code> checks the straight cases.</p>
+						
+						<pre translate="no">	MazeCellObject
+		&hellip;
+		xJunctionClosed<ins>, xJunctionOpenNE, xJunctionOpenNE_SE, xJunctionOpenNE_SW,</ins>
+		<ins>xJunctionClosedNE, xJunctionOpen</ins>;
+	
+	(MazeCellObject, int) GetPrefab (MazeFlags flags) => flags.StraightPassages() switch
+	{
+		&hellip;
+		_ => <ins>GetXJunction(flags)</ins>
+	};
+
+	<ins>(MazeCellObject, int) GetXJunction (MazeFlags flags) =></ins>
+		<ins>flags.DiagonalPassages() switch</ins>
+		<ins>{</ins>
+			<ins>MazeFlags.Empty => (xJunctionClosed, 0),</ins>
+
+			<ins>MazeFlags.PassageNE => (xJunctionOpenNE, 0),</ins>
+			<ins>MazeFlags.PassageSE => (xJunctionOpenNE, 1),</ins>
+			<ins>MazeFlags.PassageSW => (xJunctionOpenNE, 2),</ins>
+			<ins>MazeFlags.PassageNW => (xJunctionOpenNE, 3),</ins>
+
+			<ins>MazeFlags.PassageNE | MazeFlags.PassageSE => (xJunctionOpenNE_SE, 0),</ins>
+			<ins>MazeFlags.PassageSE | MazeFlags.PassageSW => (xJunctionOpenNE_SE, 1),</ins>
+			<ins>MazeFlags.PassageSW | MazeFlags.PassageNW => (xJunctionOpenNE_SE, 2),</ins>
+			<ins>MazeFlags.PassageNW | MazeFlags.PassageNE => (xJunctionOpenNE_SE, 3),</ins>
+
+			<ins>MazeFlags.PassageNE | MazeFlags.PassageSW => (xJunctionOpenNE_SW, 0),</ins>
+			<ins>MazeFlags.PassageSE | MazeFlags.PassageNW => (xJunctionOpenNE_SW, 1),</ins>
+
+			<ins>MazeFlags.PassagesDiagonal &amp; ~MazeFlags.PassageNE => (xJunctionClosedNE, 0),</ins>
+			<ins>MazeFlags.PassagesDiagonal &amp; ~MazeFlags.PassageSE => (xJunctionClosedNE, 1),</ins>
+			<ins>MazeFlags.PassagesDiagonal &amp; ~MazeFlags.PassageSW => (xJunctionClosedNE, 2),</ins>
+			<ins>MazeFlags.PassagesDiagonal &amp; ~MazeFlags.PassageNW => (xJunctionClosedNE, 3),</ins>
+
+			<ins>_ => (xJunctionOpen, 0),</ins>
+		<ins>};</ins></pre>
+						
+						<figure>
+							<img src="generating-the-maze/maze-without-pillars.png" width="260" height="260">
+							<figcaption>Maze without pillars.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Gameplay</h2>
+					
+					<p>With the maze completed we move on to implementing gameplay.</p>
+					
+					<section>
+						<h3>Player</h3>
+						
+						<p>We start with the player, for which we'll use a game object with a <code>CharacterController</code> component. Set its <em translate="no">Skin Width</em> to 0.04, its <em translate="no">Min Move Distance</em> to zero, its <em translate="no">Center</em> Y to 0.8, its <em translate="no">Radius</em> to 0.3, and its <em translate="no">Height</em> to 1.6.</p>
+						
+						<p>Make the main camera a child of the player object with its Y position set to 1.5, clear its rotation, and reduce its near clipping plane to 0.15.</p>
+						
+						<p>We make the player a light source itself so we can see something. Create a point light with a slightly yellow color and make it a child of the camera. This light doesn't need to cast shadows because it matches the view position, thus anything shadowed would not be visible.</p>
+						
+						<p>Position the player a (1, 0, 1) so it stands in the middle of cell (10, 10) facing north.</p>
+						
+						<figure>
+							<img src="gameplay/player-view.png" width="400" height="250">
+							<figcaption>Player view at (1, 0, 1).</figcaption>
+						</figure>
+						
+						<p>Give the player object a <code>Player</code> component with configurable movement speed, rotation speed, and mouse sensitivity, set to 4, 180, and 5 by default. Also give it a configurable starting vertical eye angle set to 10 by default so it look a bit down.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class Player : MonoBehaviour</ins>
+<ins>{</ins>
+	<ins>[SerializeField, Min(0f)]</ins>
+	<ins>float movementSpeed = 4f, rotationSpeed = 180f, mouseSensitivity = 5f;</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>float startingVerticalEyeAngle = 10f;</ins>
+<ins>}</ins></pre>
+						
+						<p>When the player awakens, have it store a reference to its character controller and also the <code>Transform</code> of its eye, which is the camera, its only child. Also keep track of the horizontal and vertical eye angles.</p>
+						
+						<pre translate="no">	<ins>CharacterController characterController;</ins>
+
+	<ins>Transform eye;</ins>
+	
+	<ins>Vector2 eyeAngles;</ins>
+	
+	<ins>void Awake ()</ins>
+	<ins>{</ins>
+		<ins>characterController = GetComponent&lt;CharacterController>();</ins>
+		<ins>eye = transform.GetChild(0);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Introduce a public <code>StartNewGame</code> method with a position parameter. Have it pick a random horizontal eye angle and use the configured starting vertical eye angle. Then set the player's position, temporarily disabling the character controller to make teleportation possible. Also add a public <code>Move</code> method that moves the player and returns its final position, but leave actual movement for later.</p>
+						
+						<pre translate="no">	<ins>public void StartNewGame (Vector3 position)</ins>
+	<ins>{</ins>
+		<ins>eyeAngles.x = Random.Range€(0f, 360f);</ins>
+		<ins>eyeAngles.y = startingVerticalEyeAngle;</ins>
+		<ins>characterController.enabled = false;</ins>
+		<ins>transform.localPosition = position;</ins>
+		<ins>characterController.enabled = true;</ins>
+	<ins>}</ins>
+
+	<ins>public Vector3 Move ()</ins>
+	<ins>{</ins>
+		<ins>return transform.localPosition;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Add a configuration field for the player to <code>Game</code>. Have it start a new game for the player when it awakens, placing it at position (1, 0, 1). Initialize the random state to the give seed if it isn't zero, so we always get the same view if a seed is configured. Then add an <code>Update</code> method that tells the player to move.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>Player player;</ins>
+
+	&hellip;
+
+	void Awake ()
+	{
+		&hellip;
+		
+		<ins>if (seed != 0)</ins>
+		<ins>{</ins>
+			<ins>Random.InitState(seed);</ins>
+		<ins>}</ins>
+		
+		<ins>player.StartNewGame(new Vector3(1f, 0f, 1f));</ins>
+	}
+
+	<ins>void Update()</ins>
+	<ins>{</ins>
+		<ins>player.Move();</ins>
+	<ins>}</ins></pre>
+						
+						<p>Let's begin by controlling the player's view. As usual we use the default input so go to the <em translate="no">Input Manager</em> project settings. Duplicate the first <em translate="no">Horizontal</em> axis, rename it to <em translate="no">Horizontal View</em>, and set its negative and positive buttons to something like q and e for primary and j and l for secondary keys. Also duplicate the first <em translate="no">Vertical</em> axis and use something like the k and i keys. You can also add support for gamepads.</p>
+						
+						<p>Add an <code>UpdateEyeAngles</code> method to <code>Player</code> and invoke it at the start of <code>Move</code>. In it, adjust the angles based on the rotation speed and time delta, using the view axes. Also, if the mouse sensitivity is positive, incorporate the mouse axes scaled by the sensitivity. Then wrap the horizontal angle so it stays in the 0&ndash;360 range and clamp the vertical angle so it stays in the &minus;45&ndash;45 range. Use the final angles to set the eye's XY rotation.</p>
+						
+						<pre translate="no">	public Vector3 Move ()
+	{
+		<ins>UpdateEyeAngles();</ins>
+		return transform.localPosition;
+	}
+	
+	<ins>void UpdateEyeAngles ()</ins>
+	<ins>{</ins>
+		<ins>float rotationDelta = rotationSpeed * Time.deltaTime;</ins>
+		<ins>eyeAngles.x += rotationDelta * Input.GetAxis("Horizontal View");</ins>
+		<ins>eyeAngles.y -= rotationDelta * Input.GetAxis("Vertical View");</ins>
+		<ins>if (mouseSensitivity > 0f)</ins>
+		<ins>{</ins>
+			<ins>float mouseDelta = rotationDelta * mouseSensitivity;</ins>
+			<ins>eyeAngles.x += mouseDelta * Input.GetAxis("Mouse X");</ins>
+			<ins>eyeAngles.y -= mouseDelta * Input.GetAxis("Mouse Y");</ins>
+		<ins>}</ins>
+
+		<ins>if (eyeAngles.x > 360f)</ins>
+		<ins>{</ins>
+			<ins>eyeAngles.x -= 360f;</ins>
+		<ins>}</ins>
+		<ins>else if (eyeAngles.x &lt; 0f)</ins>
+		<ins>{</ins>
+			<ins>eyeAngles.x += 360f;</ins>
+		<ins>}</ins>
+		<ins>eyeAngles.y = Mathf.Clamp(eyeAngles.y, -45f, 45f);</ins>
+		<ins>eye.localRotation = Quaternion.Euler(eyeAngles.y, eyeAngles.x, 0f);</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="gameplay/player-rotated-view.png" width="400" height="250">
+							<figcaption>Rotated starting view.</figcaption>
+						</figure>
+						
+						<p>To also move the player add an <code>UpdatePosition</code> method that gets invoked after <code>UpdateEyeAngles</code>. The movement is in the XZ plane and based on the <em translate="no">Horizontal</em> and <em translate="no">Vertical</em> input axes. Normalize the movement vector if it is greater than 1, then factor in the movement speed. The direction of movement is based solely on the horizontal eye angle, so use it to construct 2D forward and right vectors and use those to build the final movement vector. Then invoke <code>SimpleMove</code> on the character controller with an Y component of zero.</p>
+						
+						<pre translate="no">	public Vector3 Move ()
+	{
+		UpdateEyeAngles();
+		<ins>UpdatePosition();</ins>
+		return transform.localPosition;
+	}
+
+	<ins>void UpdatePosition ()</ins>
+	{
+		<ins>var movement = new Vector2(</ins>
+			<ins>Input.GetAxis("Horizontal"), Input.GetAxis("Vertical")</ins>
+		<ins>);</ins>
+		<ins>float sqrMagnitude = movement.sqrMagnitude;</ins>
+		<ins>if (sqrMagnitude > 1f)</ins>
+		<ins>{</ins>
+			<ins>movement /= Mathf.Sqrt(sqrMagnitude);</ins>
+		<ins>}</ins>
+		<ins>movement *= movementSpeed;</ins>
+
+		<ins>var forward = new Vector2(</ins>
+			<ins>Mathf.Sin(eyeAngles.x * Mathf.Deg2Rad),</ins>
+			<ins>Mathf.Cos(eyeAngles.x * Mathf.Deg2Rad)</ins>
+		<ins>);</ins>
+		<ins>var right = new Vector2(forward.y, -forward.x);</ins>
+
+		<ins>movement = right * movement.x + forward * movement.y;</ins>
+		<ins>characterController.SimpleMove(new Vector3(movement.x, 0f, movement.y));</ins>
+	<ins>}</ins></pre>
+						
+						<p>The player can now move through the maze.</p>
+					</section>
+					
+					<section>
+						<h3>Scent</h3>
+						
+						<p>The maze will be populated with other entities that try to catch the player. We'll use the most generic term for these AI-controlled entities, which is agent. To do that they will have to determine where to go. The standard way to implement this would be by using A* pathfinding, but let's do something else instead.</p>
+						
+						<p>The idea is that our agents will navigate by smell. To seek the player they simply move in the direction of the strongest scent. So instead of finding paths we will disperse the scent of the player. We can do this with cellular automata, one per cell. The advantage of cellular automata is that they are simple, can be processed in parallel at constant time when using double-buffering, and the same data can be used by multiple agents. A disadvantage is that every cell needs to be processed all the time.</p>
+						
+						<p>Create a parallel <code>DisperseScentJob</code> Burst job with fields for the maze and two <code>float</code> arrays for the old and new scent.
+						
+						<pre translate="no"><ins>using Unity.Burst;</ins>
+<ins>using Unity.Collections;</ins>
+<ins>using Unity.Jobs;</ins>
+
+<ins>[BurstCompile(FloatPrecision.Standard, FloatMode.Fast)]</ins>
+<ins>public struct DisperseScentJob : IJobFor</ins>
+<ins>{</ins>
+	<ins>[ReadOnly]</ins>
+	<ins>public Maze maze;</ins>
+
+	<ins>[ReadOnly, NativeDisableParallelForRestriction]</ins>
+	<ins>public NativeArray&lt;float> oldScent;</ins>
+
+	<ins>public NativeArray&lt;float> newScent;</ins>
+
+	<ins>public void Execute (int i)</ins>
+	<ins>{ }</ins>
+<ins>}</ins></pre>
+						
+						<p>The <code>Execute</code> method retrieves the old scent of its cell. Then it checks how many straight passages are open and accumulates the scent of those neighbors. It gains 20% of the total neighbor scent and loses 20% of its own scent per neighbor. Its new scent becomes that decayed by 50%.</p>
+						
+						<pre translate="no">	public void Execute (int i)
+	{
+		<ins>MazeFlags cell = maze[i];</ins>
+		<ins>float scent = oldScent[i];</ins>
+
+		<ins>float fromNeighbors = 0f;</ins>
+		<ins>float dispersalFactor = 0f;</ins>
+		<ins>if (cell.Has(MazeFlags.PassageE))</ins>
+		<ins>{</ins>
+			<ins>fromNeighbors += oldScent[i + maze.StepE];</ins>
+			<ins>dispersalFactor += 1f;</ins>
+		<ins>}</ins>
+		<ins>if (cell.Has(MazeFlags.PassageW))</ins>
+		<ins>{</ins>
+			<ins>fromNeighbors += oldScent[i + maze.StepW];</ins>
+			<ins>dispersalFactor += 1f;</ins>
+		<ins>}</ins>
+		<ins>if (cell.Has(MazeFlags.PassageN))</ins>
+		<ins>{</ins>
+			<ins>fromNeighbors += oldScent[i + maze.StepN];</ins>
+			<ins>dispersalFactor += 1f;</ins>
+		<ins>}</ins>
+		<ins>if (cell.Has(MazeFlags.PassageS))</ins>
+		<ins>{</ins>
+			<ins>fromNeighbors += oldScent[i + maze.StepS];</ins>
+			<ins>dispersalFactor += 1f;</ins>
+		<ins>}</ins>
+
+		<ins>scent += (fromNeighbors - scent * dispersalFactor) * 0.2f;</ins>
+		<ins>newScent[i] = scent * 0.5f;</ins>
+	<ins>}</ins></pre>
+						
+						<p>To make this work we have to be able to convert the player's position to a cell index. So let's add conversion methods to <code>Maze</code> complementary to the ones that it already has.</p>
+						
+						<pre translate="no">	<ins>public int CoordinatesToIndex (int2 coordinates) =></ins>
+		<ins>coordinates.y * size.x + coordinates.x;</ins>
+
+	<ins>public int2 WorldPositionToCoordinates (Vector3 position) => int2(</ins>
+		<ins>(int)((position.x + size.x) * 0.5f),</ins>
+		<ins>(int)((position.z + size.y) * 0.5f)</ins>
+	<ins>);</ins>
+
+	<ins>public int WorldPositionToIndex (Vector3 position) =></ins>
+		<ins>CoordinatesToIndex(WorldPositionToCoordinates(position));</ins></pre>
+						
+						<p>To manage the scent create a <code>Scent</code> struct that keeps track of two native arrays, which one to use, and give it a <code>Disperse</code> method that runs <code>DisperseScentJob</code> given a maze and player position, then sets the scent of the player's cell to 1, and also returns the current scent. Because this process doesn't need to run each frame let's also include a cooldown that makes the job run only ten times per second. We do set the player's scent all the time.</p>
+						
+						<pre translate="no"><ins>using Unity.Collections;</ins>
+<ins>using Unity.Jobs;</ins>
+<ins>using UnityEngine;</ins>
+
+<ins>public struct Scent</ins>
+{
+	<ins>NativeArray&lt;float> scentA, scentB;</ins>
+
+	<ins>bool useA;</ins>
+
+	<ins>float cooldown;</ins>
+
+	<ins>public Scent (Maze maze)</ins>
+	<ins>{</ins>
+		<ins>scentA = new NativeArray&lt;float>(</ins>
+			<ins>maze.Length, Allocator.Persistent, NativeArrayOptions.UninitializedMemory</ins>
+		<ins>);</ins>
+		<ins>scentB = new NativeArray&lt;float>(maze.Length, Allocator.Persistent);</ins>
+		<ins>useA = false;</ins>
+		<ins>cooldown = 0f;</ins>
+	<ins>}</ins>
+	
+	<ins>public void Dispose ()</ins>
+	<ins>{</ins>
+		<ins>if (scentA.IsCreated)</ins>
+			<ins>{</ins>
+			<ins>scentA.Dispose();</ins>
+			<ins>scentB.Dispose();</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	<ins>public NativeArray&lt;float> Disperse (Maze maze, Vector3 playerPosition)</ins>
+	<ins>{</ins>
+		<ins>cooldown -= Time.deltaTime;</ins>
+		<ins>if (cooldown &lt;= 0f)</ins>
+		<ins>{</ins>
+			<ins>cooldown += 0.1f;</ins>
+			<ins>new DisperseScentJob</ins>
+			<ins>{</ins>
+				<ins>maze = maze,</ins>
+				<ins>oldScent = useA ? scentA : scentB,</ins>
+				<ins>newScent = useA ? scentB : scentA,</ins>
+			<ins>}.ScheduleParallel(maze.Length, maze.SizeEW, default).Complete();</ins>
+
+			<ins>useA = !useA;</ins>
+		<ins>}</ins>
+		<ins>NativeArray&lt;float> current = useA ? scentA : scentB;</ins>
+		<ins>current[maze.WorldPositionToIndex(playerPosition)] = 1f;</ins>
+		<ins>return current;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Add the scent to <code>Game</code> and disperse it after the player moves.</p>
+						
+						<pre translate="no">	<ins>Scent scent;</ins>
+
+	void Awake ()
+	{
+		maze = new Maze(mazeSize);
+		<ins>scent = new Scent(maze);</ins>
+		&hellip;
+	}
+
+	void Update()
+	{
+		<ins>scent.Disperse(maze,</ins> player.Move()<ins>)</ins>;
+	}
+
+	void OnDestroy ()
+	{
+		maze.Dispose();
+		<ins>scent.Dispose();</ins>
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Agents</h3>
+						
+						<p>Now that the player leaves a scent trail that disperses throughout the maze we move on to create an <code>Agent</code> component type. Give it a configurable and speed, set to white and 1 by default. Besides visualizing them with a cube we'll make the agents shed light and leave a trail of particles. So when it awakens set the light color, material color, and the particle main color to the configured one. The light and particle system will be components of the agent itself.</p>
+						
+						<pre translate="no"><ins>using Unity.Collections;</ins>
+<ins>using Unity.Mathematics;</ins>
+<ins>using UnityEngine;</ins>
+
+<ins>public class Agent : MonoBehaviour</ins>
+<ins>{</ins>
+	<ins>[SerializeField]</ins>
+	<ins>Color color = Color.white;</ins>
+
+	<ins>[SerializeField, Min(0f)]</ins>
+	<ins>float speed = 1f;</ins>
+
+	<ins>void Awake ()</ins>
+	<ins>{</ins>
+		<ins>GetComponent&lt;Light>().color = color;</ins>
+		<ins>GetComponent&lt;MeshRenderer>().material.color = color;</ins>
+		<ins>ParticleSystem.MainModule main = GetComponent&lt;ParticleSystem>().main;</ins>
+		<ins>main.startColor = color;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>The agent will keep track of the maze, the index of the cell it's currently targeting, and that cell's position. Give it a public <code>StartNewGame</code> method that initializes these and its own position based on a given maze and coordinates. Let it keep its own Y position.</p>
+						
+						<pre translate="no">	<ins>Maze maze;</ins>
+
+	<ins>int targetIndex;</ins>
+
+	<ins>Vector3 targetPosition;</ins>
+
+	&hellip;
+
+	<ins>public void StartNewGame (Maze maze, int2 coordinates)</ins>
+	<ins>{</ins>
+		<ins>this.maze = maze;</ins>
+		<ins>targetIndex = maze.CoordinatesToIndex(coordinates);</ins>
+		<ins>targetPosition = transform.localPosition =</ins>
+			<ins>maze.CoordinatesToWorldPosition(coordinates, transform.localPosition.y);</ins>
+	<ins>}</ins></pre>
+						
+						<p>To find its way the agent will sniff adjacent cells. Give it a <code>Sniff</code> method that does this gives a reference to the current trail, the scent data, and an index offset to check. The trail is an (index, scent) tuple pointing to the neighbor with the strongest scent. The method checks whether the cell with the given offset has a stronger scent and if so changes the trail.</p>
+						
+						<pre translate="no">	<ins>void Sniff (ref (int, float) trail, NativeArray&lt;float> scent, int indexOffset)</ins>
+	<ins>{</ins>
+		<ins>int sniffIndex = targetIndex + indexOffset;</ins>
+		<ins>float detectedScent = scent[sniffIndex];</ins>
+		<ins>if (detectedScent > trail.Item2)</ins>
+		<ins>{</ins>
+			<ins>trail = (sniffIndex, detectedScent);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Next, add a <code>TryFindNewTarget</code> method with a scent data parameter that sniffs all eight neighbors if possible, sniffing diagonal passages first as those are preferred. Once it's finished and a scent was detected it updates the target index and position. It also returns whether any scent was detected.</p>
+						
+						<pre translate="no">	<ins>bool TryFindNewTarget (NativeArray&lt;float> scent)</ins>
+	{
+		<ins>MazeFlags cell = maze[targetIndex];</ins>
+		<ins>(int, float) trail = (0, 0f);</ins>
+
+		<ins>if (cell.Has(MazeFlags.PassageNE))</ins>
+		<ins>{</ins>
+			<ins>Sniff(ref trail, scent, maze.StepN + maze.StepE);</ins>
+		<ins>}</ins>
+		<ins>if (cell.Has(MazeFlags.PassageNW))</ins>
+		<ins>{</ins>
+			<ins>Sniff(ref trail, scent, maze.StepN + maze.StepW);</ins>
+		<ins>}</ins>
+		<ins>if (cell.Has(MazeFlags.PassageSE))</ins>
+		<ins>{</ins>
+			<ins>Sniff(ref trail, scent, maze.StepS + maze.StepE);</ins>
+		<ins>}</ins>
+		<ins>if (cell.Has(MazeFlags.PassageSW))</ins>
+		<ins>{</ins>
+			<ins>Sniff(ref trail, scent, maze.StepS + maze.StepW);</ins>
+		<ins>}</ins>
+		<ins>if (cell.Has(MazeFlags.PassageE))</ins>
+		<ins>{</ins>
+			<ins>Sniff(ref trail, scent, maze.StepE);</ins>
+		<ins>}</ins>
+		<ins>if (cell.Has(MazeFlags.PassageW))</ins>
+		<ins>{</ins>
+			<ins>Sniff(ref trail, scent, maze.StepW);</ins>
+		<ins>}</ins>
+		<ins>if (cell.Has(MazeFlags.PassageN))</ins>
+		<ins>{</ins>
+			<ins>Sniff(ref trail, scent, maze.StepN);</ins>
+		<ins>}</ins>
+		<ins>if (cell.Has(MazeFlags.PassageS))</ins>
+		<ins>{</ins>
+			<ins>Sniff(ref trail, scent, maze.StepS);</ins>
+		<ins>}</ins>
+
+		<ins>if (trail.Item2 > 0f)</ins>
+		<ins>{</ins>
+			<ins>targetIndex = trail.Item1;</ins>
+			<ins>targetPosition = maze.IndexToWorldPosition(trail.Item1, targetPosition.y);</ins>
+			<ins>return true;</ins>
+		<ins>}</ins>
+		<ins>return false;</ins>
+	<ins>}</ins></pre>
+						
+						<p>The agent also gets a public <code>Move</code> method, with the current scent data as a parameter. It begins by determining the vector and distance to the current target, along with its current movement given its speed and the time delta. Then as long as the movement exceeds the distance to the target, jump to the target position and try to find a new target. If that succeeds reduce the remaining movement by the traveled distance and determine the target vector and distance again. If this fails then stop moving and return the current position. Finally, apply the remainder of the movement and set and return the position.</p>
+						
+						<pre translate="no">	<ins>public Vector3 Move (NativeArray&lt;float> scent)</ins>
+	<ins>{</ins>
+		<ins>Vector3 position = transform.localPosition;</ins>
+		<ins>Vector3 targetVector = targetPosition - position;</ins>
+		<ins>float targetDistance = targetVector.magnitude;</ins>
+		<ins>float movement = speed * Time.deltaTime;</ins>
+
+		<ins>while (movement > targetDistance)</ins>
+		<ins>{</ins>
+			<ins>position = targetPosition;</ins>
+			<ins>if (TryFindNewTarget(scent))</ins>
+			<ins>{</ins>
+				<ins>movement -= targetDistance;</ins>
+				<ins>targetVector = targetPosition - position;</ins>
+				<ins>targetDistance = targetVector.magnitude;</ins>
+			<ins>}</ins>
+			<ins>else</ins>
+			<ins>{</ins>
+				<ins>return transform.localPosition = position;</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+
+		<ins>return transform.localPosition =</ins>
+			<ins>position + targetVector * (movement / targetDistance);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Add a configuration array for agents to <code>Game</code>. Start a new game for them all at the end of <code>Awake</code>, giving them random starting coordinates. And move them all in <code>Update</code> after the player.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>Agent[] agents;</ins>
+
+	&hellip;
+
+	void Awake ()
+	{
+		&hellip;
+
+		<ins>for (int i = 0; i &lt; agents.Length; i++)</ins>
+		<ins>{</ins>
+			<ins>var coordinates =</ins>
+				<ins>int2(Random.Range€(0, mazeSize.x), Random.Range€(0, mazeSize.y));</ins>
+			<ins>agents[i].StartNewGame(maze, coordinates);</ins>
+		<ins>}</ins>
+	}
+
+	void Update()
+	{
+		<ins>NativeArray&lt;float> currentScent =</ins> scent.Disperse(maze, player.Move());
+		<ins>for (int i = 0; i &lt; agents.Length; i++)</ins>
+		<ins>{</ins>
+			<ins>agents[i].Move(currentScent);</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>Create a prefab for the agent with an <code>Agent</code> component, a <code>Light</code>, a <code>ParticleSystem</code>, a <code>MeshFilter</code>, and a <code>MeshRenderer</code>.</p>
+						
+						<p>The light is a point light with intensity 2, range 6, and shadows enabled. To make shadows for additional lights show up they must also be enabled for the URP asset.</p>
+						
+						<p>The particle system has its <em translate="no">Start Lifetime</em> set to 30, <em translate="no">Simulation Space</em> set to <em translate="no">World</em> and <em translate="no">Emitter Velocity Mode</em> set to <em translate="no">Transform</em>. That will make agents leave a trail of particles for the player to encounter. Set the <em translate="no">Emission / Rate over Time</em> to zero and <em translate="no">Emission / Rate over Distance</em> to 1. Set <em translate="no">Shape</em> to a box scaled to 0.25. Give it a <em translate="no">Color over Lifetime</em> as a linear gradient going from opaque to fully transparent. Set <em translate="no">Renderer</em> to use cubes with our <em translate="no">Particles</em> material and set <em translate="no">Render Alignment</em> to <em translate="no">World</em> so the particles don't rotate.</p>
+						
+						<p>Finally, use a default cube to visualize the agent and give it an unlit material with a color and intensity property, by creating a simple shader graph for that. Set the material's intensity to 10. Also disable shadow casting of the mesh renderer.</p>
+						
+						<p>Create three agent instances and assign them to the game's array. The first agent is red, scaled down to 0.75 and with speed 2.5. The second agent is blue, with the same scale and speed 1.5. The third agent is yellow, scaled down to 0.5 and with speed 0.5. Give them all an Y position of 1 so they float above the floor.
+						
+						<figure>
+							<img src="gameplay/agents-player-view.png" width="400" height="250" alt="player view">
+							<img src="gameplay/agents-top-down-view.png" width="260" height="260" alt="top-down view">
+							<figcaption>Agents moving through the maze, player view and top-down lit scene view.</figcaption>
+						</figure>
+						
+						<p>We now have three agents that chase the player. Depending on their initial distance from the player it might take a second or so before they start moving as the scent needs time to spread. Besides directly seeing the agents, the player can also find their particle trails and notice the light that they emit even before they come into view.</p>
+					</section>
+					
+					<section>
+						<h3>Ending the Game</h3>
+						
+						<p>With agents actively hunting the player we have a game-over condition: an agent catches the player. So let's have <code>Game</code> keep track of whether the game is playing, like we also did in the previous tutorials. Rename its <code>Awake</code> method to <code>StartNewGame</code>. Rename <code>Update</code> to <code>UpdateGame</code> and invoke it in a new <code>Update</code> method if the game is currently playing. Otherwise, if the space key is pressed, start a new game and immediately update it to start everything up.</p>
+						
+						<pre translate="no">	<ins>bool isPlaying;</ins>
+
+	<del>//void Awake ()</del>
+	<ins>void StartNewGame ()</ins>
+	{
+		<ins>isPlaying = true;</ins>
+		&hellip;
+	}
+
+	void Update ()
+	{
+		<ins>if (isPlaying)</ins>
+		<ins>{</ins>
+			<ins>UpdateGame();</ins>
+		<ins>}</ins>
+		<ins>else if (Input.GetKeyDown(KeyCode.Space))</ins>
+		<ins>{</ins>
+			<ins>StartNewGame();</ins>
+			<ins>UpdateGame();</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	<ins>void UpdateGame ()</ins>
+	<ins>{</ins>
+		NativeArray&lt;float> currentScent = scent.Disperse(maze, player.Move());
+		for (int i = 0; i &lt; agents.Length; i++)
+		{
+			agents[i].Move(currentScent);
+		}
+	}</pre>
+						
+						<p>To initially hide the agents deactivate them in their <code>Awake</code> method and reactivate them in <code>StartNewGame</code>. Also give them a public <code>EndGame</code> method that deactivates them again.</p>
+						
+						<pre translate="no">	void Awake ()
+	{
+		&hellip;
+		<ins>gameObject.SetActive(false);</ins>
+	}
+
+	public void StartNewGame (Maze maze, int2 coordinates)
+	{
+		&hellip;
+		<ins>gameObject.SetActive(true);</ins>
+	}
+
+	<ins>public void EndGame () => gameObject.SetActive(false);</ins></pre>
+						
+						<p>Adjust <code>Game.UpdateGame</code> so it checks whether an agent is less than a unit away from the player after moving, in the XZ dimensions. If so invoke a new <code>EndGame</code> method and immediately return. The <code>EndGame</code> method disables the playing state, ends the game for all agents, and invokes <code>OnDestroy</code> to clear the maze and scent.</p>
+						
+						<pre translate="no">	void UpdateGame ()
+	{
+		<ins>Vector3 playerPosition = player.Move();</ins>
+		NativeArray&lt;float> currentScent = scent.Disperse(maze, <ins>playerPosition</ins>);
+		for (int i = 0; i &lt; agents.Length; i++)
+		{
+			<ins>Vector3 agentPosition =</ins> agents[i].Move(currentScent);
+			<ins>if (</ins>
+				<ins>new Vector2(</ins>
+					<ins>agentPosition.x - playerPosition.x,</ins>
+					<ins>agentPosition.z - playerPosition.z</ins>
+				<ins>).sqrMagnitude &lt; 1f</ins>
+			<ins>)</ins>
+			<ins>{</ins>
+				<ins>EndGame();</ins>
+				<ins>return;</ins>
+			<ins>}</ins>
+		}
+	}
+
+	<ins>void EndGame ()</ins>
+	<ins>{</ins>
+		<ins>isPlaying = false;</ins>
+		<ins>for (int i = 0; i &lt; agents.Length; i++)</ins>
+		<ins>{</ins>
+			<ins>agents[i].EndGame();</ins>
+		<ins>}</ins>
+		
+		<ins>OnDestroy();</ins>
+	<ins>}</ins></pre>
+						
+						<p>At this point the game ends as soon as an agent gets close enough to the player. Pressing space after that starts a new game. If we use a fixed seed then everything will appear to work fine as we restart the game with the exact same maze and position. However, the old visualization still exists so we have to recycle it. To make this possible add a <code>MazeCellObject</code> array parameter to <code>MazeVisualization.Visualize</code> in which it stores references to all cell objects.</p>
+						
+						<pre translate="no">	public void Visualize (Maze maze<ins>, MazeCellObject[] cellObjects</ins>)
+	{
+		for (int i = 0; i &lt; maze.Length; i++)
+		{
+			(MazeCellObject, int) prefabWithRotation = GetPrefab(maze[i]);
+			MazeCellObject instance = <ins>cellObjects[i] =</ins>
+				prefabWithRotation.Item1.GetInstance();
+			instance.transform.SetPositionAndRotation(
+				maze.IndexToWorldPosition(i), rotations[prefabWithRotation.Item2]
+			);
+		}
+	}</pre>
+						
+						<p>Keep track of this array in <code>Game</code>, creating it in <code>StartNewGame</code> if needed and passing it to <code>Visualize</code>. Then in <code>EndGame</code> recycle all cell objects.</p>
+						
+						<pre translate="no">	<ins>MazeCellObject[] cellObjects;</ins>
+
+	void StartNewGame ()
+	{
+		&hellip;
+
+		<ins>if (cellObjects == null || cellObjects.Length != maze.Length)</ins>
+		<ins>{</ins>
+			<ins>cellObjects = new MazeCellObject[maze.Length];</ins>
+		<ins>}</ins>
+		visualization.Visualize(maze<ins>, cellObjects</ins>);
+
+		&hellip;
+	}
+
+	&hellip;
+
+	void EndGame ()
+	{
+		&hellip;
+
+		<ins>for (int i = 0; i &lt; cellObjects.Length; i++)</ins>
+		<ins>{</ins>
+			<ins>cellObjects[i].Recycle();</ins>
+		<ins>}</ins>
+
+		OnDestroy();
+	}</pre>
+						
+						<p>If we're using a fixed seed then the recycling will be perfect and no new cell instances will be created for successive games. If random mazes are generated then most cells will get recycled, some new ones will have to be created, and some will remain in reserve.</p>
+					</section>
+					
+					<section>
+						<h3>Reaching the Goal</h3>
+						
+						<p>Besides a game-over state we should also have a win state. We can do this by placing a goal somewhere in the maze. The challenge is to find a good location. Let's introduce a twist here and make the goal position itself, by making it move instead of remaining stationary. We can use an agent for this, by making it move away from instead of toward the player.</p>
+						
+						<p>Add a configuration toggle to <code>Agent</code> to indicate whether it is a goal. If so, set the initial trail scent to the maximum in <code>TryFindNewTarget</code> and update the trail in <code>Sniff</code> only when the detected scent is weaker than the current one. This will make the goal move away from the player. It might get stuck in a corner or dead end at some point, moving back and forth between two cells, but that is fine.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>bool isGoal;</ins>
+
+	&hellip;
+
+	bool TryFindNewTarget (NativeArray&lt;float> scent)
+	{
+		MazeFlags cell = maze[targetIndex];
+		(int, float) trail = (0, <ins>isGoal ? float.MaxValue :</ins> 0f);
+
+		&hellip;
+	}
+
+	void Sniff (ref (int, float) trail, NativeArray&lt;float> scent, int indexOffset)
+	{
+		int sniffIndex = targetIndex + indexOffset;
+		float detectedScent = scent[sniffIndex];
+		if (<ins>isGoal ? detectedScent &lt; trail.Item2 :</ins> detectedScent > trail.Item2)
+		{
+			trail = (sniffIndex, detectedScent);
+		}
+	}</pre>
+						
+						<p>Let's also indicate the difference between a win and a loss by adding a configurable trigger message to <code>Agent</code>, with a public getter property.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>string triggerMessage;</ins>
+
+	&hellip;
+
+	<ins>public string TriggerMessage => triggerMessage;</ins></pre>
+						
+						<p>Have <code>Game</code> display this message when a game ends, via a <code>TextMeshPro</code> game object, the same that we used in all tutorial of this series. Deactivate it when a new game starts and activate it with the message when the game ends.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>TextMeshPro displayText;</ins>
+
+	&hellip;
+	
+	void StartNewGame ()
+	{
+		isPlaying = true;
+		<ins>displayText.gameObject.SetActive(false);</ins>
+		&hellip;
+	}
+	
+	void UpdateGame ()
+	{
+		&hellip;
+				EndGame(<ins>agents[i].TriggerMessage</ins>);
+				return;
+		&hellip;
+	}
+
+	void EndGame (<ins>string message</ins>)
+	{
+		isPlaying = false;
+		<ins>displayText.text = message;</ins>
+		<ins>displayText.gameObject.SetActive(true);</ins>
+		&hellip;
+	}</pre>
+						
+						<p>Make the text game object a child of the camera, with a Z position of 5 and a font size of 8. Set its initial text to <em translate="no">PRESS SPACE</em>.</p>
+						
+						<p>The red and blue agents are chasers. Set their trigger message to <em translate="no">RED CAUGHT YOU</em> and <em translate="no">BLUE CAUGHT YOU</em>, indicating a loss. Make the yellow agent a goal and set its trigger message to <em translate="no">YOU CAUGHT YELLOW</em>, indicating a win.</p>
+					</section>
+					
+					<section>
+						<h3>Starting Positions</h3>
+						
+						<p>We wrap up this tutorial by improving the starting positions of the agents and the player. The player currently always starts in the same cell and the agents could start very close to it or even in the same cell. We'll instead spawn the player somewhere in the bottom left quadrant of the maze and ensure that the agents spawn outside the bottom left quadrant of the maze. We can guaranteed that by offsetting the agent coordinates by half the maze size in one dimension if they end up in the bottom left quadrant.</p>
+						
+						<pre translate="no">		
+		player.StartNewGame(<ins>maze.CoordinatesToWorldPosition(</ins>
+			<ins>int2(Random.Range€(0, mazeSize.x / 4), Random.Range€(0, mazeSize.y / 4))</ins>
+		<ins>)</ins>);
+		
+		<ins>int2 halfSize = mazeSize / 2;</ins>
+		for (int i = 0; i &lt; agents.Length; i++)
+		{
+			var coordinates =
+				int2(Random.€Range(0, mazeSize.x), Random.Range€(0, mazeSize.y));
+			<ins>if (coordinates.x &lt; halfSize.x && coordinates.y &lt; halfSize.y)</ins>
+			<ins>{</ins>
+				<ins>if (Random.value &lt; 0.5f)</ins>
+				<ins>{</ins>
+					<ins>coordinates.x += halfSize.x;</ins>
+				<ins>}</ins>
+				<ins>else</ins>
+				<ins>{</ins>
+					<ins>coordinates.y += halfSize.y;</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+			agents[i].StartNewGame(maze, coordinates);
+		}</pre>
+						
+						<p>We now have a functional minimal maze game. This tutorial has been promoted to a project, the next version is <a href="../../../maze/2-1-0/index.html">2.1.0 Occlusion Culling</a>.</p>
+						
+						<p>The next tutorial prototype in the is <a href="../serpensquares/index.html">Serpensquares</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/prototypes-04-maze-2/" class="repository">repository</a>
+					<a href="Maze-2.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

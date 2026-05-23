@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/rendering/part-17/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/rendering/part-17/tutorial-image.jpg">
+		<meta property="og:title" content="Rendering 18">
+		<meta property="og:description" content="A Unity Rendering tutorial about supporing mixing baked and realtime lighting. Part 17 of 20.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Rendering 17</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/rendering/part-17/#article",
+				"headline": "Rendering 17",
+				"alternativeHeadline": "Mixed Lighting",
+				"datePublished": "2017-06-30",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Rendering tutorial about supporing mixing baked and realtime lighting. Part 17 of 20.",
+				"image": "https://catlikecoding.com/unity/tutorials/rendering/part-17/tutorial-image.jpg",
+				"dependencies": "Unity 5.6.0",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/rendering/", "name": "Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				DeferredFogEffect: 1,
+				MyLightingShaderGUI: 1,
+				RenderingMode: 1,
+				RenderingSettings: 1,
+				SmoothnessSource: 1,
+				TangentSpaceVisualizer: 1
+			};
+			
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Rendering 17</h1>
+					<p>Mixed Lighting</p>
+					<ul>
+						<li>Bake only indirect light.</li>
+						<li>Mix baked and realtime shadows.</li>
+						<li>Deal with code changes and bugs.</li>
+						<li>Support subtractive lighting.</li>
+					</ul>
+				</header>
+
+				<p>This is part 17 of a tutorial series about rendering. <a href="../part-16/index.html">Last time</a>, we added support for static lighting via lightmaps. Now we follow up with combining features of both baked and realtime lighting.</p>
+				
+				<p>This tutorial was made with Unity 5.6.0.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Mixing baked and realtime lighting.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Baking Indirect Light</h2>
+					
+					<p>Lightmaps allow us to compute lighting ahead of time. This reduces the amount of work that the GPU has to do in realtime, at the cost of texture memory. Besides that, it also adds indirect lighting. But as we saw last time, there are limitations. First, specular lighting cannot be baked. Second, baked lights only influence dynamic objects via light probes. And third, baked lights do not cast realtime shadows.</p>
+					
+					<p>You can see the difference between fully realtime and fully baked lighting in the screenshots below. It is the scene from the <a href="../part-16/index.html">previous tutorial</a>, except that I have made all spheres dynamic and relocated a few. Everything else is static. This is using the forward rendering path.</p>
+					
+					<figure>
+						<img alt="realtime" src="baking-indirect-light/fully-realtime.png" width="380" height="220">
+						<img alt="baked" src="baking-indirect-light/fully-baked.png" width="380" height="220">
+						<figcaption>Fully realtime and fully baked lighting.</figcaption>
+					</figure>
+					
+					<p>I haven't adjusted the light probes, so their positions make less sense now that there is less static geometry. The resulting probe lighting is a bit off now, which makes it easier to notice when it's being used.</p>
+					
+					<section>
+						<h3>Mixed Mode</h3>
+						
+						<p>Indirect light is the one thing that baked lighting has that realtime lighting lacks, because it requires a lightmap. As indirect light can add a lot of realism to a scene, it would be nice if we could combine it with realtime lighting. This is possible, although of course this means that shading becomes more expensive. It requires the <em translate="no">Lighting Mode</em> of <em translate="no">Mixed Lighting</em> to be set to <em translate="no">Baked Indirect</em>.</p>
+						
+						<figure>
+							<img src="baking-indirect-light/baked-indirect.png" width="360" height="98">
+							<figcaption>Mixed lighting, baked indirect.</figcaption>
+						</figure>
+						
+						<p>We already switched to this mode in the <a href="../part-16/index.html">previous tutorial</a>, but back then we only worked with fully baked lights. As a result, the mode for mixed lighting didn't make a difference. To make use of mixed lighting, a light's <em translate="no">Mode</em> has to be set to <em translate="no">Mixed</em>.</p>
+						
+						<figure>
+							<img src="baking-indirect-light/mixed-light.png" width="320" height="126">
+							<figcaption>Mixed-mode main light.</figcaption>
+						</figure>
+						
+						<p>After turning the main directional light into a mixed light, two things will happen. First, Unity will bake the lightmap again. This time, it will only store the indirect light, so the resulting lightmap will be much darker than before.</p>
+						
+						<figure>
+							<img alt="all" src="baking-indirect-light/lightmap-baked.png" width="356" height="168">
+							<img alt="indirect" src="baking-indirect-light/lightmap-indirect.png" width="356" height="168">
+							<figcaption>Fully baked vs. indirect-only lightmaps.</figcaption>
+						</figure>
+						
+						<p>Second, everything will be lit as if the main light was set to realtime, with one difference. The lightmap is used to add indirect light to static objects, instead of spherical harmonics or probes. The dynamic objects still use light probes for their indirect light.</p>
+						
+						<figure>
+							<img src="baking-indirect-light/mixed-lighting.png" width="380" height="220">
+							<figcaption>Mixed lighting, realtime direct plus baked indirect.</figcaption>
+						</figure>
+						
+						<p>We didn't have to change our shader to support this, because the forward base pass already combines lightmapped data and the main directional light. Additional lights get additive passes, as usual. When using the deferred rendering path, the main light will simply gets a pass as well.</p>
+						
+						<aside>
+							<h3>Can mixed lights be adjusted at runtime?</h3>
+							<div>
+								<p>Yes, because they are used for realtime lighting. However, their baked data is static. So you can only get away with small tweaks to the light at runtime, like varying its intensity a little. More drastic changes will make it obvious that the baked and realtime lighting is not synchronized anymore.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Upgrading Our Shader</h3>
+						
+						<p>Initially, everything appears to work fine. However, it turns out that shadow fading no longer works correct for the directional light. The shadows are cut off, which is easiest to see by greatly reducing the shadow distance.</p>
+						
+						<figure>
+							<img alt="standard" src="baking-indirect-light/shadows-standard.png" width="380" height="220">
+							<img alt="custom" src="baking-indirect-light/shadows-custom.png" width="380" height="220">
+							<figcaption>Shadow fading, standard vs. our shader.</figcaption>
+						</figure>
+						
+						<p>While Unity has had a mixed lighting mode for a long time, it actually became nonfunctional in Unity 5. A new mixed lighting mode was added in Unity 5.6, which is what we are using now. When this new mode was added, the code behind the <code class="shader">UNITY_LIGHT_ATTENUATION</code> macro was changed. We didn't notice this when using fully baked or realtime lighting, but we have to update our code to work with the new approach for mixed lighting. As this has been a recent big change, we have to be on our guard for bugs.</p>
+						
+						<p>The first thing we have to change is to no longer use the <code class="shader">SHADOW_COORDS</code> macro to define the interpolator for shadow coordinates. We have to use new <code class="shader">UNITY_SHADOW_COORDS</code> macro instead.</p>
+						
+						<pre translate="no" class="shader">struct Interpolators {
+	&hellip;
+
+<del>//	SHADOW_COORDS(5)</del>
+	<ins>UNITY_SHADOW_COORDS(5)</ins>
+
+	&hellip;
+};</pre>
+						
+						<p>Likewise, <code class="shader">TRANSFER_SHADOW</code> should be replaced with <code class="shader">UNITY_TRANSFER_SHADOW</code>.</p>
+						
+						<pre translate="no" class="shader">Interpolators MyVertexProgram (VertexData v) {
+	&hellip;
+
+<del>//	TRANSFER_SHADOW(i);</del>
+	<ins>UNITY_TRANSFER_SHADOW(i);</ins>
+
+	&hellip;
+}</pre>
+						
+						<p>However, this will produce a compiler error, because that macro requires an additional parameter. Since Unity 5.6, only the screen-space coordinates for directional shadows are put in an interpolator. Shadows coordinates for point lights and spotlights are now computed in the fragment program. What's new is that lightmap coordinates are used to a shadowmasks in some cases, which we'll cover later. For this to work, the macro has to be provided with data from the second UV channel, which contains the lightmap coordinates.</p>
+						
+						<pre translate="no" class="shader">	UNITY_TRANSFER_SHADOW(i<ins>, v.uv1</ins>);</pre>
+						
+						<p>This once again produces a compiler error. When this happens, it's because <code class="shader">UNITY_SHADOW_COORDS</code> in some cases incorrectly creates an interpolator, even though it is not actually needed. In that case, <code class="shader">TRANSFER_SHADOW</code> doesn't initialize it, which leads to the error. This bug is in versions 5.6.0, up to at least 5.6.2 and the 2017.1.0 beta.</p>
+						
+						<p>The bug usually goes unnoticed, because Unity's standard shader uses the <code class="shader">UNITY_INITIALIZE_OUTPUT</code> macro to fully initialize its interpolators structure. Because we didn't use that macro, we found the bug. To work around it, use the <code class="shader">UNITY_INITIALIZE_OUTPUT</code> macro to initialize our interpolators as well. That way, our code will compile with and without the bug.</p>
+						
+						<pre translate="no" class="shader">Interpolators MyVertexProgram (VertexData v) {
+	Interpolators i;
+	<ins>UNITY_INITIALIZE_OUTPUT(Interpolators, i);</ins>
+	&hellip;
+}</pre>
+						
+						<aside>
+							<h3>What does <code class="shader">UNITY_INITIALIZE_OUTPUT</code> do?</h3>
+							<div>
+								<p>It simply assigns zero to the variable, cast to the appropriate type. At least, when this is supported, otherwise it does nothing.</p>
+								
+								<pre translate="no" class="shader">// Initialize arbitrary structure with zero values.
+// Not supported on some backends
+// (e.g. Cg-based particularly with nested structs).
+// hlsl2glsl would almost support it, except with structs that have arrays
+// -- so treat as not supported there either :(
+#if defined(UNITY_COMPILER_HLSL) || defined(SHADER_API_PSSL) || \
+	defined(UNITY_COMPILER_HLSLCC)
+	#define UNITY_INITIALIZE_OUTPUT(type,name) name = (type)0;
+#else
+	#define UNITY_INITIALIZE_OUTPUT(type,name)
+#endif</pre>
+								
+								<p>I prefer not to use this macro and only rely on explicit assignments, because it hides bugs like the one we just encountered.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Fading Shadows Ourselves</h3>
+						
+						<p>We are now correctly using the new macros, but the shadows of our main light still don't fade out like they should. It turns out that <code class="shader">UNITY_LIGHT_ATTENUATION</code> does not perform this fading when both directional shadows and lightmaps are used at the same time, which is the case for the mixed-mode main directional light. So we must do it manually.</p>
+						
+						<aside>
+							<h3>Why does it not fade shadows in this case?</h3>
+							<div>
+								<p>The <code class="shader">UNITY_LIGHT_ATTENUATION</code> macro used to stand on its own, but since Unity 5.6 it is assumed to be used together with Unity's standard global illumination functions. We don't use the same approach, so it fails to work for us.</p>
+								
+								<p>The only real clue why this change was made is a comment in <em translate="no">AutoLight</em> which reads <em translate="no">"handles shadows in the depths of the GI function for performance reasons"</em>. As the shader compiler moves code around at will, this doesn't tell us anything. If there is a good reason for this special case, it's hard to find, as Unity's shader code has become quite tangled. So I don't know.</p>
+							</div>
+						</aside>
+						
+						<p>We already have code to perform shadow fading, for our deferred lighting shader. Copy the relevant code fragment from <em translate="no">MyDeferredShading</em> to a new function in <em translate="no">My Lighting</em>. The only real difference is that we have to construct <code class="shader">viewZ</code> from the view vector and the view matrix. Only the Z component is needed, so we don't need to perform a full matrix multiplication.</p>
+						
+						<pre translate="no" class="shader"><ins>float FadeShadows (Interpolators i, float attenuation) {</ins>
+	<ins>float viewZ =</ins>
+		<ins>dot(_WorldSpaceCameraPos - i.worldPos, UNITY_MATRIX_V[2].xyz);</ins>
+	<ins>float shadowFadeDistance =</ins>
+		<ins>UnityComputeShadowFadeDistance(i.worldPos, viewZ);</ins>
+	<ins>float shadowFade = UnityComputeShadowFade(shadowFadeDistance);</ins>
+	<ins>attenuation = saturate(attenuation + shadowFade);</ins>
+	<ins>return attenuation;</ins>
+<ins>}</ins></pre>
+						
+						<p>This manual fading must be done after using <code class="shader">UNITY_LIGHT_ATTENUATION</code>.</p>
+							
+						<pre translate="no" class="shader">UnityLight CreateLight (Interpolators i) {
+	&hellip;
+
+		UNITY_LIGHT_ATTENUATION(attenuation, i, i.worldPos.xyz);
+		<ins>attenuation = FadeShadows(i, attenuation);</ins>
+
+	&hellip;
+}</pre>
+						
+						<p>But only when <code class="shader">UNITY_LIGHT_ATTENUATION</code> decides to skip fading. This is the case when <code class="shader">HANDLE_SHADOWS_BLENDING_IN_GI</code> is defined in the <em translate="no">UnityShadowLibrary</em> include file. So <code class="shader">FadeShadows</code> should only do anything when <code class="shader">HANDLE_SHADOWS_BLENDING_IN_GI</code> is defined.</p>
+						
+						<pre translate="no" class="shader">float FadeShadows (Interpolators i, float attenuation) {
+	<ins>#if HANDLE_SHADOWS_BLENDING_IN_GI</ins>
+		<ins>// UNITY_LIGHT_ATTENUATION doesn't fade shadows for us.</ins>
+		float viewZ =
+			dot(_WorldSpaceCameraPos - i.worldPos, UNITY_MATRIX_V[2].xyz);
+		float shadowFadeDistance =
+			UnityComputeShadowFadeDistance(i.worldPos, viewZ);
+		float shadowFade = UnityComputeShadowFade(shadowFadeDistance);
+		attenuation = saturate(attenuation + shadowFade);
+	<ins>#endif</ins>
+	return attenuation;
+}</pre>
+						
+						<p>Finally, our shadows again fade as they should.</p>
+					</section>
+					
+					<a href="baking-indirect-light/baking-indirect-light.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Using a Shadowmask</h2>
+					
+					<p>Baked-indirect mixed-mode lights are quite expensive. They require as much work as realtime lights, plus lightmaps for indirect light. Most significant compared to fully-baked lights is the addition of realtime shadows. Fortunately, there is a way to still bake shadows into lightmaps, in combination with realtime shading. To enable this, change the mixed lighting mode to <em translate="no">Shadowmask</em>.</p>
+					
+					<figure>
+						<img src="using-a-shadowmask/shadowmask-mode.png" width="360" height="106">
+						<figcaption>Shadowmask mode.</figcaption>
+					</figure>
+					
+					<p>In this mode, both the indirect lighting and the shadow attenuation for mixed lights are stored in lightmaps. The shadows are stored in a separate map, known as a shadowmask. When using only the main directional light, everything that's illuminated will show up red in the shadowmask. It's red because the shadow information is stored in the texture's R channel. Actually, shadows for up to four lights can be stored in the map, as it has four channels.</p>
+					
+					<figure>
+						<img src="using-a-shadowmask/shadowmask.png" width="260" height="200">
+						<figcaption>Baked intensity and shadowmask.</figcaption>
+					</figure>
+					
+					<p>After Unity has created the shadowmask, the shadows cast by static objects will disappear. Only the light probes still take them into consideration. Shadows of dynamic objects are unaffected.</p>
+					
+					<figure>
+						<img src="using-a-shadowmask/no-baked-shadows.png" width="380" height="220">
+						<figcaption>No baked shadows.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Sampling the Shadowmask</h3>
+						
+						<p>To get the baked shadows back, we have to sample the shadowmask. Unity's macro already does that for point lights and spotlights, but we have to include it in our <code>FadeShadows</code> function as well. We can use the <code>UnitySampleBakedOcclusion</code> function from <em translate="no">UnityShadowLibrary</em> for this. It requires the lightmap UV coordinates and world position as arguments.</p>
+						
+						<pre translate="no" class="shader">float FadeShadows (Interpolators i, float attenuation) {
+	#if HANDLE_SHADOWS_BLENDING_IN_GI
+		&hellip;
+		<ins>float bakedAttenuation =</ins>
+			<ins>UnitySampleBakedOcclusion(i.lightmapUV, i.worldPos);</ins>
+		attenuation = saturate(attenuation + shadowFade);
+	#endif
+	return attenuation;
+}</pre>
+						
+						<aside>
+							<h3>What does <code class="shader">UnitySampleBakedOcclusion</code> look like?</h3>
+							<div>
+								<p>It uses the lightmap coordinates to sample the shadowmask and then selects the appropriate channel. The <code class="shader">unity_OcclusionMaskSelector</code> variable is a vector with a single component set to 1, matching the light that is currently being shaded.
+								
+								<pre translate="no" class="shader">fixed UnitySampleBakedOcclusion (float2 lightmapUV, float3 worldPos) {
+    #if defined (SHADOWS_SHADOWMASK)
+        #if defined(LIGHTMAP_ON)
+            fixed4 rawOcclusionMask = UNITY_SAMPLE_TEX2D_SAMPLER(
+				unity_ShadowMask, unity_Lightmap, lightmapUV.xy
+			);
+        #else
+			fixed4 rawOcclusionMask =
+				UNITY_SAMPLE_TEX2D(unity_ShadowMask, lightmapUV.xy);
+        #endif
+        return saturate(dot(rawOcclusionMask, unity_OcclusionMaskSelector));
+    #else
+        return 1.0;
+    #endif
+}</pre>
+								
+								<p>The function also deals with attenuation for light probe proxy volumes, but we're not supporting those yet so I removed that code. That's why the function has a parameter for the world position.</p>
+							</div>
+						</aside>
+						
+						<p><code class="shader">UnitySampleBakedOcclusion</code> provides us with the baked shadow attenuation when a shadowmask is used, and simply 1 in all other cases. Now we have to combine this with the attenuation that we already have and then fade the shadows. The <code class="shader">UnityMixRealtimeAndBakedShadows</code> function does all this for us.</p>
+						
+						<pre translate="no" class="shader">		float bakedAttenuation =
+			UnitySampleBakedOcclusion(i.lightmapUV, i.worldPos);
+<del>//		attenuation = saturate(attenuation + shadowFade);</del>
+		<ins>attenuation = UnityMixRealtimeAndBakedShadows(</ins>
+			<ins>attenuation, bakedAttenuation, shadowFade</ins>
+		<ins>);</ins></pre>
+						
+						<aside>
+							<h3>How does <code class="shader">UnityMixRealtimeAndBakedShadows</code> work?</h3>
+							<div>
+								<p>It is also a function in <em translate="no">UnityShadowLibrary</em>. It also deals with light probe proxy volumes and a few other corner cases, which aren't relevant to us, so I cut that out.</p>
+								
+								<pre translate="no" class="shader">inline half UnityMixRealtimeAndBakedShadows (
+	half realtimeShadowAttenuation, half bakedShadowAttenuation, half fade
+) {
+	#if !defined(SHADOWS_DEPTH) &amp;&amp; !defined(SHADOWS_SCREEN) &amp;&amp; \
+		!defined(SHADOWS_CUBE)
+		return bakedShadowAttenuation;
+	#endif
+
+	#if defined (SHADOWS_SHADOWMASK)
+		#if defined (LIGHTMAP_SHADOW_MIXING)
+			realtimeShadowAttenuation =
+				saturate(realtimeShadowAttenuation + fade);
+			return min(realtimeShadowAttenuation, bakedShadowAttenuation);
+		#else
+			return lerp(
+				realtimeShadowAttenuation, bakedShadowAttenuation, fade
+			);
+		#endif
+	#else //no shadowmask
+		return saturate(realtimeShadowAttenuation + fade);
+	#endif
+}</pre>
+								
+								<p>If there are no dynamic shadows, then the result is the baked attenuation. That means no shadows for dynamic objects, and baked shadows for objects that are lightmapped.</p>
+								
+								<p>When a shadowmask isn't used, it performs the same fading that we used to do. Otherwise, it depends on whether we're doing shadow mixing, which we'll cover later. Right now, it simply interpolates between realtime and baked attenuation.</p>
+							</div>
+						</aside>
+						
+						<figure>
+							<img src="using-a-shadowmask/mixed-shadows.png" width="380" height="220">
+							<figcaption>Both realtime and shadowmask shadows.</figcaption>
+						</figure>
+						
+						<p>We now get both realtime and baked shadows on static objects, and they correctly blend. The realtime shadows still fade out beyond the shadow distance, but the baked shadows don't.</p>
+						
+						<figure>
+							<img src="using-a-shadowmask/fading-realtime-shadows.png" width="380" height="220">
+							<figcaption>Only realtime shadows fade.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Adding a Shadowmask G-Buffer</h3>
+						
+						<p>The shadowmask now works with forward rendering, but we have some work to do before it also works with the deferred rendering path. Specifically, we have to add the shadowmask information as an additional G-buffer, when needed. So add another buffer to our <code class="shader">FragmentOutput</code> structure when <em translate="no">SHADOWS_SHADOWMASK</em> is defined.</p>
+						
+						<pre translate="no" class="shader">struct FragmentOutput {
+	#if defined(DEFERRED_PASS)
+		float4 gBuffer0 : SV_Target0;
+		float4 gBuffer1 : SV_Target1;
+		float4 gBuffer2 : SV_Target2;
+		float4 gBuffer3 : SV_Target3;
+
+		<ins>#if defined(SHADOWS_SHADOWMASK)</ins>
+			<ins>float4 gBuffer4 : SV_Target4;</ins>
+		<ins>#endif</ins>
+	#else
+		float4 color : SV_Target;
+	#endif
+};</pre>
+						
+						<p>This is our fifth G-buffer, which is quite a lot. Not all platforms support it. Unity only supports shadowmasks when enough render targets are available, and we should do so as well.</p>
+						
+						<pre translate="no" class="shader">		#if defined(SHADOWS_SHADOWMASK) <ins>&amp;&amp; (UNITY_ALLOWED_MRT_COUNT > 4)</ins>
+			float4 gBuffer4 : SV_Target4;
+		#endif
+</pre>
+						
+						<p>We simply have to store the sampled shadowmask data in the G-buffer, as we're not working with a specific light at this point. We can use the <code class="shader">UnityGetRawBakedOcclusions</code> function for this. It works like <code class="shader">UnitySampleBakedOcclusion</code>, except that it doesn't select one of the channels.</p>
+						
+						<pre translate="no" class="shader">	FragmentOutput output;
+	#if defined(DEFERRED_PASS)
+		#if !defined(UNITY_HDR_ON)
+			color.rgb = exp2(-color.rgb);
+		#endif
+		output.gBuffer0.rgb = albedo;
+		output.gBuffer0.a = GetOcclusion(i);
+		output.gBuffer1.rgb = specularTint;
+		output.gBuffer1.a = GetSmoothness(i);
+		output.gBuffer2 = float4(i.normal * 0.5 + 0.5, 1);
+		output.gBuffer3 = color;
+
+		<ins>#if defined(SHADOWS_SHADOWMASK) &amp;&amp; (UNITY_ALLOWED_MRT_COUNT > 4)</ins>
+			<ins>output.gBuffer4 =</ins>
+				<ins>UnityGetRawBakedOcclusions(i.lightmapUV, i.worldPos.xyz);</ins>
+		<ins>#endif</ins>
+	#else
+		output.color = ApplyFog(color, i);
+	#endif</pre>
+						
+						<p>To make this compile without lightmaps, substitute 0 for the lightmap coordinates when they're not available.</p>
+						
+						<pre translate="no" class="shader">		#if defined(SHADOWS_SHADOWMASK) &amp;&amp; (UNITY_ALLOWED_MRT_COUNT > 4)
+			<ins>float2 shadowUV = 0;</ins>
+			<ins>#if defined(LIGHTMAP_ON)</ins>
+				<ins>shadowUV = i.lightmapUV;</ins>
+			<ins>#endif</ins>
+			output.gBuffer4 =
+				UnityGetRawBakedOcclusions(<ins>shadowUV</ins>, i.worldPos.xyz);
+		#endif</pre>
+					</section>
+					
+					<section>
+						<h3>Using the Shadowmask G-Buffer</h3>
+						
+						<p>This is enough to make our shader work with the default deferred lighting shader. But to make it work with our custom shader, we have to adjust <em translate="no">MyDeferredShading</em>. The first step is to add a variable for the extra G-buffer.</p>
+						
+						<pre translate="no" class="shader">sampler2D _CameraGBufferTexture0;
+sampler2D _CameraGBufferTexture1;
+sampler2D _CameraGBufferTexture2;
+<ins>sampler2D _CameraGBufferTexture4;</ins></pre>
+						
+						<p>Next, create a function to retrieve the appropriate shadow attenuation. If we have a shadowmask, this is done by sampling the texture and performing a saturated dot product with <code class="shader">unity_OcclusionMaskSelector</code>. That variable is defined in <em translate="no">UnityShaderVariables</em> and contains a vector for selecting the channel for the light that's currently being rendered.</p>
+						
+						<pre translate="no" class="shader"><ins>float GetShadowMaskAttenuation (float2 uv) {</ins>
+	<ins>float attenuation = 1;</ins>
+	<ins>#if defined (SHADOWS_SHADOWMASK)</ins>
+		<ins>float4 mask = tex2D(_CameraGBufferTexture4, uv);</ins>
+		<ins>attenuation = saturate(dot(mask, unity_OcclusionMaskSelector));</ins>
+	<ins>#endif</ins>
+	<ins>return attenuation;</ins>
+<ins>}</ins></pre>
+						
+						<p>In <code class="shader">CreateLight</code>, we now have to also fade shadows in case of a shadowmask, even if there are no realtime shadows for the current light.</p>
+						
+						<pre translate="no" class="shader">UnityLight CreateLight (float2 uv, float3 worldPos, float viewZ) {
+	&hellip;
+
+	<ins>#if defined(SHADOWS_SHADOWMASK)</ins>
+		<ins>shadowed = true;</ins>
+	<ins>#endif</ins>
+
+	if (shadowed) {
+		&hellip;
+	}
+
+	&hellip;
+}</pre>
+						
+						<p>To properly include the baked shadows, again use <code class="shader">UnityMixRealtimeAndBakedShadows</code> instead of our old fading computation.</p>
+						
+						<pre translate="no" class="shader">	if (shadowed) {
+		float shadowFadeDistance =
+			UnityComputeShadowFadeDistance(worldPos, viewZ);
+		float shadowFade = UnityComputeShadowFade(shadowFadeDistance);
+<del>//		shadowAttenuation = saturate(shadowAttenuation + shadowFade);</del>
+		<ins>shadowAttenuation = UnityMixRealtimeAndBakedShadows(</ins>
+			<ins>shadowAttenuation, GetShadowMaskAttenuation(uv), shadowFade</ins>
+		<ins>);</ins>
+
+		&hellip;
+	}</pre>
+						
+						<p>We now get correct baked shadows with our custom deferred lighting shader as well. Except when our optimization branch ends up being used, which skips shadow blending. That shortcut isn't possible when a shadowmask is used.</p>
+						
+						<pre translate="no" class="shader">	if (shadowed) {
+		&hellip;
+
+		#if defined(UNITY_FAST_COHERENT_DYNAMIC_BRANCHING) &amp;&amp; defined(SHADOWS_SOFT)
+			<ins>#if !defined(SHADOWS_SHADOWMASK)</ins>
+				UNITY_BRANCH
+				if (shadowFade > 0.99) {
+					shadowAttenuation = 1;
+				}
+			<ins>#endif</ins>
+		#endif
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Distance Shadowmask Mode</h3>
+						
+						<p>While the shadowmask mode gives us good baked shadows for static objects, dynamic objects cannot benefit from them. Dynamic objects can only receive realtime shadows, and light probe data. If we want good shadows on dynamic objects, then the static objects have to cast realtime shadows as well. This is what the <em translate="no">Distance Shadowmask</em> mixed lighting mode is for.</p>
+						
+						<figure>
+							<img src="using-a-shadowmask/distance-shadowmask-mode.png" width="360" height="106">
+							<figcaption>Distance Shadowmask mode.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>I have no <em translate="no">Distance Shadowmask</em> option?</h3>
+							<div>
+								<p>In Unity 2017, which shadowmask mode you use is controlled via the quality settings.</p>
+							</div>
+						</aside>
+						
+						<p>When using <em translate="no">Distance Shadowmask</em> mode, everything uses realtime shadows. At first glance, it appears to be exactly the same as the <em translate="no">Baked Indirect</em> mode.</p>
+
+						<figure>
+							<img src="using-a-shadowmask/realtime-shadows.png" width="380" height="220">
+							<figcaption>Realtime shadows on everything.</figcaption>
+						</figure>
+						
+						<p>However, there is still a shadowmask. In this mode, the baked shadows and light probes are used beyond the shadow distance. So this is the most expensive mode, equal to <em translate="no">Baked Indirect</em> up to the shadow distance, and <em translate="no">Shadowmask</em> beyond that.</p>
+						
+						<figure>
+							<img src="using-a-shadowmask/realtime-shadowmask-blending.png" width="380" height="220">
+							<figcaption>Realtime nearby, shadowmask and probes further away.</figcaption>
+						</figure>
+						
+						<p>We already support this mode, because we're using <code class="shader">UnityMixRealtimeAndBakedShadows</code>. To correctly blend between fully realtime and baked shadows, it simply fades realtime shadows as usual, then takes the minimum of that and the baked shadows.</p>
+					</section>
+					
+					<section>
+						<h3>Multiple Lights</h3>
+						
+						<p>Because the shadowmask has four channels, it can support up to four overlapping light volumes at once. For example, here is a screenshot with lightmaps of the scene with three additional spotlights. I lowered the intensity of the main light so it's easier to see the spotlights.</p>
+						
+						<figure>
+							<img alt="scene" src="using-a-shadowmask/four-lights.png" width="380" height="220">
+							<img alt="maps" src="using-a-shadowmask/four-lights-maps.png" width="360" height="200">
+							<figcaption>Four lights, all mixed.</figcaption>
+						</figure>
+						
+						<p>The main directional light's shadows are still stored in the R channel. You can also see the shadows of the spotlights that are stored in the G and B channels. The last spotlight's shadows are stored in the A channel, which is not visible.</p>
+						
+						<p>When light volumes do not overlap, they can use the same channel to store their shadow data. So you can have as many mixed lights as you want. But you have to make sure that at most four light volumes end up overlapping each other. If there are too many mixed lights influencing the same area, then some will fall back to fully baked mode. To illustrate this, below is a screenshot with lightmaps after adding one more spotlight. One of them has turned into a baked light, which you can clearly see in the intensity map.</p>
+						
+						<figure>
+							<img alt="scene" src="using-a-shadowmask/five-lights.png" width="380" height="220">
+							<img alt="maps" src="using-a-shadowmask/five-lights-maps.png" width="360" height="200">
+							<figcaption>Five overlapping lights, one fully baked.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Supporting Multiple Masked Directional Lights</h3>
+						
+						<p>Unfortunately, it turns out that shadowmasks only work correctly when there is at most one mixed-mode directional light involved. Shadow fading goes wrong for additional directional lights. At least, when using the forward rendered path. Deferred rendering works fine.</p>
+						
+						<figure>
+							<img src="using-a-shadowmask/two-directional-incorrect.png" width="380" height="220">
+							<figcaption>Incorrect fading with two directional lights.</figcaption>
+						</figure>
+						
+						<p>Unity's standard shader also has this problem, at least up to versions 5.6.2 and 2017.1.0f1. However, it is not an inherent limitation of the lightmapping engine. It is an oversight in the new approach used for <code class="shader">UNITY_LIGHT_ATTENUATION</code>. Unity uses the shadow interpolator defined via <code class="shader">UNITY_SHADOW_COORDS</code> to either store the screen-space coordinates for directional shadows, or the lightmap coordinates for other lights that have a shadowmask.</p>
+						
+						<p>Directional lights that use the shadowmask also need the lightmap coordinates. In case of the forward base pass, these coordinates will be included, because <em translate="no">LIGHTMAP_ON</em> will be defined when needed. However, <em translate="no">LIGHTMAP_ON</em> is never defined in additive passes. This means that additive directional lights won't have lightmap coordinates available. It turns out that <code class="shader">UNITY_LIGHT_ATTENUATION</code> simply uses 0 when that's the case, leading to incorrect lightmap sampling.</p>
+						
+						<p>So we cannot rely on <code class="shader">UNITY_LIGHT_ATTENUATION</code> for additional directional lights that use the shadowmask. Let's make it easy to identify when this is the case. This all assumes that we're actually using screen-space directional shadows, which on some platforms isn't the case.</p>
+						
+						<pre translate="no" class="shader">#if defined(FOG_LINEAR) || defined(FOG_EXP) || defined(FOG_EXP2)
+	&hellip;
+#endif
+
+
+<ins>#if !defined(LIGHTMAP_ON) &amp;&amp; defined(SHADOWS_SCREEN)</ins>
+	<ins>#if defined(SHADOWS_SHADOWMASK) &amp;&amp; !defined(UNITY_NO_SCREENSPACE_SHADOWS)</ins>
+		<ins>#define ADDITIONAL_MASKED_DIRECTIONAL_SHADOWS 1</ins>
+	<ins>#endif</ins>
+<ins>#endif</ins></pre>
+						
+						<p>Next, we have to include the lightmap coordinates also when we have the additional masked directional shadows.</p>
+						
+						<pre translate="no" class="shader">struct Interpolators {
+	&hellip;
+
+	#if defined(LIGHTMAP_ON) <ins>|| ADDITIONAL_MASKED_DIRECTIONAL_SHADOWS</ins>
+		float2 lightmapUV : TEXCOORD6;
+	#endif
+};
+
+&hellip;
+
+Interpolators MyVertexProgram (VertexData v) {
+	&hellip;
+
+	#if defined(LIGHTMAP_ON) <ins>|| ADDITIONAL_MASKED_DIRECTIONAL_SHADOWS</ins>
+		i.lightmapUV = v.uv1 * unity_LightmapST.xy + unity_LightmapST.zw;
+	#endif
+
+	&hellip;
+}</pre>
+						
+						<p>With the lightmap coordinates available, we can again use our <code class="shader">FadeShadows</code> function to perform our own fading.</p>
+						
+						<pre translate="no" class="shader">float FadeShadows (Interpolators i, float attenuation) {
+	#if HANDLE_SHADOWS_BLENDING_IN_GI <ins>|| ADDITIONAL_MASKED_DIRECTIONAL_SHADOWS</ins>
+		&hellip;
+	#endif
+
+	return attenuation;
+}</pre>
+						
+						<p>However, this is still not correct, because we're feeding it bugged attenuation data. We have to bypass <code class="shader">UNITY_LIGHT_ATTENUATION</code> and get the baked attenuation only, which in this case we can do via the <code class="shader">SHADOW_ATTENUATION</code> macro.</p>
+						
+						<pre translate="no" class="shader">float FadeShadows (Interpolators i, float attenuation) {
+	#if HANDLE_SHADOWS_BLENDING_IN_GI || ADDITIONAL_MASKED_DIRECTIONAL_SHADOWS
+		// UNITY_LIGHT_ATTENUATION doesn't fade shadows for us.
+		<ins>#if ADDITIONAL_MASKED_DIRECTIONAL_SHADOWS</ins>
+			<ins>attenuation = SHADOW_ATTENUATION(i);</ins>
+		<ins>#endif</ins>
+		&hellip;
+	#endif
+
+	return attenuation;
+}</pre>
+						
+						<figure>
+							<img src="using-a-shadowmask/two-directional-correct.png" width="380" height="220">
+							<figcaption>Correct fading with two directional lights.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Is it a good idea to rely on <code class="shader">UNITY_LIGHT_ATTENUATION</code> at all?</h3>
+							<div>
+								<p>The macro code has been stable for a long time. It has always been the best way to work with Unity's lighting setup for custom shaders. This changed in Unity 5.6.0, when a new approach was forced into an old macro structure.</p>
+								
+								<p>Unity again changed its approach for the additional light in 2017.3, so the extra directional light is supported, but this causes trouble for our workaround and future lighting work. The quick fix is for us to disable our workaround.</p>
+								
+								<pre translate="no" class="shader"><ins>//</ins>		#define ADDITIONAL_MASKED_DIRECTIONAL_SHADOWS 1</pre>
+								
+								<p>Unforunately Unity's latest approach is a hack that introduced a new dependency on the clip space position's W coordinate&mdash;the only one anywhere. This doesn't work for all combinations with LOD crossfading, so one bug got replaced with another one. When I'll cover the new scriptable render pipleline I probably won't rely on <code class="shader">UNITY_LIGHT_ATTENUATION</code>.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="using-a-shadowmask/using-a-shadowmask.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Subtractive Shadows</h2>
+					
+					<p>Mixed lighting is nice, but it's is not as cheap as fully baked lighting. If you're targeting low-performance hardware, then mixed lighting is not feasible. Baked lighting will work, but you might really need dynamic objects to cast shadows on static objects. In that case, you can use the <em translate="no">Subtractive</em> mixed lighting mode.</p>
+					
+					<figure>
+						<img src="subtractive-shadows/subtractive-mode.png" width="360" height="106">
+						<figcaption>Subtractive mode.</figcaption>
+					</figure>
+					
+					<p>After switching to <em translate="no">Subtractive</em> mode, the scene will get a lot brighter. That happens because static objects now use both the fully-baked lightmap and direct lighting. Dynamic objects still use light probes and direct lighting, as usual.</p>
+					
+					<figure>
+						<img src="subtractive-shadows/too-bright.png" width="380" height="220">
+						<figcaption>Static objects are lit twice.</figcaption>
+					</figure>
+					
+					<p><em translate="no">Subtractive</em> mode only works with forward rendering. When using the deferred rendering path, the relevant objects will fall back to forward the forward path, like transparent objects do.</p>
+					
+					<section>
+						<h3>Subtractive Lighting</h3>
+						
+						<p>The idea of <em translate="no">Subtractive</em> mode is that static objects are lit via lightmaps, while also factoring dynamic shadows into it. This is done by decreasing the intensity of the lightmap in shadowed areas. To do this, the shader needs to access both the lightmap and the realtime shadows. It also need to use the realtime light to figure out how much the lightmap has to be dimmed. That's why we got double lighting after switching to this mode.</p>
+						
+						<p>Subtractive lighting is an approximation, which only works with a single directional light. So only shadows of the main directional light are supported. Also, we have to somehow know what the indirect light situation is supposed to be in dynamically shaded areas. As we're using a fully-baked lightmap, we don't have this information. Instead of including an additional lightmap with only the indirect light, Unity uses a uniform color to approximate the ambient light. This is the <em translate="no">Realtime Shadow Color</em>, which you can adjust in the mixed lighting section.</p>
+						
+						<p>In the shader, we know that we should be using subtractive lighting when the <em translate="no">LIGHTMAP_ON</em>, <em translate="no">SHADOWS_SCREEN</em>, and <em translate="no">LIGHTMAP_SHADOW_MIXING</em> keywords are defined, while <em translate="no">SHADOWS_SHADOWMASK</em> isn't. Let's define <em translate="no">SUBTRACTIVE_LIGHTING</em> when that's the case, to make it easier to work with.</p>
+						
+						<pre translate="no" class="shader">#if !defined(LIGHTMAP_ON) &amp;&amp; defined(SHADOWS_SCREEN)
+	#if defined(SHADOWS_SHADOWMASK) &amp;&amp; !defined(UNITY_NO_SCREENSPACE_SHADOWS)
+		#define ADDITIONAL_MASKED_DIRECTIONAL_SHADOWS 1
+	#endif
+#endif
+
+<ins>#if defined(LIGHTMAP_ON) &amp;&amp; defined(SHADOWS_SCREEN)</ins>
+	<ins>#if defined(LIGHTMAP_SHADOW_MIXING) &amp;&amp; !defined(SHADOWS_SHADOWMASK)</ins>
+		<ins>#define SUBTRACTIVE_LIGHTING 1</ins>
+	<ins>#endif</ins>
+<ins>#endif</ins></pre>
+						
+						<p>Before we do anything else, we have to get rid of the double lighting. This can be done by switching off the dynamic light, like we do for the deferred pass.</p>
+						
+						<pre translate="no" class="shader">UnityLight CreateLight (Interpolators i) {
+	UnityLight light;
+
+	#if defined(DEFERRED_PASS) <ins> || SUBTRACTIVE_LIGHTING</ins>
+		light.dir = float3(0, 1, 0);
+		light.color = 0;
+	#else
+		&hellip;
+	#endif
+
+	return light;
+}</pre>
+						
+						<figure>
+							<img src="subtractive-shadows/baked-static.png" width="380" height="220">
+							<figcaption>Only baked lighting for static objects.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Shadowing Baked Light</h3>
+						
+						<p>To apply subtractive shadows, let's create a function to adjust the indirect light when needed. It usually does nothing.</p>
+						
+						<pre translate="no" class="shader"><ins>void ApplySubtractiveLighting (</ins>
+	<ins>Interpolators i, inout UnityIndirect indirectLight</ins>
+<ins>) {}</ins></pre>
+						
+						<p>This function has to be invoked after we have retrieved the lightmap data.</p>
+						
+						<pre translate="no" class="shader">UnityIndirect CreateIndirectLight (Interpolators i, float3 viewDir) {
+	&hellip;
+
+	#if defined(FORWARD_BASE_PASS) || defined(DEFERRED_PASS)
+		#if defined(LIGHTMAP_ON)
+			indirectLight.diffuse =
+				DecodeLightmap(UNITY_SAMPLE_TEX2D(unity_Lightmap, i.lightmapUV));
+			
+			#if defined(DIRLIGHTMAP_COMBINED)
+				&hellip;
+			#endif
+
+			<ins>ApplySubtractiveLighting(i, indirectLight);</ins>
+		#else
+			indirectLight.diffuse += max(0, ShadeSH9(float4(i.normal, 1)));
+		#endif
+		&hellip;
+	#endif
+
+	return indirectLight;
+}</pre>
+						
+						<p>If there is subtractive lighting, then we have to fetch the shadow attenuation. We can simply copy the code from <code>CreateLight</code>.</p>
+						
+						<pre translate="no" class="shader">void ApplySubtractiveLighting (
+	Interpolators i, inout UnityIndirect indirectLight
+) {
+	<ins>#if SUBTRACTIVE_LIGHTING</ins>
+		<ins>UNITY_LIGHT_ATTENUATION(attenuation, i, i.worldPos.xyz);</ins>
+		<ins>attenuation = FadeShadows(i, attenuation);</ins>
+	<ins>#endif</ins>
+}</pre>
+						
+						<p>Next, we have to figure out how much light we would receive, if we were using realtime lighting. We assume that this information matches what's baked in the lightmap. As the lightmap only contains diffuse light, we can suffice with computing the Lambert term for the directional light.</p>
+						
+						<pre translate="no" class="shader">	#if SUBTRACTIVE_LIGHTING
+		UNITY_LIGHT_ATTENUATION(attenuation, i, i.worldPos.xyz);
+		attenuation = FadeShadows(i, attenuation);
+
+		<ins>float ndotl = saturate(dot(i.normal, _WorldSpaceLightPos0.xyz));</ins>
+	#endif
+</pre>
+						
+						<p>To arrive at the shadowed light intensity, we have to multiply the Lambert term with the attenuation. But we already have the fully unshadowed baked light. So instead we'll estimate how much light is blocked by the shadow.</p>
+						
+						<pre translate="no" class="shader">		float ndotl = saturate(dot(i.normal, _WorldSpaceLightPos0.xyz));
+		<ins>float3 shadowedLightEstimate =</ins>
+			<ins>ndotl * (1 - attenuation) * _LightColor0.rgb;</ins></pre>
+						
+						<p>By subtracting this estimate from the baked light, we end up with the adjusted light.</p>
+						
+						<pre translate="no" class="shader">		float3 shadowedLightEstimate =
+			ndotl * (1 - attenuation) * _LightColor0.rgb;
+		<ins>float3 subtractedLight = indirectLight.diffuse - shadowedLightEstimate</ins>
+		<ins>indirectLight.diffuse = subtractedLight;</ins></pre>
+						
+						<figure>
+							<img src="subtractive-shadows/subtracted-light.png" width="380" height="220">
+							<figcaption>Subtracted light.</figcaption>
+						</figure>
+						
+						<p>This always produces solid black shadows, regardless of ambient lighting situation. To better match the scene, we can use our subtractive shadow color, which is made available via <code class="shader">unity_ShadowColor</code>. The shadowed areas shouldn't be darker than this color, but they could be brighter. So take the maximum of the computed light and the shadow color.</p>
+						
+						<pre translate="no" class="shader">		float3 subtractedLight = indirectLight.diffuse - shadowedLightEstimate;
+		<ins>subtractedLight = max(subtractedLight, unity_ShadowColor.rgb);</ins>
+		indirectLight.diffuse = subtractedLight;</pre>
+						
+						<p>We must also take into consideration the possibility that the shadow strength has been set to lower than 1. To apply the shadow strength, interpolate between the shadowed and unshadowed light based on the X component of <code class="shader">_LightShadowData</code>.</p>
+						
+						<pre translate="no" class="shader">		subtractedLight = max(subtractedLight, unity_ShadowColor.rgb);
+		<ins>subtractedLight =</ins>
+			<ins>lerp(subtractedLight, indirectLight.diffuse, _LightShadowData.x);</ins>
+		indirectLight.diffuse = subtractedLight;</pre>
+						
+						<figure>
+							<img src="subtractive-shadows/colored-shadows.png" width="380" height="220">
+							<figcaption>Colored shadows.</figcaption>
+						</figure>
+						
+						<p>Because our scene has its ambient intensity set to zero, the default shadow color doesn't match the scene very well. But it makes it easy to spot the subtractive shadows, so I didn't adjust it. This also makes it obvious that the shadow color now overrides all baked shadows, which shouldn't happen. It should only affect areas that receive dynamic shadows, not brighten baked shadows. To enforce this, use the minimum of the subtractive lighting and the baked lighting.</p>
+						
+						<pre translate="no" class="shader">//		indirectLight.diffuse = subtractedLight;
+		<ins>indirectLight.diffuse = min(subtractedLight, indirectLight.diffuse);</ins></pre>
+						
+						<figure>
+							<img src="subtractive-shadows/subtractive-shadows.png" width="380" height="220">
+							<figcaption>Proper subtractive shadows.</figcaption>
+						</figure>
+						
+						<p>We now get correct subtractive shadows, as long as we use an appropriate shadow color. But keep in mind that this is just an approximation, and it doesn't work well with multiple lights. For example, other baked lights will be shadowed incorrectly.</p>
+						
+						<figure>
+							<img src="subtractive-shadows/incorrect-subtraction.png" width="380" height="220">
+							<figcaption>Incorrect subtraction for other lights.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../part-18/index.html">Realtime GI, Probe Volumes, LOD Groups</a>.</p>
+					</section>
+					
+					<a href="subtractive-shadows/subtractive-shadows.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Rendering-17.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

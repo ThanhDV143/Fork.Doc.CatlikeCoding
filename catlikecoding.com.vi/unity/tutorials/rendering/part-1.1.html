@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/rendering/part-1/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/rendering/part-1/tutorial-image.png">
+		<meta property="og:title" content="Rendering 1, Matrices, a Unity C# Tutorial">
+		<meta property="og:description" content="A Unity Rendering tutorial about matrices and transformations. Part 1 of 20.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Rendering 1</title>
+		<link href="../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/rendering/part-1/#article",
+				"headline": "Rendering 1",
+				"alternativeHeadline": "Matrices",
+				"datePublished": "2016-02-26",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Rendering tutorial about matrices and transformations. Part 1 of 20.",
+				"image": "https://catlikecoding.com/unity/tutorials/rendering/part-1/tutorial-image.png",
+				"dependencies": "Unity 5.3.1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/rendering/", "name": "Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				CameraTransformation: 1,
+				PositionTransformation: 1,
+				RotationTransformation: 1,
+				ScaleTransformation: 1,
+				Transformation: 1,
+				TransformationGrid: 1
+			};
+			
+			var hasAnimations = true;
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../products/utilities/frame-rate-counter/index.html"><img src="../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../index.html">Unity</a></li>
+					<li><a href="../index.html">Tutorials</a></li>
+					<li><a href="index.html">Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Rendering 1</h1>
+					<p>Matrices</p>
+					<ul>
+						<li>Create a cube grid.</li>
+						<li>Support scaling, positioning, and rotating.</li>
+						<li>Work with transformation matrices.</li>
+						<li>Create simple camera projections.</li>
+					</ul>
+				</header>
+
+				<p>This is the first part of a tutorial series about the basics of rendering. It covers transformation matrices. First, go through the Mesh Basics  series, which starts with <a href="../procedural-grid.1.html">Procedural Grid</a>. Then you will know how meshes work. This series will explore how those meshes actually end up as pixels on a display.</p>
+				
+				<p>This tutorial was made with Unity 5.3.1.</p>
+				
+				<figure>
+					<img src="part-1/tutorial-image.png" width="375" height="325">
+					<figcaption>Manipulating points in space.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Visualizing Space</h2>
+					
+					<p>You already know what meshes are and how they can be positioned in a scene. But how does this positioning actually work? How does a shader know where to draw? Of course we can just rely on Unity's transform component and shaders to take care of it all, but understanding what's actually going on is crucial if you want to gain total control. To understand this process fully, it's best if we create our own implementation.</p>
+					
+					<p>Moving, rotating, and scaling a mesh is done by manipulating the positions of its vertices. This is a transformation of space, so to see it in action we have to make space visible. We can do this by creating a 3D grid of points. The points could be any prefab.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class TransformationGrid : MonoBehaviour {</ins>
+
+	<ins>public Transform prefab;</ins>
+
+	<ins>public int gridResolution = 10;</ins>
+
+	<ins>Transform[] grid;</ins>
+
+	<ins>void Awake () {</ins>
+		<ins>grid = new Transform[gridResolution * gridResolution * gridResolution];</ins>
+		<ins>for (int i = 0, z = 0; z &lt; gridResolution; z++) {</ins>
+			<ins>for (int y = 0; y &lt; gridResolution; y++) {</ins>
+				<ins>for (int x = 0; x &lt; gridResolution; x++, i++) {</ins>
+					<ins>grid[i] = CreateGridPoint(x, y, z);</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+					
+					<aside>
+						<h3>Why not use particles to visualize the points?</h3>
+						<div>
+							<p>Sure, you could use a particle system as well. I won't because particle systems deserve their own topic.</p>
+						</div>
+					</aside>
+					
+					<p>Creating a point is a matter of instantiating the prefab, determining its coordinates, and giving it a distinct color.</p>
+					
+					<pre translate="no">	<ins>Transform CreateGridPoint (int x, int y, int z) {</ins>
+		<ins>Transform point = Instantiate&lt;Transform>(prefab);</ins>
+		<ins>point.localPosition = GetCoordinates(x, y, z);</ins>
+		<ins>point.GetComponent&lt;MeshRenderer>().material.color = new Color(</ins>
+			<ins>(float)x / gridResolution,</ins>
+			<ins>(float)y / gridResolution,</ins>
+			<ins>(float)z / gridResolution</ins>
+		<ins>);</ins>
+		<ins>return point;</ins>
+	<ins>}</ins></pre>
+					
+					<p>The most obvious shape of our grid is a cube, so let's go with that. We center it at the origin, so transformations &ndash; specifically rotation and scaling &ndash; are relative to the midpoint of the grid cube.</p>
+
+					<pre translate="no">	<ins>Vector3 GetCoordinates (int x, int y, int z) {</ins>
+		<ins>return new Vector3(</ins>
+			<ins>x - (gridResolution - 1) * 0.5f,</ins>
+			<ins>y - (gridResolution - 1) * 0.5f,</ins>
+			<ins>z - (gridResolution - 1) * 0.5f</ins>
+		<ins>);</ins>
+	<ins>}</ins></pre>
+					
+					<p>I'll use a default cube as a prefab, scaled to half size so there's room between them.</p>
+					
+					<figure>
+						<img src="part-1/visualizing-space/prefab.png" width="320" height="222">
+						<figcaption>Small cube prefab.</figcaption>
+					</figure>
+					
+					<p>Create a grid object, add our component, and hook up the prefab. When entering play mode, the grid cube will appear, centered on our object's local origin.</p>
+					
+					<figure>
+						<img alt="inspector" src="part-1/visualizing-space/grid-inspector.png" width="320" height="136">
+						<img alt="scene" src="part-1/visualizing-space/grid-scene.png" width="290" height="290">
+						<figcaption>Transformation grid.</figcaption>
+					</figure>
+					
+					<a href="part-1/visualizing-space/visualizing-space.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Transformations</h2>
+					
+					<p>Ideally, we should be able to apply an arbitrary amount of transformations to our grid. And there are many types of transformations that we could dream up, but let's restrict ourselves to positioning, rotating, and scaling.</p>
+					
+					<p>If we created a component type for each transformation, we could add those to our grid object in any order and quantity that we want. And while the details of each transformation is different, they'll all need a method to apply themselves to a point in space.</p>
+					
+					<p>Let's create a base component for all transformations, that they can inherit from. This will be an abstract class, which means that it cannot be used directly, as that would be pointless. Give it an abstract <code>Apply</code> method that will be used by the concrete transformation components to do their job.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public abstract class Transformation : MonoBehaviour {</ins>
+
+	<ins>public abstract Vector3 Apply (Vector3 point);</ins>
+<ins>}</ins></pre>
+					
+					<p>Once we add such components to our grid object, we'll have to retrieve them somehow so we can apply them to all our grid points. We will use a generic list to store references to these components.</p>
+					
+					<pre translate="no">using UnityEngine;
+<ins>using System.Collections.Generic;</ins>
+
+public class TransformationGrid : MonoBehaviour {
+	
+	&hellip;
+	<ins>List&lt;Transformation> transformations;</ins>
+
+	void Awake () {
+		&hellip;
+		<ins>transformations = new List&lt;Transformation>();</ins>
+	}
+}</pre>
+					
+					<p>Now we can add an <code>Update</code> method which retrieves the transformation, then loops through the entire grid and transforms all of our points.</p>
+					
+					<pre translate="no">	<ins>void Update () {</ins>
+		<ins>GetComponents&lt;Transformation>(transformations);</ins>
+		<ins>for (int i = 0, z = 0; z &lt; gridResolution; z++) {</ins>
+			<ins>for (int y = 0; y &lt; gridResolution; y++) {</ins>
+				<ins>for (int x = 0; x &lt; gridResolution; x++, i++) {</ins>
+					<ins>grid[i].localPosition = TransformPoint(x, y, z);</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<aside>
+						<h3>Why get the components each update?</h3>
+						<div>
+							<p>This allows us to mess around with the transformation components while remaining in play mode, immediately seeing the results.</p>
+						</div>
+					</aside>
+					
+					<aside>
+						<h3>Why use a list instead of an array?</h3>
+						<div>
+							<p>The most straightforward version of the <code>GetComponents</code> method simply returns an array with all components of the requested type. This means that a new array gets created every invocation, which is each update in our case. An alternative version has a list parameter. The advantage of that one is that it will put the components in the list instead of creating a new array.</p>
+							
+							<p>It is not a crucial optimization at all in our case, but it is a good habit to use the list variant whenever you're grabbing components often.</p>
+						</div>
+					</aside>
+					
+					<p>Transforming each point is done by getting the original coordinates, and then applying each transformation. We cannot rely on the actual position of each point, because those have already been transformed and we don't want to accumulate transformations each frame.</p>
+					
+					<pre translate="no">	<ins>Vector3 TransformPoint (int x, int y, int z) {</ins>
+		<ins>Vector3 coordinates = GetCoordinates(x, y, z);</ins>
+		<ins>for (int i = 0; i &lt; transformations.Count; i++) {</ins>
+			<ins>coordinates = transformations[i].Apply(coordinates);</ins>
+		<ins>}</ins>
+		<ins>return coordinates;</ins>
+	<ins>}</ins></pre>
+					
+					<section>
+						<h3>Translation</h3>
+						
+						<p>Our first concrete component will be for translation, which seems the simplest. So create a new component which extends <code>Transformation</code>, with a position to be used as a local offset.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class PositionTransformation : Transformation {</ins>
+
+	<ins>public Vector3 position;</ins>
+
+<ins>}</ins></pre>
+						
+						<p>At this point the compiler will correctly complain that we're not providing a concrete version of <code>Apply</code>, so let's do that. It's simply a matter of adding the desired position to the original point.</p>
+						
+						<pre translate="no">	<ins>public override Vector3 Apply (Vector3 point) {</ins>
+		<ins>return point + position;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now you can add a position transformation component to our grid object. This allows us to move the points around, without moving the actual grid object. All our transformations take place in the local space of our object.</p>
+						
+						<figure>
+							<img src="part-1/transformations/position-inspector.png" width="320" height="153" alt="inspector"><br>
+							<video width="500" height="350" controls loop muted>
+								<source src="part-1/transformations/position.mp4" type="video/mp4">
+							</video>
+							<figcaption>Transforming the position.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Scaling</h3>
+						
+						<p>Next up is the scaling transformation. It's almost the same as positioning, except that the scale components are multiplied instead of added to the original point.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class ScaleTransformation : Transformation {</ins>
+
+	<ins>public Vector3 scale;</ins>
+
+	<ins>public override Vector3 Apply (Vector3 point) {</ins>
+		<ins>point.x *= scale.x;</ins>
+		<ins>point.y *= scale.y;</ins>
+		<ins>point.z *= scale.z;</ins>
+		<ins>return point;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Add this component to our grid object as well. Now we can scale the grid too. Note that we're only adjusting the positions of our grid points, so scaling won't change the size of their visualizations.</p>
+						
+						<figure>
+							<img src="part-1/transformations/scale-inspector.png" width="320" height="147" alt="inspector"><br>
+							<video width="500" height="350" controls loop muted>
+								<source src="part-1/transformations/scale.mp4" type="video/mp4">
+							</video>
+							<figcaption>Adjusting scale.</figcaption>
+						</figure>
+						
+						<p>Try both positioning and scaling at once. You will find that the scale also affects the position. This happens because we first reposition space, and then scale it. Unity's transform component does it the other way around, which is much more useful. We should do so as well, which can be done by reordering the components. They can be moved via the pop-up menu under the gear icon at the top right of each component.</p>
+						
+						<figure>
+							<img src="part-1/transformations/changed-order.png" width="320" height="147">
+							<figcaption>Changing the order of transformations.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Rotation</h3>
+						
+						<p>The third transformation type is rotation. It is a bit more difficult than the previous two. Start with a new component which just returns the point unchanged.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class RotationTransformation : Transformation {</ins>
+
+	<ins>public Vector3 rotation;</ins>
+
+	<ins>public override Vector3 Apply (Vector3 point) {</ins>
+		<ins>return point;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>So how does rotation work? Let's limit ourselves to rotation around a single axis for now, the Z axis. Rotating a point around this axis is like spinning a wheel. As Unity uses a left-handed coordinate system, a positive rotation will make the wheel go counterclockwise, when looking at it in the positive Z direction.</p>
+						
+						<figure>
+							<img src="part-1/transformations/wheel.png" width="255" height="255">
+							<figcaption>2D rotation around the Z axis.</figcaption>
+						</figure>
+						
+						<p>What happens to a point's coordinates when it rotates? It is easiest to consider points that lie on a circle with a radius of one unit, the unit circle. And the most straightforward points correspond with the X and the Y axes. If we rotate those points by 90&deg; steps, we always end up with coordinates that are either 0, 1, or &minus;1.</p>
+						
+						<figure>
+							<img src="part-1/transformations/wheel-0-90-180.png" width="570" height="190">
+							<figcaption>Rotating (1,0) and (0,1) by 90 and 180 degrees.</figcaption>
+						</figure>
+						
+						<p>The point (1,0) becomes (0,1) after the first step. The next step puts it at (&minus;1,0). Then comes (0,&minus;1), and finally back to (1,0).</p>
+						
+						<p>If we start with the point (0,1) instead, we're just one step ahead compared to the previous sequence. We go from (0,1) to (&minus;1,0) to (0,&minus;1) to (1,0) and back.</p>
+						
+						<p>So the coordinates of our points go through the cycle 0, 1, 0, &minus;1. They just have different starting points.</p>
+						
+						<p>What if we rotated in 45&deg; increments instead? That will produce points that lie on the diagonals in the XY plane. And as the distance to the origin doesn't change, we have to end up with coordinates of the form (&plusmn;&radic;&frac12;, &plusmn;&radic;&frac12;). This expands our cycle to 0, &radic;&frac12;, 1, &radic;&frac12;, 0, &minus;&radic;&frac12;, &minus;1, &minus;&radic;&frac12;. If we keep decreasing the step size, we'll end up with a sine wave.</p>
+						
+						<figure>
+							<img src="part-1/transformations/sine-cosine.png" width="480" height="200">
+							<figcaption>Sine and cosine.</figcaption>
+						</figure>
+						
+						<p>In our case, the sine wave matches the y coordinate when starting at (1,0). The cosine matches the x coordinate. This means that we can redefine (1,0) as `(cosz,sinz)`. Likewise, we can replace (0,1) with `(-sinz,cosz)`.</p>
+						
+						<p>So we start by computing the sine and cosine of the desired rotation around the Z axis. We provide the angles in degrees, but the sine and cosine work with radians, so we have to convert.</p>
+						
+						<pre translate="no">	public override Vector3 Apply (Vector3 point) {
+		<ins>float radZ = rotation.z * Mathf.Deg2Rad;</ins>
+		<ins>float sinZ = Mathf.Sin(radZ);</ins>
+		<ins>float cosZ = Mathf.Cos(radZ);</ins>
+
+		return point;
+	}</pre>
+						
+						<aside>
+							<h3>What are radians?</h3>
+							<div>
+								<p>Like degrees, they can be used as a measure of rotation. When working with the unit circle, radians match the distance you would travel along its circumference. As the length of the circumference equals 2&pi; times the radius of a circle, 1 degree is equal to 2&pi;/360 = &pi;/180 radians.</p>
+								
+								<p>Here you also find the definition of &pi;. It is the ratio between a circle's circumference and its diameter.</p>
+							</div>
+						</aside>
+						
+						<p>It is nice that we found a way to rotate (1,0) and (0,1), but what about rotating arbitrary points? Well, these two points define the X and Y axes. We can decompose any 2D point `(x,y)` into `xX + yY`. Without any rotation, this is equal to `x(1,0) + y(0,1)` which indeed is just `(x,y)`. But when rotating, we can now use `x(cosZ,sinZ) + y(-sinZ,cosZ)` and end up with a correctly rotated point. You can think of it like scaling a point so it falls on the unit circle, rotating, and then scaling back. Compressed into a single coordinate pair, this becomes `(xcosZ - ysinZ, xsinZ + ycosZ)`.</p>
+						
+						<pre translate="no">		return <ins>new Vector3(</ins>
+			<ins>point.x * cosZ - point.y * sinZ,</ins>
+			<ins>point.x * sinZ + point.y * cosZ,</ins>
+			<ins>point.z</ins>
+		<ins>)</ins>;</pre>
+						
+						<p>Add a rotation component to the grid and make it the middle transformation. This means we scale first, then rotate, and finally reposition, which is exactly what Unity's transform component does. Of course we're only supporting rotation around Z at this point. We'll deal with the other two axes later.</p>
+						
+						<figure>
+							<img src="part-1/transformations/rotation-inspector.png" width="320" height="220" alt="inspector"><br>
+							<video width="500" height="350" controls loop muted>
+								<source src="part-1/transformations/all-three.mp4" type="video/mp4">
+							</video>
+							<figcaption>All three transformations.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="part-1/transformations/transformations.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Full Rotations</h2>
+					
+					<p>Right now we can only rotate around the Z axis. To provide the same rotation support that Unity's transform component does, we have to enable rotation around the X and Y axes as well. While rotating around these axes in isolation is similar to rotating around Z, it gets more complicated when rotating around multiple axes at once. To tackle that, we could use a better way to write down our rotation math.</p>
+					
+					<section>
+						<h3>Matrices</h3>
+					
+						<p>From now on, we'll write the coordinates of a point vertically instead of horizontally. Instead of `(x,y)` we'll use `[[x],[y]]`. Likewise, `(xcosZ - ysinZ, xsinZ + ycosZ)` is split into two rows and becomes `[[xcosZ - ysinZ],[xsinZ + ycosZ]]`, which is easier to read.</p>
+
+						<p>Notice that the x and y factors end up arranged in vertical columns. It's as if we multiplied something with `[[x],[y]]`. That would suggest a 2D multiplication. Indeed, the multiplication we performed is `[[cosZ,-sinZ],[sinZ,cosZ]][[x],[y]]`. This is a matrix multiplication. The first column of the 2 by 2 matrix represents the X axis and its second column represents the Y axis.</p>
+
+						<figure>
+							<img src="part-1/full-rotations/multiplication.png" width="410" height="140">
+							<figcaption>Defining the X and Y axes with a 2D matrix.</figcaption>
+						</figure>
+
+						<p>In general, when multiplying two matrices, you go row by row in the first matrix and column by column in the second matrix. Each term in the result matrix is the sum of the terms of a row multiplied with the corresponding terms of a column. This means that the rows of the first matrix and columns of the second matrix must have the same amount of elements.</p>
+						
+						<figure>
+							<img src="part-1/full-rotations/matrix-multiplication-general.png" width="530" height="150">
+							<figcaption>Multiplying two 2 by 2 matrices.</figcaption>
+						</figure>
+
+						<p>The first row of the resulting matrix contains row 1 &times; column 1, row 1 &times; column 2, and so on. The second row contains row 2 &times; column 1, row 2 &times; column 2, and so on. Thus, it has the same amount of rows as the first matrix, and the same amount of columns as the second matrix.</p>
+						
+						
+					</section>
+					
+					<section>
+						<h3>3D Rotation Matrices</h3>
+						
+						<p>So far, we have a 2 by 2 matrix that we can use to rotate a 2D point around the Z axis. But we're actually using 3D points. So we're attempting the multiplication `[[cosZ,-sinZ],[sinZ,cosZ]][[x],[y],[z]]`, which in invalid because the row and column length of the matrices don't match. So we have to increase our rotation matrix to 3 by 3, by including the third dimension. What happens if we just pad it with zeros?</p>
+						
+						<p>`[[cosZ,-sinZ,0],[sinZ,cosZ,0],[0,0,0]][[x],[y],[z]] = [[xcosZ - ysinZ + 0z],[xsinZ + ycosZ + 0z],[0x + 0y + 0z]] = [[xcosZ - ysinZ],[xsinZ + ycosZ],[0]]`</p>
+						
+						<p>The X and Y components of the result are good, but the Z component always becomes zero. That is incorrect. In order to keep Z unchanged, we have to insert a 1 at the bottom right of our rotation matrix. This makes sense, because the third column represents the Z axis, which is `[[0],[0],[1]]`.</p>
+						
+						<p>`[[cosZ,-sinZ,0],[sinZ,cosZ,0],[0,0,1]][[x],[y],[z]] = [[xcosZ - ysinZ],[xsinZ + ycosZ],[z]]`</p>
+						
+						<p>If we used this trick for all three dimension at once, we'd end up with a matrix with 1s along its diagonal and 0s everywhere else. This is known as an identity matrix, as it doesn't change whatever it is multiplied with. It's like a filter that lets everything through unchanged.</p>
+						
+						<p>`[[1,0,0],[0,1,0],[0,0,1]][[x],[y],[z]] = [[x],[y],[z]]`</p>
+					</section>
+					
+					<section>
+						<h3>Rotation Matrices for X and Y</h3>
+						
+						<p>Using the same reasoning we applied to find a way to rotate around Z, we can come up with a matrix for rotating around Y. First, the X axis starts as `[[1],[0],[0]]` and becomes `[[0],[0],[-1]]` after a 90&deg; counterclockwise rotation. This means that the rotated X axis can be represented with `[[cosY],[0],[-sinY]]`. The Z axis lags 90&deg; behind it, so that's `[[sinY],[0],[cosY]]`. The Y axis remains unchanged, which completes the rotation matrix.</p>
+						
+						<p>`[[cosY,0,sinY],[0,1,0],[-sinY,0,cosY]]`</p>
+						
+						<p>The third rotation matrix keeps X constant and adjust Y and Z in a similar way.</p>
+						
+						<p>`[[1,0,0],[0,cosX,-sinX],[0,sinX,cosX]]`</p>
+					</section>
+					
+					<section>
+						<h3>Unified Rotation Matrix</h3>
+						
+						<p>Our three rotation matrices each rotate around a single axis. To combine them, we have to apply one after the other. Let's rotate around Z first, then around Y, and finally around X. We can do this by first applying the Z rotation to our point, then applying the Y rotation to the result, and then applying the X rotation to that result.</p>
+						
+						<p>But we can also multiply our rotation matrices with each other. That will produce a new rotation matrix, which would apply all three rotations at once. Let's fist perform Y &times; Z.</p>
+						
+						<p>The first entry of the result matrix is `cosYcosZ - 0sinZ - 0sinY = cosYcosZ`. The entire matrix requires a lot of multiplications, but many parts end up as 0s and can be discarded.</p>
+						
+						<p>`[[cosYcosZ, -cosYsinZ, sinY],[sinZ, cosZ, 0],[-sinYcosZ, sinYsinZ, cosY]]`</p>
+						
+						<p>Now perform X &times; (Y &times; Z) to get our final matrix.</p>
+						
+						<p>`[[cosYcosZ, -cosYsinZ, sinY],[cosXsinZ + sinXsinYcosZ, cosXcosZ - sinXsinYsinZ, -sinXCosY],[sinXsinZ - cosXsinYcosZ, sinXcosZ + cosXsinYsinZ,cosXcosY]]`</p>
+						
+						<aside>
+							<h3>Does the multiplication order matter?</h3>
+							<div>
+								<p>It doesn't matter in what order you compute the multiplications, `X &times; (Y &times; Z) = (X &times; Y) &times; Z`. You end up with a different intermediate step, but with the same end result.</p>
+								
+								<p>However, reordering the matrices in this equation does change the rotation order, which will produce a different result. So `X &times; Y &times; Z != Z &times; Y &times; X`. Matrix multiplications differ from multiplications with single numbers in this regard.</p>
+								
+								<p>Unity's actual rotation order is ZXY.</p>
+							</div>
+						</aside>
+						
+						<p>Now that we have this matrix, we can see how the X, Y, and Z axes of the rotation result can be constructed.</p>
+						
+						<pre translate="no">	public override Vector3 Apply (Vector3 point) {
+		<ins>float radX = rotation.x * Mathf.Deg2Rad;</ins>
+		<ins>float radY = rotation.y * Mathf.Deg2Rad;</ins>
+		float radZ = rotation.z * Mathf.Deg2Rad;
+		<ins>float sinX = Mathf.Sin(radX);</ins>
+		<ins>float cosX = Mathf.Cos(radX);</ins>
+		<ins>float sinY = Mathf.Sin(radY);</ins>
+		<ins>float cosY = Mathf.Cos(radY);</ins>
+		float sinZ = Mathf.Sin(radZ);
+		float cosZ = Mathf.Cos(radZ);
+
+		<ins>Vector3 xAxis = new Vector3(</ins>
+			<ins>cosY * cosZ,</ins>
+			<ins>cosX * sinZ + sinX * sinY * cosZ,</ins>
+			<ins>sinX * sinZ - cosX * sinY * cosZ</ins>
+		<ins>);</ins>
+		<ins>Vector3 yAxis = new Vector3(</ins>
+			<ins>-cosY * sinZ,</ins>
+			<ins>cosX * cosZ - sinX * sinY * sinZ,</ins>
+			<ins>sinX * cosZ + cosX * sinY * sinZ</ins>
+		<ins>);</ins>
+		<ins>Vector3 zAxis = new Vector3(</ins>
+			<ins>sinY,</ins>
+			<ins>-sinX * cosY,</ins>
+			<ins>cosX * cosY</ins>
+		<ins>);</ins>
+
+		return <ins>xAxis * point.x + yAxis * point.y + zAxis * point.z</ins>;
+	}</pre>
+						<figure>
+							<video width="500" height="350" controls loop muted>
+								<source src="part-1/full-rotations/three-axes.mp4" type="video/mp4">
+							</video>
+							<figcaption>Rotating around three axes.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="part-1/full-rotations/full-rotations.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Matrix Transformations</h2>
+					
+					<p>If we can combine three rotations into a single matrix, could we also combine scaling, rotating, and repositioning into one matrix? If we can represent scaling and repositioning as matrix multiplications, then the answer is yes.</p>
+					
+					<p>A scaling matrix is straightforward to construct. Take the identity matrix and scale its components.</p>
+					
+					<p>`[[2,0,0],[0,3,0],[0,0,4]][[x],[y],[z]] = [[2x],[3y],[4z]]`</p>
+					
+					<p>But how could we support repositioning? This is not a redefinition of the three axes, it is an offset. So we cannot represent it with the 3 by 3 matrix that we have right now. We need an additional column to contain the offset.</p>
+					
+					<p>`[[1,0,0,2],[0,1,0,3],[0,0,1,4]][[x],[y],[z]] = [[x + 2],[y + 3],[z + 4]]`</p>
+					
+					<p>However, this is invalid because our matrix's row length has become 4. So we need to add a fourth component to our point. As this component gets multiplied with the offset, it should be 1. And we want to preserve that 1, so it can be used in further matrix multiplications. This leads to a 4 by 4 matrix and a 4D point.</p>
+					
+					<p>`[[1,0,0,2],[0,1,0,3],[0,0,1,4],[0,0,0,1]][[x],[y],[z],[1]] = [[1x + 0y + 0z + 2],[0x + 1y + 0z + 3],[0x + 0y + 1z + 4],[0x + 0y+ 0z + 1]] = [[x + 2],[y + 3],[z + 4],[1]]`</p>
+					
+					<p>So we have to use 4 by 4 transformation matrices. This means that the scale and rotation matrices get an additional row and column with 0s and a 1 at the bottom right. And all our points get a fourth coordinate, which is always 1. </p>
+					
+					<section>
+						<h3>Homogeneous Coordinates</h3>
+						
+						<p>Can we make any sense of that fourth coordinate? Does it represent anything useful? We know that we give it the value 1 to enable repositioning of points. If its value were 0, the offset would be ignored, but scaling and rotation would still happen.</p>
+						
+						<p>Something that can be scaled and rotated, but not moved. That is not a point, that is a vector. A direction.</p>
+						
+						<p>So `[[x],[y],[z],[1]]` represents a point, while `[[x],[y],[z],[0]]` represents a vector. This is useful, because it means that we can use the same matrix to transform positions, normals, and tangents.</p>
+						
+						<p>So what happens when the fourth coordinate gets a value other than 0 or 1? Well, it shouldn't. Or actually, it should make no difference. We are now working with homogeneous coordinates. The idea is that each point in space can be represented by an infinite amount of coordinate sets. The most straightforward form uses 1 as the fourth coordinate. All other alternatives can be found by multiplying the whole set with an arbitrary number.</p>
+						
+						<p>`[[x],[y],[z],[1]] = [[2x],[2y],[2z],[2]] = [[3x],[3y],[3z],[3]] = [[wx],[wy],[wz],[w]] = w[[x],[y],[z],[1]]`</p>
+						
+						<p>So to get the Euclidean point &ndash; the actual 3D point &ndash; you divide each coordinate by the fourth one, which is then discarded.</p>
+						
+						<p>`[[x],[y],[z],[w]] = 1/w[[x],[y],[z],[w]] = [[x/w],[y/w],[z/w],[1]] -> [[x/w],[y/w],[z/w]]`</p>
+						
+						<p>Of course that doesn't work when the fourth coordinate is 0. Such points are defined to be infinitely far away. That's why they behave as directions.</p>
+					</section>
+					
+					<section>
+						<h3>Using Matrices</h3>
+						
+						<p>We can use Unity's <code>Matrix4x4</code> struct to perform matrix multiplications. From now on, we'll use it to perform out transformations instead of the current approach.</p>
+						
+						<p>Add an abstract readonly property to <code>Transformation</code> to retrieve the transformation matrix.</p>
+						
+						<pre translate="no">	<ins>public abstract Matrix4x4 Matrix { get; }</ins></pre>
+						
+						<p>Its <code>Apply</code> method no longer needs to be abstract. It will just grab the matrix and perform the multiplication.</p>
+						
+						<pre translate="no">	<ins>public</ins> Vector3 Apply (Vector3 point) <ins>{</ins>
+		<ins>return Matrix.MultiplyPoint(point);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Note that <code>Matrix4x4.MultiplyPoint</code> has a 3D vector parameter. It assumes that the missing fourth coordinate is 1. It also takes care of the conversion back from homogeneous coordinates to Euclidean coordinates. If you want to multiply a direction instead of a point, you can use <code>Matrix4x4.MultiplyVector</code>.</p>
+						
+						<p>The concrete transformation classes now have to change their <code>Apply</code> methods into <code>Matrix</code> properties.</p>
+						
+						<p>First up is <code>PositionTransformation</code>. The <code>Matrix4x4.SetRow</code> method offers a convenient way to fill a matrix.</p>
+						
+						<pre translate="no">	public override <ins>Matrix4x4 Matrix</ins> {
+		<ins>get {</ins>
+			<ins>Matrix4x4 matrix = new Matrix4x4();</ins>
+			<ins>matrix.SetRow(0, new Vector4(1f, 0f, 0f, position.x));</ins>
+			<ins>matrix.SetRow(1, new Vector4(0f, 1f, 0f, position.y));</ins>
+			<ins>matrix.SetRow(2, new Vector4(0f, 0f, 1f, position.z));</ins>
+			<ins>matrix.SetRow(3, new Vector4(0f, 0f, 0f, 1f));</ins>
+			return <ins>matrix</ins>;
+		<ins>}</ins>
+	}</pre>
+						
+						<p>Next up is <code>ScaleTransformation</code>.</p>
+						
+						<pre translate="no">	public override <ins>Matrix4x4 Matrix</ins> {
+			<ins>get {</ins>
+			<ins>Matrix4x4 matrix = new Matrix4x4();</ins>
+			<ins>matrix.SetRow(0, new Vector4(scale.x, 0f, 0f, 0f));</ins>
+			<ins>matrix.SetRow(1, new Vector4(0f, scale.y, 0f, 0f));</ins>
+			<ins>matrix.SetRow(2, new Vector4(0f, 0f, scale.z, 0f));</ins>
+			<ins>matrix.SetRow(3, new Vector4(0f, 0f, 0f, 1f));</ins>
+			return <ins>matrix</ins>;
+		<ins>}</ins>
+	}</pre>
+						
+						<p>For <code>RotationTransformation</code>, it's more convenient to set the matrix column by column, as that matches our already existing code.</p>
+						
+						<pre translate="no">	public override <ins>Matrix4x4 Matrix</ins> {
+			<ins>get {</ins>
+			float radX = rotation.x * Mathf.Deg2Rad;
+			float radY = rotation.y * Mathf.Deg2Rad;
+			float radZ = rotation.z * Mathf.Deg2Rad;
+			float sinX = Mathf.Sin(radX);
+			float cosX = Mathf.Cos(radX);
+			float sinY = Mathf.Sin(radY);
+			float cosY = Mathf.Cos(radY);
+			float sinZ = Mathf.Sin(radZ);
+			float cosZ = Mathf.Cos(radZ);
+			
+			<ins>Matrix4x4 matrix = new Matrix4x4();</ins>
+			<ins>matrix.SetColumn(0, new Vector4</ins>(
+				cosY * cosZ,
+				cosX * sinZ + sinX * sinY * cosZ,
+				sinX * sinZ - cosX * sinY * cosZ<ins>,</ins>
+				<ins>0f</ins>
+			)<ins>)</ins>;
+			<ins>matrix.SetColumn(1, new Vector4</ins>(
+				-cosY * sinZ,
+				cosX * cosZ - sinX * sinY * sinZ,
+				sinX * cosZ + cosX * sinY * sinZ<ins>,</ins>
+				<ins>0f</ins>
+			)<ins>)</ins>;
+			<ins>matrix.SetColumn(2, new Vector4</ins>(
+				sinY,
+				-sinX * cosY,
+				cosX * cosY<ins>,</ins>
+				<ins>0f</ins>
+			)<ins>)</ins>;
+			<ins>matrix.SetColumn(3, new Vector4(0f, 0f, 0f, 1f));</ins>
+			return <ins>matrix</ins>;
+		<ins>}</ins>
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Combining Matrices</h3>
+						
+						<p>Let's now combine our transformation matrices into a single matrix. Add a transformation matrix field to <code>TransformationGrid</code>.</p>
+						
+						<pre translate="no">	<ins>Matrix4x4 transformation;</ins></pre>
+						
+						<p>We'll update this transformation matrix each Update. This involves grabbing the first matrix, then multiplying it with all the others. Make sure that they are multiplied in the correct order.</p>
+						
+						<pre translate="no">	void Update () {
+		<ins>UpdateTransformation();</ins>
+		for (int i = 0, z = 0; z &lt; gridResolution; z++) {
+			&hellip;
+		}
+	}
+
+	<ins>void UpdateTransformation () {</ins>
+		GetComponents&lt;Transformation>(transformations);
+		<ins>if (transformations.Count > 0) {</ins>
+			<ins>transformation = transformations[0].Matrix;</ins>
+			<ins>for (int i = 1; i &lt; transformations.Count; i++) {</ins>
+				<ins>transformation = transformations[i].Matrix * transformation;</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now the grid no longer invokes <code>Apply</code>, but performs the matrix multiplication itself.</p>
+						
+						<pre translate="no">	Vector3 TransformPoint (int x, int y, int z) {
+		Vector3 coordinates = GetCoordinates(x, y, z);
+		return <ins>transformation.MultiplyPoint(coordinates)</ins>;
+	}</pre>
+						
+						<p>This new approach is more efficient, because we used to create each transformation matrix separately for every point and apply them individually. Now we create a unified transformation matrix once and reuse it for every point. Unity uses the same trick to reduce every object hierarchy to a single transformation matrix.</p>
+						
+						<p>In our case, we could make it even more efficient. All transformation matrices have the same bottom row, `[[0,0,0,1]]`. Knowing this, we could forget about that row, skipping the computation of 0s and the conversion division at the end. The <code>Matrix4x4.MultiplyPoint4x3</code> method does exactly that. However, we're not going to use that method, because there are useful transformations that do change the bottom row.</p>
+					</section>
+					
+					<a href="part-1/matrix-transformations/matrix-transformations.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Projection Matrices</h2>
+					
+					<p>So far, we've been transforming points from one position in 3D to another position in 3D space. But how do those points end up drawn on a 2D display? This requires a transformation from 3D to 2D space. We can create a transformation matrix for that!</p>
+					
+					<p>Make a new concrete transformation for a camera projection. Start with the identity matrix.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class CameraTransformation : Transformation {</ins>
+
+	<ins>public override Matrix4x4 Matrix {</ins>
+		<ins>get {</ins>
+			<ins>Matrix4x4 matrix = new Matrix4x4();</ins>
+			<ins>matrix.SetRow(0, new Vector4(1f, 0f, 0f, 0f));</ins>
+			<ins>matrix.SetRow(1, new Vector4(0f, 1f, 0f, 0f));</ins>
+			<ins>matrix.SetRow(2, new Vector4(0f, 0f, 1f, 0f));</ins>
+			<ins>matrix.SetRow(3, new Vector4(0f, 0f, 0f, 1f));</ins>
+			<ins>return matrix;</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+					
+					<p>Add it as the final transformation.</p>
+					
+					<figure>
+						<img src="part-1/projection-matrices/camera-transformation.png" width="320" height="259">
+						<figcaption>The camera projection comes at the end.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Orthographic Camera</h3>
+						
+						<p>The most straightforward way to go from 3D to 2D is to simply discard one dimension. That will collapse 3D space into a flat plane. This plane acts like a canvas, used to render the scene. Let's just drop the Z dimension and see what happens.</p>
+						
+						<p>`[[1,0,0,0],[0,1,0,0],[0,0,0,0],[0,0,0,1]]`</p>
+						
+						<pre translate="no">			matrix.SetRow(0, new Vector4(1f, 0f, 0f, 0f));
+			matrix.SetRow(1, new Vector4(0f, 1f, 0f, 0f));
+			matrix.SetRow(2, new Vector4(0f, 0f, <ins>0f</ins>, 0f));
+			matrix.SetRow(3, new Vector4(0f, 0f, 0f, 1f));
+</pre>
+						
+						<figure>
+							<img alt="scene" src="part-1/projection-matrices/orthograpic.png" width="300" height="300">
+							<img alt="projection" src="part-1/projection-matrices/orthographic-projection.png" width="265" height="200">
+							<figcaption>Orthographic Projection.</figcaption>
+						</figure>
+						
+						<p>Indeed, our grid becomes 2D. You can still scale, rotate, and reposition everything, but it gets projected onto the XY plane afterwards. This is a rudimentary orthographic camera projection.</p>
+						
+						<aside>
+							<h3>Why do the colors become erratic?</h3>
+							<div>
+								<p>All our point cubes end up on the XY plane. This means that they exactly overlap along the Z axis. It becomes arbitrary which cube ends up visually on top for each pixel.</p>
+							</div>
+						</aside>
+						
+						<p>Our primitive camera sits at the origin and looks in the positive Z direction. Could we move it around and rotate it? Yes, in fact we can already do that. Moving the camera has the same visual effect as moving the world in the opposite direction. The same goes for rotation and scaling. So we can use our existing transformations to move the camera, although it is a bit awkward. Unity uses matrix inversion to do the same thing.</p>
+					</section>
+					
+					<section>
+						<h3>Perspective Camera</h3>
+						
+						<p>An orthographic camera is nice, but doesn't show the world as we see it. We need a perspective camera for that. Due to perspective, things that are further away appear smaller to us. We can reproduce this effect by scaling points based on their distance from the camera.</p>
+						
+						<p>Let's just divide everything by the Z coordinate. Can we do that with a matrix multiplication? Yes, by changing the bottom row of an identity matrix to `[0,0,1,0]`. That will make the fourth coordinate of the result equal to the original Z coordinate. Converting from homogeneous to Euclidean coordinates then takes care of the desired division.</p>
+						
+						<p>`[[1,0,0,0],[0,1,0,0],[0,0,0,0],[0,0,1,0]][[x],[y],[z],[1]] = [[x],[y],[0],[z]] -> [[x/z],[y/z],[0]]`</p>
+						
+						<pre translate="no">			matrix.SetRow(0, new Vector4(1f, 0f, 0f, 0f));
+			matrix.SetRow(1, new Vector4(0f, 1f, 0f, 0f));
+			matrix.SetRow(2, new Vector4(0f, 0f, 0f, 0f));
+			matrix.SetRow(3, new Vector4(0f, 0f, <ins>1f</ins>, <ins>0f</ins>));</pre>
+						
+						<p>The big difference with the orthographic projection is that points aren't moved straight down to the projection plane. Instead, they are moved towards the camera's position &ndash; the origin &ndash; until they hit the plane. Of course this is only valid for points that lie in front of the camera. Points that lie behind the camera will be incorrectly projected. As we're not discarding those points, make sure everything lies in front of the camera, via repositioning. A distance of 5 would be enough when the grid is not scaled or rotated, otherwise you might need more.</p>
+						
+						<figure>
+							<img alt="scene" src="part-1/projection-matrices/perspective.png" width="300" height="300">
+							<img alt="projection" src="part-1/projection-matrices/perspective-projection.png" width="265" height="270">
+							<figcaption>Perspective Projection.</figcaption>
+						</figure>
+						
+						<p>The distance between the origin and the projection plane also influences the projection. It acts like the focal length of a camera. The larger you make it, the smaller your field of view will be. Right now we're using a focal length of 1, which produces a 90&deg; field of view. We can make that configurable.</p>
+						
+						<pre translate="no">	<ins>public float focalLength = 1f;</ins></pre>
+						
+						<figure>
+							<img src="part-1/projection-matrices/focal-length.png" width="320" height="58"><br>
+							<figcaption>Focal length.</figcaption>
+						</figure>
+						
+						<p>As a larger focal length means we're zooming in, this effectively increases the scale of our final points, so we can support it that way. As we're collapsing the Z dimension, that one doesn't need to be scaled.</p>
+						
+						<p>`[[fl,0,0,0],[0,fl,0,0],[0,0,0,0],[0,0,1,0]][[x],[y],[z],[1]] = [[xfl],[yfl],[0],[z]] -> [[(xfl)/z],[(yfl)/z],[0]]`</p>
+						
+						<pre translate="no">			matrix.SetRow(0, new Vector4(<ins>focalLength</ins>, 0f, 0f, 0f));
+			matrix.SetRow(1, new Vector4(0f, <ins>focalLength</ins>, 0f, 0f));
+			matrix.SetRow(2, new Vector4(0f, 0f, 0f, 0f));
+			matrix.SetRow(3, new Vector4(0f, 0f, 1f, 0f));</pre>
+						
+						<figure>
+							<video width="500" height="350" controls loop muted>
+								<source src="part-1/projection-matrices/focal-length.mp4" type="video/mp4">
+							</video>
+							<figcaption>Adjusting the focal length.</figcaption>
+						</figure>
+						
+						<p>We now have a very simple perspective camera. If we were to fully mimic Unity's camera projection, we would also have to deal with the near and far plane. That would require projecting into a cube instead of a plane, so depth information is retained. Then there is the view aspect ratio to worry about. Also, Unity's camera looks in the negative Z direction, which requires negating some numbers. You could incorporate all that into the projection matrix. I leave it to you to figure out how to do that, if you want to.</p>
+						
+						<p>So what was the point of all this? We rarely need to construct matrices ourselves, and definitely not projection matrices. The point is that you now understand what's going on. Matrices aren't scary, they just transform points and vectors from one space to another. And you understand how. That's good, because you'll encounter matrices again once we start writing our own shaders. We'll do so in <a href="part-2.1.html">part 2, Shader Fundamentals</a>.</p>
+					</section>
+					
+					<a href="part-1/projection-matrices/projection-matrices.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="part-1/Rendering-1.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../tutorials.js"></script>
+	</body>
+</html>

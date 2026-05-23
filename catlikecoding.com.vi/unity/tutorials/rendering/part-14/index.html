@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/rendering/part-14/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/rendering/part-14/tutorial-image.jpg">
+		<meta property="og:title" content="Rendering 14, Fog, a Unity Tutorial">
+		<meta property="og:description" content="A Unity Rendering tutorial about supporting fog, for both forward and deferred shading. Part 14 of 20.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Rendering 14</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/rendering/part-14/#article",
+				"headline": "Rendering 14",
+				"alternativeHeadline": "Fog",
+				"datePublished": "2017-03-31",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Rendering tutorial about supporting fog, for both forward and deferred shading. Part 14 of 20.",
+				"image": "https://catlikecoding.com/unity/tutorials/rendering/part-14/tutorial-image.jpg",
+				"dependencies": "Unity 5.5.0f3",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/rendering/", "name": "Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				DeferredFogEffect: 1,
+				MyLightingShaderGUI: 1,
+				RenderingMode: 1,
+				RenderingSettings: 1,
+				SmoothnessSource: 1,
+				TangentSpaceVisualizer: 1
+			};
+			
+			var hasAnimations = false;
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Rendering 14</h1>
+					<p>Fog</p>
+					<ul>
+						<li>Apply fog to objects.</li>
+						<li>Base fog on either distance or depth.</li>
+						<li>Create an image effect.</li>
+						<li>Support deferred fog.</li>
+					</ul>
+				</header>
+
+				<p>This is part 14 of a tutorial series about rendering. The <a href="../part-13.1.html">previous installment</a> introduced deferred shading. This time we'll add fog to our scene.</p>
+				
+				<p>This tutorial was made with Unity 5.5.0f3.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Things tend to fade with distance.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Forward Fog</h2>
+					
+					<p>Up to this point, we've always treated light rays as if they traveled through a vacuum. This might be accurate when your scene is set in space, but otherwise light has to travel through an atmosphere or liquid. Under those circumstances, light rays can get absorbed, scattered, and reflected anywhere in space, not only when hitting a solid surface.</p>
+					
+					<p>An accurate rendering of atmospheric interference would require an expensive volumetric approach, which is something we usually cannot afford. Instead, we'll settle for an approximation which relies on only a few constant fog parameters. It's known as fog, because the effect is typically used for foggy atmospheres. The visual distortions causes by clear atmospheres are usually so subtle that they can be ignored for shorter distances.</p>
+					
+					<section>
+						<h3>Standard Fog</h3>
+						
+						<p>Unity's <em translate="no">Lighting</em> window contains a section with the scene's fog settings. It's disabled by default. When activated, you get a default gray fog. However, this only works for objects that are rendered using the forward rendering path. When the deferred mode is active, this is mentioned in the fog section.</p>
+						
+						<figure>
+							<img src="forward-fog/default-fog.png" width="320" height="118">
+							<figcaption>Default fog enabled.</figcaption>
+						</figure>
+						
+						<p>We'll deal with deferred mode later. For now, let's focus on forward fog. To do so, we need to use forward rendering mode. You can change the global rendering mode, or force the main camera to use the desired rendering mode. So set the camera's <em translate="no">Rendering Path</em> to <em translate="no">Forward</em>. Let's also disable <em translate="no">HDR</em> rendering for now.</p>
+						
+						<figure>
+							<img src="forward-fog/forward-camera.png" width="320" height="366">
+							<figcaption>Forward camera.</figcaption>
+						</figure>
+						
+						<p>Create a small test scene, like a few spheres on top of a plane or cube. Use Unity's default white material.</p>
+						
+						<figure>
+							<img src="forward-fog/unnoticeable-fog.png" width="350" height="140">
+							<figcaption>Unnoticeable fog.</figcaption>
+						</figure>
+						
+						<p>With ambient lighting set to its default intensity of 1, you'll get a few very bright objects and no noticeable fog at all.</p>
+					</section>
+					
+					<section>
+						<h3>Linear Fog</h3>
+						
+						<p>To make the fog more noticeable, set its color to solid black. That would represent an atmosphere that absorbs light without much scattering, like thick black smoke.</p>
+						
+						<p>Set the <em translate="no">Fog Mode</em> to <em translate="no">Linear</em>. This isn't realistic, but easy to configure. You can set the distance at which the fog's influence begins and where it effectively becomes solid. It increases linearly in between. This is measured in view distance. Before the fog starts, visibility is normal. Beyond that distance, the fog will gradually obscure objects. Beyond the end, nothing but the fog's color is visible.</p>
+						
+						<figure>
+							<img alt="game" src="forward-fog/linear-inspector.png" width="320" height="100">
+							<img alt="graph" src="forward-fog/linear-graph.png" width="100" height="100">
+							<img alt="inspector" src="forward-fog/linear-game.png" width="350" height="140">
+							<figcaption>Linear fog.</figcaption>
+						</figure>
+						
+						<p>The linear fog factor is computed with the function `f = (E - c) / (E - S)`, where `c` is the fog coordinate and `S` and `E` and the start and end. This factor is then clamped to the 0&ndash;1 range and used to interpolate between the fog and the object's shaded color.</p>
+						
+						<aside>
+							<h3>Why doesn't fog affect the skybox?</h3>
+							<div>
+								<p>The fog effect adjusts the fragment colors of forward-rendered objects. Thus, it only affects those objects, not the skybox.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Exponential Fog</h3>
+						
+						<p>The second fog mode that Unity supports is exponential, which is a more realistic approximation of fog. It uses the function `f = 1 / 2^(cd) = 2^(-cd)` where `d` is the fog's density factor. This equation will never reach zero, unlike the linear version. Increase the density to 0.1 to make the fog appear closer to the camera.</p>
+						
+						<figure>
+							<img alt="game" src="forward-fog/exp-inspector.png" width="320" height="82">
+							<img alt="graph" src="forward-fog/exp-graph.png" width="100" height="100">
+							<img alt="inspector" src="forward-fog/exp-game.png" width="350" height="140">
+							<figcaption>Exponential fog.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Exponential Squared Fog</h3>
+						
+						<p>The last mode is exponential squared fog. This works like exponential fog, but uses the function `f = 1 / 2^((cd)^2) = 2^(-(cd)^2)` which results in less fog at close range, but it increases quicker.</p>
+						
+						<figure>
+							<img alt="game" src="forward-fog/exp2-inspector.png" width="320" height="82">
+							<img alt="graph" src="forward-fog/exp2-graph.png" width="100" height="100">
+							<img alt="inspector" src="forward-fog/exp2-game.png" width="350" height="140">
+							<figcaption>Exponential squared fog.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Adding Fog</h3>
+						
+						<p>Now that we know what fog looks like, let's add support for it to our own forward shader. To make comparison easier, set half of the objects to use our own material, while the rest keeps using the default material.</p>
+						
+						<figure>
+							<img src="forward-fog/white-linear.png" width="350" height="140">
+							<figcaption>Our material on the left, standard material on the right.</figcaption>
+						</figure>
+						
+						<p>The fog mode is controlled with shader keywords, so we have to add a multi-compile directive to support them. There is a pre-defined <code class="shader">multi_compile_fog</code> directive that we can use for this purpose. It results in extra shader variants for the <code class="shader">FOG_LINEAR</code>, <code class="shader">FOG_EXP</code>, and <code class="shader">FOG_EXP2</code> keywords. Add this directive to the two forward passes only.</p>
+						
+						<pre translate="no" class="shader">			<ins>#pragma multi_compile_fog</ins></pre>
+						
+						<p>Next, let's add a function to <em translate="no">My Lighting</em> to apply the fog to our fragment color. It takes the current color and the interpolators as parameters, and should return the final color with fog applied.</p>
+						
+						<pre translate="no" class="shader"><ins>float4 ApplyFog (float4 color, Interpolators i) {</ins>
+	<ins>return color;</ins>
+<ins>}</ins></pre>
+						
+						<p>The fog effect is based on the view distance, which is equal to the length of the vector between the camera position and the fragment's world position. We have access to both positions, so we can compute this distance.</p>
+						
+						<pre translate="no" class="shader">float4 ApplyFog (float4 color, Interpolators i) {
+	<ins>float viewDistance = length(_WorldSpaceCameraPos - i.worldPos);</ins>
+	return color;
+}</pre>
+						
+						<p>Then we use this as the fog coordinate for the fog density function, which is computed by the <code class="shader">UNITY_CALC_FOG_FACTOR_RAW</code> macro. This macro creates the <code class="shader">unityFogFactor</code> variable, which we can use to interpolate between the fog and fragment color. The fog color is stored in <code class="shader">unity_FogColor</code>, which is defined in <em translate="no">ShaderVariables</em>.</p>
+						
+						<pre translate="no" class="shader">float4 ApplyFog (float4 color, Interpolators i) {
+	float viewDistance = length(_WorldSpaceCameraPos - i.worldPos);
+	<ins>UNITY_CALC_FOG_FACTOR_RAW(viewDistance);</ins>
+	return <ins>lerp(unity_FogColor,</ins> color<ins>, unityFogFactor)</ins>;
+}</pre>
+						
+						<aside>
+							<h3>How does <code class="shader">UNITY_CALC_FOG_FACTOR_RAW</code> work?</h3>
+							<div>
+								<p>The macro is defined in <em translate="no">UnityCG</em>. Which fog keyword is defined determines what gets computed.</p>
+								
+								<pre translate="no" class="shader">#if defined(FOG_LINEAR)
+	// factor = (end-z)/(end-start) = z * (-1/(end-start))+(end/(end-start))
+	#define UNITY_CALC_FOG_FACTOR_RAW(coord) float unityFogFactor = \
+		(coord) * unity_FogParams.z + unity_FogParams.w
+#elif defined(FOG_EXP)
+	// factor = exp(-density*z)
+	#define UNITY_CALC_FOG_FACTOR_RAW(coord) float unityFogFactor = \
+		unity_FogParams.y * (coord); \
+		unityFogFactor = exp2(-unityFogFactor)
+#elif defined(FOG_EXP2)
+	// factor = exp(-(density*z)^2)
+	#define UNITY_CALC_FOG_FACTOR_RAW(coord) float unityFogFactor = \
+		unity_FogParams.x * (coord); \
+		unityFogFactor = exp2(-unityFogFactor*unityFogFactor)
+#else
+	#define UNITY_CALC_FOG_FACTOR_RAW(coord) float unityFogFactor = 0.0
+#endif</pre>
+								
+								<p>There is also a <code class="shader">UNITY_CALC_FOG_FACTOR</code> macro, which uses this macro. It assumes that the fog coordinate is of a specific type which requires a conversion, which is why we use the raw version directly.</p>
+								
+								<p>The <code class="shader">unity_FogParams</code> variable is defined in <em translate="no">UnityShaderVariables</em> and contains some useful pre-computed values.</p>
+								
+								<pre translate="no" class="shader">	// x = density / sqrt(ln(2)), useful for Exp2 mode
+	// y = density / ln(2), useful for Exp mode
+	// z = -1/(end-start), useful for Linear mode
+	// w = end/(end-start), useful for Linear mode
+	float4 unity_FogParams;</pre>
+							</div>
+						</aside>
+						
+						
+						<p>As the fog factor can end up outside the 0&ndash;1 range, we have to clamp it before interpolating.</p>
+						
+						<pre translate="no" class="shader">	return lerp(unity_FogColor, color, <ins>saturate(</ins>unityFogFactor<ins>)</ins>);</pre>
+						
+						<p>Also, because fog doesn't affect the alpha component, we can leave that out of the interpolation.</p>
+						
+						<pre translate="no" class="shader">	<ins>color.rgb =</ins> lerp(unity_FogColor<ins>.rgb</ins>, color<ins>.rgb</ins>, saturate(unityFogFactor));
+	<ins>return color;</ins></pre>
+						
+						<p>Now we can apply the fog to the final forward-pass color in <code class="shader">MyFragmentProgram</code>.</p>
+						
+						<pre translate="no" class="shader">	#if defined(DEFERRED_PASS)
+		#if !defined(UNITY_HDR_ON)
+			color.rgb = exp2(-color.rgb);
+		#endif
+		output.gBuffer0.rgb = albedo;
+		output.gBuffer0.a = GetOcclusion(i);
+		output.gBuffer1.rgb = specularTint;
+		output.gBuffer1.a = GetSmoothness(i);
+		output.gBuffer2 = float4(i.normal * 0.5 + 0.5, 1);
+		output.gBuffer3 = color;
+	#else
+		output.color = <ins>ApplyFog(</ins>color<ins>, i)</ins>;
+	#endif</pre>
+						
+						<figure>
+							<img src="forward-fog/linear-fog-different.png" width="350" height="140">
+							<figcaption>Linear fog, but different.</figcaption>
+						</figure>
+						
+						<p>Our own shader now also includes fog. However, it doesn't quite match the fog computed by the standard shader. To make the difference very clear, use linear fog with a start and end that have the same or nearly the same value. This results in a sudden transition from no to total fog.</p>
+						
+						<figure>
+							<img src="forward-fog/distance-vs-depth.png" width="350" height="140">
+							<figcaption>Curving vs. straight fog transition.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Depth-Based Fog</h3>
+						
+						<p>The difference between our and the standard shader is due to the way we compute the fog coordinate. While it makes sense to use the world-space view distance, the standard shader uses a different metric. Specifically, it uses the clip-space depth value. As a result, the view angle doesn't affect the fog coordinate. Also, in some cases the distance is affected by the near clip plane distance of the camera, which pushes the fog away a bit.</p>
+						
+						<figure>
+							<img src="forward-fog/depth-distance.png" width="170" height="160">
+							<figcaption>Flat depth vs. distance.</figcaption>
+						</figure>
+						
+						<p>The advantage of using depth instead of distance is that you don't have to calculate a square root, so it's faster. Also, while less realistic, depth-based fog might be desirable in certain cases, like for side-scrolling games. The downside is that, because view-angles are ignored, the camera orientation influences the fog. As it rotates, the fog density changes, while it logically shouldn't.</p>
+						
+						<figure>
+							<img src="forward-fog/rotating-depth.png" width="235" height="170">
+							<figcaption>Rotation changes depth.</figcaption>
+						</figure>
+						
+						<p>Let's add support for depth-based fog to our shader, to match Unity's approach. This requires a few changes to our code. We now have to pass the clip-space depth value to the fragment program. So define a <code class="shader">FOG_DEPTH</code> keyword when one of the fog modes is active.</p>
+						
+						<pre translate="no" class="shader">#include "UnityPBSLighting.cginc"
+#include "AutoLight.cginc"
+
+<ins>#if defined(FOG_LINEAR) || defined(FOG_EXP) || defined(FOG_EXP2)</ins>
+	<ins>#define FOG_DEPTH 1</ins>
+<ins>#endif</ins></pre>
+						
+						<p>We have to include an interpolator for the depth value. But instead of giving it a separate interpolator, we can piggyback it on the world position, as its fourth component.</p>
+						
+						<pre translate="no" class="shader">struct Interpolators {
+	&hellip;
+	
+	<ins>#if FOG_DEPTH</ins>
+		<ins>float4 worldPos : TEXCOORD4;</ins>
+	<ins>#else</ins>
+		float3 worldPos : TEXCOORD4;
+	<ins>#endif</ins>
+	
+	&hellip;
+}</pre>
+						
+						<p>To make sure that our code remains correct, replace all usage of <code class="shader">i.worldPos</code> with <code class="shader">i.worldPos<ins>.xyz</ins></code>. After that, assign the clip-space depth value to <code class="shader">i.worldPos.w</code> in the fragment program, when needed. It's simply the Z coordinate of the homogeneous clip-space position, so before it gets converted to a value in the 0&ndash;1 range.</p>
+						
+						<pre translate="no" class="shader">Interpolators MyVertexProgram (VertexData v) {
+	Interpolators i;
+	i.pos = UnityObjectToClipPos(v.vertex);
+	i.worldPos.xyz = mul(unity_ObjectToWorld, v.vertex);
+	<ins>#if FOG_DEPTH</ins>
+		<ins>i.worldPos.w = i.pos.z;</ins>
+	<ins>#endif</ins>
+	i.normal = UnityObjectToWorldNormal(v.normal);
+
+	&hellip;
+}</pre>
+						
+						<p>In <code>ApplyFog</code>, overwrite the computed view distance with the interpolated depth value. Keep the old computation, as we'll still use it later.</p>
+						
+						<pre translate="no" class="shader">float4 ApplyFog (float4 color, Interpolators i) {
+	float viewDistance = length(_WorldSpaceCameraPos - i.worldPos.xyz);
+	<ins>#if FOG_DEPTH</ins>
+		<ins>viewDistance = i.worldPos.w;</ins>
+	<ins>#endif</ins>
+	UNITY_CALC_FOG_FACTOR_RAW(viewDistance);
+	return lerp(unity_FogColor, color, saturate(unityFogFactor));
+}
+</pre>
+						
+						<figure>
+							<img src="forward-fog/fog-depth.png" width="350" height="140">
+							<figcaption>Fog based on clip space depth.</figcaption>
+						</figure>
+						
+						<p>Now you most likely get the same result as the standard shader. However, in some cases the clip space is configured differently, producing incorrect fog. To compensate for that, use the <code class="shader">UNITY_Z_0_FAR_FROM_CLIPSPACE</code> macro to convert the depth value.</p>
+						
+						<pre translate="no" class="shader">		viewDistance = <ins>UNITY_Z_0_FAR_FROM_CLIPSPACE(</ins>i.worldPos.w<ins>)</ins>;</pre>
+						
+						<aside>
+							<h3>What does <code class="shader">UNITY_Z_0_FAR_FROM_CLIPSPACE</code> do?</h3>
+							<div>
+								<p>Most importantly, it compensates for a possibly reversed clip-space Z dimension.</p>
+								
+								<pre translate="no" class="shader">#if defined(UNITY_REVERSED_Z)
+	//D3d with reversed Z =>
+	//z clip range is [near, 0] -> remapping to [0, far]
+	//max is required to protect ourselves from near plane not being
+	//correct/meaningfull in case of oblique matrices.
+	#define UNITY_Z_0_FAR_FROM_CLIPSPACE(coord) \
+		max(((1.0-(coord)/_ProjectionParams.y)*_ProjectionParams.z),0)
+#elif UNITY_UV_STARTS_AT_TOP
+	//D3d without reversed z => z clip range is [0, far] -> nothing to do
+	#define UNITY_Z_0_FAR_FROM_CLIPSPACE(coord) (coord)
+#else 
+	//Opengl => z clip range is [-near, far] -> should remap in theory
+	//but dont do it in practice to save some perf (range is close enought)
+	#define UNITY_Z_0_FAR_FROM_CLIPSPACE(coord) (coord)
+#endif</pre>
+								
+								<p>Note that the macro code mentions that a conversion is needed for OpenGL as well, but considers it not worth the effort.</p>
+								
+								<p>The <code class="shader">UNITY_CALC_FOG_FACTOR</code> macro simply feeds the above to its raw equivalent.</p>
+								
+								<pre translate="no" class="shader">#define UNITY_CALC_FOG_FACTOR(coord) \
+	UNITY_CALC_FOG_FACTOR_RAW(UNITY_Z_0_FAR_FROM_CLIPSPACE(coord))</pre>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Depth or Distance</h3>
+						
+						<p>So, which metric should we use for our fog? Clip-space depth, or world-space distance? Let's support both! But it's not worth making it a shader-feature. We'll make it a shader configuration option instead, like <code class="shader">BINORMAL_PER_FRAGMENT</code>. Let's say that depth-based fog it the default, and you can switch to distance-based fog by defining <code class="shader">FOG_DISTANCE</code>, in the <code class="shader">CGINCLUDE</code> section near the top of our shader.</p>
+						
+						<pre translate="no" class="shader">	CGINCLUDE
+
+	#define BINORMAL_PER_FRAGMENT
+	<ins>#define FOG_DISTANCE</ins>
+
+	ENDCG</pre>
+						
+						<p>All we have to do in <em translate="no">My Lighting</em> to switch to distance-based fog, is to get rid of the <code class="shader">FOG_DEPTH</code> definition, if <code class="shader">FOG_DISTANCE</code> has already been defined.</p>
+						
+						<pre translate="no" class="shader">#if defined(FOG_LINEAR) || defined(FOG_EXP) || defined(FOG_EXP2)
+	<ins>#if !defined(FOG_DISTANCE)</ins>
+		#define FOG_DEPTH 1
+	<ins>#endif</ins>
+#endif</pre>
+					</section>
+					
+					<section>
+						<h3>Disabling Fog</h3>
+						
+						<p>Of course we don't always want to use fog. So only include the fog code when it's actually turned on.</p>
+						
+						<pre translate="no" class="shader">#if defined(FOG_LINEAR) || defined(FOG_EXP) || defined(FOG_EXP2)
+	#if !defined(FOG_DISTANCE)
+		#define FOG_DEPTH 1
+	#endif
+	<ins>#define FOG_ON 1</ins>
+#endif
+
+&hellip;
+
+float4 ApplyFog (float4 color, Interpolators i) {
+	<ins>#if FOG_ON</ins>
+		float viewDistance = length(_WorldSpaceCameraPos - i.worldPos.xyz);
+		#if FOG_DEPTH
+			viewDistance = UNITY_Z_0_FAR_FROM_CLIPSPACE(i.worldPos.w);
+		#endif
+		UNITY_CALC_FOG_FACTOR_RAW(viewDistance);
+		color.rgb = lerp(unity_FogColor<ins>.rgb</ins>, color<ins>.rgb</ins>, saturate(unityFogFactor));
+	<ins>#endif</ins>
+	return color;
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Multiple Lights</h3>
+						
+						<p>Our fog works correctly with a single light, but how does it behave when there are multiple lights in the scene? It appears fine when we're using black fog, but try it with another color as well.</p>
+						
+						<figure>
+							<img alt="one" src="forward-fog/gray-fog.png" width="340" height="130">
+							<img alt="two" src="forward-fog/two-lights-incorrect.png" width="340" height="130">
+							<figcaption>Gray fog with one and two directional lights.</figcaption>
+						</figure>
+						
+						<p>The result is too bright. This happens because we're adding the fog color once per light. This wasn't a problem when the fog color was black. So the solution is to always use a black color in the additive pass. That way, the fog fades the contribution of additional lights, without brightening the fog itself.</p>
+						
+						<pre translate="no" class="shader">		<ins>float3 fogColor = 0;</ins>
+		<ins>#if defined(FORWARD_BASE_PASS)</ins>
+			<ins>fogColor = unity_FogColor.rgb;</ins>
+		<ins>#endif</ins>
+		color.rgb = lerp(<ins>fogColor</ins>, color.rgb, saturate(unityFogFactor));
+</pre>
+						
+						<figure>
+							<img src="forward-fog/two-lights-correct.png" width="340" height="130">
+							<figcaption>Correct gray fog with two lights.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="forward-fog/forward-fog.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Deferred Fog</h2>
+					
+					<p>Now that we have fog working for the forward rendering path, let's switch to the deferred path. Duplicate the forward-mode camera. Change the duplicate into a deferred camera, then disable the forward camera. This way, you can quickly switch between rendering modes by changing which camera is enabled.</p>
+					
+					<p>You'll notice that there is no fog at all when using the deferred rendering path. That's because the fog has to be applied after all lighting has been calculated. So we cannot add fog in the deferred pass of our shader.</p>
+					
+					<p>To compare deferred and forward rendering in the same image, you can force some of the objects to be rendered in forward mode. For example, by using a transparent material while keeping it fully opaque.</p>
+					
+					<figure>
+						<img src="deferred-fog/deferred-solid-fade.png" width="340" height="130">
+						<figcaption>Opaque and transparent materials.</figcaption>
+					</figure>
+					
+					<p>Sure enough, the objects that use a transparent material are affected by the fog.</p>
+					
+					<aside>
+						<h3>Why are two spheres missing?</h3>
+						<div>
+							<p>The objects on the right side use a transparent material, even though they're fully opaque. As a result, Unity orders then back-to-front when rendering them. The two spheres furthest away ended up being rendered before the cube below them. As transparent objects don't write to the depth buffer, the cube got drawn on top of those spheres.</p>
+						</div>
+					</aside>
+					
+					<section>
+						<h3>Image Effects</h3>
+						
+						<p>To add fog to deferred rendering, we have to wait until all lights are rendered, then do another pass to factor in the fog. As the fog applies to the entire scene, it's like rendering a directional light.</p>
+						
+						<p>A simply way to add such a pass is by adding a custom component to the camera. So create a <code>DeferredFogEffect</code> class than extends <code>MonoBehaviour</code>. Because it's useful to be able to see the fog in edit mode, give it the <code>ExecuteInEditMode</code> attribute. Add this component to our deferred camera. That should eventually make the fog appear in the game view.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>[ExecuteInEditMode]</ins>
+<ins>public class DeferredFogEffect : MonoBehaviour {</ins>
+<ins>}</ins></pre>
+						
+						<figure>
+							<img src="deferred-fog/camera-inspector.png" width="320" height="180">
+							<figcaption>Deferred camera with fog effect.</figcaption>
+						</figure>
+						
+						<p>To add an additional full-screen pass to the rendering process, give our component an <code>OnRenderImage</code> method. Unity will check whether the camera has components with this method and invoke them after rendering the scene. This allows you to alter or apply effects to the rendered image. If there are multiple such components, they will be invoked in the order that they're attached to the camera.</p>
+						
+						<p>The <code>OnRenderImage</code> method has two <code>RenderTexture</code> parameters. The first being the source texture, which contains the final colors of the scene, up to this point. The second parameter is the destination texture that we have to render to. It might be <code>null</code>, which means it goes directly to the frame buffer.</p>
+						
+						<pre translate="no">	<ins>void OnRenderImage (RenderTexture source, RenderTexture destination) {</ins>
+	<ins>}</ins></pre>
+						
+						<p>Once we have added this method, the game view will fail to render. We have to make sure that we're drawing something. To do so, invoke the <code>Graphics.Blit</code> method with both textures as arguments. That method will draw a full-screen quad with a shader that simply reads the source texture and outputs the sampled colors, unmodified.</p>
+						
+						<pre translate="no">	void OnRenderImage (RenderTexture source, RenderTexture destination) {
+		<ins>Graphics.Blit(source, destination);</ins>
+	}</pre>
+						
+						<p>The scene once again gets rendered as usual. However, if you inspect the frame debugger, you'll see that a pass has been added for our image effect.</p>
+						
+						<figure>
+							<img src="deferred-fog/frame-debugger.png" width="298" height="160">
+							<figcaption>Drawing an image effect.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Fog Shader</h3>
+						
+						<p>Simply copying the image data is useless. We have to create a new custom shader to apply the fog effect to the image. Start with a bare-bones shader. Because we're only drawing a single full-screen quad that's supposed to cover everything, we should ignore culling and the depth buffer. We shouldn't write to the depth buffer either.</p>
+						
+						<pre translate="no" class="shader"><ins>Shader "Custom/Deferred Fog" {</ins>
+	
+	<ins>Properties {</ins>
+		<ins>_MainTex ("Source", 2D) = "white" {}</ins>
+	<ins>}</ins>
+
+	<ins>SubShader {</ins>
+		<ins>Cull Off</ins>
+		<ins>ZTest Always</ins>
+		<ins>ZWrite Off</ins>
+
+		<ins>Pass {</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Our effect component requires this shader, so add a public field for it, then assign our new shader to it.</p>
+						
+						<pre translate="no">	<ins>public Shader deferredFog;</ins></pre>
+						
+						<figure>
+							<img src="deferred-fog/fog-shader.png" width="320" height="56">
+							<figcaption>Using a fog shader.</figcaption>
+						</figure>
+						
+						<p>We also need a material for rendering with our shader. We only need it when active, so no asset is required. Use a non-serialized field to hold a reference to it.</p>
+						
+						<pre translate="no">using UnityEngine;
+<ins>using System;</ins>
+
+[ExecuteInEditMode]
+public class DeferredFogEffect : MonoBehaviour {
+
+	public Shader deferredFog;
+
+	<ins>[NonSerialized]</ins>
+	<ins>Material fogMaterial;</ins>
+	
+	&hellip;
+}</pre>
+						
+						<p>In <code>OnRenderImage</code>, we now begin by checking whether we have a material instance. If not, create a new one that uses the fog shader. Then invoke <code>Graphics.Blit</code> with this material.</p>
+						
+						<pre translate="no">	void OnRenderImage (RenderTexture source, RenderTexture destination) {
+		<ins>if (fogMaterial == null) {</ins>
+			<ins>fogMaterial = new Material(deferredFog);</ins>
+		<ins>}</ins>
+		Graphics.Blit(source, destination<ins>, fogMaterial</ins>);
+	}
+</pre>
+						
+						<p>This will result in a solid white image. We have to create our own shader pass to render something useful. Begin with simple vertex and fragment programs that copy the RGB colors from the source texture, using the vertex position and UV data from the full-screen quad. Also, let's already include the multi-compile directive for the fog modes.</p>
+						
+						<pre translate="no" class="shader">		Pass {
+			<ins>CGPROGRAM</ins>
+
+			<ins>#pragma vertex VertexProgram</ins>
+			<ins>#pragma fragment FragmentProgram</ins>
+
+			<ins>#pragma multi_compile_fog</ins>
+
+			<ins>#include "UnityCG.cginc"</ins>
+
+			<ins>sampler2D _MainTex;</ins>
+
+			<ins>struct VertexData {</ins>
+				<ins>float4 vertex : POSITION;</ins>
+				<ins>float2 uv : TEXCOORD0;</ins>
+			<ins>};</ins>
+
+			<ins>struct Interpolators {</ins>
+				<ins>float4 pos : SV_POSITION;</ins>
+				<ins>float2 uv : TEXCOORD0;</ins>
+			<ins>};</ins>
+
+			<ins>Interpolators VertexProgram (VertexData v) {</ins>
+				<ins>Interpolators i;</ins>
+				<ins>i.pos = UnityObjectToClipPos(v.vertex);</ins>
+				<ins>i.uv = v.uv;</ins>
+				<ins>return i;</ins>
+			<ins>}</ins>
+
+			<ins>float4 FragmentProgram (Interpolators i) : SV_Target {</ins>
+				<ins>float3 sourceColor = tex2D(_MainTex, i.uv).rgb;</ins>
+				<ins>return float4(sourceColor, 1);</ins>
+			<ins>}</ins>
+
+			<ins>ENDCG</ins>
+		}</pre>
+					</section>
+					
+					<section>
+						<h3>Depth-Based Fog</h3>
+						
+						<p>Because we're using deferred rendering, we know that there is a depth buffer available. After all, the light passes need it to their work. So we can read from it as well, which means that we can use it to compute depth-based fog.</p>
+						
+						<p>Unity makes the depth buffer available via the <code class="shader">_CameraDepthTexture</code> variable, so add it to our shader.</p>
+						
+						<pre translate="no" class="shader">			sampler2D _MainTex<ins>, _CameraDepthTexture</ins>;</pre>
+						
+						<p>We can sample this texture, although the exact syntax depends on the target platform. The <code class="shader">SAMPLE_DEPTH_TEXTURE</code> macro, defined in <em translate="no">HLSLSupport</em>, takes care of this for us.</p>
+						
+						<pre translate="no" class="shader">			float4 FragmentProgram (Interpolators i) : SV_Target {
+				<ins>float depth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv);</ins>
+
+				float3 sourceColor = tex2D(_MainTex, i.uv).rgb;
+				return float4(sourceColor, 1);
+			}
+</pre>
+						
+						<p>This gives us the raw data from the depth buffer, so after the conversion from homogeneous coordinates to a clip-space value in the 0&ndash;1 range. We have to convert this value so it becomes a linear depth value in world space. First, we can use the <code class="shader">Linear01Depth</code> function defined in <em translate="no">UnityCG</em> to convert it to a linear range.</p>
+						
+						<pre translate="no" class="shader">				float depth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv);
+				<ins>depth = Linear01Depth(depth);</ins></pre>
+						
+						<aside>
+							<h3>What does <code class="shader">Linear01Depth</code> look like?</h3>
+							<div>
+								<p>It performs a simple conversion using two convenient predefined values.</p>
+								
+								<pre translate="no" class="shader">// Z buffer to linear 0..1 depth
+inline float Linear01Depth( float z )
+{
+	return 1.0 / (_ZBufferParams.x * z + _ZBufferParams.y);
+}</pre>
+								
+								<p>The buffer parameters are defined in <em translate="no">UnityShaderVariables</em>.</p>
+								
+								<pre translate="no" class="shader">	// Values used to linearize the Z buffer
+	// (http://www.humus.name/temp/Linearize%20depth.txt)
+	// x = 1-far/near
+	// y = far/near
+	// z = x/far
+	// w = y/far
+	float4 _ZBufferParams;</pre>
+							</div>
+						</aside>
+						
+						<p>Next, we have to scale this value by the far clip plane's distance, to get the actual depth-based view distance. The clip space settings are made available via the <code class="shader">float4 _ProjectionParams</code> variable, which is defined in <em translate="no">UnityShaderVariables</em>. Its Z component contains the far plane's distance.</p>
+						
+						<pre translate="no" class="shader">				depth = Linear01Depth(depth);
+
+				<ins>float viewDistance = depth * _ProjectionParams.z;</ins></pre>
+						
+						<p>Once we have our distance, we can compute the fog factor and interpolate.</p>
+						
+						<pre translate="no" class="shader">				float viewDistance = depth * _ProjectionParams.z;
+				
+				<ins>UNITY_CALC_FOG_FACTOR_RAW(viewDistance);</ins>
+				<ins>unityFogFactor = saturate(unityFogFactor);</ins>
+						
+				float3 sourceColor = tex2D(_MainTex, i.uv).rgb;
+				<ins>float3 foggedColor =</ins>
+					<ins>lerp(unity_FogColor.rgb, sourceColor, unityFogFactor);</ins>
+				return float4(<ins>foggedColor</ins>, 1);</pre>
+						
+						<figure>
+							<img src="deferred-fog/incorrect.png" width="320" height="56">
+							<figcaption>Incorrect fog.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Fixing the Fog</h3>
+						
+						<p>Unfortunately, our fog isn't quite right yet. The most obvious error is that we're drawing the fog on top of the transparent geometry. To prevent this from happening, we have to apply the fog effect before drawing the transparent objects. We can attach the <code >ImageEffectOpaque</code> attribute to our method to instruct Unity to do so.</p>
+						
+						<pre translate="no">	<ins>[ImageEffectOpaque]</ins>
+	void OnRenderImage (RenderTexture source, RenderTexture destination) {
+		Graphics.Blit(source, destination, fogMaterial);
+	}</pre>
+						
+						<figure>
+							<img alt="frame debugger" src="deferred-fog/after-opaque-frame-debugger.png" width="298" height="176"><br>
+							<img alt="game" src="deferred-fog/after-opaque.png" width="340" height="130">
+							<figcaption>Fog after opaque, before transparent.</figcaption>
+						</figure>
+						
+						<p>Another problem is that the fog colors are obviously wrong. This happens when not using an HDR camera, which screws up the colors. So simple enable <em translate="no">HDR</em> on our deferred camera.</p>
+						
+						<figure>
+							<img src="deferred-fog/hdr.png" width="340" height="130">
+							<figcaption>With HDR camera.</figcaption>
+						</figure>
+						
+						<p>Finally, we once again can get a difference in depth, because we're not taking the near plane into consideration.</p>
+						
+						<figure>
+							<img src="deferred-fog/depth-difference.png" width="340" height="130">
+							<figcaption>Different depths.</figcaption>
+						</figure>
+						
+						<p>We can slightly compensate for this by subtracting the near plane distance from the view distance. It's stored in the Y component of <code class="shader">_ProjectionParams</code>. Unfortunately, it won't produce an exact match, because of the order in which we have to convert the depth value. Unity's fog effects use it anyway to adjust the fog, so let's do it as well.</p>
+						
+						<pre translate="no" class="shader">				float viewDistance =
+					depth * _ProjectionParams.z <ins>- _ProjectionParams.y</ins>;</pre>
+						
+						<figure>
+							<img src="deferred-fog/depth-compensated.png" width="340" height="130">
+							<figcaption>Partially-compensated depth.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Distance-Based Fog</h3>
+						
+						<p>The shader for deferred lights reconstructs the world-space position from the depth buffer, in order to calculate lighting. We can do this as well.</p>
+						
+						<p>The clip space of a perspective camera defines a trapezoid region of space. If we ignore the near plane, then we get a pyramid with its top at the camera's world position. Its height is equal to the camera's far plane distance. The linearized depth is 0 at its tip, and 1 and its base.</p>
+						
+						<figure>
+							<img src="deferred-fog/pyramid.png" width="170" height="180">
+							<figcaption>Side view of pyramid.</figcaption>
+						</figure>
+						
+						<p>For every pixel of our image, we can shoot a ray from the top to a point on the base of the pyramid. If there's nothing in the way, then the ray reaches the base, which is the far plane. Otherwise, it hits whatever object was rendered.</p>
+						
+						<figure>
+							<img src="deferred-fog/pyramid-rays.png" width="170" height="180">
+							<figcaption>One ray per pixel.</figcaption>
+						</figure>
+						
+						<p>If something was hit, then the corresponding pixel has a depth value less than 1. For example, if it hit something halfway, then the depth value will be &frac12;. This means that the ray's Z coordinate is half the size it would've been if it hadn't been blocked. As the direction of the ray is still the same, this means that the X and Y coordinates are also halved. In general, we can find the actual ray by starting with a ray that goes all the way to the far plane, and then scaling it by the depth value.</p>
+						
+						<figure>
+							<img src="deferred-fog/pyramid-scaled.png" width="170" height="180">
+							<figcaption>Scaling rays.</figcaption>
+						</figure>
+						
+						<p>Once we have this ray, we can add it to the camera's position to find the world-space position of the rendered surface. But as we're only interested in the distance, all we really need is the length of this ray.</p>
+						
+						<p>For this to be useful, we have to know the rays from the camera to far the plane, for each pixel. Actually, we only need four rays, one per corner of the pyramid. Interpolation gives us the rays for all the pixels in between.</p>
+					</section>
+					
+					<section>
+						<h3>Calculating Rays</h3>
+						
+						<p>We can construct the rays based on the camera's far plane and its field of view angle. The camera's orientation and position don't matter for distances, so we can ignore its transformation. The <code>Camera.CalculateFrustumCorners</code> method can do this for us. It has four parameters. The first is the rectangular area to use, which in our case is the entire image. The second is how far away to project the rays, which has to match the far plane. The third parameter involves stereoscopic rendering. We'll just use the currently active eye. Finally, the method needs an array of 3D vectors to store the rays. So we have to cache both a reference to the camera and a vector array.</p>
+						
+						<pre translate="no">	<ins>[NonSerialized]</ins>
+	<ins>Camera deferredCamera;</ins>
+
+	<ins>[NonSerialized]</ins>
+	<ins>Vector3[] frustumCorners;</ins>
+
+	[ImageEffectOpaque]
+	void OnRenderImage (RenderTexture source, RenderTexture destination) {
+		if (fogMaterial == null) {
+			<ins>deferredCamera = GetComponent&lt;Camera>();</ins>
+			<ins>frustumCorners = new Vector3[4];</ins>
+			fogMaterial = new Material(deferredFog);
+		}
+		<ins>deferredCamera.CalculateFrustumCorners(</ins>
+			<ins>new Rect(0f, 0f, 1f, 1f),</ins>
+			<ins>deferredCamera.farClipPlane,</ins>
+			<ins>deferredCamera.stereoActiveEye,</ins>
+			<ins>frustumCorners</ins>
+		<ins>);</ins>
+
+		Graphics.Blit(source, destination, fogMaterial);
+	}
+</pre>
+						
+						<p>Next, we have to pass this data to the shader. We can do so with a vector array. However, we cannot directly use <code>frustumCorners</code>. The first reason is that we can only pass 4D vectors to the shader. So let's include a <code>Vector4[]</code> field as well, and pass that to the shader as <em translate="no">_FrustumCorners</em>.</p>
+						
+						<pre translate="no">	<ins>[NonSerialized]</ins>
+	<ins>Vector4[] vectorArray;</ins>
+
+	[ImageEffectOpaque]
+	void OnRenderImage (RenderTexture source, RenderTexture destination) {
+		if (fogMaterial == null) {
+			deferredCamera = GetComponent&lt;Camera>();
+			frustumCorners = new Vector3[4];
+			<ins>vectorArray = new Vector4[4];</ins>
+			fogMaterial = new Material(deferredFog);
+		}
+		deferredCamera.CalculateFrustumCorners(
+			new Rect(0f, 0f, 1f, 1f),
+			deferredCamera.farClipPlane,
+			deferredCamera.stereoActiveEye,
+			frustumCorners
+		);
+
+		<ins>vectorArray[0] = frustumCorners[0];</ins>
+		<ins>vectorArray[1] = frustumCorners[1];</ins>
+		<ins>vectorArray[2] = frustumCorners[2];</ins>
+		<ins>vectorArray[3] = frustumCorners[3];</ins>
+		<ins>fogMaterial.SetVectorArray("_FrustumCorners", vectorArray);</ins>
+
+		Graphics.Blit(source, destination, fogMaterial);
+	}</pre>
+						
+						<p>The second problem is that the order of the corners has to be changed. The <code>CalculateFrustumCorners</code> orders them bottom-left, top-left, top-right, bottom-right. However, the quad used to render the image effect has its corner vertices ordered bottom-left, bottom-right, top-left, top-right. So let's reorder them to match the quad's vertices.</p>
+						
+						<pre translate="no">		vectorArray[0] = frustumCorners[0];
+		vectorArray[1] = frustumCorners[<ins>3</ins>];
+		vectorArray[2] = frustumCorners[<ins>1</ins>];
+		vectorArray[3] = frustumCorners[<ins>2</ins>];</pre>
+					</section>
+					
+					<section>
+						<h3>Deriving Distances</h3>
+						
+						<p>To access the rays in our shader, add a float array variable. We don't actually have to add a property for this to work, as we won't be manually editing them anyway. Although we can only pass 4D vectors to the shader, internally we only need the first three components. So the <code class="shader">float3</code> type suffices.</p>
+						
+						<pre translate="no" class="shader">			sampler2D _MainTex, _CameraDepthTexture;
+
+			<ins>float3 _FrustumCorners[4];</ins></pre>
+						
+						<p>Next, define <code class="shader">FOG_DISTANCE</code> to indicate that we want to base our fog on actual distances, like in our other shader.</p>
+						
+						<pre translate="no" class="shader">			#pragma multi_compile_fog
+
+			<ins>#define FOG_DISTANCE</ins></pre>
+						
+						<p>When we need distances, we have to interpolate the rays and send them to the fragment program.</p>
+						
+						<pre translate="no" class="shader">			struct Interpolators {
+				float4 pos : SV_POSITION;
+				float2 uv : TEXCOORD0;
+				
+				<ins>#if defined(FOG_DISTANCE)</ins>
+					<ins>float3 ray : TEXCOORD1;</ins>
+				<ins>#endif</ins>
+			};</pre>
+						
+						<p>In the vertex program, we can simply use the UV coordinates to access the corner array. The coordinates are (0, 0), (1, 0), (0, 1), and (1, 1). So the index is `u + 2v`.</p>
+						
+						<pre translate="no" class="shader">			Interpolators VertexProgram (VertexData v) {
+				Interpolators i;
+				i.pos = UnityObjectToClipPos(v.vertex);
+				i.uv = v.uv;
+				<ins>#if defined(FOG_DISTANCE)</ins>
+					<ins>i.ray = _FrustumCorners[v.uv.x + 2 * v.uv.y];</ins>
+				<ins>#endif</ins>
+				return i;
+			}</pre>
+						
+						<p>Finally, we can replace the depth-based distance with the actual distance in the fragment program.</p>
+						
+						<pre translate="no" class="shader">				float viewDistance =
+					depth * _ProjectionParams.z - _ProjectionParams.y;
+				<ins>#if defined(FOG_DISTANCE)</ins>
+					<ins>viewDistance = length(i.ray * depth);</ins>
+				<ins>#endif</ins></pre>
+						
+						<figure>
+							<img src="deferred-fog/distance-fog.png" width="340" height="130">
+							<figcaption>Fog based on distance.</figcaption>
+						</figure>
+						
+						<p>Besides precision limitations of the depth buffer, both forward and deferred approaches produce the same distance-based fog.</p>
+					</section>
+					
+					<section>
+						<h3>Fogged Skybox</h3>
+						
+						<p>Actually, there is still a significant difference between forward and deferred fog. You might have noticed that deferred fog affects the skybox as well. It acts as is the far plane is a solid barrier, which is affected by the fog.</p>
+						
+						<figure>
+							<img src="deferred-fog/fogged-skybox.png" width="340" height="130">
+							<figcaption>Fogged skybox.</figcaption>
+						</figure>
+						
+						<p>We know that we've reached the far plane when the depth value approaches 1. If we don't want to fog the skybox, we can prevent that by setting the fog factor to 1, when that's the case.</p>
+						
+						<pre translate="no" class="shader">				UNITY_CALC_FOG_FACTOR_RAW(viewDistance);
+				unityFogFactor = saturate(unityFogFactor);
+				<ins>if (depth > 0.9999) {</ins>
+					<ins>unityFogFactor = 1;</ins>
+				<ins>}</ins></pre>
+						
+						<figure>
+							<img src="deferred-fog/unfogged-skybox.png" width="340" height="130">
+							<figcaption>Skybox without fog.</figcaption>
+						</figure>
+						
+						<p>In case you do want to apply fog to the entire image, you can control it via a macro definition. When <code class="shader">FOG_SKYBOX</code> is defined, apply fog to the skybox, otherwise don't.</p>
+						
+						<pre translate="no" class="shader">			#define FOG_DISTANCE
+<ins>//			#define FOG_SKYBOX</ins>
+
+			&hellip;
+
+				UNITY_CALC_FOG_FACTOR_RAW(viewDistance);
+				unityFogFactor = saturate(unityFogFactor);
+				<ins>#if !defined(FOG_SKYBOX)</ins>
+					<ins>if (depth > 0.9999) {</ins>
+						<ins>unityFogFactor = 1;</ins>
+					<ins>}</ins>
+				<ins>#endif</ins></pre>
+					</section>
+					
+					<section>
+						<h3>No Fog</h3>
+						
+						<p>Finally, we have to consider the scenario in which the fog has been deactivated.</p>
+						
+						<figure>
+							<img src="deferred-fog/no-fog.png" width="340" height="130">
+							<figcaption>No fog, incorrect.</figcaption>
+						</figure>
+						
+						<p>This can also be done by forcing the fog factor to 1, when none of the fog keywords are defined. This turns our shader into nothing but a texture copy operation, so it's actually better to deactivate or remove the fog component if you don't need it.</p>
+						
+						<pre translate="no" class="shader">				#if !defined(FOG_SKYBOX)
+					if (depth > 0.9999) {
+						unityFogFactor = 1;
+					}
+				#endif
+				<ins>#if !defined(FOG_LINEAR) &amp;&amp; !defined(FOG_EXP) &amp;&amp; !defined(FOG_EXP2)</ins>
+					<ins>unityFogFactor = 1;</ins>
+				<ins>#endif</ins></pre>
+						
+						<p>The next tutorial is <a href="../part-15.1.html">Deferred Lights</a>.</p>
+					</section>
+					
+					<a href="deferred-fog/deferred-fog.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Rendering-14.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

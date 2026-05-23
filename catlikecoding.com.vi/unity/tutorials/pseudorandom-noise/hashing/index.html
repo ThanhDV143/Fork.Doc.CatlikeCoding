@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/pseudorandom-noise/hashing/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/pseudorandom-noise/hashing/tutorial-image.jpg">
+		<meta property="og:title" content="Hashing">
+		<meta property="og:description" content="A Unity C# Pseudorandom Noise tutorial about creating a small version of xxHash and visualizing hashes.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Hashing</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/pseudorandom-noise/hashing/#article",
+				"headline": "Hashing",
+				"alternativeHeadline": "Small xxHash",
+				"datePublished": "2021-03-24",
+				"dateModified": "2021-05-23",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity C# Pseudorandom Noise tutorial about creating a small version of xxHash and visualizing hashes.",
+				"image": "https://catlikecoding.com/unity/tutorials/pseudorandom-noise/hashing/tutorial-image.jpg",
+				"dependencies": "Unity 2020.3.6f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/pseudorandom-noise/", "name": "Pseudorandom Noise" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				HashJob: 1,
+				HashVisualization: 1,
+				SmallXXHash: 1
+			};
+			
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Pseudorandom Noise</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Hashing</h1>
+					<p>Small xxHash</p>
+					<ul>
+						<li>Create a grid for hash visualization.</li>
+						<li>Convert 2D coordinates to pseudorandom values.</li>
+						<li>Implement a small version of xxHash.</li>
+						<li>Use hash values to color and offset cubes.</li>
+					</ul>
+				</header>
+				
+				<p>This is the first tutorial in a series about <a href="../index.html">pseudorandom noise</a>. It comes after the <a href="../../basics/index.html">Basics</a> series. It introduces a way to generate apparently random values via a hash function, specifically a smaller version of xxHash.</p>
+				
+				<p>This tutorial is made with Unity 2020.3.6f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Livening things up with a hash function.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Visualization</h2>
+					
+					<p>Randomness is needed to make things unpredictable, varied, and appear natural. It doesn't matter whether the perceived phenomena are truly random or only appear that way due to a lack of information or understanding of the observer. So we can make do with something that is fully deterministic and not random at all, as long as this isn't obvious. This is good, because software is inherently deterministic. Poorly-designed multithreaded code can lead to race conditions and thus unpredictable results, but this isn't a reliable source of randomness. True reliable randomness can only be obtained from external sources&mdash;like hardware that samples atmospheric noise&mdash;which are usually not available.</p>
+					
+					<p>True randomness is usually not desired. Anything generated by it is a one-time event that cannot be reproduced. The results will be different each time. Ideally we have a process that for any specific input yields a unique and fixed apparently random output. This is what hash functions are for.</p>
+					
+					<p>In this tutorial we'll create a 2D grid of small cubes and use it to visualize a hash function. Start with a new project as described in the <a href="../../basics/index.html">Basics</a> series. We'll use the jobs system so import the <em translate="no">Burst</em> package. I'll also use URP so import <em translate="no">Universal RP</em> and create an asset for it and configure Unity to use it.</p>
+					
+					<section>
+						<h3>Hash Job</h3>
+						
+						<p>We'll use a job to create hash values for all the cubes in the grid. Create a <code>HashVisualization</code> component type with such a job in it, following the same approach as introduced in the <a href="../../basics/index.html">Basics</a> series. The job will fill a <code>NativeArray</code> with hashes. Hash values are essentially a collection of bits without inherent meaning. We'll use the <code>uint</code> type for them, which comes closest to packets of 32 bits&mdash;four bytes&mdash;of generic data. Initially we'll directly use the job's execution index as the hash value.</p>
+						
+						<pre translate="no"><ins>using Unity.Burst;</ins>
+<ins>using Unity.Collections;</ins>
+<ins>using Unity.Jobs;</ins>
+<ins>using Unity.Mathematics;</ins>
+<ins>using UnityEngine;</ins>
+
+<ins>using static Unity.Mathematics.math;</ins>
+
+<ins>public class HashVisualization : MonoBehaviour {</ins>
+
+	<ins>[BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = true)]</ins>
+	<ins>struct HashJob : IJobFor {</ins>
+
+		<ins>[WriteOnly]</ins>
+		<ins>public NativeArray&lt;uint> hashes;</ins>
+        
+		<ins>public void Execute(int i) {</ins>
+			<ins>hashes[i] = (uint)i;</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Why not use <code>int</code> for the hash type?</h3>
+							<div>
+								<p>The <code>int</code> type represents a signed integer, which has a special sign bit. The <code>uint</code> type is unsigned and thus doesn't have a special sign bit. All bits of <code>uint</code> values are treated the same way.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Initialization and Rendering</h3>
+						
+						<p>Again as in the <a href="../../basics/index.html">Basics</a> series, we'll add configuration options for an instance mesh and material to <code>HashVisualization</code>, along with a resolution slider, and the required <code>NativeArray</code>, <code>ComputeBuffer</code> and <code>MaterialPropertyBlock</code>. We'll use <em translate="no">_Hashes</em> for the shader identifier of the buffer and also add a <em translate="no">_Config</em> shader property for additional configuration.</p>
+						
+						<pre translate="no">	<ins>static int</ins>
+		<ins>hashesId = Shader.PropertyToID("_Hashes"),</ins>
+		<ins>configId = Shader.PropertyToID("_Config");</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>Mesh instanceMesh;</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>Material material;</ins>
+
+	<ins>[SerializeField, Range(1, 512)]</ins>
+	<ins>int resolution = 16;</ins>
+
+	<ins>NativeArray&lt;uint> hashes;</ins>
+
+	<ins>ComputeBuffer hashesBuffer;</ins>
+
+	<ins>MaterialPropertyBlock propertyBlock;</ins></pre>
+						
+						<p>Initialize everything in <code>OnEnable</code>. Because we're not going to animate the hashes we can immediately run the job here and also configure the property block once, instead of doing it every update.</p>
+						
+						<p>We need to both multiply with and divide by the resolution in the shader, so store the resolution and its reciprocal in the first two components of a configuration vector.</p>
+						
+						<pre translate="no">	<ins>void OnEnable () {</ins>
+		<ins>int length = resolution * resolution;</ins>
+		<ins>hashes = new NativeArray&lt;uint>(length, Allocator.Persistent);</ins>
+		<ins>hashesBuffer = new ComputeBuffer(length, 4);</ins>
+
+		<ins>new HashJob {</ins>
+			<ins>hashes = hashes</ins>
+		<ins>}.ScheduleParallel(hashes.Length, resolution, default).Complete();</ins>
+
+		<ins>hashesBuffer.SetData(hashes);</ins>
+
+		<ins>propertyBlock ??= new MaterialPropertyBlock();</ins>
+		<ins>propertyBlock.SetBuffer(hashesId, hashesBuffer);</ins>
+		<ins>propertyBlock.SetVector(configId, new Vector4(resolution, 1f / resolution));</ins>
+	<ins>}</ins></pre>
+						
+						<p>Clean up the hashes and buffer in <code>OnDisable</code> and again use the approach of resetting everything in <code>OnValidate</code>, so configuration changes while in play mode will refresh the grid.</p>
+						
+						<pre translate="no">	<ins>void OnDisable () {</ins>
+		<ins>hashes.Dispose();</ins>
+		<ins>hashesBuffer.Release();</ins>
+		<ins>hashesBuffer = null;</ins>
+	<ins>}</ins>
+
+	<ins>void OnValidate () {</ins>
+		<ins>if (hashesBuffer != null &amp;&amp; enabled) {</ins>
+			<ins>OnDisable();</ins>
+			<ins>OnEnable();</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>This time the only thing we have to do in <code>Update</code> is issue the draw command. We'll keep our grid inside a unit cube at the origin.</p>
+						
+						<pre translate="no">	<ins>void Update () {</ins>
+		<ins>Graphics.DrawMeshInstancedProcedural(</ins>
+			<ins>instanceMesh, 0, material, new Bounds(Vector3.zero, Vector3.one),</ins>
+			<ins>hashes.Length, propertyBlock</ins>
+		<ins>);</ins>
+	<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Shader</h3>
+						
+						<p>Create an HLSL include file with a procedural configuration function. The difference with the earlier versions from the <a href="../../basics/index.html">Basics</a> series is that we'll directly derive the instance's position from its identifier.</p>
+						
+						<p>A 1D line be converted to a 2D grid by cutting it into segments of equal length and placing those next to each other, offset in the second dimension. We do this by dividing the identifier by the resolution as an integer division. GPUs don't have integer divisions so we'll just discard the fractional part of the division, via the <code class="shader">floor</code> function. That gives us the coordinate in the second dimension, which we'll name V. The U coordinate is then found by subtracting V multiplied with the resolution from the identifier.</p>
+						
+						<p>We then use the UV coordinates to place the instance on the XZ plane, offset and scaled such that it remains inside the unit cube at the origin.</p>
+						
+						<pre class="shader" translate="no"><ins>#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)</ins>
+	<ins>StructuredBuffer&lt;uint> _Hashes;</ins>
+<ins>#endif</ins>
+
+<ins>float4 _Config;</ins>
+
+<ins>void ConfigureProcedural () {</ins>
+	<ins>#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)</ins>
+		<ins>float v = floor(_Config.y * unity_InstanceID);</ins>
+		<ins>float u = unity_InstanceID - _Config.x * v;</ins>
+		
+		<ins>unity_ObjectToWorld = 0.0;</ins>
+		<ins>unity_ObjectToWorld._m03_m13_m23_m33 = float4(</ins>
+			<ins>_Config.y * (u + 0.5) - 0.5,</ins>
+			<ins>0.0,</ins>
+			<ins>_Config.y * (v + 0.5) - 0.5,</ins>
+			<ins>1.0</ins>
+		<ins>);</ins>
+		<ins>unity_ObjectToWorld._m00_m11_m22 = _Config.y;</ins>
+	<ins>#endif</ins>
+<ins>}</ins></pre>
+					
+					<p>Also introduce a function that retrieves the hash and uses it to produce an RGB color. Initially make it a grayscale value that divides the hash by the resolution squared, thus going from black to white based on the hash index.</p>
+					
+					<pre class="shader" translate="no"><ins>float3 GetHashColor () {</ins>
+	<ins>#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)</ins>
+		<ins>uint hash = _Hashes[unity_InstanceID];</ins>
+		<ins>return _Config.y * _Config.y * hash;</ins>
+	<ins>#else</ins>
+		<ins>return 1.0;</ins>
+	<ins>#endif</ins>
+<ins>}</ins></pre>
+					
+					<p>Follow up with the shader graph function that we'll use to pass though the position and also output the color.</p>
+					
+					<pre class="shader" translate="no"><ins>void ShaderGraphFunction_float (float3 In, out float3 Out, out float3 Color€) {</ins>
+	<ins>Out = In;</ins>
+	<ins>Color€ = GetHashColor();</ins>
+<ins>}</ins>
+
+<ins>void ShaderGraphFunction_half (half3 In, out half3 Out, out half3 Color€) {</ins>
+	<ins>Out = In;</ins>
+	<ins>Color€ = GetHashColor();</ins>
+<ins>}</ins></pre>
+						
+						<p>Then create a shader graph exactly like we did in the <a href="../../basics/index.html">Basics</a> series, except that we use the new HLSL file and function and directly connect our color to the shader's base color. I also use the default 0.5 value for smoothness instead of making it configurable.</p>
+						
+						<figure>
+							<img src="visualization/shader-graph.png" width="570" height="220">
+							<figcaption>Shader graph.</figcaption>
+						</figure>
+						
+						<p>And here is the code text used for the <em translate="no">InjectPragmas</em> custom function node:</p>
+						
+						<pre class="shader" translate="no"><ins>#pragma instancing_options assumeuniformscaling procedural:ConfigureProcedural</ins>
+<ins>#pragma editor_sync_compilation</ins>
+
+<ins>Out = In;</ins></pre>
+						
+						<aside>
+							<h3>What if I don't want to use URP?</h3>
+							<div>
+								<p>You could also use HDRP, or create a surface shader that includes the HLSL file for the default RP, as explained in the <a href="../../basics/index.html">Basics</a> series.
+							</div>
+						</aside>
+						
+						<p>Now we can create a material that uses our shader, and also a game object with our <code>HashVisualization</code> component that uses that material and cubes for its instances.</p>
+						
+						<figure>
+							<img src="visualization/game-object.png" width="320" height="266">
+							<figcaption>Hash game object.</figcaption>
+						</figure>
+						
+						<p>At this point a grid should appear in play mode.</p>
+						
+						<figure>
+							<img src="visualization/grid.png" width="300" height="300">
+							<figcaption>Grid, top-down orthographic scene view.</figcaption>
+						</figure>
+						
+						<p>Adjusting the resolution via the inspector while in play mode causes the grid to recreate itself. It appears to work fine most of the time, but the grid is misaligned for some resolutions.</p>
+						
+						<figure>
+							<img src="visualization/misaligned-resolution-41.png" width="300" height="300">
+							<figcaption>Misaligned points at resolution 41.</figcaption>
+						</figure>
+						
+						<p>This error is caused by floating-point precision limitations. In some cases we end up with values that are a tiny bit less than a whole number before applying <code class="shader">floor</code>, which causes the instance to be misplaced. In our case we can fix this by adding a 0.00001 positive bias before discarding the fractional part.</p>
+						
+						<pre class="shader" translate="no">		float v = floor(_Config.y * unity_InstanceID <ins>+ 0.00001</ins>);</pre>
+					</section>
+					
+					<section>
+						<h3>Patterns</h3>
+						
+						<p>Before we move on to implementing a true hash function, let's briefly consider simple mathematical functions. As a first step we'll make our current grayscale gradient repeat every 256 points. We do this by only considering the eight least-significant bits of the hash in <code class="shader">GetHashColor</code>. This is done by combining the hash with binary 11111111 which is decimal 255, via the  <code>&amp;</code> bitwise AND operator. This masks the value so only its eight least-significant bits are retained, limiting it to the 0&ndash;255 range. That range can then be scaled down to 0&ndash;1 via division by 255.</p>
+							
+						<pre class="shader" translate="no">		uint hash = _Hashes[unity_InstanceID];
+		return <ins>(1.0 / 255.0) * (hash &amp; 255)</ins>;</pre>
+						
+						<p>The resulting pattern depends on the resolution. At resolution 32 we get a gradient along Z that repeats four times, but this pattern goes out of alignment when the resolution is changed a little, for example to 41.
+						
+						<figure>
+							<img src="visualization/lowest-eight-bits-32.png" width="260" height="260" alt="32">
+							<img src="visualization/lowest-eight-bits-41.png" width="260" height="260" alt="41">
+							<figcaption>Lowest eight bits at resolution 32 and 41.</figcaption>
+						</figure>
+						
+						<p>Let's replace the obvious gradient with a Weyl sequence, the same we also initially used to colorize our fractal in the <a href="../../basics/organic-variety/index.html">Organic Variety</a> tutorial. Do this based on the index in <code>HashJob.Execute</code> and multiply the result with 256 before casting to <code>uint</code> so we get hashes between 0 and 255 inclusive.</p>
+						
+						<pre class="shader" translate="no">			hashes[i] = (uint)<ins>(frac(i * 0.381f) * 256f)</ins>;</pre>
+						
+						<figure>
+							<img src="visualization/sequence-32.png" width="260" height="260" alt="32">
+							<img src="visualization/sequence-41.png" width="260" height="260" alt="41">
+							<figcaption>0.381 sequence at resolution 32 and 41.</figcaption>
+						</figure>
+						
+						<p>We always end up with an obvious repeating gradient, in a direction that depends on the resolution. To make it independent of the resolution we have to base our function on the UV coordinates of the points instead of their index. We can find the coordinates in the job the same way we do in the shader. Then use the product of U and V as the basis for the sequence. This requires us to add fields for the resolution and its reciprocal.</p>
+						
+						<pre translate="no">		<ins>public int resolution;</ins>
+
+		<ins>public float invResolution;</ins>
+        
+		public void Execute(int i) {
+			<ins>float v = floor(invResolution * i + 0.00001f);</ins>
+			<ins>float u = i - resolution * v;</ins>
+			hashes[i] = (uint)(frac(<ins>u * v</ins> * 0.381f) * 255f);
+		}</pre>
+						
+						<aside>
+							<h3>Can't we use an integer division instead of <code>floor</code> here?</h3>
+							<div>
+								<p>Yes, but this isn't a good idea because integer divisions cannot be vectorized, which makes our job a lot less efficient. You can verify this by investigating the code generated by <em translate="no">Burst</em>.</p>
+								
+								<p>Note that the SSE2 instruction set doesn't include a vectorized floor operation, so when limited to that instruction set you get four un-vectorized calls to a floor function instead, which is suboptimal. Because in this specific case we're only dealing with positive values you could also cast to an integer instead, which does vectorize with SSE2. But I ignore this to keep things consistent.</p>
+							</div>
+						</aside>
+						
+						<p>Pass the required data to the job in <code>OnEnable</code>.</p>
+						
+						<pre translate="no">		new HashJob {
+			hashes = hashes<ins>,</ins>
+			<ins>resolution = resolution,</ins>
+			<ins>invResolution = 1f / resolution</ins>
+		}.ScheduleParallel(hashes.Length, resolution, default).Complete();</pre>
+						
+						<figure>
+							<img src="visualization/uv-32.png" width="260" height="260" alt="32">
+							<img src="visualization/uv-41.png" width="260" height="260" alt="41">
+							<figcaption>Coordinate-based sequence at resolution 32 and 41.</figcaption>
+						</figure>
+						
+						<p>We now get a more interesting pattern which looks more arbitrary than before, but it has very obvious repetition. To get better results we'll need a good hash function.</p>
+						
+					</section>
+				</section>
+				
+				<section>
+					<h2>Small xxHash</h2>
+					
+					<p>There are many known hash functions. We don't care about cryptographic hash functions that can be used for securing data and connections, we're looking for one that's both fast and produces good visual results. The <a href="http://xxhash.com">xxHash fast digest algorithm</a> designed by Yann Collet is a good candidate. Because we're working with very small input data&mdash;only two integers&mdash;we'll create a variant of XXH32 that skips steps 2, 3, and 4 of the <a href="https://github.com/Cyan4973/xxHash/blob/dev/doc/xxhash_spec.md">algorithm</a>. I name it <code>SmallXXHash</code>.</p>
+					
+					<section>
+						<h3>Hash Struct</h3>
+						
+						<p>Create a struct type for <code>SmallXXHash</code> in a separate C# file. Define five <code>uint</code> constants in it as shown below. These are five binary prime numbers&mdash;named A to E&mdash;used to manipulate bits. These values were empirically chosen by Yann Collet.</p>
+						
+						<pre translate="no"><ins>public struct SmallXXHash {</ins>
+
+	<ins>const uint primeA = 0b10011110001101110111100110110001;</ins>
+	<ins>const uint primeB = 0b10000101111010111100101001110111;</ins>
+	<ins>const uint primeC = 0b11000010101100101010111000111101;</ins>
+	<ins>const uint primeD = 0b00100111110101001110101100101111;</ins>
+	<ins>const uint primeE = 0b00010110010101100110011110110001;</ins>
+<ins>}</ins></pre>
+						
+						<p>The algorithm works by storing hash bits in an accumulator, for which we need a <code>uint</code> field. This value gets initialized with a seed number, to which the prime E is added. This is the first step of creating a hash, so we do this via a public constructor method with a seed parameter. We'll treat the seed as a <code>uint</code>, but signed integers are typically used in code so an <code>int</code> parameter is more convenient.</p>
+						
+						<pre translate="no">	<ins>uint accumulator;</ins>
+
+	<ins>public SmallXXHash (int seed) {</ins>
+		<ins>accumulator = (uint)seed + primeE;</ins>
+	<ins>}</ins></pre>
+						
+						<aside>
+							<h3>How is a constructor method defined?</h3>
+							<div>
+								<p>It is declared as a regular method that returns the type that it constructs, except that it doesn't have a name. It also doesn't explicitly return anything, because the method is always used to initialize a new object instance or struct value.</p>
+							</div>
+						</aside>
+						
+						<p>This allows us to create a seeded <code>SmallXXHash</code> value. To get to a final <code>uint</code> hash value we can introduce a public <code>ToUint</code> method, which simply returns the accumulator.</p>
+						
+						<pre translate="no">	<ins>public uint ToUint () => accumulator;</ins></pre>
+						
+						<p>But we can make the conversion to <code>uint</code> implicit. First rewrite the method so it becomes static and acts on a given <code>SmallXXHash</code> value.</p>
+						
+						<pre translate="no">	public <ins>static</ins> uint ToUint (<ins>SmallXXHash hash</ins>) => <ins>hash.</ins>accumulator;</pre>
+						
+						<p>Then turn the static method into a cast-to-<code>uint</code> operator, by replacing the method name with <code>operator uint</code>.</p>
+						
+						<pre translate="no">	public static <ins>operator uint</ins> (SmallXXHash hash) => hash.accumulator;</pre>
+						
+						<p>Type casting has to be either implicit or explicit. Let's make ours implicit by writing the <code>implicit</code> keyword in front of <code>operator</code>. This makes it so that we can directly assign a <code>SmallXXHash</code> value to a <code>uint</code> and the conversion will happen implicitly without us having to write <code>(uint)</code> in front of it.</p>
+						
+						<pre translate="no">	public static <ins>implicit</ins> operator uint (SmallXXHash hash) => hash.accumulator;</pre>
+						
+						<p>Now we can create a new <code>SmallXXHash</code> value in our job, initially with its seed set to zero, and then directly use it as the final hash value.</p>
+						
+						<pre translate="no">		public void Execute(int i) {
+			float v = floor(invResolution * i + 0.00001f);
+			float u = i - resolution * v;
+
+			<ins>var hash = new SmallXXHash(0);</ins>
+			hashes[i] = <ins>hash</ins>;
+		}</pre>
+						
+						<aside>
+							<h3>Isn't using a separate <code>SmallXXHash</code> type and converting to <code>uint</code> slow?</h3>
+							<div>
+								<p>There is no actual conversion between <code>int</code> and <code>uint</code>. These types only control how the value is interpreted. The types indicate whether the sign should be taken into account when performing integer operations. So as a rule of thumb always use <code>int</code>, except when you really don't want to treat the sign bit differently, which is the case for <code>SmallXXHash</code>.</p>
+								
+								<p>Besides that, <em translate="no">Burst</em> will get rid of all method invocations if possible. Our <code>SmallXXHash</code> type is effectively a decorative alias for <code>uint</code>, which has no impact on performance. The final result is the same as if we had written all code in <code>SmallXXHash</code> directly inside <code>Execute</code>, using <code>uint</code> variables. Thus it will also get vectorized.</p>
+								
+								<p>In the case of regular C# code it might well be a bit less efficient, but we're writing convenient code specifically for use with <em translate="no">Burst</em>.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Eating Data</h3>
+						
+						<p>XXHash32 works by consuming its input in portions of 32 bits, potentialy in parallel. Our small version only concerns itself with eating a single portion in isolation, for which we'll add a <code>SmallXXHash.Eat</code> method that has an <code>int</code> parameter and returns nothing. We'll treat the input data as <code>uint</code> again, multiply it with prime C, and then add it to the accumulator. This will lead to integer overflows, but that's fine as we don't care about numerical interpretations of the data. So all operations are effectively modulo 2<sup>32</sup>.</p>
+						
+						<pre translate="no">	<ins>public void Eat (int data) {</ins>
+		<ins>accumulator += (uint)data * primeC;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Adjust <code>HashJob.Execute</code> so U and V are integers, then feed U and V to the hash before using it for the result.</p>
+						
+						<pre translate="no">		public void Execute(int i) {
+			<ins>int</ins> v = <ins>(int)</ins>floor(invResolution * i + 0.00001f);
+			<ins>int</ins> u = i - resolution * v;
+
+			var hash = new SmallXXHash(0);
+			<ins>hash.Eat(u);</ins>
+			<ins>hash.Eat(v);</ins>
+			hashes[i] = hash;
+		}</pre>
+						
+						<figure>
+							<img src="short-xxhash/diagonal-pattern.png" width="260" height="260">
+							<figcaption>Diagonal pattern, resolution 32.</figcaption>
+						</figure>
+						
+						<p>This is only the first step of the eating process. After adding the value <code>Eat</code> has to rotate the bits of the accumulator to the left. Let's add a private static method for that, shifting some data by a given amount of steps. Begin by shifting all bits leftward with the <code>&lt;&lt;</code> operator.</p>
+						
+						<pre translate="no">	<ins>static uint RotateLeft (uint data, int steps) => data &lt;&lt; steps;</ins></pre>
+						
+						<aside>
+							<h3>How does shifting work?</h3>
+							<div>
+								<p>Bits that are shifted leftward become more significant by the indicated amount of steps. Bits are lost on the left and are padded with zeros on the right. For example, <code>0b11111111_00000000_11111111_00000001 &lt;&lt; 3</code> yields <code>0b11111000_00000111_11111000_00001000</code>.</p>
+							</div>
+						</aside>
+						
+						<p>The difference between rotating and shifting is that bits that would be lost by a shift are reinserted on the other side by a rotation. This can be accomplished for 32-bit data by also shifting in the other direction by 32 minus the indicated steps, then merging the results of both shifts with the <code>|</code> binary OR operator.</p>
+						
+						<pre translate="no">	static uint RotateLeft (uint data, int steps) =>
+		<ins>(</ins>data &lt;&lt; steps<ins>) | (data >> 32 - steps)</ins>;</pre>
+						
+						<aside>
+							<h3>Aren't there rotate-left CPU instructions?</h3>
+							<div>
+								<p>Yes, and <em translate="no">Burst</em> is able to recognize this code and use the appropriate ROL instruction. However, there isn't a vectorized ROL instruction so it will be done with two shifts and a bitwise OR when vectorization is possible.</p>
+							</div>
+						</aside>
+						
+						<p>Now rotate the accumulator to the left by 17 bits in <code>Eat</code>. <em translate="no">Burst</em> will also inline this method invocation and directly use 15 for the right shift, eliminating the constant subtraction.</p>
+						
+						<pre translate="no">	public void Eat (int data) {
+		<ins>accumulator = RotateLeft(accumulator +</ins> (uint)data * primeC<ins>, 17)</ins>;
+	}</pre>
+						
+						<figure>
+							<img src="short-xxhash/bit-rotation.png" width="260" height="260">
+							<figcaption>With bit rotation.</figcaption>
+						</figure>
+						
+						<p>The last step of the eating process is to multiply the accumulator with prime D.</p>
+						
+						<pre translate="no">	public void Eat (int data) {
+		accumulator = RotateLeft(accumulator + (uint)data * primeC, 17) <ins>* primeD</ins>;
+	}</pre>
+						
+						<figure>
+							<img src="short-xxhash/extra-multiplication.png" width="260" height="260" alt="32">
+							<figcaption>With extra multiplication.</figcaption>
+						</figure>
+						
+						<p>Although the results don't look good yet, the <code>Eat</code> method is finished. Although we won't use it in this tutorial, let's also add a variant <code>Eat</code> method that accept a single <code>byte</code>, as XXHash32 treats that data size a little different: it rotates left by 11 instead of 17 steps and multiplies with primes E and A and instead of primes C and D.
+						
+						<pre translate="no">	<ins>public void Eat (byte data) {</ins>
+		<ins>accumulator = RotateLeft(accumulator + data * primeE, 11) * primeA;</ins>
+	<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Avalanche</h3>
+						
+						<p>The final step of the XXHash algorithm is to mix the bits of the accumulator, to spread the influence of all input bits around. This is known as an avalanche effect. This happens after all data is eaten and the final hash value is needed, so we'll do this when converting to <code>uint</code>.</p>
+						
+						<p>The avalanche value begins equal to the accumulator. It's shifted right 15 steps and then combined with its original value via the <code>^</code> bitwise XOR operator. After that it's multiplied with prime B. This process is done again, shifted right 13 steps, XOR-ed, and multiplied with prime C, and then again with 16 steps but without further multiplication.</p>
+						
+						<pre translate="no">	public static implicit operator uint (SmallXXHash hash) <ins>{</ins>
+		<ins>uint avalanche = hash.accumulator;</ins>
+		<ins>avalanche ^= avalanche >> 15;</ins>
+		<ins>avalanche *= primeB;</ins>
+		<ins>avalanche ^= avalanche >> 13;</ins>
+		<ins>avalanche *= primeC;</ins>
+		<ins>avalanche ^= avalanche >> 16;</ins>
+		<ins>return avalanche;</ins>
+	<ins>}</ins></pre>
+						
+						<aside>
+							<h3>What does bitwise XOR do?</h3>
+							<div>
+								<p>It is the eXclusive bitwise OR operator. Each bit becomes 1 when either the first or the second operand has the same bit set to 1. When both or neither operand bits are 1 the bit becomes 0. For example, <code>0b00111100 ^ 0b00001111</code> yields <code>0b00110011</code>.</p>
+							</div>
+						</aside>
+						
+						<figure>
+							<img src="short-xxhash/avalanche-32.png" width="260" height="260" alt="32">
+							<img src="short-xxhash/avalanche-64.png" width="260" height="260" alt="364">
+							<figcaption>With avalanche, resolution 32 and 64.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Negative Coordinates</h3>
+						
+						<p>To demonstrate that our hash function also works for negative coordinates, subtract half the resolution from U and V in <code>HashJob.Execute</code>.</p>
+						
+						<pre translate="no">			int v = (int)floor(invResolution * i + 0.00001f);
+			int u = i - resolution * v <ins>- resolution / 2</ins>;
+			<ins>v -= resolution / 2</ins>;</pre>
+						
+						<figure>
+							<img src="short-xxhash/centered-32.png" width="260" height="260" alt="32">
+							<img src="short-xxhash/centered-64.png" width="260" height="260" alt="364">
+							<figcaption>Centered coordinates, resolution 32 and 64.</figcaption>
+						</figure>
+						
+						<p>When adjusting the resolution the hash pattern will now stay centered, although it will jitter by one step as it switches between even and odd resolutions.</p>
+						
+					</section>
+					
+					<section>
+						<h3>Method Chaining</h3>
+						
+						<p>Although <code>SmallXXHash</code> is already fully functional we can make it more convenient to work with, by adding support for method chaining. This means that we change both <code>Eat</code> methods so they return the hash itself, which can be done via the <code>this</code> keyword.</p>
+						
+						<pre translate="no">	public <ins>SmallXXHash</ins> Eat (int data) {
+		accumulator = RotateLeft(accumulator + (uint)data * primeC, 17) * primeD;
+		<ins>return this;</ins>
+	}
+
+	public <ins>SmallXXHash</ins> Eat (byte data) {
+		accumulator = RotateLeft(accumulator + data * primeE, 11) * primeA;
+		<ins>return this;</ins>
+	}</pre>
+						
+						<p>The current code in <code>HashJob.Execute</code> still works, ignoring the returned hash values. But now we can directly invoke <code>Eat</code> on the result of the constructor invocation, and also directly on the result of <code>Eat</code> itself, reducing our code to a single line.</p>
+						
+						<pre translate="no">			<del>//var hash = new SmallXXHash(0).Eat(u).Eat(v);</del>
+			<del>//hash.Eat(u);</del>
+			<del>//hash.Eat(v);</del>
+			hashes[i] = <ins>new SmallXXHash(0).Eat(u).Eat(v)</ins>;</pre>
+					</section>
+					
+					<section>
+						<h3>Immutability</h3>
+						
+						<p>We can go a step further and make it so that the <code>SmallXXHash.Eat</code> methods don't adjust the accumulator of the value they're invoked on. This makes it possible to keep an intermediate hash and reuse it later, which is something that we'll use in the future. Thus we make <code>SmallXXHash</code> an immutable struct, truly behaving exactly like a <code>uint</code> value.</p>
+						
+						<p>Add the <code>readonly</code> modifier to <code>SmallXXHash</code> to indicate and enforce that it is immutable.</p>
+						
+						<pre translate="no">public <ins>readonly</ins> struct SmallXXHash { &hellip; }</pre>
+						
+						<p>We must mark its accumulator field the same way.</p>
+						
+						<pre translate="no">	<ins>readonly</ins> uint accumulator;</pre>
+						
+						<p>From now on the only way to get a different accumulator value is by passing it as an argument to a constructor method, because only constructors are allowed to modify <code>readonly</code> fields. Adjust the existing constructor so it directly sets the accumulator instead of applying a seed.</p>
+						
+						<pre translate="no">	public SmallXXHash (<ins>uint accumulator</ins>) {
+		<ins>this.accumulator = accumulator;</ins>
+	}</pre>
+						
+						<p>At this point we have a direct conversion from <code>uint</code> to <code>SmallXXHash</code>. Let's create a convenient implicit cast method for it.</p>
+						
+						<pre translate="no">	<ins>public static implicit operator SmallXXHash (uint accumulator) =></ins>
+		<ins>new SmallXXHash(accumulator);</ins></pre>
+						
+						<p>The <code>Eat</code> methods can now directly return the new accumulator value as a <code>SmallXXHash</code>.</p>
+						
+						<pre translate="no">	public SmallXXHash Eat (int data) <ins>=></ins>
+		<ins>RotateLeft(accumulator + (uint)data * primeC, 17) * primeD;</ins>
+
+	public SmallXXHash Eat (byte data) <ins>=></ins>
+		<ins>RotateLeft(accumulator + data * primeE, 11) * primeA;</ins></pre>
+						
+						<p>Finally, to make initialization with a seed again possible introduce a public static <code>Seed</code> method that creates a <code>SmallXXHash</code> with an appropriate accumulator value.</p>
+						
+						<pre translate="no">	<ins>public static SmallXXHash Seed (int seed) => (uint)seed + primeE;</ins></pre>
+						
+						<p>Use this new method to initialize the hash in <code>HashJob.Execute</code>, so we're no longer explicitly invoking a constructor method and instead rely on a chain of regular method invocations, of which the first is static.</p>
+						
+						<pre translate="no">			hashes[i] = <ins>SmallXXHash.Seed(0)</ins>.Eat(u).Eat(v);</pre>
+						
+						<p>Note that these changes are purely for style. <em translate="no">Burst</em> still generates the same instructions.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Showing More of the Hash</h2>
+					
+					<p>With <code>SmallXXHash</code> finished, let's focus our attention on the visualization of its results.</p>
+					
+					<section>
+						<h3>Using Different Bits</h3>
+						
+						<p>So far we've only looked at the least significant byte of the generated hash values. A quick way to change this is by shifting the hash bits in <code class="shader">GetHashColor</code>. For example, by shifting the hash to the right by eight bits we end up seeing the second byte that is one step more significant.</p>
+						
+						<pre class="shader" translate="no">		return (1.0 / 255.0) * (<ins>(hash >> 8)</ins> &amp; 255);</pre>
+						
+						<figure>
+							<img src="short-xxhash/centered-32.png" width="260" height="260" alt="first">
+							<img src="showing-more-of-the-hash/second-byte.png" width="260" height="260" alt="second">
+							<figcaption>The first and the second byte.</figcaption>
+						</figure>
+						
+						<p>This way we could create four completely separate 8-bit visualizations with the same hash, though it's also possible to use different bit counts and shifts.</p>
+					</section>
+					
+					<section>
+						<h3>Coloring</h3>
+						
+						<p>We can combine the visualization of three bytes by using each for a different RGB channel of the final color. Let's use the lowest byte for red, the second-lowest for green, and the third for blue. Thus we have to shift zero, 8, and 16 bits to the right.
+						
+						<pre class="shader" translate="no">		uint hash = _Hashes[unity_InstanceID];
+		return (1.0 / 255.0) * <ins>float3(</ins>
+			<ins>hash &amp; 255,</ins>
+			<ins>(hash >> 8) &amp; 255,</ins>
+			<ins>(hash >> 16) &amp; 255</ins>
+		<ins>)</ins>;</pre>
+						
+						<figure>
+							<img src="showing-more-of-the-hash/rgb-colors.png" width="260" height="260">
+							<figcaption>With RGB colors.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Configurable Seed</h3>
+						
+						<p>Now that we have a good visualization that shows 75% of the hash bits let's make the seed configurable. Add a field for it to <code>HashJob</code> and use it to initialize the hash.</p>
+						
+						<pre translate="no">		<ins>public int seed;</ins>
+        
+		public void Execute(int i) {
+			&hellip;
+
+			hashes[i] = SmallXXHash.Seed(<ins>seed</ins>).Eat(u).Eat(v);
+		}</pre>
+						
+						<p>Also add the configuration field to <code>HashVisualization</code> add pass it to the job in <code>OnEnable</code>. The seed is an unrestricted integer value.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>int seed;</ins>
+
+	&hellip;
+
+	void OnEnable () {
+		&hellip;
+
+		new HashJob {
+			hashes = hashes,
+			resolution = resolution,
+			invResolution = 1f / resolution<ins>,</ins>
+			<ins>seed = seed</ins>
+		}.ScheduleParallel(hashes.Length, resolution, default).Complete();
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="showing-more-of-the-hash/seed-inspector.png" width="320" height="42">
+							<figcaption>Configurable seed.</figcaption>
+						</figure>
+						
+						<p>Now you can drastically change the pattern by adjusting the seed. Each seed yields an entirely different pattern, without an apparent relationship among them.</p>
+						
+						<figure>
+							<img src="showing-more-of-the-hash/seed-1.png" width="260" height="260" alt="1">
+							<img src="showing-more-of-the-hash/seed-2.png" width="260" height="260" alt="2">
+							<figcaption>Seed set to 1 and 2.</figcaption>
+						</figure>
+						
+						<p>We can go a step further and hoist the initialization of the hash out of the job. Besides the minor optimization of eliminating a single addition from the job, this shows that you can initialize the hash however you like before using it in a job.</p>
+						
+						<p>Replace the seed field of <code>HashJob</code> with a <code>SmallXXHash</code> field and use that directly in <code>Execute</code>.</p>
+						
+						<pre translate="no">		<del>//public int seed;</del>
+		<ins>public SmallXXHash hash;</ins>
+        
+		public void Execute(int i) {
+			&hellip;
+
+			hashes[i] = <ins>hash</ins>.Eat(u).Eat(v);
+		}</pre>
+						
+						<p>Then pass a seeded hash to the job in <code>OnEnable</code>.</p>
+						
+						<pre translate="no">		new HashJob {
+			hashes = hashes,
+			resolution = resolution,
+			invResolution = 1f / resolution,
+			<ins>hash = SmallXXHash.Seed(seed)</ins>
+		}.ScheduleParallel(hashes.Length, resolution, default).Complete();</pre>
+					</section>
+					
+					<section>
+						<h3>Using the Last Byte</h3>
+						
+						<p>There is still one byte of the hash that isn't visualized yet. We could use it for opacity, but that would make everything harder to see and require appropriate depth-based sorting of the cube instances to render correctly. So let's instead use the fourth byte to give the cubes a vertical offset.</p>
+						
+						<p>Make the vertical offset configurable, with a limited range like &minus;2&ndash;2 and a default of 1. We make this offset relative to the cube instance size, so the actual offset will be divided by the resolution. Pass this scale to the GPU as the third component of the configuration vector.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Range(-2f, 2f)]</ins>
+	<ins>float verticalOffset = 1f;</ins>
+	
+	&hellip;
+	
+	void OnEnable () {
+		&hellip;
+		propertyBlock.SetVector(configId, new Vector4(
+			resolution, 1f / resolution<ins>, verticalOffset / resolution</ins>
+		));
+	}</pre>
+						
+						<p>Apply the offset in <code class="shader">ConfigureProcedural</code>. The last byte is found by shifting right 24 steps and as all other bits are zero at that point we don't need to mask it afterwards. Scale it down to 0&ndash;1 and then subtract a half to change the range to &minus;&frac12;&ndash;&frac12;. Then apply the configured vertical offset scale.</p>
+						
+						<pre class="shader" translate="no">		unity_ObjectToWorld._m03_m13_m23_m33 = float4(
+			_Config.y * (u + 0.5) - 0.5,
+			<ins>_Config.z * ((1.0 / 255.0) * (_Hashes[unity_InstanceID] >> 24) - 0.5)</ins>,
+			_Config.y * (v + 0.5) - 0.5,
+			1.0
+		);</pre>
+						
+						<figure>
+							<img src="showing-more-of-the-hash/offset-inspector.png" width="320" height="62" alt="inspector">
+							<img src="showing-more-of-the-hash/offset-scene.png" width="430" height="160" alt="scene">
+							<figcaption>With configurable vertical offset.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../hashing-space/index.html">Hashing Space</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/pseudorandom-noise-01-hashing/" class="repository">repository</a>
+					<a href="Hashing.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

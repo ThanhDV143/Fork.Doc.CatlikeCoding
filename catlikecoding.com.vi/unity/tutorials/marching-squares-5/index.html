@@ -1,0 +1,1781 @@
+<!DOCTYPE html>
+<html>
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/marching-squares-5/">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/marching-squares-5/tutorial-image.jpg">
+		<meta property="og:image:width" content="750">
+		<meta property="og:image:height" content="430">
+		<meta property="og:description" content="A Unity C# scripting tutorial in which you will extend Marching Squares to support multiple colors.">
+		<meta name="description" content="A Unity C# scripting tutorial in which you will extend Marching Squares to support multiple colors.">
+		<meta property="og:title" content="Marching Squares 5, a Unity C# Tutorial">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Marching Squares 5, a Unity C# Tutorial</title>
+		<link href="../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../site.webmanifest.html">
+
+
+		<script>
+			var customTypes = {
+				FeaturePoint: 1,
+				Voxel: 1,
+				VoxelCell: 1,
+				VoxelGrid: 1,
+				VoxelGridSurface: 1,
+				VoxelGridWall: 1,
+				VoxelMap: 1,
+				VoxelMaterials: 1,
+				VoxelRenderer: 1,
+				VoxelStencil: 1,
+				VoxelStencilCircle: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../products/utilities/frame-rate-counter/index.html"><img src="../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<p><a href="../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></p>
+			<p class="category"><a href="../index.html">Unity C# Tutorials</a></p>
+		</header>
+		
+		<main>
+			<article itemscope itemtype="http://schema.org/TechArticle">
+				<header>
+					<h1 itemprop="name headline">Marching Squares 5</h1>
+					<p>Being Colorful</p>
+					<ul>
+						<li>Support more than two colors.</li>
+						<li>Keep normals consistent.</li>
+						<li>Distribute work among multiple structs and objects.</li>
+						<li>Find a new way to triangulate.</li>
+						<li>Deal with shared feature points.</li>
+						<li>Make nice circles.</li>
+					</ul>
+				</header>
+
+				<p itemprop="about description">In this tutorial we'll add support for multiple colors to Marching Squares.</p>
+
+				<p itemprop="dependencies">This tutorial comes after <a href="../marching-squares-4/index.html">Marching Squares 4</a>. Like the previous ones, it has been made with Unity 4.5.2 and might not work for older versions.</p>
+
+				<figure>
+					<img src="tutorial-image.jpg" width="375" height="215" itemprop="image">
+					<figcaption>Say more with colors.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Adding More Choices</h2>
+					
+					<p>While using only two voxel states &ndash; empty and filled &ndash; already allows for complex and interesting shapes, allowing even more states would greatly enhance our expressiveness. Once we're able to deal with four different states we could support as many as we want, because each individual cell can contain up to four unique states.</p>
+					
+					<p>Let's start at the top with the UI and add more fill type options to <code>VoxelMap.</code> We need at least four but I'll make it five, the empty state and four filled ones. I'll label them with letters, naming the empty state <i>X</i> and placing it on the left side. That way the first index &ndash; voxel state zero &ndash; represents emptiness.</p>
+					
+					<pre translate="no">	private static string[] fillTypeNames = {<ins>"X", "A", "B", "C", "D"</ins>};</pre>
+					
+					<p>Because starting with the eraser selected doesn't make much sense, you can set the default type selection to the first filled state, which would be <i>A</i>.</p>
+					
+					<pre translate="no">	private int fillTypeIndex <ins>= 1</ins>, radiusIndex, stencilIndex;</pre>
+					
+					<p>In <code>OnGUI</code>, put all five type buttons on a single line.</p>
+					
+					<pre translate="no">	fillTypeIndex =
+			GUILayout.SelectionGrid(fillTypeIndex, fillTypeNames, <ins>5</ins>);</pre>
+					
+					<figure>
+						<img src="01-xabcd.png" width="160" height="160">
+						<figcaption>New fill types.</figcaption>
+					</figure>
+					
+					<p>In <code>EditVoxels</code>, we used to pass a boolean fill type, but now we should pass the index itself.</p>
+					
+					<pre translate="no">	activeStencil.Initialize(
+			<ins>fillTypeIndex</ins>, (radiusIndex + 0.5f) * voxelSize);</pre>
+					
+					<p>Of course we now get compile errors because of a type mismatch, which means that we'll have to adjust <code>VoxelStencil</code> next.</p>
+					
+					<a href="ms5-01-adding-more-choices.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Upgrading the Stencils</h2>
+					
+					<p>The fill type of <code>VoxelStencil</code> needs to become an integer.</p>
+					
+					<pre translate="no">	protected <ins>int</ins> fillType;</pre>
+					
+					<p>Adjust the parameter type of <code>Initialize</code> as well, both in <code>VoxelStencil</code> and <code>VoxelStencilCircle</code>.</p>
+					
+					<pre translate="no">&hellip; void Initialize (<ins>int</ins> fillType, float radius) &hellip;</pre>
+					
+					<p>More compiler errors show up. For now just change the state type in <code>Voxel</code>, then ignore the errors produced in the grid.</p>
+					
+					<pre translate="no">	public <ins>int</ins> state;</pre>
+						
+					<p>Back to <code>VoxelStencil</code>. When finding a crossing, the fill type is used to determine which way the normal should point. But what way to point the edge normal between two filled sides? Although we won't need normals for a wall there, we do need then to detect sharp features. The most important thing here is consistency. Let them always point toward the side with the lowest index. That way the normals are guaranteed to be correctly oriented at the boundary between filled and empty space.</p>
+					
+					<figure>
+						<img src="02-normal-directions.png" width="150" height="150">
+						<figcaption>Always point down.</figcaption>
+					</figure>
+					
+					<pre translate="no">	protected virtual void FindHorizontalCrossing (Voxel xMin, Voxel xMax) {
+		if (xMin.position.y &lt; YStart || xMin.position.y > YEnd) {
+			return;
+		}
+		if (xMin.state == fillType) {
+			if (xMin.position.x &lt;= XEnd &amp;&amp; xMax.position.x >= XEnd) {
+				if (xMin.xEdge == float.MinValue || xMin.xEdge &lt; XEnd) {
+					xMin.xEdge = XEnd;
+					xMin.xNormal =
+						new Vector2(fillType <ins>> xMax.state</ins> ? 1f : -1f, 0f);
+				}
+			}
+		}
+		else if (xMax.state == fillType) {
+			if (xMin.position.x &lt;= XStart &amp;&amp; xMax.position.x >= XStart) {
+				if (xMin.xEdge == float.MinValue || xMin.xEdge > XStart) {
+					xMin.xEdge = XStart;
+					xMin.xNormal =
+						new Vector2(fillType <ins>> xMin.state</ins> ? -1f : 1f, 0f);
+				}
+			}
+		}
+	}</pre>
+					
+					<p>However, this only works when there wasn't a crossing before or if we're moving beyond an existing one. What to do when cutting behind another edge? Realistically that would leave a fragment of the old material behind, but we cannot store this information so have to discard it. Once again let's simply be consistent and leave the edge where it is, effectively extending the range of our edit.</p>
+					
+					<figure>
+						<img src="02-exact-vs-possible.png" width="360" height="360">
+						<figcaption>Exact vs. possible result.</figcaption>
+					</figure>
+					
+					<p>We still have to make sure that the normal points in the right direction. Let's add a validation method which flips the normal when it's pointing in the wrong direction. First for horizontal crossings.</p>
+					
+					<pre translate="no">	protected virtual void FindHorizontalCrossing (Voxel xMin, Voxel xMax) {
+		if (xMin.position.y &lt; YStart || xMin.position.y > YEnd) {
+			return;
+		}
+		if (xMin.state == fillType) {
+			if (xMin.position.x &lt;= XEnd &amp;&amp; xMax.position.x >= XEnd) {
+				if (xMin.xEdge == float.MinValue || xMin.xEdge &amp; XEnd) {
+					xMin.xEdge = XEnd;
+					xMin.xNormal =
+						new Vector2(fillType > xMax.state ? 1f : -1f, 0f);
+				}
+				<ins>else {</ins>
+					<ins>ValidateHorizontalNormal(xMin, xMax);</ins>
+				<ins>}</ins>
+			}
+		}
+		else if (xMax.state == fillType) {
+			if (xMin.position.x &lt;= XStart &amp;&amp; xMax.position.x >= XStart) {
+				if (xMin.xEdge == float.MinValue || xMin.xEdge > XStart) {
+					xMin.xEdge = XStart;
+					xMin.xNormal =
+						new Vector2(fillType > xMin.state ? -1f : 1f, 0f);
+				}
+				<ins>else {</ins>
+					<ins>ValidateHorizontalNormal(xMin, xMax);</ins>
+				<ins>}</ins>
+			}
+		}
+	}
+	
+	<ins>protected static void ValidateHorizontalNormal (Voxel xMin, Voxel xMax) {</ins>
+		<ins>if (xMin.state &lt; xMax.state) {</ins>
+			<ins>if (xMin.xNormal.x > 0f) {</ins>
+				<ins>xMin.xNormal = -xMin.xNormal;</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>else if (xMin.xNormal.x &lt; 0f) {</ins>
+			<ins>xMin.xNormal = -xMin.xNormal;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<p>And the same for the vertical crossings.</p>
+					
+					<pre translate="no">	protected virtual void FindVerticalCrossing (Voxel yMin, Voxel yMax) {
+		if (yMin.position.x &lt; XStart || yMin.position.x > XEnd) {
+			return;
+		}
+		if (yMin.state == fillType) {
+			if (yMin.position.y &lt;= YEnd &amp;&amp; yMax.position.y >= YEnd) {
+				if (yMin.yEdge == float.MinValue || yMin.yEdge &lt; YEnd) {
+					yMin.yEdge = YEnd;
+					yMin.yNormal =
+						new Vector2(0f, fillType <ins>> yMax.state</ins> ? 1f : -1f);
+				}
+				<ins>else {</ins>
+					<ins>ValidateVerticalNormal(yMin, yMax);</ins>
+				<ins>}</ins>
+			}
+		}
+		else if (yMax.state == fillType) {
+			if (yMin.position.y &lt;= YStart &amp;&amp; yMax.position.y >= YStart) {
+				if (yMin.yEdge == float.MinValue || yMin.yEdge > YStart) {
+					yMin.yEdge = YStart;
+					yMin.yNormal =
+						new Vector2(0f, fillType <ins>> yMin.state</ins> ? -1f : 1f);
+				}
+				<ins>else {</ins>
+					<ins>ValidateVerticalNormal(yMin, yMax);</ins>
+				<ins>}</ins>
+			}
+		}
+	}
+	
+	<ins>protected static void ValidateVerticalNormal (Voxel yMin, Voxel yMax) {</ins>
+		<ins>if (yMin.state &lt; yMax.state) {</ins>
+			<ins>if (yMin.yNormal.y > 0f) {</ins>
+				<ins>yMin.yNormal = -yMin.yNormal;</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>else if (yMin.yNormal.y &lt; 0f) {</ins>
+			<ins>yMin.yNormal = -yMin.yNormal;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<p><code>VoxelStencilCircle</code> needs to receive the same treatment. As it uses a separate <code>ComputeNormal</code> method to find the normal, let's just pass the other voxel to that method and have it compare the states.</p>
+					
+					<pre translate="no">	private Vector3 ComputeNormal (float x, float y<ins>, Voxel other</ins>) {
+		if (fillType <ins>> other.state</ins>) {
+			return new Vector2(x - centerX, y - centerY).normalized;
+		}
+		else {
+			return new Vector2(centerX - x, centerY - y).normalized;
+		}
+	}</pre>
+					
+					<p>Then adjust the crossing methods.</p>
+					
+					<pre translate="no">protected override void FindHorizontalCrossing (Voxel xMin, Voxel xMax) {
+		float y2 = xMin.position.y - centerY;
+		y2 *= y2;
+		if (xMin.state == fillType) {
+			float x = xMin.position.x - centerX;
+			if (x * x + y2 &lt;= sqrRadius) {
+				x = centerX + Mathf.Sqrt(sqrRadius - y2);
+				if (xMin.xEdge == float.MinValue || xMin.xEdge &lt; x) {
+					xMin.xEdge = x;
+					xMin.xNormal = ComputeNormal(x, xMin.position.y<ins>, xMax</ins>);
+				}
+				<ins>else {</ins>
+					<ins>ValidateHorizontalNormal(xMin, xMax);</ins>
+				<ins>}</ins>
+			}
+		}
+		else if (xMax.state == fillType) {
+			float x = xMax.position.x - centerX;
+			if (x * x + y2 &lt;= sqrRadius) {
+				x = centerX - Mathf.Sqrt(sqrRadius - y2);
+				if (xMin.xEdge == float.MinValue || xMin.xEdge > x) {
+					xMin.xEdge = x;
+					xMin.xNormal = ComputeNormal(x, xMin.position.y<ins>, xMin</ins>);
+				}
+				<ins>else {</ins>
+					<ins>ValidateHorizontalNormal(xMin, xMax);</ins>
+				<ins>}</ins>
+			}
+		}
+	}
+	
+	protected override void FindVerticalCrossing (Voxel yMin, Voxel yMax) {
+		float x2 = yMin.position.x - centerX;
+		x2 *= x2;
+		if (yMin.state == fillType) {
+			float y = yMin.position.y - centerY;
+			if (y * y + x2 &lt;= sqrRadius) {
+				y = centerY + Mathf.Sqrt(sqrRadius - x2);
+				if (yMin.yEdge == float.MinValue || yMin.yEdge &lt; y) {
+					yMin.yEdge = y;
+					yMin.yNormal = ComputeNormal(yMin.position.x, y<ins>, yMax</ins>);
+				}
+				<ins>else {</ins>
+					<ins>ValidateVerticalNormal(yMin, yMax);</ins>
+				<ins>}</ins>
+			}
+		}
+		else if (yMax.state == fillType) {
+			float y = yMax.position.y - centerY;
+			if (y * y + x2 &lt;= sqrRadius) {
+				y = centerY - Mathf.Sqrt(sqrRadius - x2);
+				if (yMin.yEdge == float.MinValue || yMin.yEdge > y) {
+					yMin.yEdge = y;
+					yMin.yNormal = ComputeNormal(yMin.position.x, y<ins>, yMin</ins>);
+				}
+				<ins>else {</ins>
+					<ins>ValidateVerticalNormal(yMin, yMax);</ins>
+				<ins>}</ins>
+			}
+		}
+	}</pre>
+					
+					<a href="ms5-02-upgrading-the-stencils.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Working with Different Voxel Visualizations</h2>
+					
+					<p>The quick way to fix the errors in <code>VoxelGrid</code> is to replace all seven test for <code>voxel.state</code> with <code>voxel.Filled</code>. Then we can paint again and actually mix different voxel types, though we won't see different colors yet. Of course we need to add that handy property to <code>Voxel</code> to make it work.</p>
+					
+					<pre translate="no">	<ins>public bool Filled {</ins>
+		<ins>get {</ins>
+			<ins>return state > 0f;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<p>We need materials to visualize the different states. Each filled state should have its own surface material and wall material. We can add two material arrays to <code>VoxelGrid</code> to hold them. Alternatively, we could add a single array of pairs of these materials, which fits the relationship between the materials better. To do so, we need to define a simple structure for the pairs.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+<ins>using System;</ins>
+
+<ins>[Serializable]</ins>
+<ins>public struct VoxelMaterials {</ins>
+
+	<ins>public Material surfaceMaterial, wallMaterial;</ins>
+<ins>}</ins></pre>
+					
+					<p>Now we can add an array of those to <code>VoxelGrid</code>.</p>
+					
+					<pre translate="no">	<ins>public VoxelMaterials[] materials;</ins></pre>
+					
+					<p>Then create three more pairs of materials. That gives us a total of four pairs, as the empty state doesn't need materials. Use whatever colors you like. I tidied up the project a bit too.</p>
+					
+					<figure>
+						<img src="03-materials.png" width="598" height="476">
+						<figcaption>New fill types.</figcaption>
+					</figure>
+					
+					<p>Both <code>VoxelGridSurface</code> and <code>VoxelGridWall</code> now need to be initialized with a material.</p>
+					
+					<pre translate="no">	public void Initialize (int resolution<ins>, Material material</ins>) {
+		<ins>GetComponent&lt;MeshRenderer>().material = material;</ins>
+		&hellip;
+	}</pre>
+					
+					<p>Because managing all the different meshes is becoming more complex, let's create a <code>MeshRenderer</code> structure to encapsulate surface&ndash;wall pairs, just like for the materials.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+<ins>using System;</ins>
+
+<ins>[Serializable]</ins>
+<ins>public struct VoxelRenderer {</ins>
+	
+	<ins>[SerializeField]</ins>
+	<ins>private VoxelGridSurface surface;</ins>
+	
+	<ins>[SerializeField]</ins>
+	<ins>private VoxelGridWall wall;</ins>
+	
+	<ins>public VoxelRenderer (VoxelGridSurface surface, VoxelGridWall wall) {</ins>
+		<ins>this.surface = surface;</ins>
+		<ins>this.wall = wall;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+					
+					<p>Now <code>VoxelGrid</code> can use a single array of those instead of having to worry about separate surfaces and walls.</p>
+					
+					<pre translate="no">	<ins>private VoxelRenderer[] renderers;</ins></pre>
+					
+					<p>Create the renderers when initializing <code>VoxelGrid</code>. Use the amount of materials to determine how many different visualizations we need. Instantiate the prefabs as normal, initialize them with the correct materials, and put them into a new renderer.</p>
+					
+					<p>Actually, create one more renderers than needed, and then skip the first one during initialization. This way we can use the voxel state to directly index the renderers array, instead of having to subtract one from it each time.</p>
+					
+					<pre translate="no">	public void Initialize (int resolution, float size, float maxFeatureAngle) {
+		&hellip;
+		
+		for (int i = 0, y = 0; y &lt; resolution; y++) {
+			for (int x = 0; x &lt; resolution; x++, i++) {
+				CreateVoxel(i, x, y);
+			}
+		}
+
+		<ins>CreateRenderers();</ins>
+		Refresh();
+	}
+
+	<ins>private void CreateRenderers () {</ins>
+		<ins>renderers = new VoxelRenderer[materials.Length + 1];</ins>
+		<ins>for (int i = 0; i &lt; materials.Length; i++) {</ins>
+			<ins>VoxelGridSurface</ins> surface =
+				Instantiate(surfacePrefab) as VoxelGridSurface;
+			surface.transform.parent = transform;
+			surface.transform.localPosition = Vector3.zero;
+			surface.Initialize(resolution<ins>, materials[i].surfaceMaterial</ins>);
+			
+			<ins>VoxelGridWall</ins> wall = Instantiate(wallPrefab) as VoxelGridWall;
+			wall.transform.parent = transform;
+			wall.transform.localPosition = Vector3.zero;
+			wall.Initialize(resolution<ins>, materials[i].wallMaterial</ins>);
+			
+			<ins>renderers[i + 1] = new VoxelRenderer(s, w);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<p>After initialization the grid now only works with the renderers and will no longer directly access the surfaces and walls. This means that <code>VoxelRenderer</code> now has to accept caching commands and forward them to its surface and wall. So we have to give it some methods to support this.</p>
+					
+					<pre translate="no">	<ins>public void Clear () {</ins>
+		<ins>surface.Clear();</ins>
+		<ins>wall.Clear();</ins>
+	<ins>}</ins>
+	
+	<ins>public void Apply () {</ins>
+		<ins>surface.Apply();</ins>
+		<ins>wall.Apply();</ins>
+	<ins>}</ins>
+	
+	<ins>public void PrepareCacheForNextCell () {</ins>
+		<ins>surface.PrepareCacheForNextCell();</ins>
+		<ins>wall.PrepareCacheForNextCell();</ins>
+	<ins>}</ins>
+	
+	<ins>public void PrepareCacheForNextRow () {</ins>
+		<ins>surface.PrepareCacheForNextRow();</ins>
+		<ins>wall.PrepareCacheForNextRow();</ins>
+	<ins>}</ins>
+
+	<ins>public void CacheFirstCorner (Voxel voxel) {</ins>
+		<ins>surface.CacheFirstCorner(voxel);</ins>
+	<ins>}</ins>
+
+	<ins>public void CacheNextCorner (int i, Voxel voxel) {</ins>
+		<ins>surface.CacheNextCorner(i, voxel);</ins>
+	<ins>}</ins>
+
+	<ins>public void CacheXEdge (int i, Voxel voxel) {</ins>
+		<ins>surface.CacheXEdge(i, voxel);</ins>
+	<ins>}</ins>
+
+	<ins>public void CacheXEdgeWithWall (int i, Voxel voxel) {</ins>
+		<ins>surface.CacheXEdge(i, voxel);</ins>
+		<ins>wall.CacheXEdge(i, voxel);</ins>
+	<ins>}</ins>
+
+	<ins>public void CacheYEdge (Voxel voxel) {</ins>
+		<ins>surface.CacheYEdge(voxel);</ins>
+	<ins>}</ins>
+	
+	<ins>public void CacheYEdgeWithWall (Voxel voxel) {</ins>
+		<ins>surface.CacheYEdge(voxel);</ins>
+		<ins>wall.CacheYEdge(voxel);</ins>
+	<ins>}</ins></pre>
+					
+					<p>Now <code>VoxelGrid</code> has to invoke these methods instead of the old ones. First, all renderers for non-empty states need to be cleared and applied.</p>
+					
+					<pre translate="no">	private void Triangulate () {
+		<ins>for (int i = 1; i &lt; renderers.Length; i++) {</ins>
+			<ins>renderers[i]</ins>.Clear();
+		<ins>}</ins>
+		FillFirstRowCache();
+		TriangulateCellRows();
+		if (yNeighbor != null) {
+			TriangulateGapRow();
+		}
+		<ins>for (int i = 1; i &lt; renderers.Length; i++) {</ins>
+			<ins>renderers[i]</ins>.Apply();
+		<ins>}</ins>
+	}</pre>
+					
+					<p>Caching needs to access the correct renderer, which we made possibly by simply indexing the array using the voxel state. The first corner is easy.</p>
+					
+					<pre translate="no">	private void CacheFirstCorner (Voxel voxel) {
+		if (voxel.Filled) {
+			<ins>renderers[voxel.state]</ins>.CacheFirstCorner(voxel);
+		}
+	}</pre>
+					
+					<p>The next corner and edge also needs to determine which renderers to use, and whether there's a wall or a second renderer involved.</p>
+					
+					<pre translate="no">	private void CacheNextEdgeAndCorner (int i, Voxel xMin, Voxel xMax) {
+		if (xMin.state != xMax.state) {
+			<ins>if (xMin.Filled) {</ins>
+				<ins>if (xMax.Filled) {</ins>
+					<ins>renderers[xMin.state].CacheXEdge(i, xMin);</ins>
+					<ins>renderers[xMax.state].CacheXEdge(i, xMin);</ins>
+				<ins>}</ins>
+				<ins>else {</ins>
+					<ins>renderers[xMin.state].CacheXEdgeWithWall(i, xMin);</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>renderers[xMax.state].CacheXEdgeWithWall(i, xMin);</ins>
+			<ins>}</ins>
+		}
+		if (xMax.Filled) {
+			<ins>renderers[xMax.state].</ins>CacheNextCorner(i, xMax);
+		}
+	}</pre>
+					
+					<p>The next middle edge has the same questions to ask. It also needs to prepare all renderers for the next cell.</p>
+					
+					<pre translate="no">	private void CacheNextMiddleEdge (Voxel yMin, Voxel yMax) {
+		<ins>for (int i = 1; i &lt; renderers.Length; i++) {</ins>
+			<ins>renderers[i]</ins>.PrepareCacheForNextCell();
+		<ins>}</ins>
+		if (yMin.state != yMax.state) {
+			<ins>if (yMin.Filled) {</ins>
+				<ins>if (yMax.Filled) {</ins>
+					<ins>renderers[yMin.state].CacheYEdge(yMin);</ins>
+					<ins>renderers[yMax.state].CacheYEdge(yMin);</ins>
+				<ins>}</ins>
+				<ins>else {</ins>
+					<ins>renderers[yMin.state].CacheYEdgeWithWall(yMin);</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>renderers[yMax.state].CacheYEdgeWithWall(yMin);</ins>
+			<ins>}</ins>
+		}
+	}</pre>
+					
+					<p>And finally the row caches need to be swapped.</p>
+					
+					<pre translate="no">	private void SwapRowCaches () {
+		<ins>for (int i = 1; i &lt; renderers.Length; i++) {</ins>
+			<ins>renderers[i]</ins>.PrepareCacheForNextRow();
+		<ins>}</ins>
+	}</pre>
+					
+					<p>Now remove the <code>surface</code> and <code>wall</code> variable declarations. This causes compile errors in all triangulations method, but they are no longer valid anyway. You can remove or comment out all that code.</p>
+					
+					<a href="ms5-03-working-with-different-voxel-visualizations.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Formalizing a Cell</h2>
+					
+					<p>We often talk about cells, but we don't have a cell entity. Instead of constantly passing sets of voxels around, let's create a cell object that stores four voxels. It is also the natural place for any method that analyzes the contents of a cells, so let's store the sharp feature limit in it too.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+<ins>using System;</ins>
+
+<ins>[Serializable]</ins>
+<ins>public class VoxelCell {</ins>
+
+	<ins>[NonSerialized]</ins>
+	<ins>public Voxel a, b, c, d;</ins>
+	
+	<ins>[NonSerialized]</ins>
+	<ins>public int i;</ins>
+	
+	<ins>public float sharpFeatureLimit;</ins>
+<ins>}</ins></pre>
+					
+					<p>It's simply a convenient data package that we add to <code>VoxelGrid</code> as a private variable. This way we no longer need to move all this data around all the time.</p>
+					
+					<pre translate="no">	<ins>private VoxelCell cell = new VoxelCell();</ins>
+
+	public void Initialize (int resolution, float size, float maxFeatureAngle) {
+		<ins>cell.</ins>sharpFeatureLimit = Mathf.Cos(maxFeatureAngle * Mathf.Deg2Rad);
+		&hellip;
+	}</pre>
+					
+					<p>Now we can put all code about finding sharp features into the cell. Ideally these are simply properties that give us a desired feature point, or nothing if it doesn't exist. To facilitate this, create a feature point struct that contains both its position and whether it actually exists.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public struct FeaturePoint {</ins>
+	
+	<ins>public Vector2 position;</ins>
+	
+	<ins>public bool exists;</ins>
+<ins>}</ins></pre>
+					
+					<p>Now we can add convenient properties to <code>VoxelCell</code>. Let's also label the four edges using compass directions, as W is easier to read than AC and so on.</p>
+					
+					<figure>
+						<img src="04-nesw.png" width="150" height="150">
+						<figcaption>Compass labels for edges.</figcaption>
+					</figure>
+					
+					<pre translate="no">	<ins>public FeaturePoint FeatureSW {</ins>
+		<ins>get {</ins>
+			<ins>return GetSharpFeature(</ins>
+				<ins>a.XEdgePoint, a.xNormal, a.YEdgePoint, a.yNormal);</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+	
+	<ins>public FeaturePoint FeatureSE {</ins>
+		<ins>get {</ins>
+			<ins>return GetSharpFeature(</ins>
+				<ins>a.XEdgePoint, a.xNormal, b.YEdgePoint, b.yNormal);</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+	
+	<ins>public FeaturePoint FeatureNW {</ins>
+		<ins>get {</ins>
+			<ins>return GetSharpFeature(</ins>
+				<ins>a.YEdgePoint, a.yNormal, c.XEdgePoint, c.xNormal);</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+	
+	<ins>public FeaturePoint FeatureNE {</ins>
+		<ins>get {</ins>
+			<ins>return GetSharpFeature(</ins>
+				<ins>c.XEdgePoint, c.xNormal, b.YEdgePoint, b.yNormal);</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+	
+	<ins>public FeaturePoint FeatureNS {</ins>
+		<ins>get {</ins>
+			<ins>return GetSharpFeature(</ins>
+				<ins>a.XEdgePoint, a.xNormal, c.XEdgePoint, c.xNormal);</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+	
+	<ins>public FeaturePoint FeatureEW {</ins>
+		<ins>get {</ins>
+			<ins>return GetSharpFeature(</ins>
+				<ins>a.YEdgePoint, a.yNormal, b.YEdgePoint, b.yNormal);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<p>As these properties have to decide whether a feature point exists without any context, we cannot know whether it's fine to clamp them or not. So we simply won't. A feature exist if it's sharp enough and lies inside the cell, otherwise it doesn't. This sacrifices some of the fidelity of our visualization, but simplifies our code.</p>
+					
+					<pre translate="no">	<ins>private FeaturePoint GetSharpFeature (</ins>
+		<ins>Vector2 p1, Vector2 n1, Vector2 p2, Vector2 n2) {</ins>
+
+		<ins>FeaturePoint point;</ins>
+		<ins>if (IsSharpFeature(n1, n2)) {</ins>
+			<ins>point.position = GetIntersection(p1, n1, p2, n2);</ins>
+			<ins>point.exists = Contains(point.position);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>point.position = Vector2.zero;</ins>
+			<ins>point.exists = false;</ins>
+		<ins>}</ins>
+		<ins>return point;</ins>
+	<ins>}</ins></pre>
+					
+					<p>The three methods used here are the same that were previously in <code>VoxelGrid</code>, just moved to <code>VoxelCell</code>.</p>
+					
+					<pre translate="no">	private bool IsSharpFeature (Vector2 n1, Vector2 n2) {
+		float dot = Vector2.Dot(n1, -n2);
+		return dot >= sharpFeatureLimit &amp;&amp; dot &lt; 0.9999f;
+	}
+	
+	private static Vector2 GetIntersection (
+		Vector2 p1, Vector2 n1, Vector2 p2, Vector2 n2) {
+		
+		Vector2 d2 = new Vector2(-n2.y, n2.x);
+		float u2 = -Vector2.Dot(n1, p2 - p1) / Vector2.Dot(n1, d2);
+		return p2 + d2 * u2;
+	}
+
+	private bool IsInsideCell (Vector2 point) {
+		return
+			point.x > a.position.x &amp;& amp;point.y > a.position.y &amp;&amp;
+				point.x &lt; d.position.x &amp;&amp; point.y &lt; d.position.y;
+	}</pre>
+					
+					<a href="ms5-04-formalizing-a-cell.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Filling Cells</h2>
+					
+					<p>Rendering cells with triangles is now the job of the renderers. <code>VoxelGrid</code> still figures out the topology of a cell, then leaves it up to the renderers to fill the cell with walls and surfaces.</p>
+					
+					<p>When working through the topology of a cell, ideally we no longer care whether a certain state is empty or filled. It's convenient to just invoke a filling method for any state. These fill methods then check whether the state is actually filled, and if so forward the request to the appropriate renderer. Otherwise it simply does nothing. Here's such a method for filling an isolated A corner.</p>
+					
+					<pre translate="no">	<ins>private void FillA (FeaturePoint f) {</ins>
+		<ins>if (cell.a.Filled) {</ins>
+			<ins>renderers[cell.a.state].FillA(cell, f);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<p>Passing the cell to <code>VoxelRenderer</code> allows it to figure out whether it needs to place walls. In case of a sharp feature each side needs to be checked separately, because they could have different voxel states. If there is no feature, then both adjacent voxels should have the same state and these separate checks are not needed.</p>
+					
+					<figure>
+						<img src="05-a.png" width="300" height="150">
+						<figcaption>To place or not to place walls for A.</figcaption>
+					</figure>
+					
+					<pre translate="no">	<ins>public void FillA (VoxelCell cell, FeaturePoint f) {</ins>
+		<ins>if (f.exists) {</ins>
+			<ins>surface.AddQuadA(cell.i, f.position);</ins>
+			<ins>if (!cell.c.Filled) {</ins>
+				<ins>wall.AddFromAC(cell.i, f.position);</ins>
+			<ins>}</ins>
+			<ins>if (!cell.b.Filled) {</ins>
+				<ins>wall.AddToAB(cell.i, f.position);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>surface.AddTriangleA(cell.i);</ins>
+			<ins>if (!cell.b.Filled) {</ins>
+				<ins>wall.AddACAB(cell.i);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<p>This means that <code>VoxelGridWall</code> need to support adding sections that go from an edge to a feature point, or from a feature point to an edge. Half sections, if you will.</p>
+					
+					<pre translate="no">	<ins>public void AddFromAB (int i, Vector2 extraVertex) {</ins>
+		<ins>AddHalfSection(xEdgesMin[i], extraVertex);</ins>
+	<ins>}</ins>
+
+	<ins>public void AddToAB (int i, Vector2 extraVertex) {</ins>
+		<ins>AddHalfSection(extraVertex, xEdgesMin[i]);</ins>
+	<ins>}</ins>
+
+	<ins>public void AddFromAC (int i, Vector2 extraVertex) {</ins>
+		<ins>AddHalfSection(yEdgeMin, extraVertex);</ins>
+	<ins>}</ins>
+	
+	<ins>public void AddToAC (int i, Vector2 extraVertex) {</ins>
+		<ins>AddHalfSection(extraVertex, yEdgeMin);</ins>
+	<ins>}</ins>
+
+	<ins>public void AddFromBD (int i, Vector2 extraVertex) {</ins>
+		<ins>AddHalfSection(yEdgeMax, extraVertex);</ins>
+	<ins>}</ins>
+	
+	<ins>public void AddToBD (int i, Vector2 extraVertex) {</ins>
+		<ins>AddHalfSection(extraVertex, yEdgeMax);</ins>
+	<ins>}</ins>
+
+	<ins>public void AddFromCD (int i, Vector2 extraVertex) {</ins>
+		<ins>AddHalfSection(xEdgesMax[i], extraVertex);</ins>
+	<ins>}</ins>
+	
+	<ins>public void AddToCD (int i, Vector2 extraVertex) {</ins>
+		<ins>AddHalfSection(extraVertex, xEdgesMax[i]);</ins>
+	<ins>}</ins></pre>
+					
+					<p>This assumes the existence of two <code>AddHalfSection</code> methods, so add those as well. While we're at it, we can extract the code that constructs a feature point and put that in its own method so we can reuse it.</p>
+					
+					<pre translate="no">	private void AddSection (int a, int b, Vector3 extraPoint) {
+		<ins>AddSection(a, AddPoint(extraPoint, a));</ins>
+		<ins>AddSection(AddPoint(extraPoint, b), b);</ins>
+	}
+
+	<ins>private void AddHalfSection (int a, Vector3 extraPoint) {</ins>
+		<ins>AddSection(a, AddPoint(extraPoint, a));</ins>
+	<ins>}</ins>
+	
+	<ins>private void AddHalfSection (Vector3 extraPoint, int a) {</ins>
+		<ins>AddSection(AddPoint(extraPoint, a), a);</ins>
+	<ins>}</ins>
+
+	<ins>private int AddPoint (Vector3 extraPoint, int normalIndex) {</ins>
+		int p = vertices.Count;
+		extraPoint.z = bottom;
+		vertices.Add(extraPoint);
+		extraPoint.z = top;
+		vertices.Add(extraPoint);
+		Vector3 n = normals[<ins>normalIndex</ins>];
+		normals.Add(n);
+		normals.Add(n);
+		<ins>return p;</ins>
+	}</pre>
+					
+					<p>Let's go ahead and create all the other fill methods too. I won't bother showing the methods for <code>VoxelGrid</code>, as they all have the same simple structure as <code>FillA</code>. Check if the relevant voxel is filled, if so index the renderers array and invoke the method with the same name.</p>
+					
+					<p>On to <code>VoxelRenderer</code>! The other three single-corner methods are slight variations of <code>FillA</code>. I marked the differences.</p>
+					
+					<pre translate="no">public void <ins>FillB</ins> (VoxelCell cell, FeaturePoint f) {
+		if (f.exists) {
+			surface.<ins>AddQuadB</ins>(cell.i, f.position);
+			if (!cell.<ins>a</ins>.Filled) {
+				wall.<ins>AddFromAB</ins>(cell.i, f.position);
+			}
+			if (!cell.<ins>d</ins>.Filled) {
+				wall.<ins>AddToBD</ins>(cell.i, f.position);
+			}
+		}
+		else {
+			surface.<ins>AddTriangleB</ins>(cell.i);
+			if (!cell.<ins>a</ins>.Filled) {
+				wall.<ins>AddABBD</ins>(cell.i);
+			}
+		}
+	}
+	
+	public void <ins>FillC</ins> (VoxelCell cell, FeaturePoint f) {
+		if (f.exists) {
+			surface.<ins>AddQuadC</ins>(cell.i, f.position);
+			if (!cell.<ins>d</ins>.Filled) {
+				wall.<ins>AddFromCD</ins>(cell.i, f.position);
+			}
+			if (!cell.<ins>a</ins>.Filled) {
+				wall.<ins>AddToAC</ins>(cell.i, f.position);
+			}
+		}
+		else {
+			surface.<ins>AddTriangleC</ins>(cell.i);
+			if (!cell.<ins>a</ins>.Filled) {
+				wall.<ins>AddCDAC</ins>(cell.i);
+			}
+		}
+	}
+	
+	public void <ins>FillD</ins> (VoxelCell cell, FeaturePoint f) {
+		if (f.exists) {
+			surface.<ins>AddQuadD</ins>(cell.i, f.position);
+			if (!cell.<ins>b</ins>.Filled) {
+				wall.<ins>AddFromBD</ins>(cell.i, f.position);
+			}
+			if (!cell.<ins>c</ins>.Filled) {
+				wall.<ins>AddToCD</ins>(cell.i, f.position);
+			}
+		}
+		else {
+			surface.<ins>AddTriangleD</ins>(cell.i);
+			if (!cell.<ins>b</ins>.Filled) {
+				wall.<ins>AddBDCD</ins>(cell.i);
+			}
+		}
+	}</pre>
+					
+					<p>Next up are the methods that fill all but one corner. These are simpler because there's only one adjacent state to check. Here's <code>FillABC</code>.</p>
+					
+					<figure>
+						<img src="05-abc.png" width="300" height="150">
+						<figcaption>Wall placement examples for ABC.</figcaption>
+					</figure>
+					
+					<pre translate="no">	<ins>public void FillABC (VoxelCell cell, FeaturePoint f) {</ins>
+		<ins>if (f.exists) {</ins>
+			<ins>surface.AddHexagonABC(cell.i, f.position);</ins>
+			<ins>if (!cell.d.Filled) {</ins>
+				<ins>wall.AddCDBD(cell.i, f.position);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>surface.AddPentagonABC(cell.i);</ins>
+			<ins>if (!cell.d.Filled) {</ins>
+				<ins>wall.AddCDBD(cell.i);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<p>And in the same vein for <code>FillABD</code>, <code>FillACD</code>, and <code>FillBCD</code>.</p>
+					
+					<pre translate="no">	public void <ins>FillABD</ins> (VoxelCell cell, FeaturePoint f) {
+		if (f.exists) {
+			surface.<ins>AddHexagonABD</ins>(cell.i, f.position);
+			if (!cell.<ins>c</ins>.Filled) {
+				wall.<ins>AddACCD</ins>(cell.i, f.position);
+			}
+		}
+		else {
+			surface.<ins>AddPentagonABD</ins>(cell.i);
+			if (!cell.<ins>c</ins>.Filled) {
+				wall.<ins>AddACCD</ins>(cell.i);
+			}
+		}
+	}
+	
+	public void <ins>FillACD</ins> (VoxelCell cell, FeaturePoint f) {
+		if (f.exists) {
+			surface.<ins>AddHexagonACD</ins>(cell.i, f.position);
+			if (!cell.<ins>b</ins>.Filled) {
+				wall.<ins>AddBDAB</ins>(cell.i, f.position);
+			}
+		}
+		else {
+			surface.<ins>AddPentagonACD</ins>(cell.i);
+			if (!cell.<ins>b</ins>.Filled) {
+				wall.<ins>AddBDAB</ins>(cell.i);
+			}
+		}
+	}
+	
+	public void <ins>FillBCD</ins> (VoxelCell cell, FeaturePoint f) {
+		if (f.exists) {
+			surface.<ins>AddHexagonBCD</ins>(cell.i, f.position);
+			if (!cell.<ins>a</ins>.Filled) {
+				wall.<ins>AddABAC</ins>(cell.i, f.position);
+			}
+		}
+		else {
+			surface.<ins>AddPentagonBCD</ins>(cell.i);
+			if (!cell.<ins>a</ins>.Filled) {
+				wall.<ins>AddABAC</ins>(cell.i);
+			}
+		}
+	}</pre>
+					
+					<p>Then straight across a cell. We once again have to check twice whether to place a wall when there's a feature. Here's <code>FillAB</code>.</p>
+					
+					<figure>
+						<img src="05-ab.png" width="300" height="150">
+						<figcaption>Wall placement examples for AB.</figcaption>
+					</figure>
+					
+					<pre translate="no">	<ins>public void FillAB (VoxelCell cell, FeaturePoint f) {</ins>
+		<ins>if (f.exists) {</ins>
+			<ins>surface.AddPentagonAB(cell.i, f.position);</ins>
+			<ins>if (!cell.c.Filled) {</ins>
+				<ins>wall.AddFromAC(cell.i, f.position);</ins>
+			<ins>}</ins>
+			<ins>if (!cell.d.Filled) {</ins>
+				<ins>wall.AddToBD(cell.i, f.position);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>surface.AddQuadAB(cell.i);</ins>
+			<ins>if (!cell.c.Filled) {</ins>
+				<ins>wall.AddACBD(cell.i);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<p>And the same for <code>FillAC</code>, <code>FillBD</code>, and <code>FillCD</code>.</p>
+					
+					<pre translate="no">public void <ins>FillAC</ins> (VoxelCell cell, FeaturePoint f) {
+		if (f.exists) {
+			surface.<ins>AddPentagonAC</ins>(cell.i, f.position);
+			if (!cell.<ins>d</ins>.Filled) {
+				wall.<ins>AddFromCD</ins>(cell.i, f.position);
+			}
+			if (!cell.<ins>b</ins>.Filled) {
+				wall.<ins>AddToAB</ins>(cell.i, f.position);
+			}
+		}
+		else {
+			surface.<ins>AddQuadAC</ins>(cell.i);
+			if (!cell.<ins>b</ins>.Filled) {
+				wall.<ins>AddCDAB</ins>(cell.i);
+			}
+		}
+	}
+	
+	public void <ins>FillBD</ins> (VoxelCell cell, FeaturePoint f) {
+		if (f.exists) {
+			surface.<ins>AddPentagonBD</ins>(cell.i, f.position);
+			if (!cell.<ins>a</ins>.Filled) {
+				wall.<ins>AddFromAB</ins>(cell.i, f.position);
+			}
+			if (!cell.<ins>c</ins>.Filled) {
+				wall.<ins>AddToCD</ins>(cell.i, f.position);
+			}
+		}
+		else {
+			surface.<ins>AddQuadBD</ins>(cell.i);
+			if (!cell.<ins>a</ins>.Filled) {
+				wall.<ins>AddABCD</ins>(cell.i);
+			}
+		}
+	}
+	
+	public void <ins>FillCD</ins> (VoxelCell cell, FeaturePoint f) {
+		if (f.exists) {
+			surface.<ins>AddPentagonCD</ins>(cell.i, f.position);
+			if (!cell.<ins>b</ins>.Filled) {
+				wall.<ins>AddFromBD</ins>(cell.i, f.position);
+			}
+			if (!cell.<ins>a</ins>.Filled) {
+				wall.<ins>AddToAC</ins>(cell.i, f.position);
+			}
+		}
+		else {
+			surface.<ins>AddQuadCD</ins>(cell.i);
+			if (!cell.<ins>a</ins>.Filled) {
+				wall.<ins>AddBDAC</ins>(cell.i);
+			}
+		}
+	}</pre>
+					
+					<p>Then the four halves of diagonal connections. Remember that each of these work on a diagonal slice of a cell. Starting with <code>FillADToB</code>.</p>
+					
+					<figure>
+						<img src="05-ad-to-b.png" width="300" height="150">
+						<figcaption>Wall placement examples for AD to B.</figcaption>
+					</figure>
+					
+					<pre translate="no">	<ins>public void FillADToB (VoxelCell cell, FeaturePoint f) {</ins>
+		<ins>if (f.exists) {</ins>
+			<ins>surface.AddPentagonADToB(cell.i, f.position);</ins>
+			<ins>if (!cell.b.Filled) {</ins>
+				<ins>wall.AddBDAB(cell.i, f.position);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>surface.AddQuadADToB(cell.i);</ins>
+			<ins>if (!cell.b.Filled) {</ins>
+				<ins>wall.AddBDAB(cell.i);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<p>And of course <code>FillADToC</code>, <code>FillBCToA</code>, and <code>FillBCToD</code>.</p>
+					
+					<pre translate="no">public void <ins>FillADToC</ins> (VoxelCell cell, FeaturePoint f) {
+		if (f.exists) {
+			surface.<ins>AddPentagonADToC</ins>(cell.i, f.position);
+			if (!cell.<ins>c</ins>.Filled) {
+				wall.<ins>AddACCD</ins>(cell.i, f.position);
+			}
+		}
+		else {
+			surface.<ins>AddQuadADToC</ins>(cell.i);
+			if (!cell.<ins>c</ins>.Filled) {
+				wall.<ins>AddACCD</ins>(cell.i);
+			}
+		}
+	}
+	
+	public void <ins>FillBCToA</ins> (VoxelCell cell, FeaturePoint f) {
+		if (f.exists) {
+			surface.<ins>AddPentagonBCToA</ins>(cell.i, f.position);
+			if (!cell.<ins>a</ins>.Filled) {
+				wall.<ins>AddABAC</ins>(cell.i, f.position);
+			}
+		}
+		else {
+			surface.<ins>AddQuadBCToA</ins>(cell.i);
+			if (!cell.<ins>a</ins>.Filled) {
+				wall.<ins>AddABAC</ins>(cell.i);
+			}
+		}
+	}
+	
+	public void <ins>FillBCToD</ins> (VoxelCell cell, FeaturePoint f) {
+		if (f.exists) {
+			surface.<ins>AddPentagonBCToD</ins>(cell.i, f.position);
+			if (!cell.<ins>d</ins>.Filled) {
+				wall.<ins>AddCDBD</ins>(cell.i, f.position);
+			}
+		}
+		else {
+			surface.<ins>AddQuadBCToD</ins>(cell.i);
+			if (!cell.<ins>d</ins>.Filled) {
+				wall.<ins>AddCDBD</ins>(cell.i);
+			}
+		}
+	}</pre>
+					
+					<p>The last one is simply a completely filled cell, so no checks are needed.</p>
+					
+					<pre translate="no">	<ins>public void FillABCD (VoxelCell cell) {</ins>
+		<ins>surface.AddQuadABCD(cell.i);</ins>
+	<ins>}</ins></pre>
+					
+					<a href="ms5-05-filling-cells.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Triangulating Anew</h2>
+					
+					<p>When we used only two states we had to identify sixteen different cell layouts. Now that each cell corner can have a unique state, the amount of possible combinations becomes much greater. However, if we ignore the exact colors and only concern ourselves with differences in state, we end up with only fifteen distinct possibilities.</p>
+					
+					<p>Consider corner A as our baseline. From our perspective, it is always the same. We represent it with the digit 0. Next consider corner B. If it has the same state as A, we also use 0 to describe it, otherwise we use the digit 1. We use the same approach for corners C and D, ending up with a four-digit label. The digits represent similarity, not specific material identifiers.</p>
+					
+					<p>For example, when A, B, and D have the same state while C has a different one, we label this case with 0010, regardless what the actual states are.</p>
+					
+					<p>Now suppose A and B have different states, while C ends up with yet another state. Then we use the digit 2 for C. And when all corners are different we need to use the digit 3 for D.</p>
+					
+					<figure>
+						<img src="06-cases.png" width="300" height="380">
+						<figcaption>Fifteen unique cell layouts.</figcaption>
+					</figure>
+					
+					<p>Unfortunately this means that we can no longer easily construct a number from the voxel state, we have to compare all the corners. But before we get to that, <code>VoxelGrid.TriangulateCell</code> should start by filling the cell with the current voxels and index.</p>
+					
+					<pre translate="no">	private void TriangulateCell (int i, Voxel a, Voxel b, Voxel c, Voxel d) {
+		<ins>cell.i = i;</ins>
+		<ins>cell.a = a;</ins>
+		<ins>cell.b = b;</ins>
+		<ins>cell.c = c;</ins>
+		<ins>cell.d = d;</ins>
+	}</pre>
+					
+					<p>Then onwards to comparing voxels! Let's start with case 0000, when they all have the same state. Create method stubs for the new triangulation methods as you go.</p>
+					
+					<pre translate="no">		&hellip;
+		
+		<ins>if (a.state == b.state) {</ins>
+			<ins>if (a.state == c.state) {</ins>
+				<ins>if (a.state == d.state) {</ins>
+					<ins>Triangulate0000();</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+		<ins>}</ins></pre>
+					
+					<p>If D turns out to be different, we have case 0001.</p>
+					
+					<pre translate="no">		if (a.state == b.state) {
+			if (a.state == c.state) {
+				if (a.state == d.state) {
+					Triangulate0000();
+				}
+				<ins>else {</ins>
+					<ins>Triangulate0001();</ins>
+				<ins>}</ins>
+			}
+		}</pre>
+					
+					<p>If C turned out to be not the same as A, then D can match either A, C, or none. That leads us to cases 0010, 0011, and 0012.</p>
+					
+					<pre translate="no">		if (a.state == b.state) {
+			if (a.state == c.state) {
+				&hellip;
+			}
+			<ins>else {</ins>
+				<ins>if (a.state == d.state) {</ins>
+					<ins>Triangulate0010();</ins>
+				<ins>}</ins>
+				<ins>else if (c.state == d.state) {</ins>
+					<ins>Triangulate0011();</ins>
+				<ins>}</ins>
+				<ins>else {</ins>
+					<ins>Triangulate0012();</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+		}</pre>
+					
+					<p>Using the same logic we can arrive at all remaining cases.</p>
+					
+					<pre translate="no">		if (a.state == b.state) {
+			&hellip;
+		}
+		<ins>else {</ins>
+			<ins>if (a.state == c.state) {</ins>
+				<ins>if (a.state == d.state) {</ins>
+					<ins>Triangulate0100();</ins>
+				<ins>}</ins>
+				<ins>else if (b.state == d.state) {</ins>
+					<ins>Triangulate0101();</ins>
+				<ins>}</ins>
+				<ins>else {</ins>
+					<ins>Triangulate0102();</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+			<ins>else if (b.state == c.state) {</ins>
+				<ins>if (a.state == d.state) {</ins>
+					<ins>Triangulate0110();</ins>
+				<ins>}</ins>
+				<ins>else if (b.state == d.state) {</ins>
+					<ins>Triangulate0111();</ins>
+				<ins>}</ins>
+				<ins>else {</ins>
+					<ins>Triangulate0112();</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>if (a.state == d.state) {</ins>
+					<ins>Triangulate0120();</ins>
+				<ins>}</ins>
+				<ins>else if (b.state == d.state) {</ins>
+					<ins>Triangulate0121();</ins>
+				<ins>}</ins>
+				<ins>else if (c.state == d.state) {</ins>
+					<ins>Triangulate0122();</ins>
+				<ins>}</ins>
+				<ins>else {</ins>
+					<ins>Triangulate0123();</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+		<ins>}</ins></pre>
+					
+					<p>Let's first deal with the trivial case, 0000. Simply fill the entire cell.</p>
+					
+					<pre translate="no">	private void Triangulate0000 () {
+		<ins>FillABCD();</ins>
+	}</pre>
+					
+					<figure>
+						<img src="06-uniform.png" width="270" height="240">
+						<figcaption>Multiple colors show up for the first time.</figcaption>
+					</figure>
+					
+					<p>Next up are the cells with a single deviant voxel. Because we don't care about specific voxel states, these are now very easy.</p>
+					
+					<pre translate="no">	private void Triangulate0001 () {
+		<ins>FeaturePoint f = cell.FeatureNE;</ins>
+		<ins>FillABC(f);</ins>
+		<ins>FillD(f);</ins>
+	}
+	
+	private void Triangulate0010 () {
+		<ins>FeaturePoint f = cell.FeatureNW;</ins>
+		<ins>FillABD(f);</ins>
+		<ins>FillC(f);</ins>
+	}
+	
+	private void Triangulate0100 () {
+		<ins>FeaturePoint f = cell.FeatureSE;</ins>
+		<ins>FillACD(f);</ins>
+		<ins>FillB(f);</ins>
+	}
+
+	private void Triangulate0111 () {
+		<ins>FeaturePoint f = cell.FeatureSW;</ins>
+		<ins>FillA(f);</ins>
+		<ins>FillBCD(f);</ins>
+	}</pre>
+					
+					<figure>
+						<img src="06-one-different.png" width="308" height="200">
+						<figcaption>One corner per cell is different.</figcaption>
+					</figure>
+					
+					<p>Partitioning cells in two different sections along the NS or EW lines is also simple.</p>
+					
+					<pre translate="no">	private void Triangulate0011 () {
+		<ins>FeaturePoint f = cell.FeatureEW;</ins>
+		<ins>FillAB(f);</ins>
+		<ins>FillCD(f);</ins>
+	}
+
+	private void Triangulate0101 () {
+		<ins>FeaturePoint f = cell.FeatureNS;</ins>
+		<ins>FillAC(f);</ins>
+		<ins>FillBD(f);</ins>
+	}</pre>
+					
+					<figure>
+						<img src="06-straight-split.png" width="190" height="240">
+						<figcaption>Horizontal and vertical splits.</figcaption>
+					</figure>
+					
+					<p>These were the easy cases, the remaining ones will require some more work.</p>
+					
+					<a href="ms5-06-triangulating-anew.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Working with more than Two States</h2>
+					
+					<p>Let's now consider the cases where two adjacent corners are the same, while the remaining two are different. This means that there are three different voxel states involved. This is still simple from the point of view of <code>VoxelGrid</code>. Just ask the cell for the point where the three edges meet and fill the three parts.</p>
+					
+					<pre translate="no">	private void Triangulate0012 () {
+		<ins>FeaturePoint f = cell.FeatureNEW;</ins>
+		<ins>FillAB(f);</ins>
+		<ins>FillC(f);</ins>
+		<ins>FillD(f);</ins>
+	}
+	
+	private void Triangulate0102 () {
+		<ins>FeaturePoint f = cell.FeatureNSE;</ins>
+		<ins>FillAC(f);</ins>
+		<ins>FillB(f);</ins>
+		<ins>FillD(f);</ins>
+	}
+	
+	private void Triangulate0121 () {
+		<ins>FeaturePoint f = cell.FeatureNSW;</ins>
+		<ins>FillA(f);</ins>
+		<ins>FillBD(f);</ins>
+		<ins>FillC(f);</ins>
+	}
+	
+	private void Triangulate0122 () {
+		<ins>FeaturePoint f = cell.FeatureSEW;</ins>
+		<ins>FillA(f);</ins>
+		<ins>FillB(f);</ins>
+		<ins>FillCD(f);</ins>
+	}</pre>
+					
+					<p>Now it's up to <code>VoxelCell</code> to figure out where these points are. This could get very involved, but let's be pragmatic and simply average the feature points when considering each involved edge pair. As there must be a feature point, if we can't find one, just average the edge crossing positions.</p>
+					
+					<aside>
+						<h3>What about a least-squares approach?</h3>
+						<div>
+							<p>It makes sense to use a quadratic error formula to find a least-squares approximation of the best feature point. This is what is often used in advanced Marching Cubes implementations. The basic least-squares algorithm is not that complex, however it requires high precision to get usable results. You could use double-precision numbers to get around this limitation, but no one ends up doing this because of memory and performance constraints. You can formulate the problem such that you get around the precision limitations, but this involves complex matrix mathematics that would require a dedicated tutorial to explain properly. It's not cheap to compute either.
+						</div>
+					</aside>
+					
+					<figure>
+						<img src="07-find-the-feature.png" width="150" height="150">
+						<figcaption>Where lies the shared feature point?</figcaption>
+					</figure>
+					
+					<pre translate="no">	<ins>public FeaturePoint FeatureNEW {</ins>
+		<ins>get {</ins>
+			<ins>FeaturePoint f = FeaturePoint.Average(</ins>
+				<ins>FeatureEW, FeatureNE, FeatureNW);</ins>
+			<ins>if (!f.exists) {</ins>
+				<ins>f.position = (a.YEdgePoint + b.YEdgePoint + c.XEdgePoint) / 3f;</ins>
+				<ins>f.exists = true;</ins>
+			<ins>}</ins>
+			<ins>return f;</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+	
+	<ins>public FeaturePoint FeatureNSE {</ins>
+		<ins>get {</ins>
+			<ins>FeaturePoint f = FeaturePoint.Average(</ins>
+				<ins>FeatureNS, FeatureSE, FeatureNE);</ins>
+			<ins>if (!f.exists) {</ins>
+				<ins>f.position = (a.XEdgePoint + b.YEdgePoint + c.XEdgePoint) / 3f;</ins>
+				<ins>f.exists = true;</ins>
+			<ins>}</ins>
+			<ins>return f;</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+	
+	<ins>public FeaturePoint FeatureNSW {</ins>
+		<ins>get {</ins>
+			<ins>FeaturePoint f = FeaturePoint.Average(</ins>
+				<ins>FeatureNS, FeatureNW, FeatureSW);</ins>
+			<ins>if (!f.exists) {</ins>
+				<ins>f.position = (a.XEdgePoint + a.YEdgePoint + c.XEdgePoint) / 3f;</ins>
+				<ins>f.exists = true;</ins>
+			<ins>}</ins>
+			<ins>return f;</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+	
+	<ins>public FeaturePoint FeatureSEW {</ins>
+		<ins>get {</ins>
+			<ins>FeaturePoint f = FeaturePoint.Average(</ins>
+				<ins>FeatureEW, FeatureSE, FeatureSW);</ins>
+			<ins>if (!f.exists) {</ins>
+				<ins>f.position = (a.XEdgePoint + a.YEdgePoint + b.YEdgePoint) / 3f;</ins>
+				<ins>f.exists = true;</ins>
+			<ins>}</ins>
+			<ins>return f;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<p>The <code>FeaturePoint.Average</code> method averages the features points, but only those that actually exist. And if none exists, then neither does the average.</p>
+					
+					<pre translate="no">	<ins>public static FeaturePoint Average (</ins>
+		<ins>FeaturePoint a, FeaturePoint b, FeaturePoint c) {</ins>
+		
+		<ins>FeaturePoint average;</ins>
+		<ins>average.position = Vector2.zero;</ins>
+		<ins>float features = 0f;</ins>
+		<ins>if (a.exists) {</ins>
+			<ins>average.position += a.position;</ins>
+			<ins>features += 1f;</ins>
+		<ins>}</ins>
+		<ins>if (b.exists) {</ins>
+			<ins>average.position += b.position;</ins>
+			<ins>features += 1f;</ins>
+		<ins>}</ins>
+		<ins>if (c.exists) {</ins>
+			<ins>average.position += c.position;</ins>
+			<ins>features += 1f;</ins>
+		<ins>}</ins>
+		<ins>if (features > 0f) {</ins>
+			<ins>average.position /= features;</ins>
+			<ins>average.exists = true;</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>average.exists = false;</ins>
+		<ins>}</ins>
+		<ins>return average;</ins>
+	<ins>}</ins></pre>
+					
+					<p>The result of all this is that a single sharp feature will be preserved, two or three sharp features will be averaged, and if we fail to find the right point we use the crossing's average position.</p>
+					
+					<p>However, there is something wrong with this approach. Our feature detection code expects both normals to have the same orientation. Either both point inward, or both point outward. But this will not always be the case if three different voxel states are involved.</p>
+					
+					<figure>
+						<img src="07-need-to-flip.png" width="150" height="150">
+						<figcaption>Corner C is in trouble.</figcaption>
+					</figure>
+					
+					<p>For each feature point we need to check whether the normals are consistent, and if not flip one of them to correct this. While we could do this every time we compute a feature point, it is only really needed for the more complex feature points. So let's duplicate the unchecked public properties and turn those into private checked ones for internal usage.</p>
+					
+					<pre translate="no">	private FeaturePoint <ins>CheckedFeatureSW</ins> {
+		get {
+			<ins>Vector2 n2 = (a.state &lt; b.state) == (a.state &lt; c.state) ?</ins>
+				<ins>a.yNormal : -a.yNormal;</ins>
+			return GetSharpFeature(a.XEdgePoint, a.xNormal, a.YEdgePoint, <ins>n2</ins>);
+		}
+	}
+	
+	private FeaturePoint <ins>CheckedFeatureSE</ins> {
+		get {
+			<ins>Vector2 n2 = (b.state &lt; a.state) == (b.state &lt; c.state) ?</ins>
+				<ins>b.yNormal : -b.yNormal;</ins>
+			return GetSharpFeature(a.XEdgePoint, a.xNormal, b.YEdgePoint, <ins>n2</ins>);
+		}
+	}
+	
+	private FeaturePoint <ins>CheckedFeatureNW</ins> {
+		get {
+			<ins>Vector2 n2 = (c.state &lt; a.state) == (c.state &lt; d.state) ?</ins>
+				<ins>c.xNormal : -c.xNormal;</ins>
+			return GetSharpFeature(a.YEdgePoint, a.yNormal, c.XEdgePoint, <ins>n2</ins>);
+		}
+	}
+	
+	private FeaturePoint <ins>CheckedFeatureNE</ins> {
+		get {
+			<ins>Vector2 n2 = (d.state &lt; b.state) == (d.state &lt; c.state) ?</ins>
+				<ins>b.yNormal : -b.yNormal;</ins>
+			return GetSharpFeature(c.XEdgePoint, c.xNormal, b.YEdgePoint, <ins>n2</ins>);
+		}
+	}
+	
+	private FeaturePoint <ins>CheckedFeatureNS</ins> {
+		get {
+			<ins>Vector2 n2 = (a.state &lt; b.state) == (c.state &lt; d.state) ?</ins>
+				<ins>c.xNormal : -c.xNormal;</ins>
+			return GetSharpFeature(a.XEdgePoint, a.xNormal, c.XEdgePoint, <ins>n2</ins>);
+		}
+	}</pre>
+					
+					<p>Now use these checked properties in the triple-edge feature properties. I only show the changes to <code>FeatureNEW</code>.</p>
+					
+					<pre translate="no">	public FeaturePoint FeatureNEW {
+		get {
+			FeaturePoint f = FeaturePoint.Average(
+				<ins>CheckedFeatureEW</ins>, <ins>CheckedFeatureNE</ins>, <ins>CheckedFeatureNW</ins>);
+			if (!f.exists) {
+				f.position = (a.YEdgePoint + b.YEdgePoint + c.XEdgePoint) / 3f;
+				f.exists = true;
+			}
+			return f;
+		}
+	}</pre>
+					
+					<figure>
+						<img alt="correct" src="07-feature-correct.png" width="110" height="110">
+						<img alt="incorrect" src="07-feature-incorrect.png" width="110" height="110">
+						<figcaption>Correct vs. incorrect feature placement.</figcaption>
+					</figure>
+					
+					<a href="ms5-07-working-with-more-than-two-states.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Revisiting the Ambiguous Cases</h2>
+					
+					<p><code>VoxelGrid.Triangulate0110</code> covers the diagonal cell configuration when there are exactly two different voxel states involved. Let's first only consider the AD connection. Start by requesting all feature points, then determine if there is a diagonal connection, and if so only include features that don't cross the diagonal.</p>
+					
+					<pre translate="no">	private void Triangulate0110 () {
+		<ins>FeaturePoint</ins>
+			<ins>fA = cell.FeatureSW, fB = cell.FeatureSE,</ins>
+			<ins>fC = cell.FeatureNW, fD = cell.FeatureNE;</ins>
+		
+		<ins>if (cell.HasConnectionAD(fA, fD)) {</ins>
+			<ins>fB.exists &amp;= cell.IsInsideABD(fB.position);</ins>
+			<ins>fC.exists &amp;= cell.IsInsideACD(fC.position);</ins>
+			<ins>FillADToB(fB);</ins>
+			<ins>FillADToC(fC);</ins>
+			<ins>FillB(fB);</ins>
+			<ins>FillC(fC);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<p>The logic of the new methods for <code>VoxelCell</code> come from the old grid, updated to take advantage of the new feature points.</p>
+					
+					<pre translate="no">	<ins>public bool HasConnectionAD (FeaturePoint fA, FeaturePoint fD) {</ins>
+		<ins>if (fA.exists) {</ins>
+			<ins>if (fD.exists) {</ins>
+				<ins>if (IsBelowLine(fA.position, b.YEdgePoint, fD.position)) {</ins>
+					<ins>if (IsBelowLine(fA.position, fD.position, c.XEdgePoint) ||</ins>
+					    <ins>IsBelowLine(fD.position, fA.position, a.XEdgePoint)) {</ins>
+						<ins>return true;</ins>
+					<ins>}</ins>
+				<ins>}</ins>
+				<ins>else if (IsBelowLine(fA.position, fD.position, c.XEdgePoint) &amp;&amp;</ins>
+				         <ins>IsBelowLine(fD.position, a.YEdgePoint, fA.position)) {</ins>
+					<ins>return true;</ins>
+				<ins>}</ins>
+				<ins>return false;</ins>
+			<ins>}</ins>
+			<ins>return IsBelowLine(fA.position, b.YEdgePoint, c.XEdgePoint);</ins>
+		<ins>}</ins>
+		<ins>return fD.exists &amp;&amp;</ins>
+			<ins>IsBelowLine(fD.position, a.YEdgePoint, a.XEdgePoint);</ins>
+	<ins>}</ins>
+	
+	<ins>public bool IsInsideABD (Vector2 point) {</ins>
+		<ins>return IsBelowLine(point, a.position, d.position);</ins>
+	<ins>}</ins>
+
+	<ins>public bool IsInsideACD (Vector2 point) {</ins>
+		<ins>return IsBelowLine(point, d.position, a.position);</ins>
+	<ins>}</ins>
+	
+	<ins>private static bool IsBelowLine (Vector2 p, Vector2 start, Vector2 end) {</ins>
+		<ins>float determinant =</ins>
+			<ins>(end.x - start.x) * (p.y - start.y) -</ins>
+				<ins>(end.y - start.y) * (p.x - start.x);</ins>
+		<ins>return determinant &lt; 0f;</ins>
+	<ins>}</ins></pre>
+					
+					<figure>
+						<img src="08-ad.png" width="150" height="130">
+						<figcaption>Diagonal connection along AD.</figcaption>
+					</figure>
+					
+					<p>Now to support the other diagonal as well. Adding it to <code>VoxelGrid.Triangulate0110</code> is simple.</p>
+					
+					<pre translate="no">	private void Triangulate0110 () {
+		FeaturePoint
+			fA = cell.FeatureSW, fB = cell.FeatureSE,
+			fC = cell.FeatureNW, fD = cell.FeatureNE;
+		
+		if (cell.HasConnectionAD(fA, fD)) {
+			&hellip;
+		}
+		<ins>else if (cell.HasConnectionBC(fB, fC)) {</ins>
+			<ins>fA.exists &amp;= cell.IsInsideABC(fA.position);</ins>
+			<ins>fD.exists &amp;= cell.IsInsideBCD(fD.position);</ins>
+			<ins>FillA(fA);</ins>
+			<ins>FillD(fD);</ins>
+			<ins>FillBCToA(fA);</ins>
+			<ins>FillBCToD(fD);</ins>
+		<ins>}</ins>
+	}</pre>
+					
+					<p><code>VoxelCell</code> has to do all the hard work.</p>
+					
+					<pre translate="no"><ins>public bool HasConnectionBC (FeaturePoint fB, FeaturePoint fC) {</ins>
+		<ins>if (fB.exists) {</ins>
+			<ins>if (fC.exists) {</ins>
+				<ins>if (IsBelowLine(fC.position, a.XEdgePoint, fB.position)) {</ins>
+					<ins>if (IsBelowLine(fC.position, fB.position, b.YEdgePoint) ||</ins>
+					    <ins>IsBelowLine(fB.position, fC.position, a.YEdgePoint)) {</ins>
+						<ins>return true;</ins>
+					<ins>}</ins>
+				<ins>}</ins>
+				<ins>else if (IsBelowLine(fC.position, fB.position, b.YEdgePoint) &amp;&amp;</ins>
+				         <ins>IsBelowLine(fB.position, c.XEdgePoint, fC.position)) {</ins>
+					<ins>return true;</ins>
+				<ins>}</ins>
+				<ins>return false;</ins>
+			<ins>}</ins>
+			<ins>return IsBelowLine(fB.position, c.XEdgePoint, a.YEdgePoint);</ins>
+		<ins>}</ins>
+		<ins>return fC.exists &amp;&amp;</ins>
+			<ins>IsBelowLine(fC.position, a.XEdgePoint, b.YEdgePoint);</ins>
+	<ins>}</ins>
+	
+	<ins>public bool IsInsideABC (Vector2 point) {</ins>
+		<ins>return IsBelowLine(point, c.position, b.position);</ins>
+	<ins>}</ins>
+
+	<ins>public bool IsInsideBCD (Vector2 point) {</ins>
+		<ins>return IsBelowLine(point, b.position, c.position);</ins>
+	<ins>}</ins></pre>
+					
+					<p>What we do when we find no diagonal connection depends on whether one of the voxel states is the empty one. If all voxels are filled, then they have to share a central feature point. If one of the voxel pairs is empty, then the other two can exist independent of each other, forming an opening.</p>
+					
+					<pre translate="no">	private void Triangulate0110 () {
+		FeaturePoint
+			fA = cell.FeatureSW, fB = cell.FeatureSE,
+			fC = cell.FeatureNW, fD = cell.FeatureNE;
+		
+		if (cell.HasConnectionAD(fA, fD)) {
+			&hellip;
+		}
+		else if (cell.HasConnectionBC(fB, fC)) {
+			&hellip;
+		}
+		<ins>else if (cell.a.Filled &amp;&amp; cell.b.Filled) {</ins>
+			<ins>FillJoinedCorners(fA, fB, fC, fD);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>FillA(fA);</ins>
+			<ins>FillB(fB);</ins>
+			<ins>FillC(fC);</ins>
+			<ins>FillD(fD);</ins>
+		<ins>}</ins>
+	}</pre>
+					
+					<p>Filling the joined corners requires averaging all four feature points. And if none exist, we have to settle for the average of the four edge crossing positions of the cell.</p>
+					
+					<pre translate="no">	<ins>private void FillJoinedCorners (</ins>
+		<ins>FeaturePoint fA, FeaturePoint fB, FeaturePoint fC, FeaturePoint fD) {</ins>
+		
+		<ins>FeaturePoint point = FeaturePoint.Average(fA, fB, fC, fD);</ins>
+		<ins>if (!point.exists) {</ins>
+			<ins>point.position = cell.AverageNESW;</ins>
+			<ins>point.exists = true;</ins>
+		<ins>}</ins>
+		<ins>FillA(point);</ins>
+		<ins>FillB(point);</ins>
+		<ins>FillC(point);</ins>
+		<ins>FillD(point);</ins>
+	<ins>}</ins></pre>
+					
+					<p>This requires an additional <code>FeaturePoint.Average</code> method which works with four feature points instead of three. As this is a very simple change I leave it up to you to add it.</p>
+					
+					<p>We also need a new property for <code>VoxelCell</code> which simply averages the four edge positions.</p>
+					
+					<pre translate="no">	<ins>public Vector2 AverageNESW {</ins>
+		<ins>get {</ins>
+			<ins>return (a.XEdgePoint + a.YEdgePoint +</ins>
+			        <ins>b.YEdgePoint + c.XEdgePoint) * 0.25f;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+					
+					<figure>
+						<img src="08-diagonals.png" width="420" height="234">
+						<figcaption>Diagonal connections and passages.</figcaption>
+					</figure>
+					
+					<a href="ms5-08-revisiting-the-ambiguous-cases.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Drawing better Circles</h2>
+					
+					<p>While we're working on diagonals, let's improve circles. The detection of connections formed by narrow circles fails because the edges are nearly parallel and feature points end up racing to infinity in either positive or negative direction. This wasn't so bad when we still clamped feature points, but without this trick they always fall apart.</p>
+					
+					<figure>
+						<img src="09-bad-circles.png" width="310" height="250">
+						<figcaption>Bad circles.</figcaption>
+					</figure>
+					
+					<p>A possible solution is to add a threshold to decide whether lines are parallel. Of course we make this configurable. First add maximum angle setting to <code>VoxelMap</code>, with a default of five degrees.</p>
+					
+					<pre translate="no">	public float maxFeatureAngle = 135f<ins>, maxParallelAngle = 5f</ins>;</pre>
+					
+					<figure>
+						<img src="09-max-parallel-angle.png" width="320" height="180">
+						<figcaption>Setting a maximum parallel angle.</figcaption>
+					</figure>
+					
+					<p>Just like the maximum feature angle, we pass it to the grids when we initialize them.</p>
+					
+					<pre translate="no">	private void CreateChunk (int i, int x, int y) {
+		VoxelGrid chunk = Instantiate(voxelGridPrefab) as VoxelGrid;
+		chunk.Initialize(
+			voxelResolution, chunkSize, maxFeatureAngle<ins>, maxParallelAngle</ins>);
+		&hellip;
+	}</pre>
+					
+					<p>Then <code>VoxelGrid</code> computes the cosine and stores it in its <code>VoxelCell</code> as the parallel limit.</p>
+					
+					<pre translate="no">	public void Initialize (
+		int resolution, float size,
+		float maxFeatureAngle<ins>, float maxParallelAngle</ins>) {
+
+		cell.sharpFeatureLimit = Mathf.Cos(maxFeatureAngle * Mathf.Deg2Rad);
+		<ins>cell.parallelLimit = Mathf.Cos(maxParallelAngle * Mathf.Deg2Rad);</ins>
+		&hellip;
+	}</pre>
+					
+					<p><code>VoxelCell</code> can them figure out if two normals belong to parallel lines. As we perform this test for diagonal connections and those can end up with inconsistent normals, let's tell the method whether a normal should be flipped or not.</p>
+					
+					<pre translate="no">	public float sharpFeatureLimit<ins>, parallelLimit</ins>;
+					
+	<ins>private bool IsParallel (Vector2 n1, Vector2 n2, bool flip) {</ins>
+		<ins>return Vector2.Dot(n1, flip ? -n2 : n2) > parallelLimit;</ins>
+	<ins>}</ins></pre>
+					
+					<p>Now we can check for a parallel connection first whenever we're asked to look for a diagonal connection.</p>
+					
+					<pre translate="no">	public bool HasConnectionAD (FeaturePoint fA, FeaturePoint fD) {
+		<ins>bool flip = (a.state &lt; b.state) == (a.state &lt; c.state);</ins>
+		<ins>if (</ins>
+			<ins>IsParallel(a.xNormal, a.yNormal, flip) ||</ins>
+			<ins>IsParallel(c.xNormal, b.yNormal, flip)) {</ins>
+			<ins>return true;</ins>
+		<ins>}</ins>
+		&hellip;
+	}
+	
+	public bool HasConnectionBC (FeaturePoint fB, FeaturePoint fC) {
+		<ins>bool flip = (b.state &lt; a.state) == (b.state &lt; d.state);</ins>
+		<ins>if (</ins>
+			<ins>IsParallel(a.xNormal, b.yNormal, flip) ||</ins>
+			<ins>IsParallel(c.xNormal, a.yNormal, flip)) {</ins>
+			<ins>return true;</ins>
+		<ins>}</ins>
+		&hellip;
+	}</pre>
+					
+					<figure>
+						<img src="09-good-circles.png" width="310" height="250">
+						<figcaption>Good circles.</figcaption>
+					</figure>
+					
+					<a href="ms5-09-drawing-better-circles.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Covering the Last Cases</h2>
+					
+					<p>Back to <code>VoxelGrid</code>, cases 0112 and 0120 cover diagonals with two different voxel states on either side. Because diagonally connecting two voxels with different states doesn't really work, these methods are actually about half as complex as when only two different voxel states are involved.</p>
+					
+					<pre translate="no">	private void Triangulate0112 () {
+		<ins>FeaturePoint</ins>
+			<ins>fA = cell.FeatureSW, fB = cell.FeatureSE,</ins>
+			<ins>fC = cell.FeatureNW, fD = cell.FeatureNE;</ins>
+		
+		<ins>if (cell.HasConnectionBC(fB, fC)) {</ins>
+			<ins>fA.exists &amp;= cell.IsInsideABC(fA.position);</ins>
+			<ins>fD.exists &amp;= cell.IsInsideBCD(fD.position);</ins>
+			<ins>FillA(fA);</ins>
+			<ins>FillD(fD);</ins>
+			<ins>FillBCToA(fA);</ins>
+			<ins>FillBCToD(fD);</ins>
+		<ins>}</ins>
+		<ins>else if (cell.b.Filled || cell.HasConnectionAD(fA, fD)) {</ins>
+			<ins>FillJoinedCorners(fA, fB, fC, fD);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>FillA(fA);</ins>
+			<ins>FillD(fD);</ins>
+		<ins>}</ins>
+	}
+	
+	private void Triangulate0120 () {
+		<ins>FeaturePoint</ins>
+			<ins>fA = cell.FeatureSW, fB = cell.FeatureSE,</ins>
+			<ins>fC = cell.FeatureNW, fD = cell.FeatureNE;</ins>
+		
+		<ins>if (cell.HasConnectionAD(fA, fD)) {</ins>
+			<ins>fB.exists &amp;= cell.IsInsideABD(fB.position);</ins>
+			<ins>fC.exists &amp;= cell.IsInsideACD(fC.position);</ins>
+			<ins>FillADToB(fB);</ins>
+			<ins>FillADToC(fC);</ins>
+			<ins>FillB(fB);</ins>
+			<ins>FillC(fC);</ins>
+		<ins>}</ins>
+		<ins>else if (cell.a.Filled || cell.HasConnectionBC(fB, fC)) {</ins>
+			<ins>FillJoinedCorners(fA, fB, fC, fD);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>FillB(fB);</ins>
+			<ins>FillC(fC);</ins>
+		<ins>}</ins>
+	}</pre>
+					
+					<figure>
+						<img src="10-mixed-diagonals.png" width="160" height="160">
+						<figcaption>Different states along diagonals.</figcaption>
+					</figure>
+					
+					<p>The last case is 0123, the only one that has four different voxel states in it. Fortunately this is simply another job for <code>FillJoinedCorners</code>.</p>
+					
+					<pre translate="no">	private void Triangulate0123 () {
+		<ins>FillJoinedCorners(</ins>
+			<ins>cell.FeatureSW, cell.FeatureSE,</ins>
+			<ins>cell.FeatureNW, cell.FeatureNE);</ins>
+	}</pre>
+					
+					<figure>
+						<img src="10-fully-multicolored.png" width="370" height="330">
+						<figcaption>Full support for multiple colors.</figcaption>
+					</figure>
+					
+					<p>I hope you enjoyed this tutorial series about Marching Squares. There is still much more that could be covered about this subject, but a reasonable foundation has been laid. What you do with it is up to you!</p>
+					
+					<a href="ms5-10-covering-the-last-cases.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Marching-Squares-5.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../index.html">tutorials</a>? Are they useful?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../tutorials.js"></script>
+	</body>
+</html>

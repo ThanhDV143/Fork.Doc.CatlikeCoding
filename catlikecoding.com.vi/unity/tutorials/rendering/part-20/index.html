@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/rendering/part-20/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/rendering/part-20/tutorial-image.jpg">
+		<meta property="og:title" content="Rendering 20">
+		<meta property="og:description" content="A Unity Rendering tutorial about supporting parallax mapping. Part 20 of 20.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Rendering 20</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/rendering/part-20/#article",
+				"headline": "Rendering 20",
+				"alternativeHeadline": "Parallax",
+				"datePublished": "2017-09-30",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Rendering tutorial about supporting parallax mapping. Part 20 of 20.",
+				"image": "https://catlikecoding.com/unity/tutorials/rendering/part-20/tutorial-image.jpg",
+				"dependencies": "Unity 2017.1.0f3",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/rendering/", "name": "Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				DeferredFogEffect: 1,
+				EmissiveOscillator: 1,
+				GPUInstancingTest: 1,
+				MyLightingShaderGUI: 1,
+				RenderingMode: 1,
+				RenderingSettings: 1,
+				SmoothnessSource: 1,
+				TangentSpaceVisualizer: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Rendering 20</h1>
+					<p>Parallax</p>
+					<ul>
+						<li>Shift texture coordinates based on view direction.</li>
+						<li>Use a height field to create the illusion of depth.</li>
+						<li>Trace a ray through a height field.</li>
+						<li>Approximate or search for an intersection point.</li>
+					</ul>
+				</header>
+
+				<p>This is part 20 of a tutorial series about rendering. The <a href="../part-19/index.html">previous part</a> covered GPU instancing. In this installment we'll add the final part of the standard shader that we so far didn't support, which is parallax mapping.</p>
+				
+				<p>This tutorial was made with Unity 2017.1.0f3.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A single quad, up close.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Parallax Mapping</h2>
+					
+					<p>Due to perspective, the observed relative position of things that we see changes when we adjust our point of view. This visual phenomenon is known as parallax. It is most obvious when looking sideways when traveling at a high speed. Nearby things appear large and move by quickly, while the distant background appears small and moves slower.</p>
+					
+					<p>We already account for perspective when rendering, at least when using a camera in perspective mode. Thus, geometry exhibits parallax.</p>
+					
+					<p>We also use normal maps to add the illusion of surface irregularities to smooth triangles. This affects the lighting, but not the actual shape of the surface. Thus, this effect does not exhibit parallax. This limits the illusion of depth that we can add via normal maps.</p>
+					
+					<section>
+						<h3>Test Scene</h3>
+						
+						<p>Below is an albedo map and normal map that suggest many elevation differences.</p>
+						
+						<figure>
+							<img alt="albedo" src="parallax-mapping/parallax-albedo.png" width="256" height="256">
+							<img alt="normals" src="parallax-mapping/parallax-normals.png" width="256" height="256">
+							<figcaption>Albedo and normal maps.</figcaption>
+						</figure>
+						
+						<p>Import these textures, then create a material that uses them and <em translate="no">My First Lighting Shader</em>. Create a new scene with a single quad, rotated (90, 0, 0) so it lies flat, and give it the material.</p>
+						
+						<figure>
+							<img alt="without" src="parallax-mapping/quad-albedo.png" width="390" height="130">
+							<img alt="with" src="parallax-mapping/quad-albedo-normals.png" width="390" height="130">
+							<figcaption>Quad without and with normal map.</figcaption>
+						</figure>
+						
+						<p>Without the normal map, the quad is obviously flat. Adding a normal map makes it look as if it has an irregular surface. However, the elevation differences appear small. This becomes evident when observing the quad from a shallow view angle. Were the elevation differences large, the relative visual position of surface features should change a lot due to parallax, but they don't. The parallax that we see is that of a flat surface.</p>
+						
+						<figure>
+							<img src="parallax-mapping/quad-shallow.png" width="350" height="140">
+							<figcaption>Shallow view angle.</figcaption>
+						</figure>
+						
+						<p>We could increase the strength of the normal map, but this doesn't change the parallax. Also, when the normal map becomes too strong it will just look weird. The lighting suggests steep slopes, while the parallax tells us it's flat. So normal maps only work for small variations that wouldn't exhibit obvious parallax.</p>
+						
+						<figure>
+							<img src="parallax-mapping/strong-normals.png" width="350" height="140">
+							<figcaption>Strong normals, still flat.</figcaption>
+						</figure>
+						
+						<p>To get a true sense of depth, we first need to determine how much depth there should be. Normal maps don't contain this information. So we need a height map. With that, we might be able to create fake parallax, like we create fake slopes. Below is such a map for our material. It is grayscale, with black representing the lowest points and white representing the highest points. Because we'll use this map to create a parallax effect, it's often known as a parallax map instead of a height map.</p>
+						
+						<figure>
+							<img src="parallax-mapping/parallax-heights.png" width="256" height="256">
+							<figcaption>Height map for parallax.</figcaption>
+						</figure>
+						
+						<p>Make sure to disable <em translate="no">sRGB (Color Texture)</em> when importing it, so the data doesn't get messed up when using linear rendering.</p>
+					</section>
+					
+					<section>
+						<h3>Parallax Shader Parameters</h3>
+						
+						<p>To be able to use the parallax map, we have to add a property for it to <em translate="no">My First Lighting Shader</em>. Just like for occlusion, we'll also give it a strength parameter to scale the effect. Because parallax effects are rather strong, we'll set its range to 0&ndash;0.1.</p>
+						
+						<pre translate="no" class="shader">		<ins>[NoScaleOffset] _ParallaxMap ("Parallax", 2D) = "black" {}</ins>
+		<ins>_ParallaxStrength ("Parallax Strength", Range(0, 0.1)) = 0</ins>
+
+		[NoScaleOffset] _OcclusionMap ("Occlusion", 2D) = "white" {}
+		_OcclusionStrength ("Occlusion Strength", Range(0, 1)) = 1</pre>
+						
+						<p>Parallax mapping is a shader feature that we'll enable with the <em translate="no">_PARALLAX_MAP</em> keyword. Add the required compiler directive to the base pass, the additive pass, and the deferred pass.</p>
+						
+												<pre translate="no" class="shader">			#pragma shader_feature _NORMAL_MAP
+			<ins>#pragma shader_feature _PARALLAX_MAP</ins></pre>
+						
+						<aside>
+							<h3>Doesn't the shadowcaster pass need parallax as well?</h3>
+							<div>
+								<p>Our parallax effect will affect textures. Textures only affect shadows when the opacity in the alpha channel of the albedo map is used. It is rare that this is done in combination with parallax mapping. And even when it is, the parallax effects in shadows maps will be hardly noticeable. So it's usually not worth the extra computation time. But if you want to, you can add it to the shadowcaster pass as well and adjust <em translate="no">My Shadows</em> accordingly.</p>
+							</div>
+						</aside>
+						
+						<p>To access the new properties, add the corresponding variables to <em translate="no">My Lighting</em>.</p>
+						
+						<pre translate="no" class="shader"><ins>sampler2D _ParallaxMap;</ins>
+<ins>float _ParallaxStrength;</ins>
+
+sampler2D _OcclusionMap;
+float _OcclusionStrength;</pre>
+						
+						<p>And to make it possible to configure the material, add a <code>DoParallax</code> method to <code>MyLightingShaderGUI</code>. You can duplicate its <code>DoOcclusion</code> method and change the property names, label, and keyword. Like the occlusion map, Unity's standard shader expects the height data to be stored in the texture's G channel. So we'll do this as well and indicate this in the tooltip.</p>
+						
+						<pre translate="no">	void <ins>DoParallax</ins> () {
+		MaterialProperty map = FindProperty(<ins>"_ParallaxMap"</ins>);
+		Texture tex = map.textureValue;
+		EditorGUI.BeginChangeCheck();
+		editor.TexturePropertySingleLine(
+			MakeLabel(map, <ins>"Parallax (G)"</ins>), map,
+			tex ? FindProperty(<ins>"_ParallaxStrength"</ins>) : null
+		);
+		if (EditorGUI.EndChangeCheck() &amp;&amp; tex != map.textureValue) {
+			SetKeyword(<ins>"_PARALLAX_MAP"</ins>, map.textureValue);
+		}
+	}</pre>
+						
+						<p>Invoke the new method in <code>DoMain</code>, between <code>DoNormals</code> and <code>DoOcclusion</code>.</p>
+						
+						<pre translate="no">	void DoMain () {
+		&hellip;
+		DoNormals();
+		<ins>DoParallax();</ins>
+		DoOcclusion();
+		&hellip;
+	}</pre>
+						
+						<p>It is now possible to assign a parallax map to our material. After doing so, set its strength to a low value, like 0.03.</p>
+						
+						<figure>
+							<img src="parallax-mapping/material-inspector.png" width="320" height="176">
+							<figcaption>Material with parallax properties.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Adjusting Texture Coordinates</h3>
+						
+						<p>To apply a parallax effect, we have to make parts of the surface appear to be somewhere else. This is done by adjust the texture coordinates in the fragment program. Create an <code class="shader">ApplyParallax</code> function for that somewhere above <code class="shader">MyFragmentProgram</code> in <em translate="no">My Lighting</em>. This function is going to adjust the interpolated data when needed, so give it an <code class="shader">inout Interpolators</code> parameter.</p>
+						
+						<pre translate="no" class="shader"><ins>void ApplyParallax (inout Interpolators i) {</ins>
+<ins>}</ins></pre>
+						
+						<p><code class="shader">ApplyParallax</code> should be invoked in our fragment program before the interpolated data is used. The exception is LOD fading, because that depends on the screen position. We're not going to adjust those coordinates.</p>
+						
+						<pre translate="no" class="shader">FragmentOutput MyFragmentProgram (Interpolators i) {
+	UNITY_SETUP_INSTANCE_ID(i);
+	#if defined(LOD_FADE_CROSSFADE)
+		UnityApplyDitherCrossFade(i.vpos);
+	#endif
+	
+	<ins>ApplyParallax(i);</ins>
+
+	float alpha = GetAlpha(i);
+	#if defined(_RENDERING_CUTOUT)
+		clip(alpha - _Cutoff);
+	#endif
+
+	&hellip;
+}</pre>
+						
+						<p>Let's begin by adjusting the texture coordinates by simply adding the parallax strength to the U coordinate. Only do this when the parallax feature is enabled.</p>
+						
+						<pre translate="no" class="shader">void ApplyParallax (inout Interpolators i) {
+	<ins>#if defined(_PARALLAX_MAP)</ins>
+		<ins>i.uv.x += _ParallaxStrength;</ins>
+	<ins>#endif</ins>
+}</pre>
+						
+						<figure>
+							<video width="320" height="141" controls loop muted>
+								<source src="parallax-mapping/shifting-u-coordinates.mp4" type="video/mp4">
+							</video>
+							<figcaption>Shifting U Coordinates.</figcaption>
+						</figure>
+						
+						<p>Changing the parallax strength now causes the texture to scroll. Increasing the U coordinates moves the texture in the negative U direction. This doesn't look like a parallax effect yet, because it's a uniform displacement, and it's independent of the point of view.</p>
+					</section>
+					
+					<section>
+						<h3>Shifting Along View Direction</h3>
+						
+						<p>Parallax is caused by perspective projection, which is relative to the observer. So we have to shift the texture coordinates with that in mind. What this means is that we have to shift the coordinates based on the view direction, which is different for each fragment.</p>
+						
+						<figure>
+							<img src="parallax-mapping/view-directions.png" width="330" height="230">
+							<figcaption>View direction varies across a surface.</figcaption>
+						</figure>
+						
+						<p>Texture coordinates exist in tangent space. To adjust these coordinates, we need to know the view direction in tangent space as well. This will require a space conversion, which means a matrix multiplication. We already have a tangent-space matrix available in the fragment shader, but that one is for converting from tangent to world space. In this case, we need to transform in the other direction. We could pass another matrix to the fragment program and use it there, but that's getting costly.</p>
+						
+						<p>The view direction is defined as the vector from the surface to the camera, normalized. We can determine this vector in the vertex program, convert it there, and pass it to the fragment program. It we postpone normalization until after interpolation, we end up with the correct direction. Then we only have to add the tangent-space view direction as a new interpolator.</p>
+						
+						<pre translate="no" class="shader">struct InterpolatorsVertex {
+	&hellip;
+
+	<ins>#if defined(_PARALLAX_MAP)</ins>
+		<ins>float3 tangentViewDir : TEXCOORD8;</ins>
+	<ins>#endif</ins>
+};
+
+struct Interpolators {
+	&hellip;
+
+	<ins>#if defined(_PARALLAX_MAP)</ins>
+		<ins>float3 tangentViewDir : TEXCOORD8;</ins>
+	<ins>#endif</ins>
+};</pre>
+						
+						<aside>
+							<h3>Do we have room for a ninth interpolator?</h3>
+							<div>
+								<p>When targeting shader model 3, yes. Below that, we're limited to only eight general-purpose high-precision interpolators. As we're targeting model 3, we can use <code class="shader">TEXCOORD8</code>. Hardware that doesn't support this is generally not very powerful, so you wouldn't want to use parallax mapping anyway.</p>
+							</div>
+						</aside>
+						
+						<p>We can create an object-to-tangent space transformation matrix in the vertex program, using the raw vertex tangent and normal vectors from the mesh data. As we only use it for transforming a vector &ndash; not a position &ndash; we can suffice with a 3&times;3 matrix.</p>
+						
+						<pre translate="no" class="shader">InterpolatorsVertex MyVertexProgram (VertexData v) {
+	&hellip;
+
+	ComputeVertexLightColor(i);
+
+	<ins>#if defined (_PARALLAX_MAP)</ins>
+		<ins>float3x3 objectToTangent = float3x3(</ins>
+			<ins>v.tangent.xyz,</ins>
+			<ins>cross(v.normal, v.tangent.xyz) * v.tangent.w,</ins>
+			<ins>v.normal</ins>
+		<ins>);</ins>
+	<ins>#endif</ins>
+
+	return i;
+}</pre>
+						
+						<p>Next, we need the view direction to the vertex position in object space, for which we can use the <code class="shader">ObjSpaceViewDir</code> function. Transform that using our matrix, and we have what we need.</p>
+						
+						<pre translate="no" class="shader">	#if defined (_PARALLAX_MAP)
+		float3x3 objectToTangent = float3x3(
+			v.tangent.xyz,
+			cross(v.normal, v.tangent.xyz) * v.tangent.w,
+			v.normal
+		);
+		<ins>i.tangentViewDir = mul(objectToTangent, ObjSpaceViewDir(v.vertex));</ins>
+	#endif</pre>
+						
+						<aside>
+							<h3>What does <code class="shader">ObjSpaceViewDir</code> do?</h3>
+							<div>
+								<p>The <code class="shader">ObjSpaceViewDir</code> function is defined in <em translate="no">UnityCG</em>. It converts the camera position to object space and then subtracts the provided vertex position from it, which is in object space by definition. Note that this produces a vector pointing from the vertex to the camera. It isn't normalized yet. This is exactly what we want.</p>
+								
+								<pre translate="no" class="shader">inline float3 ObjSpaceViewDir (float4 v) {
+    float3 objSpaceCameraPos =
+		mul(unity_WorldToObject, float4(_WorldSpaceCameraPos.xyz, 1)).xyz;
+    return objSpaceCameraPos - v.xyz;
+}</pre>
+							</div>
+						</aside>
+						
+						<p>Now we have access to the tangent-space view direction in <code>ApplyParallax</code>. First, normalize it to turn it into a proper direction vector. Then, add its XY components to the texture coordinates, modulated by the parallax strength.</p>
+						
+						<pre translate="no" class="shader">void ApplyParallax (inout Interpolators i) {
+	#if defined(_PARALLAX_MAP)
+		<ins>i.tangentViewDir = normalize(i.tangentViewDir);</ins>
+		i.uv.<ins>xy</ins> += <ins>i.tangentViewDir.xy *</ins> _ParallaxStrength;
+	#endif
+}</pre>
+						
+						<p>What this effectively does is project the view direction onto the texture surface. When looking straight at the surface, at a 90&deg; angle, the view direction in tangent space is equal to the surface normal (0, 0, 1), which results in no displacement. The shallower the view angle gets, the larger the projection becomes, and the greater the displacement effect.</p>
+						
+						<figure>
+							<img src="parallax-mapping/view-directions-projected.png" width="330" height="246">
+							<figcaption>Projected view directions used as UV offsets.</figcaption>
+						</figure>
+						
+						<p>The effect of all of this is that the surface appears to get pulled upwards in tangent space, appearing higher than it actually is, based on the parallax strength.</p>
+						
+						<figure>
+							<video width="320" height="143" controls loop muted>
+								<source src="parallax-mapping/shifting-view-direction.mp4" type="video/mp4">
+							</video>
+							<figcaption>Shifting UV along projected view direction.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Sliding Based on Height</h3>
+						
+						<p>At this point we can make the surface appear higher, but it's still a uniform displacement. The next step is to use the parallax map to scale the displacement. Sample the map, use its G channel as the height, apply the parallax strength, and use that to modulate the displacement.</p>
+						
+						<pre translate="no" class="shader">		i.tangentViewDir = normalize(i.tangentViewDir);
+		<ins>float height = tex2D(_ParallaxMap, i.uv.xy).g;</ins>
+		<ins>height *= _ParallaxStrength;</ins>
+		i.uv.xy += i.tangentViewDir.xy * <ins>height</ins>;</pre>
+						
+						<figure>
+							<video width="320" height="141" controls loop muted>
+								<source src="parallax-mapping/shifting-height.mp4" type="video/mp4">
+							</video>
+							<figcaption>Shifting modulated by height.</figcaption>
+						</figure>
+						
+						<p>Lows area now remain in place, while high areas get pulled upwards. The standard shader offsets this effect, so low areas move downward as well, while areas in the middle remain where they are. This is done by subtracting &frac12; from the raw height data.</p>
+						
+						<pre translate="no" class="shader">		float height = tex2D(_ParallaxMap, i.uv.xy).g;
+		<ins>height -= 0.5;</ins>
+		height *= _ParallaxStrength;</pre>
+						
+						<figure>
+							<video width="320" height="140" controls loop muted>
+								<source src="parallax-mapping/parallax-mapping.mp4" type="video/mp4">
+							</video>
+							<figcaption>Parallax mapping at reasonable strength, and beyond.</figcaption>
+						</figure>
+						
+						<p>This produces the parallax effect that we're looking for, but it only works at low strength. The displacement quickly becomes too great, ripping the surface apart.</p>
+					</section>
+					
+					<section>
+						<h3>Correctly Projected Offsets</h3>
+						
+						<p>The parallax mapping technique that we're currently using is known as parallax mapping with offset limiting. We're simply using the XY part of the view direction, which has a maximum length of 1. Hence, the texture offset is limited. The effect can give decent results, but doesn't represent a correct perspective projection.</p>
+						
+						<p>A more physically accurate way to calculate offsets would be to treat the height field as a volume below the geometry surface, and shoot a view ray though it. The ray is shot from the camera to the surface, enters the height field volume from above, and continues until it hits the surface defined by the field.</p>
+						
+						<p>If the height field were uniformly zero, then the ray would simply continue until it reaches the bottom of the volume. How far away that is depends on the angle at which the ray entered the volume. It is not limited. The shallower the angle, the further it goes. The most extreme case is when the view angle approaches zero, which makes the ray shoot towards infinity.</p>
+						
+						<figure>
+							<img src="parallax-mapping/raycasting.png" width="360" height="240">
+							<figcaption>Raycasting to the bottom, limited and correct.</figcaption>
+						</figure>
+						
+						<p>To find the appropriate offset, we have to scale the view direction vector so it's Z component becomes 1, which we do by dividing it by its own Z component. As we don't need to use Z later, we only have to divide X and Y by Z.</p>
+						
+						<pre translate="no" class="shader">		i.tangentViewDir = normalize(i.tangentViewDir);
+		<ins>i.tangentViewDir.xy /= i.tangentViewDir.z;</ins></pre>
+						
+						<p>While this results in a more correct projection, it does worsen the artifacts of our parallax effect for shallow view angles. The standard shader alleviates this by adding a bias to the Z component, which is 0.42, so it never gets close to zero. This warps the perspective, but keeps the artifacts more manageable. Let's add this bias as well.</p>
+						
+						<pre translate="no" class="shader">		i.tangentViewDir.xy /= <ins>(</ins>i.tangentViewDir.z <ins>+ 0.42)</ins>;</pre>
+						
+						<figure>
+							<img src="parallax-mapping/parallax-mapping.png" width="320" height="140">
+							<figcaption>Parallax mapping like the standard shader.</figcaption>
+						</figure>
+						
+						<p>Our shader now support the same parallax effect as the standard shader. While parallax mapping can be applied to any surface, the projection assumes that the tangent space is uniform. Curved surfaces have curved tangent spaces, so will produce physically incorrect results. As long as the parallax strength and curvature are small, you can get away with it.</p>
+						
+						<figure>
+							<img src="parallax-mapping/sphere.png" width="330" height="320">
+							<figcaption>Parallax mapping on a sphere.</figcaption>
+						</figure>
+						
+						<p>Also, shadow coordinates are not influenced by this effect. As a result, shadows can look weird in combination with strong parallax, appearing to float above the surface.</p>
+						
+						<figure>
+							<img src="parallax-mapping/shadows.png" width="320" height="140">
+							<figcaption>Shadows unaffected by parallax mapping.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Parallax Configuration</h3>
+						
+						<p>Do you agree with Unity's bias of 0.42? Would you like to use a different value, or leave it at zero? Or would you like to use offset limiting instead? Let's make it configurable!</p>
+						
+						<p>When you want to use offset limiting, define <code class="shader">PARALLAX_OFFSET_LIMITING</code> in your shader. Otherwise, set which bias you want to use by defining <code class="shader">PARALLAX_BIAS</code>. Adjust <code class="shader">ApplyParallax</code> to make this possible.</p>
+						
+						<pre translate="no" class="shader">void ApplyParallax (inout Interpolators i) {
+	#if defined(_PARALLAX_MAP)
+		i.tangentViewDir = normalize(i.tangentViewDir);
+		<ins>#if !defined(PARALLAX_OFFSET_LIMITING)</ins>
+			i.tangentViewDir.xy /= (i.tangentViewDir.z + <ins>PARALLAX_BIAS</ins>);
+		<ins>#endif</ins>
+		&hellip;
+	#endif
+}</pre>
+						
+						<p>Let's stick to the default bias of 0.42 when nothing is defined. We can do that by simply defining it in <code>ApplyParallax</code> when someone else hasn't. Note that macro definitions don't care about function scope, they're always global.</p>
+						
+						<pre translate="no" class="shader">		#if !defined(PARALLAX_OFFSET_LIMITING)
+			<ins>#if !defined(PARALLAX_BIAS)</ins>
+				<ins>#define PARALLAX_BIAS 0.42</ins>
+			<ins>#endif</ins>
+			i.tangentViewDir.xy /= (i.tangentViewDir.z + PARALLAX_BIAS);
+		#endif</pre>
+						
+						<p>Now we can fine-tune our parallax effect via the <code class="shader">CGINCLUDE</code> block in <em translate="no">My First Lighting Shader</em>. I added the options for no bias and offset-limiting, but turned them into comments to stick with the default options.</p>
+						
+						<pre translate="no" class="shader">	CGINCLUDE
+
+	#define BINORMAL_PER_FRAGMENT
+	#define FOG_DISTANCE
+	
+<ins>//	#define PARALLAX_BIAS 0</ins>
+<ins>//	#define PARALLAX_OFFSET_LIMITING</ins>
+
+	ENDCG</pre>
+					</section>
+					
+					<section>
+						<h3>Detail UV</h3>
+						
+						<p>Parallax mapping works with the main maps, but we haven't taken care of the secondary maps yet. We have to apply the texture coordinate offset to the detail UV as well.</p>
+						
+						<p>First, below is a detail map containing a grid pattern. It makes it easy to verify whether the effect gets applied to the details correctly.</p>
+						
+						<figure>
+							<img src="parallax-mapping/parallax-detail-grid.png" width="256" height="256">
+							<figcaption>Detail grid texture.</figcaption>
+						</figure>
+						
+						<p>Use this texture as the detail albedo map for our material. Set the tiling of the secondary maps to 10&times;10. This reveals that the detail UV are indeed still unaffected.</p>
+						
+						<figure>
+							<img alt="inspector" src="parallax-mapping/detail-inspector.png" width="320" height="96"><br>
+							<img alt="scene" src="parallax-mapping/detail-unaffected.png" width="320" height="140">
+							<figcaption>Detail UV unaffected.</figcaption>
+						</figure>
+						
+						<p>The standard shader simply also adds the UV offset to the detail UV, which are stored in the ZW components of the UV interpolator. Let's do the same.</p>
+						
+						<pre translate="no" class="shader">		float height = tex2D(_ParallaxMap, i.uv.xy).g;
+		height -= 0.5;
+		height *= _ParallaxStrength;
+		<ins>float2 uvOffset =</ins> i.tangentViewDir.xy * height;
+		i.uv.xy += <ins>uvOffset</ins>;
+		<ins>i.uv.zw += uvOffset;</ins></pre>
+						
+						<p>The details might have changed a little, but they definitely do not match the parallax effect yet. That's because we tile our secondary maps. This scales the detail UV by 10, making the parallax offset ten times too weak. We have to apply the detail tiling to the offset as well. The standard shader does not take this into account.</p>
+						
+						<pre translate="no" class="shader">		i.uv.zw += uvOffset <ins>* _DetailTex_ST.xy</ins>;</pre>
+						
+						<p>Actually, the scaling should be relative to the main UV tiling, in case it's set to something else than 1&times;1. This ensures that it always works.</p>
+						
+						<pre translate="no" class="shader">		i.uv.zw += uvOffset * <ins>(</ins>_DetailTex_ST.xy <ins>/ _MainTex_ST.xy)</ins>;</pre>
+						
+						<figure>
+							<img src="parallax-mapping/detail-correct.png" width="320" height="140">
+							<figcaption>Correct detail UV.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Shouldn't the offset be scaled by the main tiling as well?</h3>
+							<div>
+								<p>You could do that, instead of dividing the detail offset by the main tiling. With that approach, the parallax strength will scale with the main tiling. However, you'd typically want a weaker parallax effect when increasing the tiling of the main maps. So it makes sense to have the tiling influence the effect, which is done by not compensating for it.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<a href="parallax-mapping/parallax-mapping.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+							
+				<section>
+					<h2>Raymarching</h2>
+					
+					<p>The idea is that our parallax effect works by shooting a view ray thought the height volume and determining where it hits the surface. It does this by sampling the height map only once, at the point where the ray enters the volume. But when we're looking at an angle, this doesn't tell us anything about the height where the ray actually intersects the height field.</p>
+					
+					<figure>
+						<img src="raymarching/correct-guessed-offset.png" width="345" height="230">
+						<figcaption>Correct vs. guessed offset.</figcaption>
+					</figure>
+					
+					<p>Our current approach assumes that the height at the entry point is the same as the height at the intersection point. This is only correct if the entry and intersection points actually have the same height. It still works fairly well when the offset isn't large and the height field doesn't vary too much. However, when the offset becomes too large or the heights vary too quickly, we end up with a wild guess, which is likely wrong. This is what causes the artifacts that rip the surface apart.</p>
+					
+					<p>If we can figure out where the ray actually hits the height field, then we can we can always find the true visible surface point. This cannot be done with a single texture sample. We'll have to move along the view ray in small steps, sampling the height field each time, until we reach the surface. This technique is known as raymarching.</p>
+					
+					<figure>
+						<img src="raymarching/raymarching.png" width="300" height="183">
+						<figcaption>Marching along the view ray.</figcaption>
+					</figure>
+					
+					<p>There are various variants of parallax mapping that use raymarching. The most well-known are <em translate="no">Steep Parallax Mapping</em>, <em translate="no">Relief Mapping</em>, and <em translate="no">Parallax Occlusion Mapping</em>. Their names don't tell you what they do exactly, but what they're trying to achieve. Basically, it's tree ways to say the same thing. They raymarch through a height field to create a better parallax effect, compared to using a single texture sample. Besides that, they can apply additional shading and techniques to improve the algorithm. I'll call it out when what we're doing matches one of these approaches.</p>
+					
+					<section>
+						<h3>Parallax Functions</h3>
+						
+						<p>The standard shader only supports simple offset parallax mapping. We're now going to add support for parallax raymarching to our own shader. But let's also keep supporting the simple approach. Both will need to sample the height field, so put the sampling code line in a separate <code class="shader">GetParallaxHeight</code> function. Also, the projected view direction and the final application of the offset will be the same for both approaches. So put the offset calculation in its own function as well. It only requires the original UV coordinates and processed view direction as parameters. Its result is the UV offset to apply.</p>
+						
+						<pre translate="no" class="shader"><ins>float GetParallaxHeight (float2 uv) {</ins>
+	<ins>return tex2D(_ParallaxMap, uv).g;</ins>
+<ins>}</ins>
+
+<ins>float2 ParallaxOffset (float2 uv, float2 viewDir) {</ins>
+	float height = <ins>GetParallaxHeight(uv)</ins>;
+	height -= 0.5;
+	height *= _ParallaxStrength;
+	<ins>return viewDir</ins> * height;
+}
+	
+void ApplyParallax (inout Interpolators i) {
+	#if defined(_PARALLAX_MAP)
+		i.tangentViewDir = normalize(i.tangentViewDir);
+		#if !defined(PARALLAX_OFFSET_LIMITING)
+			#if !defined(PARALLAX_BIAS)
+				#define PARALLAX_BIAS 0.42
+			#endif
+			i.tangentViewDir.xy /= (i.tangentViewDir.z + PARALLAX_BIAS);
+		#endif
+		
+		float2 uvOffset = <ins>ParallaxOffset(i.uv.xy, i.tangentViewDir.xy);</ins>
+		i.uv.xy += uvOffset;
+		i.uv.zw += uvOffset * (_DetailTex_ST.xy / _MainTex_ST.xy);
+	#endif
+}</pre>
+						
+						<p>Now we'll make our parallax approach flexible by replacing the hard-coded invocation of <code class="shader">ParallaxOffset</code> with the <code class="shader">PARALLAX_FUNCTION</code> macro. If it hasn't been defined, we'll set it to use the offset approach.</p>
+						
+						<pre translate="no" class="shader">void ApplyParallax (inout Interpolators i) {
+	#if defined(_PARALLAX_MAP)
+		&hellip;
+
+		<ins>#if !defined(PARALLAX_FUNCTION)</ins>
+			<ins>#define PARALLAX_FUNCTION ParallaxOffset</ins>
+		<ins>#endif</ins>
+		float2 uvOffset = <ins>PARALLAX_FUNCTION</ins>(i.uv.xy, i.tangentViewDir.xy);
+		i.uv.xy += uvOffset;
+		i.uv.zw += uvOffset * (_DetailTex_ST.xy / _MainTex_ST.xy);
+	#endif
+}</pre>
+						
+						<p>Create a new function for our raymarching approach. It has to match the behavior of <code class="shader">ParallaxOffset</code>, so give it the same parameters and return type. Initially it does nothing, returning a zero offset.</p>
+						
+						<pre translate="no" class="shader">float2 ParallaxOffset (float2 uv, float2 viewDir) {
+	&hellip;
+}
+
+<ins>float2 ParallaxRaymarching (float2 uv, float2 viewDir) {</ins>
+	<ins>float2 uvOffset = 0;</ins>
+	<ins>return uvOffset;</ins>
+<ins>}</ins></pre>
+						
+						<p>It is now possible to change the parallax approach in <em translate="no">My First Lighting Shader</em> by defining <code class="shader">PARALLAX_FUNCTION</code>. Set it to <code class="shader">ParallaxRaymarching</code>.</p>
+						
+												<pre translate="no" class="shader">	<ins>#define PARALLAX_BIAS 0</ins>
+//	#define PARALLAX_OFFSET_LIMITING
+	<ins>#define PARALLAX_FUNCTION ParallaxRaymarching</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Stepping Through the Height Field</h3>
+						
+						<p>To find the point where the view ray hits the height field, we have to sample multiple points on the ray and figure out where we end up below the surface. The first sample point is at the top, where we enter the height volume, like with the offset approach. The last sample point would be where the ray hits the bottom of the volume. We'll add additional sample points evenly spaced in between those end points.</p>
+						
+						<p>Let's go with ten samples per ray. This means that we're going to sample the height map ten times instead of just once, so this isn't a cheap effect.</p>
+						
+						<p>Because we use ten samples, our step size is 0.1. This is the factor by which we move along the view ray, which becomes our UV delta.</p>
+						
+						<pre translate="no" class="shader">float2 ParallaxRaymarching (float2 uv, float2 viewDir) {
+	float2 uvOffset = 0;
+	<ins>float stepSize = 0.1;</ins>
+	<ins>float2 uvDelta = viewDir * stepSize;</ins>
+	return uvOffset;
+}</pre>
+						
+						<p>To apply the parallax strength, we could adjust the height we sample each step. But scaling the UV delta has the same effect, which we only need to do once.</p>
+						
+						<pre translate="no" class="shader">	float2 uvDelta = viewDir * <ins>(</ins>stepSize <ins>* _ParallaxStrength)</ins>;</pre>
+						
+						<p>By doing it this way, we can keep using 0&ndash;1 as the range of the height field, regardless of the parallax strength. Thus, the height of the first step on the ray is always 1. The height of the surface point below or above it is defined by the height field.</p>
+						
+						<pre translate="no" class="shader">	float stepSize = 0.1;
+	float2 uvDelta = viewDir * (stepSize * _ParallaxStrength);
+
+	<ins>float stepHeight = 1;</ins>
+	<ins>float surfaceHeight = GetParallaxHeight(uv);</ins></pre>
+						
+						<p>Now we have to iterate along the ray. Each step we'll increase the UV offset by the UV delta. The view vector points towards the camera, but we're moving towards the surface, so we actually have to subtract the UV delta instead. Then we decrease the step height by the step size. Then we sample the height map again. We keep doing this as long as we stay above the surface, which is at most nine more times after the first sample. We can use a <code class="shader">while</code> loop to program this.</p>
+						
+						<pre translate="no" class="shader">	float stepHeight = 1;
+	float surfaceHeight = GetParallaxHeight(uv);
+
+	<ins>while (stepHeight > surfaceHeight) {</ins>
+		<ins>uvOffset -= uvDelta;</ins>
+		<ins>stepHeight -= stepSize;</ins>
+		<ins>surfaceHeight = GetParallaxHeight(uv + uvOffset);</ins>
+	<ins>}</ins></pre>
+						
+						<p>When attempting to compile this, we get a shader compiler warning and error. The warning tells us that there are gradient instructions used in a loop. This refers to the texture sampling inside our loop. The GPU has to figure out which mipmap level to use, for which it needs to compare the used UV coordinates of adjacent fragments. It can only do this when all fragments execute the same code. This is impossible for our loop, because it can terminate early, which can differ per fragment. So the compiler will unroll the loop, which means that it will perform all nine steps all the time, regardless whether our logic would suggest that we can stop earlier. Instead, it uses deterministic logic to select the final result afterwards.</p>
+						
+						<p>The compilation fails because the compiler cannot determine the maximum number of iterations of our loop. It doesn't know that this is at most nine. So let's make this explicit, by turning our <code class="shader">while</code> loop into a <code class="shader">for</code> loop that enforces a limit.</p>
+						
+						<pre translate="no" class="shader">	<ins>for</ins> (<ins>int i = 1; i &lt; 10 &amp;&amp;</ins> stepHeight > surfaceHeight<ins>; i++</ins>) {
+		uvOffset -= uvDelta;
+		stepHeight -= stepSize;
+		surfaceHeight = GetParallaxHeight(uv + uvOffset);
+	}</pre>
+						
+						<figure>
+							<img src="raymarching/raymarching-10.png" width="320" height="140">
+							<figcaption>Raymarching with 10 steps, no bias, no limiting.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Can the GPU use an actual loop?</h3>
+							<div>
+								<p>Yes, but we'd have to get rid of the gradient instructions. This is possible by determining the UV derivatives ourselves and manually controlling the mipmap level. Using derivatives is an advanced topic that I won't cover in this tutorial. Even then, fragments are processed in parallel. Basically, the performance of a batch of fragments that are computed together is determined by the fragment that requires the most iterations. So any potential performance gain is variable and unpredictable, and will vary based on the GPU. Extensive testing would be required to determine which approach is best for specific hardware.</p>
+							</div>
+						</aside>
+						
+						<p>The difference with the simple offset approach is obvious. The parallax effect is much more pronounced. Higher areas now also correctly block our view of lower areas behind them. And we also get obvious layers, ten in total.</p>
+					</section>
+					
+					<section>
+						<h3>Using More Steps</h3>
+						
+						<p>This basic raymarching approach best matches <em translate="no">Steep Parallax Mapping</em>. The quality of the effect is determined by our sample resolution. Some approaches use a variable amount of steps, based on the view angle. More shallow angles require more steps, because the ray is longer. But we're limited to a fixed amount of samples, so we won't do that.</p>
+						
+						<p>The obvious way to increase the quality is by increasing the amount of samples, so let's make that configurable. Use <code class="shader">PARALLAX_RAYMARCHING_STEPS</code>, with a default of 10, instead of a fixed step size and iteration count.</p>
+						
+						<pre translate="no" class="shader">float2 ParallaxRaymarching (float2 uv, float2 viewDir) {
+	<ins>#if !defined(PARALLAX_RAYMARCHING_STEPS)</ins>
+		<ins>#define PARALLAX_RAYMARCHING_STEPS 10</ins>
+	<ins>#endif</ins>
+	float2 uvOffset = 0;
+	float stepSize = <ins>1.0 / PARALLAX_RAYMARCHING_STEPS</ins>;
+	float2 uvDelta = viewDir * (stepSize * _ParallaxStrength);
+
+	float stepHeight = 1;
+	float surfaceHeight = GetParallaxHeight(uv);
+
+	for (
+		int i = 1;
+		i &lt; <ins>PARALLAX_RAYMARCHING_STEPS</ins> &amp;&amp; stepHeight > surfaceHeight;
+		i++
+	) {
+		uvOffset -= uvDelta;
+		stepHeight -= stepSize;
+		surfaceHeight = GetParallaxHeight(uv + uvOffset);
+	}
+
+	return uvOffset;
+}</pre>
+						
+						<p>Now we can control the step count in <em translate="no">My First Lighting Shader</em>. For really high quality, define <code class="shader">PARALLAX_RAYMARCHING_STEPS</code> as 100.</p>
+						
+						<pre translate="no" class="shader">	#define PARALLAX_BIAS 0
+//	#define PARALLAX_OFFSET_LIMITING
+	<ins>#define PARALLAX_RAYMARCHING_STEPS 100</ins>
+	#define PARALLAX_FUNCTION ParallaxRaymarching</pre>
+						
+						<figure>
+							<img src="raymarching/raymarching-100.png" width="320" height="140">
+							<figcaption>Raymarching with 100 steps.</figcaption>
+						</figure>
+						
+						<p>This gives us an idea of how good it can get, but is far too expensive to use in general. So set the number of samples back to 10. Still, we can see that the parallax effect can appear continuous and smooth. However, silhouettes caused by parallax occlusion are always aliased. MSAA doesn't get rid of that, because it only applies to the edges of geometry, not texture effects. Post-processing anti-aliasing techniques will work though, as long as they don't rely on the depth buffer.</p>
+						
+						<aside>
+							<h3>Can't we write to the depth buffer per fragment?</h3>
+							<div>
+								<p>This is indeed possible on advanced enough hardware, making it possible to correctly intersect other geometry with the height field and apply shadows. It doesn't come cheap, though.</p>
+							</div>
+						</aside>
+						
+						<p>Our current approach is to step along the ray until we end up at a point below the surface, or at the lowest possible point at the end of the ray. We then use the UV offset for that point. But most likely this point lies below the surface, which introduces an error. This is what causes the surface to split into layers.</p>
+						
+						<p>Increasing the number of steps simply decreases the maximum error. Use enough steps, and the error becomes smaller that a visible fragment, at which point we can no longer perceive it. So when a surface is always seen from a distance, you can get away with fewer steps. The closer you get, and the smaller your view angle, the more samples you need.</p>
+						
+						<figure>
+							<img src="raymarching/raymarching-errors.png" width="300" height="183">
+							<figcaption>Errors dependent on sample resolution.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Interpolating Between Layers</h3>
+						
+						<p>One way to improve the quality is by making an educated guess about where the ray actually hit the surface. At one step we're above the surface, and at the next step we're below it. Somewhere in between those two steps the ray must have hit the surface.</p>
+						
+						<p>The pairs of ray points and surface points define two line segments. Because the ray and surface collided, these two lines cross. So if we keep track of the previous step, we can perform a line-line intersection after the loop. We could use this information to approximate the true intersection point.</p>
+						
+						<figure>
+							<img src="raymarching/line-line-intersection.png" width="300" height="150">
+							<figcaption>Performing a line-line intersection.</figcaption>
+						</figure>
+						
+						<p>We have to keep track of the previous UV offset, step height, and surface height during the iteration process. Intially, these are equal to those of the first sample, before the loop.</p>
+						
+						<pre translate="no" class="shader">	<ins>float2 prevUVOffset = uvOffset;</ins>
+	<ins>float prevStepHeight = stepHeight;</ins>
+	<ins>float prevSurfaceHeight = surfaceHeight;</ins>
+
+	for (
+		&hellip;
+	) {
+		<ins>prevUVOffset = uvOffset;</ins>
+		<ins>prevStepHeight = stepHeight;</ins>
+		<ins>prevSurfaceHeight = surfaceHeight;</ins>
+		
+		&hellip;
+	}</pre>
+						
+						<p>After the loop, we calculate where the lines intersect. We can use this to interpolate between the previous and last UV offset.</p>
+						
+						<pre translate="no" class="shader">	for &hellip;
+
+	<ins>float prevDifference = prevStepHeight - prevSurfaceHeight;</ins>
+	<ins>float difference = surfaceHeight - stepHeight;</ins>
+	<ins>float t = prevDifference / (prevDifference + difference);</ins>
+	<ins>uvOffset = lerp(prevUVOffset, uvOffset, t);</ins>
+
+	return uvOffset;</pre>
+						
+						<aside>
+							<h3>How does that math work?</h3>
+							<div>
+								<p>The two line segments are defined inside the space between two sample steps. We set the width of this space to 1. The line from the previous step point to the last step point is then defined by the points (0, `a`) and (1, `b`), where `a` is the previous step height and `b` is the last step height. Thus, the view line can be defined by the linear function `v(t) = a + (b - a)t`. Likewise, the surface line is defined by the points (0, `c`) and (1, `d`), and the function `s(t) = c + (d - c)t`.</p>
+								
+								<p>The intersection point exist where `s(t) = v(t)`. What is the value of `t`?</p>
+								
+								<p>`c + (d - c)t = a + (b - a)t`</p>
+								
+								<p>`(d - c)t - (b - a)t = a - c`</p>
+								
+								<p>`(a - c + d - b)t = a - c`</p>
+								
+								<p>`t = (a - c) / (a - c + d - b)`</p>
+								
+								<p>Note tat `a - c` is the absolute difference between the line heights at `t = 0`. And `d - b` is the absolute height difference at `t = 1`.</p>
+								
+								<figure>
+									<img src="raymarching/line-line-intersection-math.png" width="310" height="210">
+									<figcaption>Line-line intersection relationships.</figcaption>
+								</figure>
+							</div>
+						</aside>
+						
+						<p>Actually, in this case we can use the interpolator to scale the UV offset that we have to add to the previous point. It boils down to the same thing, just with less math.</p>
+						
+						<pre translate="no" class="shader">	float t = prevDifference / (prevDifference - difference);
+	uvOffset = <ins>prevUVOffset - uvDelta * t</ins>;</pre>
+						
+						<figure>
+							<img src="raymarching/interpolating-10.png" width="320" height="140">
+							<figcaption>10 steps plus interpolation.</figcaption>
+						</figure>
+						
+						<p>The result looks a lot better. We now assume that the surface is linear in between sample points, which prevents the most obvious stratification artifacts. However, it cannot help us detect when we miss an intersection in between steps. We still need many samples to deal with small features, silhouettes, and shallow angles.</p>
+						
+						<p>With this trick, our approach resembles <em translate="no">Parallax Occlusion Mapping</em>. While it is a relatively cheap improvement, let's make it optional anyway, via the definition of <code class="shader">PARALLAX_RAYMARCHING_INTERPOLATE</code>.</p>
+						
+						<pre translate="no" class="shader">	<ins>#if defined(PARALLAX_RAYMARCHING_INTERPOLATE)</ins>
+		float prevDifference = prevStepHeight - prevSurfaceHeight;
+		float difference = surfaceHeight - stepHeight;
+		float t = prevDifference / (prevDifference + difference);
+		uvOffset = prevUVOffset - uvDelta * t;
+	<ins>#endif</ins></pre>
+						
+						<p>Define <code class="shader">PARALLAX_RAYMARCHING_INTERPOLATE</code> in <em translate="no">My First Lighting Shader</em> to use it.</p>
+						
+						<pre translate="no" class="shader">	#define PARALLAX_BIAS 0
+//	#define PARALLAX_OFFSET_LIMITING
+	#define PARALLAX_RAYMARCHING_STEPS 10
+	<ins>#define PARALLAX_RAYMARCHING_INTERPOLATE</ins>
+	#define PARALLAX_FUNCTION ParallaxRaymarching</pre>
+					</section>
+					
+					<section>
+						<h3>Searching Between Layers</h3>
+						
+						<p>By linearly interpolating between two steps, we assume that the surface is straight in between them. However, this will often not be the case. To better deal with irregular height fields, we'll have to search for the actual intersection point in between the two steps. Or at least get closer to it.</p>
+						
+						<p>After finishing the loop, instead of using the last offset, adjust the offset to halfway between the last two steps. Sample the height at that point. If we end up below the surface, move a quarter of the offset back to the previous point and sample again. If instead we ended up above the surface, move a quarter forward to the last point and sample again. Do the same thing again, but this time move one eight of the way. Keep repeating this process until you are satisfied.</p>
+						
+						<figure>
+							<img src="raymarching/binary-search.png" width="300" height="150">
+							<figcaption>Getting closer to the intersection point.</figcaption>
+						</figure>
+						
+						<p>The above approach is an application of binary search. It best matches the <em translate="no">Relief Mapping</em> approach. Each step the covered distance halves, until the destination is reached. In our case, we'll simply do this a fixed number of times, arrived at a desired resolution. With one step, we always end up halfway between the last two points, at 0.5. With two steps, we end up at either 0.25 or 0.75. With three steps, it's 0.125, 0.375, 0.625, or 0.875. And so on. Note that, starting at the second step, the effective resolution doubles per sample.</p>
+						
+						<p>To control whether this approach is used, let's define <code class="shader">PARALLAX_RAYMARCHING_SEARCH_STEPS</code>. Make it zero by default, which means that we do not search at all. If it's defined higher than zero, we'll have to use another loop. Note that this approach is incompatible with <code class="shader">PARALLAX_RAYMARCHING_INTERPOLATE</code>, because we can no longer guarantee that the surface is crossed between the last two steps. So when we're searching, disable interpolation.</p>
+						
+						<pre translate="no" class="shader">	for &hellip;
+
+	<ins>#if !defined(PARALLAX_RAYMARCHING_SEARCH_STEPS)</ins>
+		<ins>#define PARALLAX_RAYMARCHING_SEARCH_STEPS 0</ins>
+	<ins>#endif</ins>
+	<ins>#if PARALLAX_RAYMARCHING_SEARCH_STEPS > 0</ins>
+		<ins>for (int i = 0; i &lt; PARALLAX_RAYMARCHING_SEARCH_STEPS; i++) {</ins>
+		<ins>}</ins>
+	<ins>#elif defined(PARALLAX_RAYMARCHING_INTERPOLATE)</ins>
+		float prevDifference = prevStepHeight - prevSurfaceHeight;
+		float difference = surfaceHeight - stepHeight;
+		float t = prevDifference / (prevDifference + difference);
+		uvOffset = prevUVOffset - uvDelta * t;
+	#endif</pre>
+						
+						<p>This loop also performs the same basic work as the original one. Adjust the offset and step height, then sample the height field.</p>
+						
+						<pre translate="no" class="shader">		for (int i = 0; i &lt; PARALLAX_RAYMARCHING_SEARCH_STEPS; i++) {
+			<ins>uvOffset -= uvDelta;</ins>
+			<ins>stepHeight -= stepSize;</ins>
+			<ins>surfaceHeight = GetParallaxHeight(uv + uvOffset);</ins>
+		}</pre>
+						
+						<p>But the UV delta and step size are halved each iteration.</p>
+						
+						<pre translate="no" class="shader">		for (int i = 0; i &lt; PARALLAX_RAYMARCHING_SEARCH_STEPS; i++) {
+			<ins>uvDelta *= 0.5;</ins>
+			<ins>stepSize *= 0.5;</ins>
+
+			uvOffset -= uvDelta;
+			stepHeight -= stepSize;
+			surfaceHeight = GetParallaxHeight(uv + uvOffset);
+		}</pre>
+						
+						<p>Also, if we're below the surface, we have to move in the opposite direction.</p>
+						
+						<pre translate="no" class="shader">			uvDelta *= 0.5;
+			stepSize *= 0.5;
+
+			<ins>if (stepHeight &lt; surfaceHeight) {</ins>
+				<ins>uvOffset += uvDelta;</ins>
+				<ins>stepHeight += stepSize;</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				uvOffset -= uvDelta;
+				stepHeight -= stepSize;
+			<ins>}</ins>
+			surfaceHeight = GetParallaxHeight(uv + uvOffset);</pre>
+						
+						<p>Let's adjust <em translate="no">My First Lighting Shader</em> so it uses three search steps and see what that looks like.</p>
+						
+						<pre translate="no" class="shader">	#define PARALLAX_BIAS 0
+//	#define PARALLAX_OFFSET_LIMITING
+	#define PARALLAX_RAYMARCHING_STEPS 10
+	#define PARALLAX_RAYMARCHING_INTERPOLATE
+	<ins>#define PARALLAX_RAYMARCHING_SEARCH_STEPS 3</ins>
+	#define PARALLAX_FUNCTION ParallaxRaymarching</pre>
+						
+						<figure>
+							<img src="raymarching/searching-10-3.png" width="320" height="140">
+							<figcaption>10 steps plus 3 binary search steps.</figcaption>
+						</figure>
+						
+						<p>The results look pretty good, though still not perfect. Binary search can deal better with shallow angles than simple interpolation, but you still need quite a few search steps to get rid of stratification. So it's a matter of experimenting to find out which approach works best in a specific case and how many steps are needed.</p>
+					</section>
+					
+					<section>
+						<h3>Scaled Objects and Dynamic Batching</h3>
+						
+						<p>While our parallax mapping approach appears to work, there is a hidden bug. It manifests when dynamic batching is used to combine objects that are scaled. For example, give our quad a scale like (10, 10, 10) and duplicate it, moving the copy a little below it. This will trigger Unity to dynamically batch the quads, assuming that this option is enabled in the player settings.</p>
+						
+						<p>When batching kicks in, the parallax effect will become warped. This is very obvious when rotating the camera. However, this only happens in the game view &ndash; and builds &ndash; not in the scene view. Note that the standard shader has this problem as well, but you might not immediately notice it when using a weak offset parallax effect.</p>
+						
+						<figure>
+							<img src="raymarching/batched-incorrect.png" width="400" height="230">
+							<figcaption>Dynamic batching produces weird results.</figcaption>
+						</figure>
+						
+						<p>The problem is that Unity doesn't normalize the normal and tangent vectors of batched geometry, after combining them in a single mesh. So the assumption that the vertex data is correct no longer holds.</p>
+						
+						<aside>
+							<h3>Why doesn't Unity normalize these vectors?</h3>
+							<div>
+								<p>It's probably a conscious decision, because otherwise dynamic batching would become too expensive to be practical.</p>
+							</div>
+						</aside>
+						
+						<p>That the vertex normal and tangent vectors aren't normalized is only an issue for us because we're transforming the view vector to tangent space in the vertex program. For everything else, the data gets normalized before use.</p>
+						
+						<p>The solution is to normalize the vectors before we construct the object-to-tangent matrix. Because this is only required for scaled geometry that gets dynamically batched, let's make it optional, depending on whether <code class="shader">PARALLAX_SUPPORT_SCALED_DYNAMIC_BATCHING</code> is defined.</p>
+						
+						<pre translate="no" class="shader">	#if defined (_PARALLAX_MAP)
+		<ins>#if defined(PARALLAX_SUPPORT_SCALED_DYNAMIC_BATCHING)</ins>
+			<ins>v.tangent.xyz = normalize(v.tangent.xyz);</ins>
+			<ins>v.normal = normalize(v.normal);</ins>
+		<ins>#endif</ins>
+		float3x3 objectToTangent = float3x3(
+			v.tangent.xyz,
+			cross(v.normal, v.tangent.xyz) * v.tangent.w,
+			v.normal
+		);
+		i.tangentViewDir = mul(objectToTangent, ObjSpaceViewDir(v.vertex));
+	#endif</pre>
+						
+						<p>Now we can make <em translate="no">My First Lighting Shader</em> dynamic-batching proof.</p>
+						
+						<pre translate="no" class="shader">	#define PARALLAX_BIAS 0
+//	#define PARALLAX_OFFSET_LIMITING
+	#define PARALLAX_RAYMARCHING_STEPS 10
+	#define PARALLAX_RAYMARCHING_INTERPOLATE
+	#define PARALLAX_RAYMARCHING_SEARCH_STEPS 3
+	#define PARALLAX_FUNCTION ParallaxRaymarching
+	<ins>#define PARALLAX_SUPPORT_SCALED_DYNAMIC_BATCHING</ins></pre>
+						
+						<figure>
+							<img src="raymarching/batched-correct.png" width="400" height="230">
+							<figcaption>Dynamic batching with correct results.</figcaption>
+						</figure>
+						
+						<p>This concludes the Rendering tutorial series. You now have a good idea of how Unity's rendering pipeline works and how the standard shader does its thing. From here, we can move on to more advanced rendering and shading techniques, like the <a href="../../advanced-rendering/flat-and-wireframe-shading/index.html">Flat and Wireframe Shading</a> tutorial.</p>
+					</section>
+
+					<a href="raymarching/raymarching.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Rendering-20.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

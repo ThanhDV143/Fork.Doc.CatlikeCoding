@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/procedural-meshes/geodesic-octasphere/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/procedural-meshes/geodesic-octasphere/tutorial-image.jpg">
+		<meta property="og:title" content="Geodesic Octasphere">
+		<meta property="og:description" content="A Unity C# Procedural Meshes tutorial about creating an octasphere based on geodesic lines.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Geodesic Octasphere</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/procedural-meshes/geodesic-octasphere/#article",
+				"headline": "Geodesic Octasphere",
+				"alternativeHeadline": "Tracing Lines on a Sphere",
+				"datePublished": "2022-05-31",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity C# Procedural Meshes tutorial about creating an octasphere based on geodesic lines.",
+				"image": "https://catlikecoding.com/unity/tutorials/procedural-meshes/geodesic-octasphere/tutorial-image.jpg",
+				"dependencies": "Unity 2020.3.29f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/procedural-meshes/", "name": "Procedural Meshes" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				CubeSphere: 1,
+				FlatHexagonGrid: 1,
+				IMeshGenerator: 1,
+				IMeshStreams: 1,
+				G: 1,
+				GeoOctasphere: 1,
+				GizmoMode: 1,
+				MaterialMode: 1,
+				MeshJob: 1,
+				MeshJobScheduleDelegate: 1,
+				MeshOptimizationMode: 1,
+				MeshType: 1,
+				MultiStream: 1,
+				Octasphere: 1,
+				PointyHexagonGrid: 1,
+				PositionStream: 1,
+				ProceduralMesh: 1,
+				Rhombus: 1,
+				S: 1,
+				SharedCubeSphere: 1,
+				SharedSquareGrid: 1,
+				SharedTriangleGrid: 1,
+				Side: 1,
+				SingleStream: 1,
+				SquareGrid: 1,
+				Stream0: 1,
+				TriangleUInt16: 1,
+				UVSphere: 1,
+				Vertex: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Procedural Meshes</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Geodesic Octasphere</h1>
+					<p>Tracing Lines on a Sphere</p>
+					<ul>
+						<li>Place vertices uniformly along meridians.</li>
+						<li>Interpolate horizontally across rhombuses.</li>
+						<li>Interpolate along geodesic lines.</li>
+					</ul>
+				</header>
+				
+				<p>This is the ninth tutorial in a series about <a href="../index.html">procedural meshes</a>. This time we use geodesic lines to position the vertices of an octasphere.</p>
+				
+				<p>This tutorial is made with Unity 2020.3.29f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>An octasphere with vertices placed on geodesic lines.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Meridians</h2>
+					
+					<p>An octasphere has the same problem that a cube sphere has: the vertices bunch up near the corners of the base shape. In the case of the cube there are eight corners, while in the case of the octahedron there are six corners. So the octahedron has two more problems regions than the cube, but the distortion of the vertex distribution is less severe in each region.</p>
+					
+					<figure>
+						<img src="meridians/normalized-top.png" width="280" height="280" alt="top">
+						<img src="meridians/normalized-back.png" width="280" height="280" alt="back">
+						<img src="meridians/normalized-rotated.png" width="280" height="280" alt="face">
+						<figcaption>Vertex distribution, looking at the top and back corners and a face; resolution 20.</figcaption>
+					</figure>
+					
+					<p>The octasphere and the UV sphere have in common that both contain meridians along which vertices are placed. In the case of the UV sphere there are many meridians, while in the case of the octasphere there are two circles, matching the vertical edges of the octahedron. We distributed vertices evenly along those lines when generating the UV sphere, so it makes sense to try the same approach for the octasphere.</p>
+					
+					<section>
+						<h3>Geo Octasphere</h3>
+						
+						<p>Meridians are a special case of geodesic lines, which are the shortest lines that connect two points on the surface of a sphere. Thus these are always curved lines, which can be found by slicing a plane through the two points and the center of the sphere, or by rotating one of the points around the sphere center straight towards the other point, describing an orbit.</p>
+						
+						<p>As we'll use more geodesic lines besides meridians later, we'll create a geodesic octasphere variant, shortened to geo octasphere. Duplicate <code>Octasphere</code> and name it <code>GeoOctasphere</code>.</p>
+						
+						<pre translate="no">	public struct <ins>GeoOctasphere</ins> : IMeshGenerator { &hellip; }</pre>
+						
+						<p>And add an option for it to <code>ProceduralMesh</code>.</p>
+						
+						<pre translate="no">	static MeshJobScheduleDelegate[] jobs = {
+		&hellip;
+		MeshJob&lt;Octasphere, SingleStream>.ScheduleParallel,
+		<ins>MeshJob&lt;GeoOctasphere, SingleStream>.ScheduleParallel,</ins>
+		MeshJob&lt;UVSphere, SingleStream>.ScheduleParallel
+	};
+
+	public enum MeshType {
+		SquareGrid€, SharedSquareGrid€, SharedTriangleGrid€,
+		FlatHexagonGrid€, PointyHexagonGrid€, CubeSphere€, SharedCubeSphere€,
+		Octasphere€, <ins>GeoOctasphere€,</ins> UVSphere€
+	};</pre>
+					</section>
+					
+					<section>
+						<h3>Seam</h3>
+						
+						<p>Let's begin by adjusting the seam vertex line first, turning it into a half meridian. We can do this by replacing the vertex code inside the seam loop of <code>GeoOctasphere.ExecutePolesAndSeam</code> with the seam code from <code>UVSphere</code>, which uses <code>sincos</code>.</p>
+						
+						<pre translate="no">			for (int v = 1; v &lt; 2 * Resolution; v++) {
+				<del>//if (v &lt; Resolution) { &hellip; }</del>
+				<del>//else { &hellip; }</del>
+				<ins>sincos(</ins>
+					<ins>PI + PI * v / (2 * Resolution),</ins>
+					<ins>out vertex.position.z, out vertex.position.y</ins>
+				<ins>);</ins>
+				vertex.normal = vertex.position = normalize(vertex.position);
+				vertex.texCoord0.y = GetTexCoord(vertex.position).y;
+				streams.SetVertex(v + 7, vertex);
+			}</pre>
+						
+						<p>This means that we no longer need to normalize those vertices and can also directly set the vertical texture coordinate, no longer relying on <code>GetTexCoord</code>.</p>
+						
+						<pre translate="no">				vertex.normal = vertex.position<ins>;</ins> <del>//= normalize(vertex.position);</del>
+				vertex.texCoord0.y = <ins>(float)v / (2 * Resolution)</ins>;</pre>
+						
+						<p>If we generate the geo octasphere at this point then we will get two different vertex distributions along the seam. This allows us to see that they are indeed different and that the meridian version is superior.</p>
+						
+						<figure>
+							<img src="meridians/seam-different-vertex-distributions.png" width="280" height="280">
+							<figcaption>Two different vertex distributions along seam.</figcaption>
+						</figure>
+						
+						<p>To better see the seam in isolation, let's remove the vertex normalization from <code>ExecuteRegular</code>.</p>
+						
+						<pre translate="no">			var vertex = new Vertex();
+			vertex.normal = vertex.position = <ins>columnBottomStart</ins>;
+			&hellip;
+
+			for (int v = 1; v &lt; Resolution; v++, vi++, ti += 2) {
+				&hellip;
+				vertex.normal = vertex.position<ins>;</ins> <ins>//= normalize(vertex.position);</ins>
+				&hellip;
+			}</pre>
+						
+						<figure>
+							<img src="meridians/seam-only-spherical.png" width="280" height="280">
+							<figcaption>Octahedron with half-meridian seam.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Bottom Meridians</h3>
+						
+						<p>We can apply the same vertex distribution to the other vertical octahedron edges. Begin by doing this for the bottom edges only, by use the same distribution for the first vertex in <code>ExecuteRegular</code>. Here we're dealing with a variable edge direction, so we have to use the sine that we calculate for either the X or the Z coordinate, either positive or negative. We can do this by multiplying the sine with the right corner vector and subtract that from the position.</p>
+						
+						<pre translate="no">			var vertex = new Vertex();
+			<ins>sincos(PI + PI * u / (2 * Resolution), out float sine, out vertex.position.y);</ins>
+			<ins>vertex.position -= sine * rhombus.rightCorner;</ins>
+			vertex.normal = vertex.position<ins>;</ins> <del>//= columnBottomStart;</del></pre>
+						
+						<figure>
+							<img src="meridians/meridians-bottom.png" width="280" height="280">
+							<figcaption>Four quarter meridians on bottom half.</figcaption>
+						</figure>
+						
+						<p>Now we can also directly set the vertical texture coordinate for those meridians.</p>
+						
+						<pre translate="no">			vertex.texCoord0<ins>.x</ins> = GetTexCoord(vertex.position)<ins>.x</ins>;
+			<ins>vertex.texCoord0.y = (float)u / (2 * Resolution);</ins></pre>
+						
+						<p>And we can completely avoid using <code>GetTexCoord</code> by noting that along these edges the horizontal texture coordinate is equal to the rhombus identifies plus one, divided by four.</p>
+						
+						<pre translate="no">			vertex.texCoord0.x = <ins>rhombus.id * 0.25f + 0.25f</ins>;</pre>
+					</section>
+					
+					<section>
+						<h3>Top Meridians</h3>
+						
+						<p>Generating the top parts of the meridians is less straightforward, because they're formed by the last row of each rhombus, inside the loop, when U is equal to the resolution. We can add a special case for this inside the loop. We can use the same meridian code for that case, if we first reset the position to zero.</p>
+						
+						<pre translate="no">				<ins>if (u == Resolution) {</ins>
+					<ins>vertex.position = 0f;</ins>
+					<ins>sincos(</ins>
+						<ins>PI + PI * u / (2 * Resolution),</ins>
+						<ins>out sine, out vertex.position.y</ins>
+					<ins>);</ins>
+					<ins>vertex.position -= sine * rhombus.rightCorner;</ins>
+				<ins>}</ins>
+				<ins>else</ins> if (v &lt;= Resolution - u) {
+					vertex.position =
+						lerp(columnBottomStart, columnBottomEnd, (float)v / Resolution);
+				}
+				else {
+					vertex.position =
+						lerp(columnTopStart, columnTopEnd, (float)v / Resolution);
+				}</pre>
+						
+						<p>The other difference here is that the progression is not based on U but on V, plus the resolution because it's the top half of the octahedron.</p>
+						
+						<pre translate="no">					sincos(
+						PI + PI * <ins>(v + Resolution)</ins> / (2 * Resolution),
+						out sine, out vertex.position.y
+					);</pre>
+						
+						<figure>
+							<img src="meridians/meridians-complete.png" width="280" height="280">
+							<figcaption>Complete meridians.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Meridian Interpolation</h3>
+						
+						<p>We can make all other vertices match the meridians by creating each horizontal line by interpolating from the right to the left meridian. We generate the rhombuses diagonally, so the current height from south to north pole is equal to the sum of U and V: `h=u+v`. Use this at the start of the loop to calculate the position on the right edge.</p>
+						
+						<pre translate="no">			for (int v = 1; v &lt; Resolution; v++, vi++, ti += 2) {
+				<ins>float h = u + v;</ins>
+				<ins>float3 pRight = 0f;</ins>
+				<ins>sincos(PI + PI * h / (2 * Resolution), out sine, out pRight.y);</ins>
+				<ins>pRight -= sine * rhombus.rightCorner;</ins>
+				
+				&hellip;
+			}</pre>
+						
+						<p>And also do it for the position on the left edge, by using the left instead of the right corner.</p>
+						
+						<pre translate="no">				float3 pRight = 0f;
+				sincos(PI + PI * h / (2 * Resolution), out sine, out pRight.y);
+				<ins>float3 pLeft = pRight - sine * rhombus.leftCorner;</ins>
+				pRight -= sine * rhombus.rightCorner;</pre>
+						
+						<p>Now replace the code that sets the vertices with a single horizontal interpolation from the right to the left position. If we look at the bottom half of the octahedron it is clear that V matches the horizontal progression, while the height matches the amount of steps. So let's use `v/h` as the interpolator.</p>
+						
+						<pre translate="no">				<del>//if (u == Resolution) { &hellip; }</del>
+				<del>//else if (v &lt;= Resolution - u) { &hellip; }</del>
+				<del>//else { &hellip; }</del>
+				<ins>vertex.position = lerp(pRight, pLeft, v / h);</ins>
+				vertex.normal = vertex.position;</pre>
+						
+						<figure>
+							<img src="meridians/interpolation-bottom.png" width="280" height="280">
+							<figcaption>Interpolation only correct for bottom half.</figcaption>
+						</figure>
+						
+						<p>This produces correct interpolation for the bottom half of the octahedron only. For the top half the horizontal progression is based on U and both it and the amount of steps decreases. So we need to use `(r-u)/(2r-h)` for the interpolator instead.</p>
+						
+						<pre translate="no">				vertex.position = lerp(
+					pRight, pLeft,
+					<ins>v &lt;= Resolution - u ?</ins> v / h <ins>: (Resolution - u) / (2f * Resolution - h)</ins>
+				);</pre>
+						
+						<figure>
+							<img src="meridians/interpolation-complete.png" width="280" height="280">
+							<figcaption>Complete interpolation.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Sphere</h3>
+						
+						<p>Finally, to produce a valid sphere we normalize the vertex positions again.</p>
+						
+						<pre translate="no">				vertex.position = lerp(
+					pRight, pLeft,
+					v &lt;= Resolution - u ? v / h : (Resolution - u) / (2f * Resolution - h)
+				);
+				vertex.normal = vertex.position <ins>= normalize(vertex.position)</ins>;</pre>
+						
+						<figure>
+							<img src="meridians/interpolated-meridians-top.png" width="280" height="280" alt="top corner">
+							<img src="meridians/interpolated-meridians-back.png" width="280" height="280" alt="back corner">
+							<img src="meridians/interpolated-meridians-face.png" width="280" height="280" alt="face">
+							<figcaption>Complete meridian-based octahedron sphere.</figcaption>
+						</figure>
+						
+						<p>Now the vertices no longer bunch up as much near the octahedron corners. The vertex distribution has drastically changed near the poles, because those regions are dominated by the meridians. Near the equator the linearly interpolated lines dominate, so vertices are still pulled towards the corners there, horizontally. Note that this means that the vertex distribution is not as symmetrical as the distribution of a normalized octasphere.</p>
+						
+						<p>At this point we can get rid of the code that calculates the old interpolation data.</p>
+						
+						<pre translate="no">			<del>//float3 columnBottomDir = rhombus.rightCorner - down();</del>
+			<del>//&hellip;</del>
+			<del>//float3 columnTopEnd = rhombus.leftCorner + columnTopDir * u / Resolution;</del></pre>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Geodesic Interpolation</h2>
+					
+					<p>We can improve our geo octasphere further by eliminating all straight lines and instead interpolate along geodesic lines only.</p>
+					
+					<section>
+						<h3>Quaternions</h3>
+						
+						<p>As described earlier, a geodesic line between two arbitrary points can be made by rotating one point straight towards the other, orbiting around the sphere center. We can use quaternions to generate an arbitrary rotation, via the static <code>quaternion.AxisAngle</code> method.</p>
+						
+						<pre translate="no">using static Unity.Mathematics.math;
+
+<ins>using quaternion = Unity.Mathematics.quaternion;</ins></pre>
+						
+						<aside>
+							<h3>Why do we explicitly use the <code>quaternion</code> type?</h3>
+							<div>
+								<p>To avoid a name clash with <code>math.quaternion€</code>. See <a href="../../basics/jobs/index.html#4.8">Basics / Jobs / 4.8 Mathematics Library</a>.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Axis</h3>
+						
+						<p>A geodesic line can also be found by slicing a plane through the sphere, which goes through both points and the center of the sphere. The normal vector of this plane matches the rotation axis that we need. We can find it by taking the cross product of the vectors pointing to the right and left meridian points, inside the loop in <code>ExecuteRegular</code>.</p>
+						
+						<pre translate="no">				float3 pLeft = pRight - sine * rhombus.leftCorner;
+				pRight -= sine * rhombus.rightCorner;
+				
+				<ins>float3 axis = cross(pRight, pLeft);</ins></pre>
+						
+						<p>Because the angle between these vectors isn't fixed the length of the cross product varies, so we have to normalize it.</p>
+						
+						<pre translate="no">				float3 axis = <ins>normalize(</ins>cross(pRight, pLeft)<ins>)</ins>;</pre>
+					</section>
+					
+					<section>
+						<h3>Angle</h3>
+						
+						<p>We also need to know the angle by which we have to rotate. We begin by determining the angle between the two meridian points, by calculating their dot product. This gives us the cosine of the angle so we have use the <code>acos</code> method to convert it to radians.</p>
+						
+						<pre translate="no">				float3 axis = normalize(cross(pRight, pLeft));
+				<ins>float angle = acos(dot(pRight, pLeft));</ins></pre>
+						
+						<p>Then, to interpolate along the geodesic line, we have to apply the interpolator as a factor to this angle, which gives us the amount of rotation that we need.</p>
+						
+						<pre translate="no">				float angle = acos(dot(pRight, pLeft)) <ins>* (</ins>
+					<ins>v &lt;= Resolution - u ? v / h : (Resolution - u) / (2f * Resolution - h)</ins>
+				<ins>)</ins>;</pre>
+					</section>
+					
+					<section>
+						<h3>Interpolation</h3>
+						
+						<p>We apply the rotation by invoking <code>quaternion.AxisAngle</code> with the axis and angle, then multiply the resulting quaternion with the right point to apply the rotation.</p>
+						
+						<pre translate="no">				<del>//vertex.position = lerp(</del>
+				<del>//	pRight, pLeft,</del>
+				<del>//	v &lt;= Resolution - u ? v / h : (Resolution - u) / (2f * Resolution - h)</del>
+				<del>//);</del>
+				<del>//vertex.normal = vertex.position = normalize(vertex.position);</del>
+				<ins>vertex.normal = vertex.position = mul(</ins>
+					<ins>quaternion.AxisAngle(axis, angle), pRight</ins>
+				<ins>);</ins></pre>
+						
+						<figure>
+							<img src="geodesic-interpolation/geodesic-interpolation-top.png" width="280" height="280" alt="geo top corner">
+							<img src="meridians/normalized-top.png" width="280" height="280" alt="normalized top corner">
+							<img src="geodesic-interpolation/geodesic-interpolation-back.png" width="280" height="280" alt="geo back corner">
+							<img src="meridians/normalized-back.png" width="280" height="280" alt="normalized back corner">
+							<img src="geodesic-interpolation/geodesic-interpolation-face.png" width="280" height="280" alt="geo face">
+							<img src="meridians/normalized-rotated.png" width="280" height="280" alt="normalized face">
+							<figcaption>Interpolation along geodesic lines, compared with normalized octahedron.</figcaption>
+						</figure>
+						
+						<p>The polar regions haven't changed much, but the vertices no longer get pulled as much toward the octahedron corners on the equator. Note that this approach does vertically stretch the triangle rows near the equator a bit.</p>
+						
+						<aside>
+							<h3>Isn't there an alternative mapping, like for the cube sphere?</h3>
+							<div>
+								<p>It it possible to apply an alternative mapping from octahedron to sphere, based on the barycentric coordinates per octahedron face. However, these mappings are inferior to simple vertex normalization because they affect vertices near the middle of edges more than those near corners, which is the opposite of what we need.</p>
+							</div>
+						</aside>
+						
+						<p>The next tutorial is <a href="../icosphere/index.html">Icosphere</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/procedural-meshes-09-geodesic-octasphere/" class="repository">repository</a>
+					<a href="Geodesic-Octasphere.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/rendering/part-4/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/rendering/part-4/tutorial-image.jpg">
+		<meta property="og:title" content="Rendering 4">
+		<meta property="og:description" content="A Unity Rendering tutorial about performing PBS lighting. Part 4 of 20.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Rendering 4</title>
+		<link href="../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/rendering/part-4/#article",
+				"headline": "Rendering 4",
+				"alternativeHeadline": "The First Light",
+				"datePublished": "2016-05-31",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Rendering tutorial about performing PBS lighting. Part 4 of 20.",
+				"image": "https://catlikecoding.com/unity/tutorials/rendering/part-4/tutorial-image.jpg",
+				"dependencies": "Unity 5.4.0b17",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/rendering/", "name": "Rendering" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+			};
+			
+			var hasAnimations = true;
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../products/utilities/frame-rate-counter/index.html"><img src="../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../index.html">Unity</a></li>
+					<li><a href="../index.html">Tutorials</a></li>
+					<li><a href="index.html">Rendering</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Rendering 4</h1>
+					<p>The First Light</p>
+					<ul>
+						<li>Transform normals from object to world space.</li>
+						<li>Work with a directional light.</li>
+						<li>Compute diffuse and specular reflections.</li>
+						<li>Enforce energy conservation.</li>
+						<li>Use a metallic workflow.</li>
+						<li>Take advantage of Unity's PBS algorithms.</li>
+					</ul>
+				</header>
+
+				<p>This is the fourth part of a tutorial series about rendering. The <a href="part-3.1.html">previous part</a> was about combining textures. This time we'll look at how to compute lighting.</p>
+				
+				<p>This tutorials was made using Unity 5.4.0b17.</p>
+				
+				<figure>
+					<img src="part-4/tutorial-image.jpg" width="512" height="256">
+					<figcaption>It is time to shine a light on things.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Normals</h2>
+					
+					<p>We can see things, because our eyes can detect electromagnetic radiation. Individual quanta of light are known as photons. We can see a part of the electromagnetic spectrum, which is know to us as visible light. The rest of the spectrum is invisible to us. </p>
+					
+					<aside>
+						<h3>What's the entire electromagnetic spectrum?</h3>
+						<div>
+							<p>The spectrum is split into spectral bands. From low to high frequency, these are known as radio waves, microwaves, infrared, visible light, ultraviolet, X-rays, and gamma rays.</p>
+						</div>
+					</aside>
+					
+					<p>A light source emits light. Some of this light hits objects. Some of this light bounces off the object. If that light then ends up hitting our eyes &ndash; or the camera lens &ndash; then we see the object.</p>
+					
+					<p>To work this all out, we have to know our object's surface. We already know its position, but not its orientation. For that, we need the surface normal vectors.</p>
+					
+					<section>
+						<h3>Using Mesh Normals</h3>
+						
+						<p>Duplicate our first shader, and use that as our first lighting shader. Create a material with this shader and assign it to some cubes and spheres in the scene. Give the objects different rotations and scales, some non-uniform, to get a varied scene.</p>
+						
+					<pre translate="no" class="shader">Shader "Custom/My First <ins>Lighting</ins> Shader" {
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="part-4/normals/objects.png" width="280" height="200">
+							<figcaption>Some cubes and spheres.</figcaption>
+						</figure>
+						
+						<p>Unity's cube and sphere meshes contain vertex normals. We can grab them and pass them straight to the fragment shader.</p>
+						
+						<pre translate="no" class="shader">			struct VertexData {
+				float4 position : POSITION;
+				<ins>float3 normal : NORMAL;</ins>
+				float2 uv : TEXCOORD0;
+			};
+			
+			struct Interpolators {
+				float4 position : SV_POSITION;
+				float2 uv : TEXCOORD0;
+				<ins>float3 normal : TEXCOORD1;</ins>
+			};
+
+			Interpolators MyVertexProgram (VertexData v) {
+				Interpolators i;
+				i.uv = TRANSFORM_TEX(v.uv, _MainTex);
+				i.position = mul(UNITY_MATRIX_MVP, v.position);
+				<ins>i.normal = v.normal;</ins>
+				return i;
+			}</pre>
+						
+						<p>Now we can visualize the normals in our shader.</p>
+						
+						<pre translate="no" class="shader">			float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+				return <ins>float4(i.normal * 0.5 + 0.5, 1)</ins>;
+			}</pre>
+						
+						<figure>
+							<img src="part-4/normals/batching.png" width="280" height="200">
+							<figcaption>Normal vectors as colors.</figcaption>
+						</figure>
+						
+						<p>These are the raw normals, directly from the mesh. The faces of the cubes appear flat, because each face is a separate quad with four vertices. The normals of these vertices all point in the same direction. In contrast, the vertex normals of the spheres all point in different directions, resulting in a smooth interpolation.</p>
+					</section>
+					
+					<section>
+						<h3>Dynamic Batching</h3>
+						
+						<p>There is something strange going on with the cube normals. We'd expect each cube to show the same colors, but this is not the case. Even weirder, the cubes can change color, depending on how we look at them.</p>
+						
+						<figure>
+							<video width="350" height="200" controls loop muted>
+								<source src="part-4/normals/color-changing-cubes.mp4" type="video/mp4">
+							</video>
+							<figcaption>Color-changing cubes.</figcaption>
+						</figure>
+						
+						<p>This is caused by dynamic batching. Unity dynamically merges small meshes together, to reduce draw calls. The meshes of the spheres are too large for this, so they aren't affected. But the cubes are fair game.</p>
+						
+						<p>To merge meshes, they have to be converted from their local space to world space. Whether and how objects are batched depends, among other things, on how they are sorted for rendering. As this conversion affects the normals as well, this is why we see the colors change.</p>
+						
+						<p>If you want to, you can switch dynamic batching off via the player settings.</p>
+						
+						<figure>
+							<img src="part-4/normals/batching-settings.png" width="300" height="226">
+							<figcaption>Batching settings.</figcaption>
+						</figure>
+						
+						<p>Besides dynamic batching, Unity can also do static batching. This works differently for static geometry, but also involves a conversion to world space. It happens at build time.</p>
+						
+						<figure>
+							<img src="part-4/normals/no-batching.png" width="280" height="210">
+							<figcaption>Normals, without dynamic batching.</figcaption>
+						</figure>
+						
+						<p>While you need to be aware of dynamic batching, it's nothing to be worried about. In fact, we have to do the same thing for our normals. So you can leave it enabled.</p>
+					</section>
+					
+					<section>
+						<h3>Normals in World Space</h3>
+						
+						<p>Except for dynamically batched objects, all our normals are in object space. But we have to know the surface orientation in world space. So we have to transform the normals from object to world space. We need the object's transformation matrix for that.</p>
+						
+						<p>Unity collapses an object's entire transformation hierarchy into a single transformation matrix, just like we did in <a href="part-1.1.html">part 1</a>. We could write this as `O = T_1 T_2 T_3 &hellip;` where `T` are the individual transformations and `O` is the combined transformation. This matrix is known as the object-to-world matrix.</p>
+						
+						<p>Unity makes this matrix available in shaders via a <code class="shader">float4x4 unity_ObjectToWorld</code> variable, which is defined in <em translate="no">UnityShaderVariables</em>. Multiply this matrix with the normal in the vertex shader to transform it to world space. And because it's a direction, repositioning should be ignored. So the fourth homogeneous coordinate must be zero.</p>
+						
+						<pre translate="no" class="shader">			Interpolators MyVertexProgram (VertexData v) {
+				Interpolators i;
+				i.position = mul(UNITY_MATRIX_MVP, v.position);
+				i.normal = <ins>mul(unity_ObjectToWorld, float4(v.normal, 0))</ins>;
+				i.uv = TRANSFORM_TEX(v.uv, _MainTex);
+				return i;
+			}</pre>
+						
+						<p>Alternatively, we can multiply with only the 3 by 3 part of the matrix. The compiled code ends up the same, because the compilers will eliminate everything that gets multiplied with the constant zero.</p>
+						
+						<pre translate="no" class="shader">				i.normal = mul(<ins>(float3x3)</ins>unity_ObjectToWorld, <ins>v.normal</ins>);</pre>
+						
+						<figure>
+							<img src="part-4/normals/object-to-world.png" width="280" height="200">
+							<figcaption>Going from object to world space.</figcaption>
+						</figure>
+						
+						<p>The normals are now in world space, but some appear brighter than others. That's because they got scaled as well. So we have to normalize them after the transformation.</p>
+						
+						<pre translate="no" class="shader">			i.normal = mul(unity_ObjectToWorld, float4(v.normal, 0));
+			<ins>i.normal = normalize(i.normal);</ins></pre>
+						
+						<figure>
+							<img src="part-4/normals/normalized.png" width="280" height="200">
+							<figcaption>Normalized normals.</figcaption>
+						</figure>
+						
+						<p>While we have normalized vectors again, they look weird for objects that don't have a uniform scale. That's because when a surface gets stretched in one dimension, its normals don't stretch in the same way.</p>
+						
+						<figure>
+							<img src="part-4/normals/scaling-incorrect.png" width="150" height="100">
+							<figcaption>Scaling X, both vertices and normals by &frac12;.</figcaption>
+						</figure>
+						
+						<p>When the scale is not uniform, it should be inverted for the normals. That way the normals will match the shape of the deformed surface, after they've been normalized again. And it doesn't make a difference for uniform scales.</p>
+						
+						<figure>
+							<img src="part-4/normals/scaling-correct.png" width="160" height="100">
+							<figcaption>Scaling X, vertices by &frac12; and normals by 2.</figcaption>
+						</figure>
+						
+						<p>So we have to invert the scale, but the rotation should remain the same. How can we do this?</p>
+						
+						<p>We described an object's transformation matrix as `O = T_1 T_2 T_3 &hellip;` but we can be more specific than that. We know that each step in the hierarchy combines a scaling, rotating, and positioning. So each `T` can be decomposed into `S R P`.</p>
+						
+						<p>This means that `O = S_1 R_1 P_1 S_2 R_2 P_2 S_3 R_3 P_3 &hellip;` but let's just say `O = S_1 R_1 P_1 S_2 R_2 P_2` to keep it short.</p>
+						
+						<p>Because normals are direction vectors, we don't care about repositioning. So we can shorten it further to `O = S_1 R_1 S_2 R_2` and we only have to consider 3 by 3 matrices.</p>
+						
+						<p>We want to invert the scaling, but keep the rotations the same. So we want a new matrix `N = S_1^-1 R_1 S_2^-1 R_2`.</p>
+						
+						<aside>
+							<h3>How do inverse matrices work?</h3>
+							<div>
+								<p>The inverse of a matrix `M` is written as `M^-1`. It is a matrix that will undo the operation of another matrix when they are multiplied. Each is the inverse of the other. So `M M^-1 = M^-1 M = I`.</p>
+								
+								<p>To undo a sequence of steps, you have to perform the inverse steps in reverse order. The mnemonic for this involves socks and shoes. This means that `(A B)^-1 = B^-1 A^-1`.</p>
+								
+								<p>In the case of a single number `x`, its inverse is simply `1/x`, because `x/x = 1`. This also demonstrates that zero has no inverse. Neither does every matrix have an inverse.</p>
+								
+								<p>We're working with scaling, rotating, and repositioning matrices. As long as we're not scaling by zero, all these matrices can be inverted.</p>
+								
+								<p>The inverse of a reposition matrix is made by simply negating the XYZ offset in it's fourth column.</p>
+								
+								<p>`[[1,0,0,x],[0,1,0,y],[0,0,1,z],[0,0,0,1]]^-1 = [[1,0,0,-x],[0,1,0,-y],[0,0,1,-z],[0,0,0,1]]`</p>
+								
+								<p>The inverse of a scaling matrix is made by inverting its diagonal. We only need to consider the 3 by 3 matrix.</p>
+								
+								<p>`[[x,0,0],[0,y,0],[0,0,z]]^-1 = [[1/x,0,0],[0,1/y,0],[0,0,1/z]]`</p>
+								
+								<p>Rotation matrices can be considered one axis at a time, for example around the Z axis. A rotation by `z` radians can be undone by simply rotating by `-z` radians. When you study the sine and cosine waves, you'll notice that `sin (-z) = -sin z` and `cos (-z) = cos z`. This makes the inverse matrix simple.</p>
+								
+								<p>`[[cos z, -sin z, 0],[sin z, cos z, 0],[0,0,1]]^-1 = [[cos z, sin z, 0],[-sin z, cos z, 0],[0,0,1]]`</p>
+								
+								<p>Notice that the rotation inverse is the same as the original matrix flipped across its main diagonal. Only the signs of the sine components changed.</p>
+							</div>
+						</aside>
+						
+						<p>Besides the object-to-world matrix, Unity also provides an object's world-to-object matrix. These matrices are indeed inverses of each other. So we also have access to `O^-1 = R_2^-1 S_2^-1 R_1^-1 S_1^-1`.</p>
+						
+						<p>That gives us the inverse scaling that we need, but also gives us the inverse rotations and a reversed transformation order. Fortunately, we can remove those unwanted effects by transposing the matrix. Then we get `(O^-1)^T = N`.</p>
+						
+						<aside>
+							<h3>What is the transpose of a matrix?</h3>
+							<div>
+								<p>The transpose of a matrix `M` is written as `M^T`. You transpose a matrix by flipping its main diagonal. So its rows become columns, and its columns become rows. Note that this means that the diagonal itself is unchanged.</p>
+								
+								<p>`[[1,2,3],[4,5,6],[7,8,9]]^T = [[1,4,7],[2,5,8],[3,6,9]]`</p>
+								
+								<p>Like inversion, transposing a sequence of matrix multiplications reverses its order. `(A B)^T = B^T A^T`. This makes sense when working with matrices that aren't square, otherwise you could end up with invalid multiplications. But it's true in general, and you can look up the proof for it.</p>
+								
+								<p>Of course flipping twice gets you back where you started. So `(M^T)^T = M`.</p>
+							</div>
+						</aside>
+						
+						<aside>
+							<h3>Why does transposing produce the correct matrix?</h3>
+							<div>
+								<p>First, notice that `R^-1 = R^T`, as observed above.</p>
+								<p>This leads to `O^-1 = R_2^-1 S_2^-1 R_1^-1 S_1^-1 = R_2^T S_2^-1 R_1^T S_1^-1`.</p>
+								<p>Now let's transpose `(O^-1)^T = (S_1^-1)^T (R_1^T)^T (S_2^1)^T (R_2^T)^T = (S_1^-1)^T R_1 (S_2^-1)^T R_2`.</p>
+								<p>Next, notice that `S^T = S`, because these matrices have zeros everywhere, except along their main diagonal.</p>
+								<p>This leads to `(O^-1)^T = S_1^-1 R_1 S_2^-1 R_2 = N`.</p>
+							</div>
+						</aside>
+						
+						<p>So let's transpose the world-to-object matrix and multiply that with the vertex normal.</p>
+						
+						<pre translate="no" class="shader">				i.normal = mul(
+					<ins>transpose((float3x3)unity_WorldToObject)</ins>,
+					v.normal
+				);
+				i.normal = normalize(i.normal);</pre>
+						
+						<figure>
+							<img src="part-4/normals/correct-normals.png" width="280" height="200">
+							<figcaption>Correct world-space normals.</figcaption>
+						</figure>
+						
+						<p>Actually, <em translate="no">UnityCG</em> contains a handy <code class="shader">UnityObjectToWorldNormal</code> function that does exactly this. So we can use that function. It also does it with explicit multiplications, instead of using <code class="shader">transpose</code>. That should result in better compiled code.</p>
+						
+						<pre translate="no" class="shader">			Interpolators MyVertexProgram (VertexData v) {
+				Interpolators i;
+				i.position = mul(UNITY_MATRIX_MVP, v.position);
+				<ins>i.normal = UnityObjectToWorldNormal(v.normal);</ins>
+				i.uv = TRANSFORM_TEX(v.uv, _MainTex);
+				return i;
+			}</pre>
+						
+						<aside>
+							<h3>What does <code class="shader">UnityObjectToWorldNormal</code> look like?</h3>
+							<div>
+								<p>Here it is. The <code class="shader">inline</code> keyword doesn't do anything, in case you're wondering.</p>
+								<pre translate="no" class="shader">// Transforms normal from object to world space
+inline float3 UnityObjectToWorldNormal( in float3 norm ) {
+	// Multiply by transposed inverse matrix,
+	// actually using transpose() generates badly optimized code
+	return normalize(
+		unity_WorldToObject[0].xyz * norm.x +
+		unity_WorldToObject[1].xyz * norm.y +
+		unity_WorldToObject[2].xyz * norm.z
+	);
+}</pre>
+							</div>
+						</aside>
+						
+					</section>
+					
+					<section>
+						<h3>Renormalizing</h3>
+
+						<p>After producing correct normals in the vertex program, they are passed through the interpolator. Unfortunately, linearly interpolating between different unit-length vectors does not result in another unit-length vector. It will be shorter.</p>
+						
+						<p>So we have to normalize the normals again in the fragment shader.</p>
+
+						<pre translate="no" class="shader">			float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+				<ins>i.normal = normalize(i.normal);</ins>
+				return float4(i.normal * 0.5 + 0.5, 1);
+			}</pre>
+
+						<figure>
+							<img src="part-4/normals/renormalized.png" width="280" height="200">
+							<figcaption>Renormalized normals.</figcaption>
+						</figure>
+						
+						<p>While this produces better results, the error is usually very small. You could decide to not renormalize in the fragment shader, if you value performance more. This is a common optimization for mobile devices.</p>
+						
+						<figure>
+							<img src="part-4/normals/interpolation-error.png" width="280" height="200">
+							<figcaption>Exaggerated error.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="part-4/normals/normals.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Diffuse Shading</h2>
+					
+					<p>We see objects that aren't themselves light sources, because they reflect light. There are different ways in which this reflection can happen. Let's first consider diffuse reflection.</p>
+					
+					<p>Diffuse reflection happens because a ray of light doesn't just bounce off a surface. Instead, it penetrates the surface, bounces around for a bit, gets split up a few times, until it exits the surface again. In reality, the interaction between photons and atoms is more complex than that, but we don't need to know the real-world physics in that much detail.</p>
+					
+					<p>How much light is diffusely refected off a surface depends on the angle at which the light ray hits it. Most light is reflected when the surface is hit head-on, at a 0&deg; angle. As this angle increases, the reflections will decrease. At 90&deg;, no light hits the surface anymore, so it stays dark. The amount of diffused light is directly proportional to the cosine of the angle between the light direction and the surface normal. This is known as Lambert's cosine law.</p>
+					
+					<figure>
+						<img src="part-4/diffuse-shading/lambert.png" width="380" height="230">
+						<figcaption>Diffuse reflections.</figcaption>
+					</figure>
+					
+					<p>We can determine this Lamberterian reflectance factor by computing the dot product of the surface normal and the light direction. We already know the normal, but not yet the light direction. Let's start with a fixed light direction, coming directly from above.</p>
+					
+					<pre translate="no" class="shader">			float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+				i.normal = normalize(i.normal);
+				<ins>return dot(float3(0, 1, 0), i.normal)</ins>;
+			}</pre>
+					
+					<figure>
+						<img alt="gamma" src="part-4/diffuse-shading/lit-from-above-gamma.png" width="280" height="200">
+						<img alt="linear" src="part-4/diffuse-shading/lit-from-above-linear.png" width="280" height="200">
+						<figcaption>Lit from above, in gamma and linear space.</figcaption>
+					</figure>
+					
+					<aside>
+						<h3>What's a dot product?</h3>
+						<div>
+							<p>The dot product between two vectors is geometrically defined as `A * B =  ||A|| &nbsp; ||B|| &nbsp; cos theta`. This means that it is the cosine of the angle between the vectors, multiplied by their lengths. So in the case of two unity vectors, `A * B = cos theta`.</p>
+							
+							<p>Algebraically, it is defined as `A * B = sum_(i=1)^n A_i B_i = A_1 B_1 + A_2 B_2 + &hellip; + A_n B_n`. This means that you can compute it by multiplying all component pairs and sum them.</p>
+							
+							<pre translate="no" class="shader">float dotProduct = v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;</pre>
+							
+							<p>Visually, this operation projects one vector straight down to the other. As if casting a shadow on it. In doing so, you end up with a right triangle of which the bottom side's length is the result of the dot product. And if both vectors are unit length, that's the cosine of their angle.</p>
+							
+							<figure>
+								<img src="part-4/diffuse-shading/dot-product.png" width="135" height="110">
+								<figcaption>Dot product.</figcaption>
+							</figure>
+						</div>
+					</aside>
+					
+					<section>
+						<h3>Clamped Lighting</h3>
+						
+						<p>Computing the dot product works when the surface is directed towards the light, but not when it is directed away from it. In that case, the surface would logically be in its own shadow and it should receive no light at all. As the angle between the light direction and the normal must be larger than 90&deg; at this point, its cosine and thus the dot product becomes negative. As we don't want negative light, we have to clamp the result. We can use the standard <code class="shader">max</code> function for that.</p>
+					
+						<pre translate="no" class="shader">				return <ins>max(0,</ins> dot(float3(0, 1, 0), i.normal)<ins>)</ins>;</pre>
+						
+						<p>Instead of <code class="shader">max</code>, you'll often see shaders use <code class="shader">saturate</code> instead. This standard function clamps between 0 and 1.</p>
+						
+						<pre translate="no" class="shader">				return <ins>saturate(</ins>dot(float3(0, 1, 0), i.normal));</pre>
+						
+						<p>This seems unnecessary, as we know that our dot product will never produce a result that is greater than 1. However, in some cases it can actually be more efficient, depending on the hardware. But we shouldn't worry about such micro optimizations at this point. In fact, we can delegate that to the folks at Unity.</p>
+						
+						<p>The <em translate="no">UnityStandardBRDF</em> include file defines the convenient <code class="shader">DotClamped</code> function. This function performs a dot product and makes sure it is never negative. This is exactly what we need. It contains a lot of other lighting function as well, and includes other useful files too, which we'll need later. So let's use it!</p>
+						
+						<pre translate="no" class="shader">			#include "UnityCG.cginc"
+			<ins>#include "UnityStandardBRDF.cginc"</ins>
+
+			&hellip;
+
+			float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+				i.normal = normalize(i.normal);
+				return <ins>DotClamped(</ins>float3(0, 1, 0), i.normal);
+			}</pre>
+						
+						<aside>
+							<h3>What does <code class="shader">DotClamped</code> look like?</h3>
+							<div>
+								<p>Here it is. Apparently, they decided that it's better to use <code class="shader">saturate</code> when targeting low-capability shader hardware, and when targeting PS3.</p>
+								
+								<pre translate="no" class="shader">inline half DotClamped (half3 a, half3 b) {
+	#if (SHADER_TARGET &lt; 30 || defined(SHADER_API_PS3))
+		return saturate(dot(a, b));
+	#else
+		return max(0.0h, dot(a, b));
+	#endif
+}</pre>
+								
+								<p>This shader uses half-precision numbers, but you don't need to worry about numerical precision yet. It only makes a difference for mobile devices.</p>
+							</div>
+						</aside>
+						
+						<p>Because <em translate="no">UnityStandardBRDF</em> already includes <em translate="no">UnityCG</em> and some other files, we don't have to explicitly include it anymore. It is not wrong to do so, but we might as well keep it short.</p>
+						
+						<pre translate="no" class="shader"><del>//			#include "UnityCG.cginc"</del>
+			#include "UnityStandardBRDF.cginc"</pre>
+						
+						<figure>
+							<img src="part-4/diffuse-shading/include-files.png" width="550" height="565">
+							<figcaption>Include file hierarchy, starting at <em translate="no">UnityStandardBRDF</em>.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Light Source</h3>
+						
+						<p>Instead of a hard-coded light direction, we should use the direction of the light that's in our scene. By default, each Unity scene has a  light that represents the sun. It is a directional light, which means that it is considered to be infinitely far away. As a result, all its light rays come from exactly the same direction. Of course this isn't true in real life, but the sun is so far away that it is a fair approximation.</p>
+						
+						<figure>
+							<img src="part-4/diffuse-shading/default-scene-light.png" width="320" height="474">
+							<figcaption>Default scene light, moved out of the way.</figcaption>
+						</figure>
+						
+						<p><em translate="no">UnityShaderVariables</em> defines <code class="shader">float4 _WorldSpaceLightPos0</code>, which contains the position of the current light. Or the direction that the light rays are coming from, in case of a directional light. It has four components, because these are homogeneous coordinates. So the fourth component is 0 for our directional light.</p>
+						
+						<pre translate="no" class="shader">				<ins>float3 lightDir = _WorldSpaceLightPos0.xyz;</ins>
+				return DotClamped(<ins>lightDir</ins>, i.normal);</pre>
+					</section>
+					
+					<section>
+						<h3>Light Mode</h3>
+						
+						<p>Before this produces correct result, we have to tell Unity which light data we want to use. We do so by adding a <em translate="no">LightMode</em> tag to our shader pass.</p>
+						
+						<p>Which light mode we need depends on how we're rendering the scene. We can either use the forward or the deferred rendering path. There are also two older rendering modes, but we won't bother with those. You choose the rendering path via the player rendering settings. It sits right above the color space choice. We're using forward rendering, which is the default.</p>
+						
+						<figure>
+							<img src="part-4/diffuse-shading/rendering-path.png" width="300" height="80">
+							<figcaption>Rendering path choice.</figcaption>
+						</figure>
+						
+						<p>We have to use the <em translate="no">ForwardBase</em> pass. This is the first pass used when rendering something via the forward rendering path. It gives us access to the main directional light of the scene. It sets up some other things as well, but we'll cover those later.</p>
+						
+						<pre translate="no" class="shader">		Pass {
+			<ins>Tags {</ins>
+				<ins>"LightMode" = "ForwardBase"</ins>
+			<ins>}</ins>
+
+			CGPROGRAM
+
+			&hellip;
+
+			ENDCG
+		}</pre>
+						
+						<figure>
+							<video width="280" height="200" controls loop muted>
+								<source src="part-4/diffuse-shading/diffuse-light.mp4" type="video/mp4">
+							</video>
+							<figcaption>Diffuse light.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Light Color</h3>
+						
+						<p>Of course light isn't always white. Each light source has its own color, which we can get to via the <code class="shader">fixed4 _LightColor0</code> variable, which is defined in <em translate="no">UnityLightingCommon</em>.</p>
+						
+						<aside>
+							<h3>What is <code class="shader">fixed4</code>?</h3>
+							<div>
+								<p>These are low-precision numbers, which trade precision for speed on mobile devices. On desktops, <code class="shader">fixed</code> is just an alias for <code class="shader">float</code>. Precision optimizations are a subject for later.</p>
+							</div>
+						</aside>
+						
+						<p>This variable contains the light's color, multiplied by its intensity. Although it provides all four channels, we only need the RGB components.</p>
+						
+						<pre translate="no" class="shader">			float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+				i.normal = normalize(i.normal);
+				float3 lightDir = _WorldSpaceLightPos0.xyz;
+				<ins>float3 lightColor = _LightColor0.rgb;</ins>
+				<ins>float3 diffuse = lightColor *</ins> DotClamped(lightDir, i.normal);
+				<ins>return float4(diffuse, 1);</ins>
+			}</pre>
+						
+						<figure>
+							<img src="part-4/diffuse-shading/light-color.png" width="280" height="200">
+							<figcaption>Colored light.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Albedo</h3>
+						
+						<p>Most materials absorb part of the electromagnetic spectrum. This gives them their color. For example, if all visible red frequencies are absorbed, what escapes will appear cyan.</p>
+						
+						<aside>
+							<h3>What happens to the light that doesn't escape?</h3>
+							<div>
+								<p>The light's energy gets stored in the object, typically as heat. That's why black things tend to be warmer than white things.</p>
+							</div>
+						</aside>
+						
+						<p>The color of the diffuse reflectivity of a material is known as its albedo. Albedo is Latin for whiteness. So it describes how much of the red, green, and blue color channels are diffusely reflected. The rest is absorbed. We can use the material's texture and tint to define this.</p>
+						
+						<pre translate="no" class="shader">			float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+				i.normal = normalize(i.normal);
+				float3 lightDir = _WorldSpaceLightPos0.xyz;
+				float3 lightColor = _LightColor0.rgb;
+				<ins>float3 albedo = tex2D(_MainTex, i.uv).rgb * _Tint.rgb;</ins>
+				float3 diffuse =
+					<ins>albedo *</ins> lightColor * DotClamped(lightDir, i.normal);
+				return float4(diffuse, 1);
+			}</pre>
+						
+						<p>Let's also change the label of the main texture to <em translate="no">Albedo</em> in the inspector.</p>
+						
+						<pre translate="no" class="shader">	Properties {
+		_Tint ("Tint", Color) = (1, 1, 1, 1)
+		_MainTex (<ins>"Albedo"</ins>, 2D) = "white" {}
+	}
+</pre>
+						
+						<figure>
+							<img alt="inspector" src="part-4/diffuse-shading/albedo-inspector.png" width="320" height="92"><br>
+							<img alt="gamma" src="part-4/diffuse-shading/albedo-gamma.png" width="280" height="200">
+							<img alt="linear" src="part-4/diffuse-shading/albedo-linear.png" width="280" height="200">
+							<figcaption>Diffuse shading with albedo, in gamma and linear space.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="part-4/diffuse-shading/diffuse-shading.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+					
+				<section>
+					<h2>Specular Shading</h2>
+					
+					<p>Besides diffuse reflections, there are also specular reflections. This happens when light doesn't get diffused after hitting a surface. Instead, the light ray bounces off the surface at and angle equal to the angle at which it hit the surface. This is what causes the reflections that you see in mirrors.</p>
+					
+					<p>Unlike with diffuse reflections, the position of the viewer matters for specular reflections. Only light that ends up reflected directly towards you is visible. The rest goes somewhere else, so you won't see it.</p>
+					
+					<p>So we need to know the direction from the surface to the viewer. This requires the world-space positions of the surface and the camera.</p>
+					
+					<p>We can determine the world position of the surface in the vertex program, via the object-to-world matrix, then pass it to the fragment program.</p>
+
+					<pre translate="no" class="shader">			struct Interpolators {
+				float4 position : SV_POSITION;
+				float2 uv : TEXCOORD0;
+				float3 normal : TEXCOORD1;
+				<ins>float3 worldPos : TEXCOORD2;</ins>
+			};
+
+			Interpolators MyVertexProgram (VertexData v) {
+				Interpolators i;
+				i.position = mul(UNITY_MATRIX_MVP, v.position);
+				<ins>i.worldPos = mul(unity_ObjectToWorld, v.position);</ins>
+				i.normal = UnityObjectToWorldNormal(v.normal);
+				i.uv = TRANSFORM_TEX(v.uv, _MainTex);
+				return i;
+			}</pre>
+					
+					<p>The position of the camera can be accessed via <code class="shader">float3 _WorldSpaceCameraPos</code>, which is defined in <em translate="no">UnityShaderVariables</em>. We find the view direction subtracting the surface position from this and normalizing.</p>
+					
+					<pre translate="no" class="shader">			float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+				i.normal = normalize(i.normal);
+				float3 lightDir = _WorldSpaceLightPos0.xyz;
+				<ins>float3 viewDir = normalize(_WorldSpaceCameraPos - i.worldPos);</ins>
+				
+				float3 lightColor = _LightColor0.rgb;
+				float3 albedo = tex2D(_MainTex, i.uv).rgb * _Tint.rgb;
+				float3 diffuse =
+					albedo * lightColor * DotClamped(lightDir, i.normal);
+				return float4(diffuse, 1);
+			}</pre>
+					
+					<aside>
+						<h3>Don't Unity's shaders interpolate the view direction?</h3>
+						<div>
+							<p>Yes. Unity's shaders compute the view direction in the vertex program and interpolates that. Normalization is done in the fragment program, or in the vertex program for less-capable hardware. Either approach is fine.</p>
+						</div>
+					</aside>
+
+					<section>
+						<h3>Reflecting Light</h3>
+
+						<p>To know where the reflected light goes, we can use the standard <code class="shader">reflect</code> function. It takes the direction of an incoming light ray and reflects it based on a surface normal. So we have to negate our light direction.</p>
+
+						<pre translate="no" class="shader">				<ins>float3 reflectionDir = reflect(-lightDir, i.normal);</ins>
+
+				return float4(<ins>reflectionDir * 0.5 + 0.5</ins>, 1);</pre>
+
+
+						<figure>
+							<img src="part-4/specular-shading/reflection-directions.png" width="280" height="200">
+							<figcaption>Reflection directions.</figcaption>
+						</figure>
+
+						<aside>
+							<h3>How does reflecting a vector work?</h3>
+							<div>
+								<p>You can reflect a direction `D` with a normal `N` by computing `D - 2N (N &middot; D)`.</p>
+							</div>
+						</aside>
+
+						<p>In case of a perfectly smooth mirror, we'd only see reflected light where the surface angle is just right. In all other places, the reflected light misses us and the surface would appear black to us. But objects aren't perfectly smooth. They have lots of microscopic bumps, which means that the surface normal can vary a lot.</p>
+						
+						<p>So we could see some of the reflection, even if our view direction doesn't exactly match the reflection direction. The more we deviate from the reflection direction, the less of it we'll see. Once again, we can use the clamped dot product to figure out how much light reaches us.</p>
+
+						<pre translate="no" class="shader">				return <ins>DotClamped(viewDir, reflectionDir)</ins>;</pre>
+
+						<figure>
+							<img alt="diagram" src="part-4/specular-shading/reflections.png" width="500" height="240">
+							<img alt="graphics" src="part-4/specular-shading/phong.png" width="280" height="200">
+							<figcaption>Specular reflections.</figcaption>
+						</figure>
+					</section>
+				
+					<section>
+						<h3>Smoothness</h3>
+
+						<p>The size of the highlight produced by this effect depends on the roughness of the material. Smooth materials focus the light better, so they have smaller highlights. We can control this smoothness by making it a material property. It is typically defined as a value between 0 and 1, so let's make it a slider.</p>
+						
+						<pre translate="no" class="shader">	Properties {
+		_Tint ("Tint", Color) = (1, 1, 1, 1)
+		_MainTex ("Albedo", 2D) = "white" {}
+		<ins>_Smoothness ("Smoothness", Range(0, 1)) = 0.5</ins>
+	}
+		
+		&hellip;
+
+			<ins>float _Smoothness;</ins></pre>
+						
+						<p>We narrow the highlight by raising the dot product to a higher power. We use the smoothness value for that, but it has to be much larger than 1 to have the desired effect. So let's just multiply it by 100.</p>
+						
+						<pre translate="no" class="shader">				return <ins>pow(</ins>
+					DotClamped(viewDir, reflectionDir)<ins>,</ins>
+					<ins>_Smoothness * 100</ins>
+				<ins>)</ins>;</pre>
+						
+						<figure>
+							<img alt="inspector" src="part-4/specular-shading/smoothness-slider.png" width="320" height="116"><br>
+							<img alt="smoothness" src="part-4/specular-shading/smoothness.png" width="280" height="200">
+							<figcaption>Pretty smooth.</figcaption>
+						</figure>
+					</section>					
+
+					<section>
+						<h3>Blinn-Phong</h3>
+						
+						<p>We're currently computing the reflection according to the Phong reflection model. But the most-often used model is Blinn-Phong. It uses a vector halfway between the light direction and the view direction. The dot product between the normal and the half vector determines the specular contribution.</p>
+
+						<pre translate="no" class="shader"><del>//				float3 reflectionDir = reflect(-lightDir, i.normal);</del>
+				<ins>float3 halfVector = normalize(lightDir + viewDir);</ins>
+
+				return pow(
+					DotClamped(<ins>halfVector</ins>, <ins>i.normal</ins>),
+					_Smoothness * 100
+				);
+</pre>
+
+						<figure>
+							<img alt="diagram" src="part-4/specular-shading/halfway-vector.png" width="460" height="240">
+							<img alt="graphics" src="part-4/specular-shading/blinn-phong.png" width="280" height="200">
+							<figcaption>Blinn-Phong specular.</figcaption>
+						</figure>
+						
+						<p>This approach produces a larger highlight, but that can be countered by using a higher smoothness value. The result turns out to visually match reality a bit better than Phong, although both methods are still approximations. One big limitation is that it can produce invalid highlights for objects that are lit from behind.</p>
+						
+						<figure>
+							<img src="part-4/specular-shading/specular-error.png" width="260" height="200">
+							<figcaption>Incorrect specular, with smoothness 0.01.</figcaption>
+						</figure>
+						
+						<p>These artifacts become noticeable when using low smoothness values. They can be hidden by using shadows, or by fading out the specular based on the light angle. Unity's legacy shaders have this problem too, so we'll not worry about it either. We'll move on to another lighting method soon anyway.</p>
+					</section>
+
+					<section>
+						<h3>Specular Color</h3>
+						
+						<p>Of course the color of the specular reflection matches that of the light source. So let's factor it in.</p>
+						
+						<pre translate="no" class="shader">				float3 halfVector = normalize(lightDir + viewDir);
+				<ins>float3 specular = lightColor *</ins> pow(
+					DotClamped(halfVector, i.normal),
+					_Smoothness * 100
+				);
+
+				return <ins>float4(specular, 1);</ins></pre>
+						
+						<p>But that is not all. The color of the reflection also depends on the material. This is not the same as the albedo. Metals tend to have very little if any albedo, while having strong and often colored specular reflectivity. In contrast, nonmetals tend to have a distinct albedo, while their specular reflectivity is weaker and not colorized.</p>
+						
+						<p>We can add a texture and tint to define the specular color, just as we do for the albedo. But let's not bother with another texture and just use a tint.</p>
+						
+						<pre translate="no" class="shader">	Properties {
+		_Tint ("Tint", Color) = (1, 1, 1, 1)
+		_MainTex ("Albedo", 2D) = "white" {}
+		<ins>_SpecularTint ("Specular", Color) = (0.5, 0.5, 0.5)</ins>
+		_Smoothness ("Smoothness", Range(0, 1)) = 0.1
+	}
+
+	&hellip;
+
+			<ins>float4 _SpecularTint;</ins>
+			float _Smoothness;
+
+			&hellip;
+
+			float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+				&hellip;
+
+				float3 halfVector = normalize(lightDir + viewDir);
+				float3 specular = <ins>_SpecularTint.rgb *</ins> lightColor * pow(
+					DotClamped(halfVector, i.normal),
+					_Smoothness * 100
+				);
+
+				return float4(specular, 1);
+			}</pre>
+						
+						<p>We can control both the colorizing and strength of the specular reflection with a color property.</p>
+
+						<figure>
+							<img alt="inspector" src="part-4/specular-shading/specular-color.png" width="320" height="140"><br>
+							<img alt="colored specular" src="part-4/specular-shading/colored-specular.png" width="280" height="200">
+							<figcaption>Tinted specular reflection.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Can't we use the tint's alpha as smoothness?</h3>
+							<div>
+								<p>That is certainly possible. You can also store specular color and smoothness in a single texture that way.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Diffuse and Specular</h3>
+						
+						<p>Diffuse and specular reflections are two parts of the lighting puzzle. We can add them together to make our picture more complete.</p>
+
+						<pre translate="no" class="shader">				return float4(<ins>diffuse +</ins> specular, 1);</pre>
+
+						<figure>
+							<img alt="gamma" src="part-4/specular-shading/diffuse-specular-gamma.png" width="280" height="200">
+							<img alt="linear" src="part-4/specular-shading/diffuse-specular-linear.png" width="280" height="200">
+							<figcaption>Diffuse plus specular, in gamma and linear space.</figcaption>
+						</figure>
+					</section>
+						
+					<a href="part-4/specular-shading/specular-shading.unitypackage.html" download rel="nofollow">unitypackage</a>					
+				</section>
+				
+				<section>
+					<h2>Energy Conservation</h2>
+					
+					<p>There is a problem with just adding the diffuse and specular reflections together. The result can be brighter than the light source. This is very obvious when using a fully white specular combined with low smoothness.</p>
+					
+					<figure>
+						<img src="part-4/energy-conservation/too-bright.png" width="280" height="200">
+						<figcaption>White specular, 0.1 smoothness. Too bright.</figcaption>
+					</figure>
+					
+					<p>When light hits a surface, part of it bounces off as specular light. The rest of it penetrates the surface and either comes back out as diffuse light, or is absorbed. But we currently do not take this into consideration. Instead, our light both reflects and diffuses at full strength. So we could end up doubling the light's energy.</p>
+					
+					<p>We have to make sure that the sum of the diffuse and specular parts of our material never exceed 1. That guarantees that we're not creating light out of nowhere. It is fine if the total is less than 1. That just means that part of the light is absorbed.</p>
+					
+					<p>As we're using a constant specular tint, we can simply adjust the albedo tint by multiplying it by 1 minus the specular. But it is inconvenient to do this manually, especially if we want to use a specific albedo tint. So let's do this in the shader.</p>
+					
+					<pre translate="no" class="shader">				float3 albedo = tex2D(_MainTex, i.uv).rgb * _Tint.rgb;
+				<ins>albedo *= 1 - _SpecularTint.rgb;</ins></pre>
+					
+					<figure>
+						<img src="part-4/energy-conservation/not-too-bright.png" width="280" height="200">
+						<figcaption>No longer too bright.</figcaption>
+					</figure>
+					
+					<p>The diffuse and specular contributions are now linked. The stronger the specular, the fainter the diffuse part. A black specular tint produces zero reflections, in which case you'll see the albedo at full strength. A white specular tint results in a perfect mirror, so the albedo is completely eliminated.</p>
+					
+					<figure>
+						<video width="280" height="200" controls loop muted>
+							<source src="part-4/energy-conservation/energy-conservation.mp4" type="video/mp4">
+						</video>
+						<figcaption>Energy conservation.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Monochrome</h3>
+						
+						<p>This approach works fine when the specular tint is a grayscale color. But it produces weird results when other colors are used. For example, a red specular tint will only reduce the red component of the diffuse part. As a result, the albedo will be tinted cyan.</p>
+						
+						<figure>
+							<img src="part-4/energy-conservation/red-specular.png" width="280" height="200">
+							<figcaption>Red specular, cyan albedo.</figcaption>
+						</figure>
+						
+						<p>To prevent this coloration, we can use monochrome energy conservation. This just means that we use the strongest component of the specular color to reduce the albedo.</p>
+						
+						<pre translate="no" class="shader">				albedo *= 1 -
+					<ins>max(_SpecularTint.r, max(_SpecularTint.g, _SpecularTint.b))</ins>;
+</pre>
+						
+						<figure>
+							<img src="part-4/energy-conservation/monochrome-energy-conservation.png" width="280" height="200">
+							<figcaption>Monochome energy conservation.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Utility Function</h3>
+						
+						<p>As you might expect, Unity has a utility function to take care of the energy conservation. It is <code class="shader">EnergyConservationBetweenDiffuseAndSpecular</code> and is defined in <em translate="no">UnityStandardUtils</em>.</p>
+						
+						<pre translate="no" class="shader">			#include "UnityStandardBRDF.cginc"
+			<ins>#include "UnityStandardUtils.cginc"</ins></pre>
+						
+						<figure>
+							<img src="part-4/energy-conservation/include-files.png" width="445" height="265">
+							<figcaption>Include file hierarchy, starting at UnityStandardUtils.</figcaption>
+						</figure>
+						
+						<p>This function takes albedo and specular colors as input, and output an adjusted albedo. But it also has a third output parameter, known as one-minus-reflectivity. This is one minus the specular strength, the factor we multiply the albedo with. It is an extra output, because reflectivity is needed for other lighting computations as well.</p>
+						
+						<pre translate="no" class="shader">				float3 albedo = tex2D(_MainTex, i.uv).rgb * _Tint.rgb;
+<del>//				albedo *= 1 -</del>
+<del>//					max(_SpecularTint.r, max(_SpecularTint.g, _SpecularTint.b));</del>
+
+				<ins>float oneMinusReflectivity;</ins>
+				<ins>albedo = EnergyConservationBetweenDiffuseAndSpecular(</ins>
+					<ins>albedo, _SpecularTint.rgb, oneMinusReflectivity</ins>
+				<ins>);</ins></pre>
+						
+						<aside>
+							<h3>What does <code class="shader">EnergyConservationBetweenDiffuseAndSpecular</code> look like?</h3>
+							<div>
+								<p>Here it is. It has three modes, either no conservation, monochrome, or colored. These are controlled with <code class="shader">#define</code> statements. The default is monochrome.</p>
+								
+								<pre translate="no" class="shader">half SpecularStrength(half3 specular) {
+	#if (SHADER_TARGET &lt; 30)
+		// SM2.0: instruction count limitation
+		// SM2.0: simplified SpecularStrength
+		// Red channel - because most metals are either monochrome
+		// or with redish/yellowish tint
+		return specular.r;
+	#else
+		return max(max(specular.r, specular.g), specular.b);
+	#endif
+}
+
+// Diffuse/Spec Energy conservation
+inline half3 EnergyConservationBetweenDiffuseAndSpecular (
+	half3 albedo, half3 specColor, out half oneMinusReflectivity
+) {
+	oneMinusReflectivity = 1 - SpecularStrength(specColor);
+	#if !UNITY_CONSERVE_ENERGY
+		return albedo;
+	#elif UNITY_CONSERVE_ENERGY_MONOCHROME
+		return albedo * oneMinusReflectivity;
+	#else
+		return albedo * (half3(1, 1, 1) - specColor);
+	#endif
+}</pre>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Metallic Workflow</h3>
+
+						<p>There are basically two kinds of materials that we are concerned with. There are metals, and there are nonmetals. The latter are also known as dielectric materials. Currently, we can create metals by using a strong specular tint. And we can create dielectrics by using a weak monochrome specular. This is the specular workflow.</p>
+
+						<p>It would be much simpler if we could just toggle between metal and nonmetal. As metals don't have albedo, we could use that color data for their specular tint instead. And nonmetals don't have a colored specular anyway, so we don't need a separate specular tint at all. This is known as the metallic workflow. Let's go with that.</p>
+
+						<aside>
+							<h3>Which is the better workflow?</h3>
+							<div>
+								<p>Both approaches are fine. That's why Unity has a standard shader for each. The metallic workflow is simpler, because you have only one color source plus a slider. This is sufficient to create realistic materials. The specular workflow can produce the same results, but because you have more control, unrealistic materials are also possible.</p>
+							</div>
+						</aside>
+
+						<p>We can use another slider property as a metallic toggle, to replace the specular tint. Typically, it should be set to either 0 or 1, because something is either a metal or not. A value in between represents a material that has a mix of metal and nonmetal components.</p>
+
+						<pre translate="no" class="shader">	Properties {
+		_Tint ("Tint", Color) = (1, 1, 1, 1)
+		_MainTex ("Albedo", 2D) = "white" {}
+<del>//		_SpecularTint ("Specular", Color) = (0.5, 0.5, 0.5)</del>
+		<ins>_Metallic ("Metallic", Range(0, 1)) = 0</ins>
+		_Smoothness ("Smoothness", Range(0, 1)) = 0.1
+	}
+
+	&hellip;
+
+<del>//			float4 _SpecularTint;</del>
+			<ins>float _Metallic;</ins>
+			float _Smoothness;</pre>
+
+						<figure>
+							<img src="part-4/energy-conservation/metallic-slider.png" width="320" height="134">
+							<figcaption>Metallic slider.</figcaption>
+						</figure>
+						
+						<p>Now we can derive the specular tint from the albedo and metallic properties. The albedo can then simply be multiplied by one minus the metallic value.</p>
+
+						<pre translate="no" class="shader">				<ins>float3 specularTint = albedo * _Metallic;</ins>
+				float oneMinusReflectivity <ins>= 1 - _Metallic</ins>;
+<del>//				albedo = EnergyConservationBetweenDiffuseAndSpecular(</del>
+<del>//					albedo, _SpecularTint.rgb, oneMinusReflectivity</del>
+<del>//				);</del>
+				<ins>albedo *= oneMinusReflectivity;</ins>
+				
+				float3 diffuse =
+					albedo * lightColor * DotClamped(lightDir, i.normal);
+
+				float3 halfVector = normalize(lightDir + viewDir);
+				float3 specular = <ins>specularTint</ins> * lightColor * pow(
+					DotClamped(halfVector, i.normal),
+					_Smoothness * 100
+				);</pre>
+
+						<p>However, this is an oversimplification. Even pure dielectrics still have some specular reflection. So the specular strength and reflection values do not exactly match the metallic slider's value. And this is also influenced by the color space. Fortunately, <em translate="no">UnityStandardUtils</em> also has the <code class="shader">DiffuseAndSpecularFromMetallic</code> function, which takes care of this for us.</p>
+
+						<pre translate="no" class="shader">				float3 specularTint<ins>;</ins> <del>// = albedo * _Metallic;</del>
+				float oneMinusReflectivity<ins>;</ins> <del>// = 1 - _Metallic;</del>
+<del>//				albedo *= oneMinusReflectivity;</del>
+				<ins>albedo = DiffuseAndSpecularFromMetallic(</ins>
+					<ins>albedo, _Metallic, specularTint, oneMinusReflectivity</ins>
+				<ins>);</ins></pre>
+
+						<figure>
+							<video width="280" height="200" controls loop muted>
+								<source src="part-4/energy-conservation/metallic-workflow.mp4" type="video/mp4">
+							</video>
+							<figcaption>Metallic workflow.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What does <code class="shader">DiffuseAndSpecularFromMetallic</code> look like?</h3>
+							<div>
+								<p>Here it is. Note that it uses the <code class="shader">half4 unity_ColorSpaceDielectricSpec</code> variable, which is set by Unity based on the color space.</p>
+								
+								<pre translate="no" class="shader">inline half OneMinusReflectivityFromMetallic(half metallic) {
+	// We'll need oneMinusReflectivity, so
+	//   1-reflectivity = 1-lerp(dielectricSpec, 1, metallic)
+	//                  = lerp(1-dielectricSpec, 0, metallic)
+	// store (1-dielectricSpec) in unity_ColorSpaceDielectricSpec.a, then
+	//	 1-reflectivity = lerp(alpha, 0, metallic)
+	//                  = alpha + metallic*(0 - alpha)
+	//                  = alpha - metallic * alpha
+	half oneMinusDielectricSpec = unity_ColorSpaceDielectricSpec.a;
+	return oneMinusDielectricSpec - metallic * oneMinusDielectricSpec;
+}
+
+inline half3 DiffuseAndSpecularFromMetallic (
+	half3 albedo, half metallic,
+	out half3 specColor, out half oneMinusReflectivity
+) {
+	specColor = lerp(unity_ColorSpaceDielectricSpec.rgb, albedo, metallic);
+	oneMinusReflectivity = OneMinusReflectivityFromMetallic(metallic);
+	return albedo * oneMinusReflectivity;
+}</pre>
+							</div>
+						</aside>
+						
+						<p>One detail is that the metallic slider itself is supposed to be in gamma space. But single values are not automatically gamma corrected by Unity, when rendering in linear space. We can use the <code class="shader">Gamma</code> attribute to tell Unity that it should also apply gamma correction to our metallic slider.</p>
+						
+						<pre translate="no" class="shader">		<ins>[Gamma]</ins> _Metallic ("Metallic", Range(0, 1)) = 0</pre>
+						
+						<p>Unfortunately, by now the specular reflections have now become rather vague for nonmetals. To improve this, we need a better way to compute the lighting.</p>
+					</section>
+					
+					<a href="part-4/energy-conservation/energy-conservation.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Physically-Based Shading</h2>
+					
+					<p>Blinn-Phong has long been the workhorse of the game industry, but nowadays physically-based shading &ndash; known as PBS &ndash; is all the rage. And for good reason, because it is a lot more realistic and predictable. Ideally, game engines and modeling tools all use the same shading algorithms. This makes content creation much easier. The industry is slowly converging on a standard PBS implementation.</p>
+					
+					<p>Unity's standard shaders use a PBS approach as well. Unity actually has multiple implementations. It decides which to used based on the target platform, hardware, and API level. The algorithm is accessible via the <code class="shader">UNITY_BRDF_PBS</code> macro, which is defined in <em translate="no">UnityPBSLighting</em>. BRDF stands for bidirectional reflectance distribution function.</p>
+					
+										<pre translate="no" class="shader"><del>//			#include "UnityStandardBRDF.cginc"</del>
+<del>//			#include "UnityStandardUtils.cginc"</del>
+			<ins>#include "UnityPBSLighting.cginc"</ins></pre>
+					
+					<figure>
+						<img src="part-4/physically-based-shading/include-files.png" width="410" height="180">
+						<figcaption>Partial include file hierarchy, starting at <em translate="no">UnityPBSLighting</em>.</figcaption>
+					</figure>
+					
+					<aside>
+						<h3>What does <code class="shader">UNITY_BRDF_PBS</code> look like?</h3>
+						<div>
+							<p>It defines an alias for one of Unity's BRDF functions. <code class="shader">UNITY_PBS_USE_BRDF1</code> is set by Unity by default, as a platform define. This will select the best shader, unless the shader target is below 3.0.</p>
+							
+							<pre translate="no" class="shader">// Default BRDF to use:
+#if !defined (UNITY_BRDF_PBS)
+	// allow to explicitly override BRDF in custom shader
+	// still add safe net for low shader models,
+	// otherwise we might end up with shaders failing to compile
+	#if SHADER_TARGET &lt; 30
+		#define UNITY_BRDF_PBS BRDF3_Unity_PBS
+	#elif UNITY_PBS_USE_BRDF3
+		#define UNITY_BRDF_PBS BRDF3_Unity_PBS
+	#elif UNITY_PBS_USE_BRDF2
+		#define UNITY_BRDF_PBS BRDF2_Unity_PBS
+	#elif UNITY_PBS_USE_BRDF1
+		#define UNITY_BRDF_PBS BRDF1_Unity_PBS
+	#elif defined(SHADER_TARGET_SURFACE_ANALYSIS)
+		// we do preprocess pass during shader analysis and we dont
+		// actually care about brdf as we need only inputs/outputs
+		#define UNITY_BRDF_PBS BRDF1_Unity_PBS
+	#else
+		#error something broke in auto-choosing BRDF
+	#endif
+#endif</pre>
+							
+							<p>I don't include the actual functions, because they are large. You can see them by downloading Unity's include files, or by finding the files in your Unity installation. They're in <em translate="no">UnityStandardBRDF</em>.</p>
+						</div>
+					</aside>
+					
+					<p>These functions are quite math-intensive, so I won't go into the details. They still compute diffuse and specular reflections, just in a different way than Blinn-Phong. Besides that, there also is a Fresnel reflection component. This adds the reflections that you get when viewing objects at grazing angles. Those will become obvious once we include environmental reflections.</p>
+					
+					<p>To make sure that Unity selects the best BRDF function, we have to target at least shader level 3.0. We do this with a pragma statement.</p>
+					
+					<pre translate="no" class="shader">			CGPROGRAM
+
+			<ins>#pragma target 3.0</ins>
+
+			#pragma vertex MyVertexProgram
+			#pragma fragment MyFragmentProgram</pre>
+					
+					<p>Unity's BRDF functions return an RGBA color, with the alpha component always set to 1. So we can directly have our fragment program return its result.</p>
+					
+					<pre translate="no" class="shader"><del>//				float3 diffuse =</del>
+<del>//					albedo * lightColor * DotClamped(lightDir, i.normal);</del>
+
+<del>//				float3 halfVector = normalize(lightDir + viewDir);</del>
+<del>//				float3 specular = specularTint * lightColor * pow(</del>
+<del>//					DotClamped(halfVector, i.normal),</del>
+<del>//					_Smoothness * 100</del>
+<del>//				);</del>
+
+				return <ins>UNITY_BRDF_PBS()</ins>;</pre>
+					
+					<p>Of course we have to invoke it with arguments. The functions each have eight parameters. The first two are the diffuse and specular colors of the material. We already have those.</p>
+					
+					<pre translate="no" class="shader">				return UNITY_BRDF_PBS(
+					<ins>albedo, specularTint</ins>
+				);</pre>
+					
+					<p>The next two arguments have to be the reflectivity and the roughness. These parameters must be in one-minus form, which is an optimization. We already got <code class="shader">oneMinusReflectivity</code> out of <code class="shader">DiffuseAndSpecularFromMetallic</code>. And smoothness is the opposite of roughness, so we can directly use that.</p>
+					
+					<pre translate="no" class="shader">				return UNITY_BRDF_PBS(
+					albedo, specularTint<ins>,</ins>
+					<ins>oneMinusReflectivity, _Smoothness</ins>
+				);</pre>
+					
+					<p>Of course the surface normal and view direction are also required. These become the fifth and sixth arguments.</p>
+					
+					<pre translate="no" class="shader">				return UNITY_BRDF_PBS(
+					albedo, specularTint,
+					oneMinusReflectivity, _Smoothness<ins>,</ins>
+					<ins>i.normal, viewDir</ins>
+				);</pre>
+					
+					<p>The last two arguments must be the direct and indirect light.</p>
+					
+					<section>
+						<h3>Light Structures</h3>
+						
+						<p><em translate="no">UnityLightingCommon</em> defines a simple <code class="shader">UnityLight</code> structure which Unity shaders use to pass light data around. It contains a light's color, its direction, and an <code class="shader">ndotl</code> value, which is the diffuse term. Remember, these structures are purely for our convenience. It doesn't affect the compiled code.</p>
+						
+						<p>We have all this information, so all we have to do is put it in a light structure and pass it as the seventh argument.</p>
+						
+						<pre translate="no" class="shader">				<ins>UnityLight light;</ins>
+				<ins>light.color = lightColor;</ins>
+				<ins>light.dir = lightDir;</ins>
+				<ins>light.ndotl = DotClamped(i.normal, lightDir);</ins>
+				
+				return UNITY_BRDF_PBS(
+					albedo, specularTint,
+					oneMinusReflectivity, _Smoothness,
+					i.normal, viewDir<ins>,</ins>
+					<ins>light</ins>
+				);</pre>
+						
+						<aside>
+							<h3>Why does the light data include the diffuse term?</h3>
+							<div>
+								<p>As the BRDF functions have all they need to calculate it themselves, why do we have to provide it? This is the case because the light structure is used in other contexts as well.</p>
+								
+								<p>Actually, the GGX BRDF version doesn't even use ndotl. It computes it on its own, as its fiddles with the normal. As always, the shader compilers will get rid of all unused code. So you don't have to worry about it.</p>
+							</div>
+						</aside>
+						
+						<p>The final argument is for the indirect light. We have to use the <code class="shader">UnityIndirect</code> structure for that, which is also defined in <em translate="no">UnityLightingCommon</em>. It contains two colors, a diffuse and a specular one. The diffuse color represents the ambient light, while the specular color represents environmental reflections.</p>
+						
+						<p>We'll cover indirect light later, so simply set these colors to black for now.</p>
+						
+						<pre translate="no" class="shader">			float4 MyFragmentProgram (Interpolators i) : SV_TARGET {
+				i.normal = normalize(i.normal);
+				float3 lightDir = _WorldSpaceLightPos0.xyz;
+				float3 viewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
+
+				float3 lightColor = _LightColor0.rgb;
+				float3 albedo = tex2D(_MainTex, i.uv).rgb * _Tint.rgb;
+
+				float3 specularTint;
+				float oneMinusReflectivity;
+				albedo = DiffuseAndSpecularFromMetallic(
+					albedo, _Metallic, specularTint, oneMinusReflectivity
+				);
+				
+				UnityLight light;
+				light.color = lightColor;
+				light.dir = lightDir;
+				light.ndotl = DotClamped(i.normal, lightDir);
+				<ins>UnityIndirect indirectLight;</ins>
+				<ins>indirectLight.diffuse = 0;</ins>
+				<ins>indirectLight.specular = 0;</ins>
+
+				return UNITY_BRDF_PBS(
+					albedo, specularTint,
+					oneMinusReflectivity, _Smoothness,
+					i.normal, viewDir,
+					light<ins>, indirectLight</ins>
+				);
+			}</pre>
+						
+						<figure>
+							<img alt="nonmetal gamma" src="part-4/physically-based-shading/nonmetal-gamma.png" width="280" height="200">
+							<img alt="nonmetal linear" src="part-4/physically-based-shading/nonmetal-linear.png" width="280" height="200">
+							<img alt="metal gamma" src="part-4/physically-based-shading/metal-gamma.png" width="280" height="200">
+							<img alt="metal linear" src="part-4/physically-based-shading/metal-linear.png" width="280" height="200">
+							<figcaption>Nonmetal and metal, in gamma and linear space.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="part-5.1.html">Multiple Lights</a>.</p>
+						
+					</section>
+					
+					<a href="part-4/physically-based-shading/physically-based-shading.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="part-4/Rendering-4.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		
+		<script src="../tutorials.js"></script>
+	</body>
+</html>

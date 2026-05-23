@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/procedural-meshes/cube-sphere/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/procedural-meshes/cube-sphere/tutorial-image.jpg">
+		<meta property="og:title" content="Cube Sphere">
+		<meta property="og:description" content="A Unity C# Procedural Meshes tutorial about creating a cube sphere.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Cube Sphere</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/procedural-meshes/cube-sphere/#article",
+				"headline": "Cube Sphere",
+				"alternativeHeadline": "Going from Cube to Sphere",
+				"datePublished": "2022-02-18",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity C# Procedural Meshes tutorial about creating a cube sphere.",
+				"image": "https://catlikecoding.com/unity/tutorials/procedural-meshes/cube-sphere/tutorial-image.jpg",
+				"dependencies": "Unity 2020.3.23f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/procedural-meshes/", "name": "Procedural Meshes" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				CubeSphere: 1,
+				FlatHexagonGrid: 1,
+				IMeshGenerator: 1,
+				IMeshStreams: 1,
+				G: 1,
+				GizmoMode: 1,
+				MaterialMode: 1,
+				MeshJob: 1,
+				MeshJobScheduleDelegate: 1,
+				MeshType: 1,
+				MultiStream: 1,
+				PointyHexagonGrid: 1,
+				ProceduralMesh: 1,
+				S: 1,
+				SharedSquareGrid: 1,
+				SharedTriangleGrid: 1,
+				Side: 1,
+				SingleStream: 1,
+				SquareGrid: 1,
+				Stream0: 1,
+				TriangleUInt16: 1,
+				UVSphere: 1,
+				Vertex: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Procedural Meshes</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Cube Sphere</h1>
+					<p>Going from Cube to Sphere</p>
+					<ul>
+						<li>Combine six grids to form a cube.</li>
+						<li>Turn the cube into a sphere.</li>
+						<li>Set normals and tangents per quad.</li>
+						<li>Find an alternative mapping from cube to sphere.</li>
+					</ul>
+				</header>
+				
+				<p>This is the sixth tutorial in a series about <a href="../index.html">procedural meshes</a>. This time we first create a cube and then transform it into a sphere.</p>
+				
+				<p>This tutorial is made with Unity 2020.3.23f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A cube transformed into a sphere.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Cube</h2>
+					
+					<p>The UV sphere from the <a href="../uv-sphere/index.html">previous tutorial</a> has a bad vertex distribution, bunching up vertices near the poles. Fortunately there are different ways to generate a sphere mesh. A common approach is to start with a cube and turn it into a sphere by pulling its vertices toward its center. The result is commonly known as a cube sphere.</p>
+					
+					<section>
+						<h3>UV Square Grid</h3>
+						
+						<p>Because we start with a cube we can partition the entire surface of the mesh into squares. So this time we will generate a mesh with separate quads instead of one with shared vertices. Start by duplicating <code>SquareGrid</code>, renaming it <code>CubeSphere</code>, and increasing its bounds size to two.</p>
+						
+						<pre translate="no">	public struct <ins>CubeSphere</ins> : IMeshGenerator {
+
+		public Bounds Bounds => new Bounds(Vector3.zero, new Vector3(<ins>2f</ins>, <ins>2f</ins>, <ins>2f</ins>));
+		
+		&hellip;
+	}</pre>
+						
+						<p>We'll again adjust the <code>Execute</code> method so it acts on U and V coordinates instead of Z and X, as the directions are no longer constant.</p>
+						
+						<pre translate="no">		public void Execute&lt;S> (int <ins>u</ins>, S streams) where S : struct, IMeshStreams {
+			int vi = 4 * Resolution * <ins>u</ins>, ti = 2 * Resolution * <ins>u</ins>;
+
+			for (int <ins>v</ins> = 0; <ins>v</ins> &lt; Resolution; <ins>v</ins>++, vi += 4, ti += 2) {
+				var xCoordinates = float2€(<ins>v</ins>, <ins>v</ins> + 1f) / Resolution - 0.5f;
+				var zCoordinates = float2€(<ins>u</ins>, <ins>u</ins> + 1f) / Resolution - 0.5f;
+
+				&hellip;
+			}
+		}</pre>
+						
+						<p>Also add the cube sphere to <code>ProceduralMesh</code>.</p>
+						
+						<pre translate="no">	static MeshJobScheduleDelegate[] jobs = {
+		&hellip;
+		MeshJob&lt;PointyHexagonGrid, SingleStream>.ScheduleParallel,
+		<ins>MeshJob&lt;CubeSphere, SingleStream>.ScheduleParallel,</ins>
+		MeshJob&lt;UVSphere, SingleStream>.ScheduleParallel
+	};
+
+	public enum MeshType {
+		SquareGrid€, SharedSquareGrid€, SharedTriangleGrid€,
+		FlatHexagonGrid€, PointyHexagonGrid€, <ins>CubeSphere€,</ins> UVSphere€
+	};</pre>
+					</section>
+					
+					<section>
+						<h3>First Side of the Cube</h3>
+						
+						<p>At this point we create a single square grid, which we can use to represent a single side of our cube. But because each of the six sides of a cube has its own position and orientation we'll have to make our grid flexible enough to support any position and orientation. To make this easy we'll introduce a private <code>Side</code> struct type inside <code>CubeSphere</code> containing three public vectors: the 3D position that matches the origin in UV space, along with 3D vectors that represent the U and V dimensions.</p>
+						
+						<pre translate="no">		<ins>struct Side {</ins>
+			<ins>public float3 uvOrigin, uVector, vVector;</ins>
+		<ins>}</ins></pre>
+						
+						<p>We'll define our cube such that it exactly contains the unit sphere. Thus its minimum corner is at XYZ &minus;1 and its maximum corner is at XYZ 1, matching its bounding box. We begin with the back side of the cube, the one we see when looking down the Z axis. Its four corners are thus `[[-1],[-1],[-1]]`, `[[1],[-1],[-1]]`, `[[-1],[1],[-1]]`, and `[[1],[1],[-1]]`.</p>
+						
+						<p>We can represent this side with a UV origin of &minus;1 along a U vector pointing right and a V vector pointing up, both with length 2. Create a <code>side</code> variable for this at the start of <code>Execute</code>.</p>
+						
+						<pre translate="no">		public void Execute&lt;S> (int u, S streams) where S : struct, IMeshStreams {	
+			<ins>var side = new Side {</ins>
+				<ins>uvOrigin = -1f,</ins>
+				<ins>uVector = 2f * right(),</ins>
+				<ins>vVector = 2f * up()</ins>
+			<ins>};</ins>
+			
+			int vi = 4 * Resolution * u, ti = 2 * Resolution * u;
+			
+			&hellip;
+		}</pre>
+						
+						<p>Determining the four vertices of each quad now becomes a bit more complicated. Once again we'll create columns of quads, so we have two U coordinates that are constant per column. We can find the corresponding 3D positions for the bottom of the column by adding the side's U vector to its UV origin, scaled appropriately. Store these in two variables before the loop.</p>
+						
+						<pre translate="no">			<ins>float3 uA = side.uvOrigin + side.uVector * u / Resolution;</ins>
+			<ins>float3 uB = side.uvOrigin + side.uVector * (u + 1) / Resolution;</ins>
+		
+			for (int v = 0; v &lt; Resolution; v++, vi += 4, ti += 2) { &hellip; }</pre>
+						
+						<p>Then inside the loop we can find the four positions of the quad by adding the appropriately-scaled V vectors to these positions. Do this at the start of the loop, storing them in variables.</p>
+						
+						<pre translate="no">			for (int v = 0; v &lt; Resolution; v++, vi += 4, ti += 2) {
+				<ins>float3 pA = uA + side.vVector * v / Resolution;</ins>
+				<ins>float3 pB = uB + side.vVector * v / Resolution;</ins>
+				<ins>float3 pC = uA + side.vVector * (v + 1) / Resolution;</ins>
+				<ins>float3 pD = uB + side.vVector * (v + 1) / Resolution;</ins>
+
+				&hellip;
+			}</pre>
+						
+						<p>Now adjust the loop so these positions are used for its vertices.</p>
+						
+						<pre translate="no">				<del>//var xCoordinates = float2(v, v + 1f) / Resolution - 0.5f;</del>
+				<del>//var zCoordinates = float2(u, u + 1f) / Resolution - 0.5f;</del>
+
+				var vertex = new Vertex();
+				vertex.normal.y = 1f;
+				vertex.tangent.xw = float2€(1f, -1f);
+
+				<del>//vertex.position.x = xCoordinates.x;</del>
+				<del>//vertex.position.z = zCoordinates.x;</del>
+				<ins>vertex.position = pA;</ins>
+				streams.SetVertex(vi + 0, vertex);
+
+				<del>//vertex.position.x = xCoordinates.y;</del>
+				<ins>vertex.position = pB;</ins>
+				vertex.texCoord0 = float2€(1f, 0f);
+				streams.SetVertex(vi + 1, vertex);
+
+				<del>//vertex.position.x = xCoordinates.x;</del>
+				<del>//vertex.position.z = zCoordinates.y;</del>
+				<ins>vertex.position = pC;</ins>
+				vertex.texCoord0 = float2€(0f, 1f);
+				streams.SetVertex(vi + 2, vertex);
+
+				<del>//vertex.position.x = xCoordinates.y;</del>
+				<ins>vertex.position = pD;</ins>
+				vertex.texCoord0 = 1f;
+				streams.SetVertex(vi + 3, vertex);</pre>
+						
+						<p>This will produces a grid for the first side of the cube, but it will have incorrect normal vectors. The normal vectors vary by side and so do the tangent vectors. So let's add fields for them to <code>Side</code>.</p>
+						
+						<pre translate="no">		struct Side {
+			public float3 uvOrigin, uVector, vVector;
+			<ins>public float3 normal;</ins>
+			<ins>public float4 tangent;</ins>
+		}</pre>
+						
+						<p>In <code>Execute</code>, configure the normal and tangent for the back side appropriately.</p>
+						
+						<pre translate="no">			var side = new Side {
+				uvOrigin = -1f,
+				uVector = 2f * right(),
+				vVector = 2f * up()<ins>,</ins>
+				<ins>normal = back(),</ins>
+				<ins>tangent = float4€(1f, 0f, 0f, -1f)</ins>
+			};</pre>
+						
+						<p>And use them inside the loop.</p>
+						
+						<pre translate="no">				var vertex = new Vertex();
+				<del>//vertex.normal.y = 1f;</del>
+				<del>//vertex.tangent.xw = float2€(1f, -1f);</del>
+				<ins>vertex.normal = side.normal;</ins>
+				<ins>vertex.tangent = side.tangent;</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Reducing Work</h3>
+						
+						<p>Because adjacent quads have overlapping vertices we can reuse the C and D positions of a quad for the A and B positions of the next quad. And because V starts at zero we don't need to calculate the V offsets for the fist A and B positions. This means we can eliminate some work by defining the A and B positions before the loop and making them equal to C and D at the end of each iteration.</p>
+						
+						<pre translate="no">			float3 uA = side.uvOrigin + side.uVector * u / Resolution;
+			float3 uB = side.uvOrigin + side.uVector * (u + 1) / Resolution;
+			<ins>float3 pA = uA, pB = uB;</ins>
+
+			for (int v = 0; v &lt; Resolution; v++, vi += 4, ti += 2) {
+				<del>//float3 pA = uA + side.vVector * v / Resolution;</del>
+				<del>//float3 pB = uB + side.vVector * v / Resolution;</del>
+				float3 pC = uA + side.vVector * (v + 1) / Resolution;
+				float3 pD = uB + side.vVector * (v + 1) / Resolution;
+
+				&hellip;
+
+				<ins>pA = pC;</ins>
+				<ins>pB = pD;</ins>
+			}</pre>
+						
+						<p>We can also avoid the addition of 1 to V each iteration by shifting the loop so it starts at 1 instead of zero.</p>
+						
+						<pre translate="no">			for (int v = <ins>1</ins>; v <ins>&lt;=</ins> Resolution; v++, vi += 4, ti += 2) {
+				float3 pC = uA + side.vVector * <ins>v</ins> / Resolution;
+				float3 pD = uB + side.vVector * <ins>v</ins> / Resolution;
+
+				&hellip;
+			}</pre>
+					</section>
+					
+					<section>
+						<h3>Six Sides</h3>
+						
+						<p>Because a cube has six sides we need to generate six grids, so we need six times as many vertices and triangle indices as before. Our job length also becomes six times as long.</p>
+						
+						<pre translate="no">		public int VertexCount => <ins>6 *</ins> 4 * Resolution * Resolution;
+
+		public int IndexCount => <ins>6 *</ins> 6 * Resolution * Resolution;
+
+		public int JobLength => <ins>6 *</ins> Resolution;</pre>
+						
+						<p>We can identify which side we're working on by assigning an identifier number to it, from 0 to 5. Add a field for this to <code>Side</code>.</p>
+						
+						<pre translate="no">		struct Side {
+			<ins>public int id;</ins>
+			&hellip;
+		}</pre>
+						
+						<p>As <code>Execute</code> can now work on a column of any side, its index parameter no longer directly corresponds to the U index. So let's rename it to <code>i</code>. We can find the U index by dividing the job index by six, via an integer division.The side identifier then becomes equal to the remainder of that division, which we find by subtracting six times U from the job index.</p>
+						
+						<pre translate="no">		public void Execute&lt;S> (int <ins>i</ins>, S streams) where S : struct, IMeshStreams {
+			<ins>int u = i / 6;</ins>
+			var side = new Side {
+				<ins>id = i - 6 * u,</ins>
+				&hellip;
+			};
+			
+			&hellip;
+		}</pre>
+						
+						<aside>
+							<h3>How does the job get split into sides, exactly?</h3>
+							<div>
+								<p>The job index cycles through all sides for a given U coordinate, then proceeds to the next U coordinate: U0S0, U0S1, U0S2, U0S3, U0S4, U0S5, U1S0, U1S1, U1S2, U1S3, U1S4, U1S5, U2S0, U2S1, U2S2, U2S3, U2S4, U2S5, and so on. The actual execution order depends on how the jobs get scheduled on the CPU cores.</p>
+							</div>
+						</aside>
+						
+						<p>We also have to adjust the vertex and triangle index to take the side offset into account. We do this replacing U with the resolution times the side identifier plus U in both multications.</p>
+						
+						<pre translate="no">			<del>//int vi = 4 * Resolution * u, ti = 2 * Resolution * u;</del>
+			<ins>int vi = 4 * Resolution * (Resolution * side.id + u);</ins>
+			<ins>int ti = 2 * Resolution * (Resolution * side.id + u);</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Cube Layout</h3>
+						
+						<p>At this point we're generating all sides of the cube, but they'll all the same back side so they overlap. To correctly generate the cube we have to configure all six sides appropriately. There are various ways that we could define the sides. A common and straightforward approach is to start by wrapping around the Y axis, forming the back, right, forward, and left sides. Then finish by adding the bottom and top sides. This is a typical box unwrap, with varying ways to orient the bottom and top sides.</p>
+						
+						<figure>
+							<img src="cube/layout-box.png" width="350" height="265">
+							<figcaption>Box unwrap layout.</figcaption>
+						</figure>
+						
+						<p>A downside of this approach is that is lacks symmetry, because the orientation of the bottom and top sides can never match those of the other sides. A UV sphere doesn't have this problem because its layout is anchored on the poles of the sphere. This is easiest to see at resolution 1, which matches an octahedron. The octahedron can be unwrapped by peeling it open at the north pole, leaving its columns connected only at the south pole.</p>
+						
+						<figure>
+							<img src="cube/layout-octahedron.png" width="310" height="310">
+							<figcaption>Octahedron unwrap layout.</figcaption>
+						</figure>
+						
+						<p>We can use a similar polar layout for our cube sphere. This requires us to designate two of its corners as its poles. We'll use its minimum and maximum corners. To make this intuitive let's orient our cube so these corners are indeed at the bottom and top.</p>
+						
+						<p>As the required rotation isn't trivial let's first do this with a default cube game object. The first step is to rotate 45&deg; around the Z axis so the sides touching the minimum and maximum corners are at the bottom and top.</p>
+						
+						<figure>
+							<img src="cube/rotated-z-back.png" width="220" height="220" alt="back">
+							<img src="cube/rotated-z-right.png" width="220" height="220" alt="right">
+							<figcaption>A cube with a Z rotation of 45&deg;.</figcaption>
+						</figure>
+						
+						<p>The second step is to rotate around the X axis by &minus;35.26&deg; so that the correct corners are at the bottom and top.</p>
+						
+						<figure>
+							<img src="cube/rotated-zx-back.png" width="250" height="250" alt="back">
+							<img src="cube/rotated-zx-right.png" width="250" height="250" alt="right">
+							<figcaption>With additional X rotation of &minus;35.26&deg;.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>How did you find the rotation angle around X?</h3>
+							<div>
+								<p>After the rotation around Z we have to rotate such that the diagonal line going through the polar corners aligns with the diagonal line of the vertical faces. The angle between those lines is equal to `arctan(1/sqrt(2))` which is roughly 35.26&deg;.</p>
+								
+								<figure>
+									<img src="cube/x-rotation-angle.png" width="115" height="135">
+									<figcaption>Finding the angle.</figcaption>
+								</figure>
+								
+								<p>The desired rotation is counterclockwise so has to be negative.</p>
+							</div>
+						</aside>
+						
+						<p>Now it becomes clear that we can also peel open the cube starting at the north pole, leaving it connected only at the south pole. The result is a symmetrical layout consisting of three slanted columns that each contain two sides of the cube.</p>
+						
+						<figure>
+							<img src="cube/layout-polar.png" width="320" height="345">
+							<figcaption>Polar unwrap layout.</figcaption>
+						</figure>
+						
+						<p>Apply the same rotation to our <em translate="no">Procedural Mesh</em> game object.</p>
+					</section>
+					
+					<section>
+						<h3>Folding the Sides</h3>
+						
+						<p>To correctly fold the sides to get our cube we have to give each its own configuration. To do this we'll introduce a static <code>GetSide</code> method that returns the appropriate <code>Side</code> value for a given identifier. Initially it returns the single side that we already have. We also copy the identifier parameters to the side's field.</p>
+						
+						<pre translate="no">		<ins>static Side GetSide (int id) => new Side {</ins>
+			<ins>id = id,</ins>
+			<ins>uvOrigin = -1f,</ins>
+			<ins>uVector = 2f * right(),</ins>
+			<ins>vVector = 2f * up(),</ins>
+			<ins>normal = back(),</ins>
+			<ins>tangent = float4€(1f, 0f, 0f, -1f)</ins>
+		<ins>};</ins></pre>
+						
+						<p>Invoke this method in <code>Execute</code> to get the side.</p>
+						
+						<pre translate="no">			int u = i / 6;
+			<ins>Side side = GetSide(i - 6 * u);</ins>
+			<del>//var side = new Side { &hellip; };</del></pre>
+						
+						<p>To select the appropriate side we'll change <code>GetSide</code> so it uses a <code>switch</code> expression, initially only supporting the first face.</p>
+						
+						<pre translate="no">		static Side GetSide (int id) => <ins>id switch {</ins>
+			<ins>0 =></ins> new Side {
+				id = id,
+				uvOrigin = -1f,
+				uVector = 2f * right(),
+				vVector = 2f * up(),
+				normal = back(),
+				tangent = float4€(1f, 0f, 0f, -1f)
+			<ins>}</ins>
+		};</pre>
+						
+						<aside>
+							<h3>How does a <code>switch</code> expression work?</h3>
+							<div>
+								<p>A <code>switch</code> expression is a variable followed by the <code>switch</code> keyword, after which comes a block that contains a comma-separated list of options. Each option specifies the value it matches, followed by <code>=></code> and then the resulting expression. The appropriate option is chosen based on the variable to which the <code>switch</code> is applied.</p>
+							</div>
+						</aside>
+						
+						<p>At this point the compiler will issue a warning that the <code>switch</code> block does not handle all possible input values, because we only have an option for zero. To handle all possible integer values we can use the special underscore <code>_</code> option, which represents the default case when none of the other options match. Duplicate the zero option and use that for the default.</p>
+						
+						<pre translate="no">			0 => new Side { &hellip; }<ins>,</ins>
+			<ins>_ => new Side { &hellip; }</ins></pre>
+						
+						<p>Let's change the default option to represent the second side of the cube. Following our polar layout, this is the right side of the cube. Its UV origin is equal to the origin of the back side with the back side's U vector added to it, so `[[1],[-1],[-1]]`. Its U vector goes forward instead of right and its V vector doesn't change. Adjust its normal and tangent vectors to match.</p>
+						
+						<pre translate="no">			_ => new Side {
+				id = id,
+				uvOrigin = <ins>float3€(1f, -1f, -1f)</ins>,
+				uVector = 2f * <ins>forward</ins>(),
+				vVector = 2f * up(),
+				normal = <ins>right</ins>(),
+				tangent = float4€(<ins>0f</ins>, 0f, <ins>1f</ins>, -1f)
+			}</pre>
+						
+						<figure>
+							<img src="cube/sides-01.png" width="250" height="250">
+							<figcaption>Sides 0 and 1.</figcaption>
+						</figure>
+						
+						<p>Duplicate this option and make it the option for 1. Then adjust the default to represent the third side. This is the bottom, again starting at the minimum corner. Its U vector matches side 1 but its V vector points right.</p>
+						
+						<pre translate="no">			0 => new Side { … },
+			<ins>1 => new Side { &hellip; },</ins>
+			_ => new Side {
+				id = id,
+				uvOrigin = <ins>-1f</ins>,
+				uVector = 2f * forward(),
+				vVector = 2f * <ins>right</ins>(),
+				normal = <ins>down</ins>(),
+				tangent = float4€(0f, 0f, 1f, -1f)
+			}</pre>
+						
+						<figure>
+							<img src="cube/sides-12.png" width="250" height="250">
+							<figcaption>Sides 1 and 2.</figcaption>
+						</figure>
+						
+						<p>Repeat this process, now for the forward side.</p>
+						
+						<pre translate="no">			<ins>2 => new Side { &hellip; },</ins>
+			_ => new Side {
+				id = id,
+				uvOrigin = <ins>float3€(-1f, -1f, 1f)</ins>,
+				uVector = 2f * <ins>up</ins>(),
+				vVector = 2f * right(),
+				normal = <ins>forward</ins>(),
+				tangent = float4€(0f, <ins>1f</ins>, <ins>0f</ins>, -1f)
+			}</pre>
+						
+						<figure>
+							<img src="cube/sides-23.png" width="250" height="250">
+							<figcaption>Sides 2 and 3.</figcaption>
+						</figure>
+						
+						<p>After that comes the third side column, starting with the left side.</p>
+						
+						<pre translate="no">			<ins>3 => new Side { &hellip; }</ins>,
+			_ => new Side {
+				id = id,
+				uvOrigin = <ins>-1f</ins>,
+				uVector = 2f * up(),
+				vVector = 2f * <ins>forward</ins>(),
+				normal = <ins>left</ins>(),
+				tangent = float4€(0f, 1f, 0f, -1f)
+			}</pre>
+						
+						<figure>
+							<img src="cube/sides-345.png" width="250" height="250">
+							<figcaption>Sides 3, 4, and 5.</figcaption>
+						</figure>
+						
+						<p>And finally the top side.</p>
+						
+						<pre translate="no">			<ins>4 => new Side { &hellip; },</ins>
+			_ => new Side {
+				id = id,
+				uvOrigin = <ins>float3€(-1f, 1f, -1f)</ins>,
+				uVector = 2f * <ins>right</ins>(),
+				vVector = 2f * forward(),
+				normal = <ins>up</ins>(),
+				tangent = float4€(<ins>1f</ins>, <ins>0f</ins>, 0f, -1f)
+			}</pre>
+						
+						<figure>
+							<img src="cube/pole-south.png" width="250" height="250" alt="south">
+							<img src="cube/pole-north.png" width="250" height="250" alt="north">
+							<figcaption>South and north poles.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Sphere</h2>
+					
+					<p>Now that we have a complete cube with grids for sides we can turn it into a sphere.</p>
+					
+					<section>
+						<h3>Normalization</h3>
+						
+						<p>To convert the cube we have to adjust its vertex positions, for which we'll add a static <code>CubeToSphere</code> method that converts a given point. The straightforward way to do this is by normalizing the vector that represents the point. This pulls all vertices toward the origin, forming a unit sphere.</p>
+						
+						<pre translate="no">		<ins>static float3 CubeToSphere (float3 p) => normalize(p);</ins></pre>
+						
+						<p>Use this method to convert all four positions in <code>Execute</code>.</p>
+						
+						<pre translate="no">			float3 pA = <ins>CubeToSphere(</ins>uA<ins>)</ins>, pB = <ins>CubeToSphere(</ins>uB<ins>)</ins>;
+
+			for (int v = 1; v &lt;= Resolution; v++, vi += 4, ti += 2) {
+				float3 pC = <ins>CubeToSphere(</ins>uA + side.vVector * v / Resolution<ins>)</ins>;
+				float3 pD = <ins>CubeToSphere(</ins>uB + side.vVector * v / Resolution<ins>)</ins>;
+
+				&hellip;
+			}</pre>
+						
+						<figure>
+							<img src="sphere/sphere-positions.png" width="250" height="250">
+							<figcaption>Normalized positions; resolution 4.</figcaption>
+						</figure>
+						
+						<p>This creates a sphere, but with the normal vectors or a cube. We can fix this by also using the positions as normal vectors.</p>
+						
+						<pre translate="no">				var vertex = new Vertex();
+				<del>//vertex.normal = side.normal;</del>
+				vertex.tangent = side.tangent;
+
+				vertex.position = pA;
+				<ins>vertex.normal = pA;</ins>
+				streams.SetVertex(vi + 0, vertex);
+
+				vertex.position = pB;
+				<ins>vertex.normal = pB;</ins>
+				vertex.texCoord0 = float2(1f, 0f);
+				streams.SetVertex(vi + 1, vertex);
+
+				vertex.position = pC;
+				<ins>vertex.normal = pC;</ins>
+				vertex.texCoord0 = float2(0f, 1f);
+				streams.SetVertex(vi + 2, vertex);
+
+				vertex.position = pD;
+				<ins>vertex.normal = pD;</ins></pre>
+						
+						<figure>
+							<img src="sphere/sphere-normals.png" width="250" height="250">
+							<figcaption>Sphere normals.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Tangents</h3>
+						
+						<p>We also have to adjust the tangent vectors. The most straightforward way to do this is by aligning them with the U sides of the quad. Thus before the loop the initial tangent XYZ components are equal to the vector from A to B&mdash;so B minus A&mdash;normalized. Then inside the loop we have to adjust the tangent each time, using C and D instead.</p>
+						
+						<pre translate="no">			<ins>var vertex = new Vertex();</ins>
+			<ins>vertex.tangent = float4€(normalize(pB - pA), -1f);</ins>
+
+			for (int v = 1; v &lt;= Resolution; v++, vi += 4, ti += 2) {
+				float3 pC = CubeToSphere(uA + side.vVector * v / Resolution);
+				float3 pD = CubeToSphere(uB + side.vVector * v / Resolution);
+
+				<del>//var vertex = new Vertex();</del>
+				<del>//vertex.tangent = side.tangent;</del>
+				
+				vertex.position = pA;
+				vertex.normal = pA;
+				<ins>vertex.texCoord0 = 0f;</ins>
+				streams.SetVertex(vi + 0, vertex);
+				
+				&hellip;
+
+				vertex.position = pC;
+				vertex.normal = pC;
+				<ins>vertex.tangent.xyz = normalize(pD - pC);</ins>
+				vertex.texCoord0 = float2€(0f, 1f);
+				streams.SetVertex(vi + 2, vertex);
+
+				&hellip;
+			}</pre>
+						
+						<figure>
+							<img src="sphere/sphere-tangents.png" width="250" height="250">
+							<figcaption>Sphere tangents.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Normals per Quad</h3>
+						
+						<p>Because we set the tangents to align with the quad edges they aren't continuous across the surface of the sphere. There is a sudden change in tangent direction between adjacent quads, which can lead to visible seams in the normal map. This is fine, because each quad represents a single cell of our grid, which are textured independently. We can do this same with the normal vectors, making them match the quads instead of a perfect sphere.</p>
+						
+						<p>The A normal is equal to the cross product of the vectors from A to C and from A to B, normalized. We can use the tangent vector for the latter, as length doesn't matter. The B normal is the same, but with the vector from B to D and the tangent instead.</p>
+						
+						<pre translate="no">				vertex.position = pA;
+				vertex.normal = <ins>normalize(cross(pC - pA, vertex.tangent.xyz))</ins>;
+				vertex.texCoord0 = 0f;
+				streams.SetVertex(vi + 0, vertex);
+
+				vertex.position = pB;
+				vertex.normal = <ins>normalize(cross(pD - pB, vertex.tangent.xyz))</ins>;
+				vertex.texCoord0 = float2(1f, 0f);
+				streams.SetVertex(vi + 1, vertex);</pre>
+						
+						<p>The C and D normals are found with the exact same calculations, after adjusting the tangent.</p>
+						
+						<pre translate="no">				vertex.position = pC;
+				<del>//vertex.normal = pC;</del>
+				vertex.tangent.xyz = normalize(pD - pC);
+				<ins>vertex.normal = normalize(cross(pC - pA, vertex.tangent.xyz));</ins>
+				vertex.texCoord0 = float2€(0f, 1f);
+				streams.SetVertex(vi + 2, vertex);
+
+				vertex.position = pD;
+				vertex.normal = <ins>normalize(cross(pD - pB, vertex.tangent.xyz))</ins>;
+				vertex.texCoord0 = 1f;
+				streams.SetVertex(vi + 3, vertex);</pre>
+						
+						<figure>
+							<img src="sphere/quad-normals.png" width="250" height="250">
+							<figcaption>Quad normals.</figcaption>
+						</figure>
+						
+						<p>The result is that individual cells of our grids now appear flatter, giving the sphere a somewhat faceted look. This is more obvious for low resolution spheres, especially resolution 1 which becomes a regular cube.</p>
+					</section>
+					
+					<section>
+						<h3>Cleaning Up the Sides</h3>
+						
+						<p>As normals and tangents are generated per quad we no longer need to define them in <code>Side</code>.</p>
+						
+						<pre translate="no">		struct Side {
+			public int id;
+			public float3 uvOrigin, uVector, vVector;
+			<del>//public float3 normal;</del>
+			<del>//public float4 tangent;</del>
+		}</pre>
+						
+						<p>Remove the code the set them from <code>GetSide</code>. I only show the changes for the first side.</p>
+						
+						<pre translate="no">			0 => new Side {
+				id = id,
+				uvOrigin = -1f,
+				uVector = 2f * right(),
+				vVector = 2f * up() <del>//,</del>
+				<del>//normal = back(),</del>
+				<del>//tangent = float4(1f, 0f, 0f, -1f)</del>
+			},</pre>
+					</section>
+					
+					<section>
+						<h3>Investigating the Mapping</h3>
+						
+						<p>When converting from cube to sphere not all vertices get displaced the same distance. The vertices exactly in the middle of each face do not move at all, while the vertices exactly on the corners of the cube are moved the most. Because normalization draws points towards the center, the more they move the more they bunch up. Thus the final vertex distribution is not uniform. As a result the grid cells near the center of cube sides are mostly square, while the cells that are near the corners of the cube are heavily distorted. There is no way to eliminate this distortion, because at the corner of cube sides only three cells touch a grid intersection, while everywhere else it's always four cells.</p>
+						
+						<p>To see this distortion clearly, show the vertices of the cube sphere set to a fairly high resolution, like 20.</p>
+						
+						<figure>
+							<img src="sphere/normalized-with-rotation.png" width="250" height="250" alt="with rotation">
+							<img src="sphere/normalized-without-rotation.png" width="250" height="250" alt="without rotation">
+							<figcaption>Resolution 20, with and without rotation.</figcaption>
+						</figure>
+						
+						<p>Although the grid distortion cannot be eliminated, it might be possible to convert from cube to sphere via a different mapping that exhibits less distortion. To investigate this let's first simplify the problem be reducing it to only two dimensions: mapping a square to a circle.</p>
+						
+						<p>Going from a square with edge length 2 to a unit circle shows a slice of the problem that we have in three dimensions: due to normalization points that start near the corners end up closer together on the circle.</p>
+						
+						<figure>
+							<img src="sphere/mapping-normalized.png" width="220" height="220">
+							<figcaption>Quarter circle showing normalization.</figcaption>
+						</figure>
+						
+						<p>The goal is to find a mapping that distributes the points more evenly on the circle. To determine whether such a mapping exists let's first formalize the normalization as a mapping function: `c=hat s=s/||s||` where `c` is the circle point and `s=[[x],[y]]` is the square point.</p>
+						
+						<p>Normalization is done by dividing by the vector's length. As we're working in 2D `||s||=sqrt(x^2+y^2)` with `x` and `y` the components of `s`. As the square has edge length 2 and is centered on the origin these components have the domain &minus;1&ndash;1, with at least one of the two always being either &minus;1 or 1.</p>
+						
+						<p>Let's formally prove that all points `c` indeed lie on the unit circle. We do this by proving that `||c||=1`, or by proving that `||c||^2=1`, which eliminates a square root from the equation. That reduces the problem to proving that `a^2+b^2=1` with `a` and `b` the components of a 2D vector.</p>
+						
+						<p>We know the components of `c`, because `c=([[x],[y]])/||s||=[[x/||s||],[y/||s||]]`.</p>
+						
+						<p>Thus `a=x/||s||` and `b=y/||s||`.</p>
+						
+						<p>Hence `||c||^2=a^2+b^2=x^2/||s||^2+y^2/||s||^2=(x^2+y^2)/||s||^2=(x^2+y^2)/(x^2+y^2)=1`.</p>
+					</section>
+					
+					<section>
+						<h3>Alternative Mapping</h3>
+						
+						<p>The point of the proof is to show that there is a formula that yields 1 for all points on the square. This formula corresponds to a mapping from square to circle. If we can find a similar but different formula that does the same thing then there must also exist a different mapping from square to circle.</p>
+						
+						<p>Let's come up with such a function, keeping it as simple as possible. We know that at least one of the coordinates is always either &minus;1 or 1. So if we square both coordinates we get a least at single 1. We can then turn them into potential zeros, by using `1-x^2` and `1-y^2`. If we multiply those together we are guaranteed to always get zero. So if we subtract that from 1 the result will always be 1. This gives us a new formula: `||c||^2=1-(1-x^2)(1-y^2)`.</p>
+						
+						<p>This formula can be simplified: `||c||^2=1-(1-x^2)(1-y^2)=x^2+y^2-x^2y^2`.</p>
+						
+						<aside>
+							<h3>How do you rewrite that?</h3>
+							<div>
+								<p>First, `(1-x^2)(1-y^2)=(1-x^2)-(1-x^2)y^2=1-x^2-y^2+x^2y^2`.</p>
+								
+								<p>The final result is 1 minus that.</p>
+							</div>
+						</aside>
+						
+						<p>Now we have to split our formula so it applies to two components of a vector, because `1=a^2+b^2=x^2+y^2-x^2y^2`. It's obvious that `x^2` is part of `a^2` and that `y^2` is part of `b^2`, but that leaves `-x^2y^2`. We have to distribute this part as well, and to produce a symmetrical result we'll have to evenly split it. Thus `[[a^2],[b^2]]=[[x^2-(x^2y^2)/2],[y^2-(x^2y^2)/2]]`.</p>
+						
+						<p>This suggests a new mapping: `c=[[sqrt(a^2)],[sqrt(b^2)]]=[[sqrt(x^2-(x^2y^2)/2)],[sqrt(y^2-(x^2y^2)/2)]]`.</p>
+						
+						<p>To preserve the original signs of the components we have to extract them from the square roots, so we end up with the mapping `c=[[a],[b]]=[[xsqrt(1-y^2/2)],[ysqrt(1-x^2/2)]]`.</p>
+						
+						<p>Applying this alternative mapping does yield better results. The points are now pulled toward the middle of the square edges instead of the corners. So they now bunch up there, but not as much as they did near the corners.</p>
+						
+						<figure>
+							<img src="sphere/mapping-alternative.png" width="220" height="220">
+							<figcaption>Alternative square to circle mapping.</figcaption>
+						</figure>
+						
+						<p>We can do the same thing for the mapping from cube to sphere, using the same reasoning but now with an extra dimension. This leads to the equation `1=a^2+b^2+c^2=1-(1-x^2)(1-y^2)(1-z^2)`.</p>
+						
+						<p>We can again simplify, in this case to `a^2+b^2+c^2=x^2+y^2+z^2-x^2y^2-x^2z^2-y^2z^2+x^2y^2z^2`.</p>
+						
+						<aside>
+							<h3>How do you rewrite that?</h3>
+							<div>
+								<p>Start with a substitution based on what we already know: `w=(1-x^2)(1-y^2)=1-x^2-y^2+x^2y^2`.</p>
+								
+								<p>Then `w(1-z^2)=w-z^2w=w-(z^2-x^2z^2-y^2z^2+x^2y^2z^2)`.</p>
+								
+								<p>The final result is 1 minus that.</p>
+							</div>
+						</aside>
+						
+						<p>We again split the formula as before, but now we have to assign portions appropriately and have to equally divide the `x^2y^2z^2` between all three components: `[[a^2],[b^2],[c^2]]=[[x^2-(x^2y^2+x^2z^2)/2+(x^2y^2z^2)/3],[y^2-(x^2y^2+y^2z^2)/2+(x^2y^2z^2)/3],[z^2-(x^2z^2+y^2z^2)/2+(x^2y^2z^2)/3]]` which leads to the mapping `[[a],[b],[c]]=[[xsqrt(1-(y^2+z^2)/2+(y^2z^2)/3)],[ysqrt(1-(x^2+z^2)/2+(x^2z^2)/3)],[zsqrt(1-(x^2+y^2)/2+(x^2y^2)/3)]]`.</p> 
+						
+						<p>Use this for the mapping instead of normalization in <code>CubeToSphere</code>. We can efficiently calculate it with vector math as `psqrt(1-(p_(yx x)^2+p_(zzy)^2)/2+(p_(yx x)^2p_(zzy)^2)/3)`, with `p` being the parameter.</p>
+						
+						<pre translate="no">		static float3 CubeToSphere (float3 p) => <ins>p * sqrt(</ins>
+			<ins>1f - ((p * p).yxx + (p * p).zzy) / 2f + (p * p).yxx * (p * p).zzy / 3f</ins>
+		<ins>)</ins>;</pre>
+						
+						<figure>
+							<img src="sphere/alternative-with-rotation.png" width="250" height="250" alt="with rotation">
+							<img src="sphere/alternative-without-rotation.png" width="250" height="250" alt="without rotation">
+							<figcaption>Alternative sphere mapping, with and without rotation.</figcaption>
+						</figure>
+						
+						<p>Just like for the circle, the alternative mapping produce a more uniform vertex layout than simple normalization.</p>
+						
+						<aside>
+							<h3>How do you come up with such math?</h3>
+							<div>
+								<p>While it is presented here in a logical order, figuring it out on your own typically takes a much more erratic path. Following a clear logical path is great when the opportunity presents itself, but intuition often only comes after experimenting. And before that, investigate what others have already figured out.</p>
+								
+								<p>In this case, the cube to sphere mapping has been described by Philip Nowell on his <a href="http://mathproofs.blogspot.nl/2005/07/mapping-cube-to-sphere.html">blog</a>. The intuition behind the mapping comes from the answer to a  <a href="http://math.stackexchange.com/questions/118760/can-someone-please-explain-the-cube-to-sphere-mapping-formula-to-me">Mathematics Stack Exchange question</a>.</p>
+								
+								<p>Also, if you're interested in a reverse mapping, see <a href="https://stackoverflow.com/questions/2656899/mapping-a-sphere-to-a-cube">this Stack Overflow question</a>.</p>
+							</div>
+						</aside>
+						
+						<p>The next tutorial is <a href="../seamless-cube-sphere/index.html">Seamless Cube Sphere</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/procedural-meshes-06-cube-sphere/" class="repository">repository</a>
+					<a href="Cube-Sphere.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

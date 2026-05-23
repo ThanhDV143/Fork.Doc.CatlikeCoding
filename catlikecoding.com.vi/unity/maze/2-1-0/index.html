@@ -1,0 +1,1553 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/maze/2-1-0/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/maze/2-1-0/tutorial-image.jpg">
+		<meta property="og:title" content="Maze 2.1.0">
+		<meta property="og:description" content="Unity Maze 2.1.0 tutorial, occlusion culling.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Maze 2.1.0</title>
+		<link href="../../tutorials/tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/maze/2-1-0/#article",
+				"headline": "Maze 2.1.0",
+				"alternativeHeadline": "Occlusion Culling",
+				"datePublished": "2023-09-25",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "Unity Maze 2.1.0 tutorial, occlusion culling.",
+				"image": "https://catlikecoding.com/unity/maze/2-1-0/tutorial-image.jpg",
+				"dependencies": "Unity 2022.3.9f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/maze/", "name": "Maze" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				Agent: 1,
+				CellData: 1,
+				ClearOcclusionJob: 1,
+				DisperseScentJob: 1,
+				FieldOfView: 1,
+				FindDiagonalPassagesJob: 1,
+				Game: 1,
+				GenerateMazeJob: 1,
+				Maze: 1,
+				MazeCellObject: 1,
+				MazeFlags: 1,
+				MazeFlagsExtensions: 1,
+				MazeVisualization: 1,
+				OcclusionJob: 1,
+				Player: 1,
+				Quadrant: 1,
+				Scan: 1,
+				ScanStack: 1,
+				Scent : 1,
+				ScentJob: 1
+			};
+			
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../products/utilities/frame-rate-counter/index.html"><img src="../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../index.html">Unity</a></li>
+					<li><a href="../index.html">Maze</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Maze 2.1.0</h1>
+					<p>Occlusion Culling</p>
+					<ul>
+						<li>Scan cells to determine visibility.</li>
+						<li>Detect overlapping vision of agents and player.</li>
+						<li>Deactivate hidden cells and lights.</li>
+					</ul>
+				</header>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Determining which cells to render, skipping most of the maze.</figcaption>
+				</figure>
+				
+				<p>This tutorial is made with Unity 2022.3.9f1 and follows <a href="../../tutorials/prototypes/maze-2/index.html">Maze 2</a>.</p>
+				
+				<section>
+					<h2>Vision</h2>
+					
+					<p>In this tutorial we'll add occlusion culling to the maze, so that we can avoid rendering cells that are not visible. This is beneficial besides frustum culling and depth sorting because it reduces the amount of draw calls and the amount of geometry that needs to be depth-tested. It will also allow us to disable shadow-casting lights that are fully occluded.</p>
+					
+					<p>We're going to use a technique inspired by the <a href="https://www.roguebasin.com/index.php?title=FOV_using_recursive_shadowcasting">FOV (field of view) using recursive shadowcasting algorithm by Björn Bergström</a>, but iterative, with blocking edges instead of cells, and running on quadrants instead of octants.</p>
+					
+					<p>We start by determining visibility in the northeastern quadrant relative to the player only, then later generalize this approach to work for all directions.</p>
+					
+					<section>
+						<h3>Tracking Visibility</h3>
+						
+						<p>To track the visibility of a cell we add a bit flag for it to <code>MazeFlags</code>.</p>
+						
+						<pre translate="no">[System.Flags]
+public enum MazeFlags
+{
+	&hellip;
+
+	PassagesDiagonal = 0b1111_0000<ins>,</ins>
+
+	<ins>Visible = 0b1_0000_0000</ins>
+}</pre>
+						
+						<p>The first step of the algorithm is to clear visibility, for which we can use a parallel <code>ClearOcclusionJob</code> job.</p>
+						
+						<pre translate="no">using Unity.Burst;
+using Unity.Jobs;
+
+[BurstCompile]
+public struct ClearOcclusionJob : IJobFor
+{
+	public Maze maze;
+
+	public void Execute(int i) => maze.Unset(i, MazeFlags.Visible);
+}</pre>
+						
+						<p>The rest of the algorithm will run in a separate <code>OcclusionJob</code> job that will process a single quadrant. It is also a parallel job because we can process the quadrants in parallel. Besides the maze it needs to know the view position and how much the walls extent into the cells. Make it do nothing for now. We'll use a few struct types to segregate the code of this job, which we'll put in different script assets, so define it as a partial struct.</p>
+						
+						<pre translate="no">using Unity.Burst;
+using Unity.Collections;
+using Unity.Jobs;
+using Unity.Mathematics;
+
+using static Unity.Mathematics.math;
+
+[BurstCompile]
+public partial struct OcclusionJob : IJobFor
+{
+	public Maze maze;
+
+	public float2 position;
+
+	public float wallExtents;
+
+	public void Execute(int i) { }
+}</pre>
+						
+						<p>The position and wall extents are in maze space. Add methods to <code>Maze</code> to convert from world to maze distance and from world to maze position.</p>
+						
+						<pre translate="no">	<ins>public readonly float WorldToMazeDistance(float distance) => distance * 0.5f;</ins>
+	
+	<ins>public readonly float2 WorldToMazePosition(Vector3 position) =></ins>
+		<ins>(float2(position.x, position.z) + size) * 0.5f;</ins></pre>
+						
+						<p>Add a configuration field for the wall extents to <code>Game</code>. We designed our walls to extent 0.25 world units into the cells so we use that as the default. You could modify this value at runtime to see how wall thickness affects vision.</p>
+						
+						<p>Schedule and run the jobs in a new <code>UpdateOcclusion</code> method and invoke it at the end of <code>UpdateGame</code>, passing it the player position. Because clearing the visibility data is so little work Burst partially unrolls the loop. So trying to schedule it on many threads is counterproductive. Let's use a quarter of the maze length as the batch size. Also, because we'll only process the northeastern quadrant for now the main occlusion job only needs a single iteration, though we'll increase this to four later.</p>
+
+						<pre translate="no">	<ins>[SerializeField, Range(0, 0.5f)]</ins>
+	<ins>float wallExtents = 0.25f;</ins>
+
+	&hellip;
+
+	void UpdateGame()
+	{
+		&hellip;
+		<ins>UpdateOcclusion(playerPosition);</ins>
+	}
+
+	<ins>void UpdateOcclusion(Vector3 playerPosition)</ins>
+	<ins>{</ins>
+		<ins>JobHandle handle = new ClearOcclusionJob</ins>
+		<ins>{</ins>
+			<ins>maze = maze</ins>
+		<ins>}.ScheduleParallel(maze.Length, maze.Length / 4, default);</ins>
+		
+		<ins>handle = new OcclusionJob</ins>
+		<ins>{</ins>
+			<ins>maze = maze,</ins>
+			<ins>position = maze.WorldToMazePosition(playerPosition),</ins>
+			<ins>wallExtents = maze.WorldToMazeDistance(wallExtents)</ins>
+		<ins>}.ScheduleParallel(1, 1, handle);</ins>
+		
+		<ins>handle.Complete();</ins>
+	<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Row Scans</h3>
+						
+						<p>Our algorithm works by scanning a row of cells, going eastward. When certain conditions are met it'll schedule a scan of another row, north of the current one. Each scan has a starting point, for which we need a cell index and an offset vector. The vision cone used for the scan can be defined by two lines, the left and the right one from the point of view of the player. We only need to store the slopes of these lines. Create an inner <code>Scan</code> struct type for this, put in a different asset named <em translate="no">OcclusionJob.Scan</em>.</p>
+						
+						<pre translate="no">using Unity.Mathematics;
+
+using static Unity.Mathematics.math;
+
+partial struct OcclusionJob
+{
+	struct Scan
+	{
+		public int index;
+
+		public float2 offset;
+
+		public float leftSlope, rightSlope;
+}</pre>
+						
+						<p>While scanning a row we'll encounter cells where a new scan should start. We can accommodate this by shifting the existing scan eastward to the current cell. Add a <code>ShiftEast</code> method for this, which replaces the index, X offset, and left slope.</p>
+						
+						<pre translate="no">		<ins>public void ShiftEast(int index, float xOffset, float leftSlope)</ins>
+		<ins>{</ins>
+			<ins>this.index = index;</ins>
+			<ins>offset.x = xOffset;</ins>
+			<ins>this.leftSlope = leftSlope;</ins>
+		<ins>}</ins></pre>
+						
+						<p>Also add a <code>ShiftedNorth</code> method that returns a new scan by shifting the current one north, adding an index offset, incrementing the Y offset, and providing a new right slope.</p>
+						
+						<pre translate="no">		<ins>public readonly Scan ShiftedNorth(int indexOffset, float rightSlope) => new()</ins>
+		<ins>{</ins>
+			<ins>index = index + indexOffset,</ins>
+			<ins>offset = float2(offset.x, offset.y + 1f),</ins>
+			<ins>leftSlope = leftSlope,</ins>
+			<ins>rightSlope = rightSlope</ins>
+		<ins>};</ins>
+	<ins>}</ins></pre>
+						
+						<p>To avoid recursion we'll store these scans in a stack. We don't need a generic dynamically-resizing stack as its maximum size is known. So let's create a simple inner <code>ScanStack</code> struct type with a constructor to create it with a capacity and first scan, a method to push a scan, and a method that tries to pop a scan.</p>
+						
+						<pre translate="no">using Unity.Collections;
+
+partial struct OcclusionJob
+{
+	struct ScanStack
+	{
+		NativeArray&lt;Scan> stack;
+
+		int stackSize;
+
+		public ScanStack(int capacity, Scan firstScan)
+		{
+			stack = new(capacity, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+			stack[0] = firstScan;
+			stackSize = 1;
+		}
+
+		public void Push(Scan scan) => stack[stackSize++] = scan;
+
+		public bool TryPop(out Scan scan)
+		{
+			if (stackSize > 0)
+			{
+				scan = stack[--stackSize];
+				return true;
+			}
+			scan = default;
+			return false;
+		}
+	}
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Cell Data</h3>
+						
+						<p>We need to analyze each cell that gets scanned. Let's put all code for that in an inner <code>CellData</code> struct type to keep it isolated. We need to know the inset used for walls and the single-dimensional offsets for the south, north, west, and east edges of the cell. We'll initialize and use one data value per scan, so its south and north offsets are constant, as well as the inset.</p>
+						
+						<pre translate="no">using Unity.Mathematics;
+
+using static Unity.Mathematics.math;
+
+partial struct OcclusionJob
+{
+	struct CellData
+	{
+		readonly float inset;
+
+		readonly float south, north;
+
+		float west, east;
+	}
+}</pre>
+						
+						<p>The questions that we're trying to answer is whether the north and the east neighbors of this cell are visible and what the left and right slopes of the vision cone for this cell are. Add properties for these that are set privately.</p>
+						
+						<pre translate="no">		<ins>public bool IsNorthVisible</ins>
+		<ins>{ get; private set; }</ins>
+
+		<ins>public bool IsEastVisible</ins>
+		<ins>{ get; private set; }</ins>
+
+		<ins>public float LeftSlope</ins>
+		<ins>{ get; private set; }</ins>
+
+		<ins>public float RightSlope</ins>
+		<ins>{ get; private set; }</ins></pre>
+						
+						<p>Its constructor method takes an offset vector, inset, and initial slopes as input and uses that to initialize the data. The offset vector points to the southwest corner of the cell. Also give it a <code>StepEast</code> method which increments both the west and east offsets.</p>
+						
+						<pre translate="no">		<ins>public CellData(float2 offset, float inset, float leftSlope, float rightSlope)</ins>
+		<ins>{</ins>
+			<ins>this = default;</ins>
+			<ins>this.inset = inset;</ins>
+			<ins>west = offset.x;</ins>
+			<ins>east = left + 1f;</ins>
+			<ins>south = offset.y;</ins>
+			<ins>north = south + 1f;</ins>
+			<ins>LeftSlope = leftSlope;</ins>
+			<ins>RightSlope = rightSlope;</ins>
+		<ins>}</ins>
+
+		<ins>public void StepEast()</ins>
+		<ins>{</ins>
+			<ins>west += 1f;</ins>
+			<ins>east += 1f;</ins>
+		<ins>}</ins></pre>
+						
+						<p>The cell evaluation will happen in an <code>UpdateForNextCell</code> method, which will use the flags of a given cell to set its properties. Leave it empty for now.</p>
+						
+						<pre translate="no">		<ins>public void UpdateForNextCell(MazeFlags cell) { }</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Scanning</h3>
+						
+						<p>Now that we have the helper structs we can begin to implementing <code>OcclusionJob.Execute</code>. The first step is to get the first scan, along with the origin of the vision cone. If it possible that we end up without a first scan, in which case the job can abort, so we put that code in a <code>TryGetFirstScan</code> method with the scan and origin as output parameters.</p>
+						
+						<p>At this point we're not yet going to avoid scanning so always have <code>TryGetFirstScan</code> indicate success. The scan origin is the player's position in the starting cell, which is the fractional part of its maze position. The scan index is found by converting the player's integer coordinates to a cell index. As we're evaluating the entire northeast quadrant the left line of the vision cone points north and the right line points east. As we're scanning eastward let's find the slopes by dividing the east offset by the north offset so the slope increases the more it points eastward. Thus the left slope is zero and the right slope would approach infinity, but let's use <code>float.MaxValue</code> for that.</p>
+						
+						<figure>
+							<img src="vision/quadrant-vision-cone.png" width="320" height="320">
+							<figcaption>Northeast quadrant vision cone.</figcaption>
+						</figure>
+						
+						<pre translate="no">	public void Execute(int i)
+	{
+		<ins>if (!TryGetFirstScan(out Scan scan, out float2 origin))</ins>
+		<ins>{</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+	}
+	
+	<ins>bool TryGetFirstScan(out Scan scan, out float2 origin)</ins>
+	<ins>{</ins>
+		<ins>origin = frac(position);</ins>
+		<ins>scan = new Scan</ins>
+		<ins>{</ins>
+			<ins>index = maze.CoordinatesToIndex((int2)position),</ins>
+			<ins>rightSlope = float.MaxValue</ins>
+		<ins>};</ins>
+		<ins>return true;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Our algorithm then creates the stack and while it can pop a scan will create new cell data, passing it the relative scan offset, wall extents, and the scan's slopes. It should also keep track of the current index and X offset. The stack's capacity should be equal to the east-west size of the maze, as that's the worst-case amount of scans that we'll have to track, pushing a new one per cell in a row.</p>
+						
+						<pre translate="no">	public void Execute(int i)
+	{
+		&hellip;
+
+		<ins>var stack = new ScanStack(maze.SizeEW, scan);</ins>
+		<ins>while (stack.TryPop(out scan))</ins>
+		<ins>{</ins>
+			<ins>var data = new CellData(</ins>
+				<ins>scan.offset - origin, wallExtents, scan.leftSlope, scan.rightSlope);</ins>
+			<ins>int currentIndex = scan.index;</ins>
+			<ins>float currentXOffset = scan.offset.x;</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>For each scan we enter a loop to to worth through the row. Each iteration we update the data for the current cell, which we also mark as visible. Then if the east neighbor is visible we increase the index and X offset and step to the east and continue, otherwise we stop.</p>
+						
+						<pre translate="no">			float currentXOffset = scan.offset.x;
+
+			<ins>while (true)</ins>
+			<ins>{</ins>
+				<ins>MazeFlags cell = maze.Set(currentIndex, MazeFlags.Visible);</ins>
+				<ins>data.UpdateForNextCell(cell);</ins>
+
+				<ins>if (data.IsEastVisible)</ins>
+				<ins>{</ins>
+					<ins>currentIndex += maze.StepE;</ins>
+					<ins>currentXOffset += 1f;</ins>
+					<ins>data.StepEast();</ins>
+				<ins>}</ins>
+				<ins>else</ins>
+				<ins>{</ins>
+					<ins>break;</ins>
+				<ins>}</ins>
+			<ins>}</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Debug Visualization</h3>
+						
+						<p>Because we don't update the cell data yet our algorithm will stop after the first cell. So it marks the cell the player occupies as visible and nothing else. Let's take this moment to add a debug visualization of the cell visibility so we can inspect the results of our algorithm. We do this by adding an <code>OnDrawGizmosSelected</code> method to <code>Game</code> which, if it is playing, loops through all cells and draws a green tile on the bottom of each visible cell. Make theses tiles 1.75 units wide so that we can see the edges between visible cells.</p>
+						
+						<pre translate="no">	<ins>void OnDrawGizmosSelected()</ins>
+	<ins>{</ins>
+		<ins>if (!isPlaying)</ins>
+		<ins>{</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+
+		<ins>Gizmos.color = Color.green;</ins>
+		<ins>var size = new Vector3(1.75f, 0.01f, 1.75f);</ins>
+		<ins>for (int i = 0; i &lt; cellObjects.Length; i++)</ins>
+		<ins>{</ins>
+			<ins>if (maze[i].Has(MazeFlags.Visible))</ins>
+			<ins>{</ins>
+				<ins>Vector3 position = cellObjects[i].transform.localPosition;</ins>
+				<ins>position.y = 0f;</ins>
+				<ins>Gizmos.DrawCube(position, size);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we'll see the tile gizmos in the scene window while we have <em translate="no">Game</em> selected. Gizmos can also be enabled in the game window to get a first-person view of them. To test whether the algorithm will process an entire quadrant set the <em translate="no">Open Arbitrary Probability</em> of <em translate="no">Game</em> to 1.</p>
+						
+						<figure>
+							<img src="vision/one-visible-cell.png" width="260" height="260">
+							<figcaption>Gizmos showing one visible cell.</figcaption>
+						</figure>
+						
+						<p>Temporarily clear the <em translate="no">Agents</em> array so they don't interrupt our work by catching the player.</p>
+					</section>
+					
+					<section>
+						<h3>Scanning a Quadrant</h3>
+						
+						<p>Going back to our algorithm, to make it scan more cells we have to indicate whether north and east are visible in <code>CellData.UpdateForNextCell</code> based on the cell flags.</p>
+						
+						<pre translate="no">		public void UpdateForNextCell(MazeFlags cell) {
+			<ins>IsNorthVisible = cell.Has(MazeFlags.PassageN);</ins>
+			<ins>IsEastVisible = cell.Has(MazeFlags.PassageE);</ins>
+		}</pre>
+						
+						<figure>
+							<img src="vision/visible-row.png" width="260" height="260">
+							<figcaption>Visible row; from player to eastern edge.</figcaption>
+						</figure>
+						
+						<p>Now we scan the entire row from the player to the eastern edge of the empty maze. To also go north, when we can no longer go east, shift the current scan north and push it onto the stack before stopping, in <code>OcclusionJob.Execute</code>.</p>
+						
+						<pre translate="no">				if (data.IsEastVisible)
+				{
+					currentIndex += maze.StepE;
+					currentXOffset += 1f;
+					data.StepEast();
+				}
+				else
+				{
+					<ins>if (data.IsNorthVisible)</ins>
+					<ins>{</ins>
+						<ins>stack.Push(scan.ShiftedNorth(maze.StepN, data.RightSlope));</ins>
+					<ins>}</ins>
+					break;
+				}</pre>
+						
+						<figure>
+							<img src="vision/visible-quadrant.png" width="260" height="260">
+							<figcaption>Visible quadrant; from player to north and east maze edges.</figcaption>
+						</figure>
+						
+						<p>Let's see how our algorithm behaves when we add walls. Set <em translate="no">Seed</em> to 123 and <em translate="no">Open Arbitrary Probability</em> to 0.75.</p>
+						
+						<figure>
+							<img src="vision/walls-block-row-scans.png" width="260" height="260">
+							<figcaption>Walls block row scans.</figcaption>
+						</figure>
+						
+						<p>We're scanning eastward until hitting a wall, then start a new scan one step north from the start of the current scan.</p>
+					</section>
+					
+					<section>
+						<h3>Shifting Scans</h3>
+						
+						<p>To also take northern visibility into account we have to keep track of whether north is visible from the previous cell, which is initially not the case as it is out of view. Then while scanning first check whether north is visible before checking east. If north is visible and it previously wasn't, then we've found the first cell for a next scan and shift east to match. Then, if we can go east, update the previous northern visibility accordingly.</p>
+						
+						<pre translate="no">			<ins>bool isPreviousNorthVisible = false;</ins>
+
+			while (true)
+			{
+				MazeFlags cell = maze.Set(currentIndex, MazeFlags.Visible);
+				data.UpdateForNextCell(cell);
+
+				<ins>if (data.IsNorthVisible)</ins>
+				<ins>{</ins>
+					<ins>if (!isPreviousNorthVisible)</ins>
+					<ins>{</ins>
+						<ins>scan.ShiftEast(currentIndex, currentXOffset, data.LeftSlope);</ins>
+					<ins>}</ins>
+				<ins>}</ins>
+
+				if (data.IsEastVisible)
+				{
+					currentIndex += maze.StepE;
+					currentXOffset += 1f;
+					<ins>isPreviousNorthVisible = data.IsNorthVisible;</ins>
+					data.StepEast();
+				}
+				else
+				{ &hellip; }
+			}</pre>
+						
+						<figure>
+							<img src="vision/shifted-scans.png" width="260" height="260">
+							<figcaption>Shifted scans.</figcaption>
+						</figure>
+						
+						<p>This shifts scan eastward so they begin after the last cell that had a northern wall. But a new scan should also start if the northern cell has a western wall, as that also blocks vision. This is the case if there isn't a northwest passage while north is open. So in that case also shift right.</p>
+						
+						<pre translate="no">					if (!isPreviousNorthVisible)
+					{
+						scan.ShiftEast(currentIndex, currentXOffset, data.LeftSlope);
+					}
+					<ins>else if (cell.HasNot(MazeFlags.PassageNW))</ins>
+					<ins>{</ins>
+						<ins>scan.ShiftEast(currentIndex, currentXOffset, data.LeftSlope);</ins>
+					<ins>}</ins></pre>
+						
+						<figure>
+							<img src="vision/shifting-past-obstructions.png" width="260" height="260">
+							<figcaption>Shifting past visual obstructions.</figcaption>
+						</figure>
+						
+						<p>At this point we add scans only for the last open segment of each row. We also have to add scans when we detect the end of earlier open segments. This is the case when current north is closed while previous north is open, and also when we encounter a western wall north of us.</p>
+						
+						<pre translate="no">				if (data.IsNorthVisible)
+				{
+					if (!isPreviousNorthVisible)
+					{
+						scan.ShiftEast(currentIndex, currentXOffset, data.LeftSlope);
+					}
+					else if (cell.HasNot(MazeFlags.PassageNW))
+					{
+						<ins>stack.Push(scan.ShiftedNorth(maze.StepN, data.RightSlope));</ins>
+						scan.ShiftEast(currentIndex, currentXOffset, data.LeftSlope);
+					}
+				}
+				<ins>else if (isPreviousNorthVisible)</ins>
+				<ins>{</ins>
+					<ins>stack.Push(scan.ShiftedNorth(maze.StepN, data.RightSlope));</ins>
+				<ins>}</ins></pre>
+						
+						<figure>
+							<img src="vision/maximum-scans.png" width="260" height="260">
+							<figcaption>Maximum scans going north and east.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Constraining Vision</h3>
+						
+						<p>By now our algorithm marks all cells as visible that could be reached by going east and north only. To narrow this down further we have to take the vision cone into consideration. The idea is that each cell that we visit potentially constrains what we can see further away. We implement that by increasing the left slope and decreasing the right slope when needed. Adjusting these slopes is the responsibility of <code>CellData</code>.</p>
+						
+						<p>If our walls didn't have any thickness only checking corners would suffice, but because walls do have thickness we'll also have to check cell edges adjusted by the wall inset. Add convenient inset getter properties for the four edges.</p>
+						
+						<pre translate="no">		<ins>readonly float WestInset => west + inset;</ins>
+
+		<ins>readonly float EastInset => east - inset;</ins>
+
+		<ins>readonly float SouthInset => south + inset;</ins>
+
+		<ins>readonly float NorthInset => north - inset;</ins></pre>
+						
+						<p>The first thing that we'll do in <code>UpdateForNextCell</code> is constrain the right slope. This could be the case when there is a southern passage but not a southeastern one, because the southeast neighbor has a west or north wall that pokes into this cell. The right slope then becomes the slope for the inset southeastern corner, if that is less than our current right slope. But we should only do this when the south inset is positive, otherwise it lies to the south of the quadrant, and a division would make the slope either infinite or negative.</p>
+						
+						<figure>
+							<img src="vision/constrained-southeast.png" width="275" height="210">
+							<figcaption>Constrained by inset southeast corner.</figcaption>
+						</figure>
+						
+						<pre translate="no">		public void UpdateForNextCell(MazeFlags cell, Quadrant quadrant, float range) {
+			<ins>if (cell.Has(MazeFlags.PassageS) &amp;&amp;</ins>
+				<ins>cell.HasNot(MazeFlags.PassageSE) &amp;&amp;</ins>
+				<ins>SouthInset > 0f)</ins>
+			<ins>{</ins>
+				<ins>RightSlope = min(RightSlope, EastInset / SouthInset);</ins>
+			<ins>}</ins>
+		
+			&hellip;
+		}</pre>
+						
+						<aside>
+							<h3>What if there is a south wall?</h3>
+							<div>
+								<p>Then the right slope would've already been constrained earlier, if needed.</p>
+							</div>
+						</aside>
+						
+						<p>We can do the same for the left slope and the northwest corner, taking the maximum of that slope and the current left slope. We can do this while checking whether north is open. Also, after potentially updating the left slope, north can only be visible if the left slope is less than the right slope, otherwise vision is completely blocked.</p>
+						
+						<figure>
+							<img src="vision/constrained-northwest.png" width="245" height="235">
+							<figcaption>Constrained by inset northwest corner.</figcaption>
+						</figure>
+						
+						<pre translate="no">			<del>//IsNorthVisible = cell.Has(MazeFlags.PassageN);</del>
+			<ins>if (cell.Has(MazeFlags.PassageN))</ins>
+			<ins>{</ins>
+				<ins>if (cell.HasNot(MazeFlags.PassageNW) &amp;&amp; WestInset > 0f)</ins>
+				<ins>{</ins>
+					<ins>LeftSlope = max(LeftSlope, WestInset / NorthInset);</ins>
+				<ins>}</ins>
+				<ins>IsNorthVisible = LeftSlope &lt; RightSlope;</ins>
+			<ins>}</ins>
+			<ins>else</ins>
+			<ins>{</ins>
+				<ins>IsNorthVisible = false;</ins>
+			<ins>}</ins></pre>
+						
+						<p>Also refine the check whether east is open, adding the check for complete view blockage. Furthermore, let's consider a cell with an open northeast corner. If that corner lies south of the right slope then the east cell is fully out of view. If that corner is blocked instead we check along the cell east edge with north inset. But only if the inset lies inside the view quadrant, otherwise the corner blocks our entire view eastward.</p>
+						
+						<figure>
+							<img src="vision/east-check-northeast.png" width="270" height="230">
+							<figcaption>East visibility check with blocked corner.</figcaption>
+						</figure>
+						
+						<pre translate="no">			IsEastVisible =
+				cell.Has(MazeFlags.PassageE) <ins>&amp;&amp;</ins>
+				<ins>LeftSlope &lt; RightSlope &amp;&amp;</ins>
+				<ins>(cell.Has(MazeFlags.PassageNE) ?</ins>
+					<ins>east / north &lt; RightSlope :</ins>
+					<ins>NorthInset > 0f &amp;&amp; east / NorthInset &lt; RightSlope)</ins>;</pre>
+						
+						<figure>
+							<img src="vision/constraining-vision.png" width="260" height="260">
+							<figcaption>Constraining vision.</figcaption>
+						</figure>
+						
+						<p>Perform a similar check with the left slope and the northeast corner for northern visibility. In this case we don't care if the inset ends up outside the view quadrant because a negative left slope is fine and we won't get a division by zero. The slope that we test here will also be needed for northern scans that we might push later, if we take the minimum of it and the current right slope. So let's expose it via a <code>RightSlopeForNorthNeighbor</code> property. We then also only have to compare the left slope with this one.</p>
+						
+						<figure>
+							<img src="vision/north-check-northeast.png" width="270" height="230">
+							<figcaption>North visibility check with blocked corner.</figcaption>
+						</figure>
+						
+						<pre translate="no">		<ins>public float RightSlopeForNorthNeighbor</ins>
+		<ins>{ get; private set; }</ins>
+
+		&hellip;
+
+		public void UpdateForNextCell(MazeFlags cell) {
+			&hellip;
+
+			if (cell.Has(MazeFlags.PassageN))
+			{
+				&hellip;
+
+				<ins>RightSlopeForNorthNeighbor = min(RightSlope,</ins>
+					<ins>(cell.Has(MazeFlags.PassageNE) ? east : EastInset) / north);</ins>
+
+				IsNorthVisible = LeftSlope &lt; <ins>RightSlopeForNorthNeighbor</ins>;
+			}
+			else
+			{
+				IsNorthVisible = false;
+			}
+
+			&hellip;
+		}</pre>
+						
+						<p>Each time we push a new scan in <code>OcclusionJob.Execute</code> we can use that slope for the right slope. However, except when encountering an east wall, the shift north happens based on the previously visited cell, so we have to remember the slope of the previous iteration.</p>
+						
+						<pre translate="no">			<ins>float previousRightSlopeForNorthNeighbor = 0f;</ins>
+
+			while (true)
+			{
+				MazeFlags cell = maze.Set(currentIndex, MazeFlags.Visible);
+				data.UpdateForNextCell(cell);
+
+				if (data.IsNorthVisible)
+				{
+					if (!isPreviousNorthVisible)
+					{
+						scan.ShiftEast(currentIndex, currentXOffset, data.LeftSlope);
+					}
+					else if (cell.HasNot(MazeFlags.PassageNW))
+					{
+						stack.Push(scan.ShiftedNorth(
+							maze.StepN, <ins>previousRightSlopeForNorthNeighbor</ins>));
+						scan.ShiftEast(currentIndex, currentXOffset, data.LeftSlope);
+					}
+				}
+				else if (isPreviousNorthVisible)
+				{
+					stack.Push(scan.ShiftedNorth(
+						maze.StepN, <ins>previousRightSlopeForNorthNeighbor</ins>));
+				}
+
+				if (data.IsEastVisible)
+				{
+					currentIndex += maze.StepE;
+					currentXOffset += 1f;
+					isPreviousNorthVisible = data.IsNorthVisible;
+					<ins>previousRightSlopeForNorthNeighbor = data.RightSlopeForNorthNeighbor;</ins>
+					data.StepEast();
+				}
+				else
+				{
+					if (data.IsNorthVisible)
+					{
+						stack.Push(scan.ShiftedNorth(
+							maze.StepN, data.<ins>RightSlopeForNorthNeighbor</ins>));
+					}
+					break;
+				}
+			}</pre>
+						
+						<figure>
+							<img src="vision/fully-constrained.png" width="260" height="260">
+							<figcaption>Fully constrained vision.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Quadrants</h2>
+					
+					<p>Our occlusion algorithm works, but currently only for everything in the northeast quadrant relative to the player. To support full omnidirectional vision we'll run the algorithm for the other three quadrants as well. This means that the quadrants will overlap at least partially along the first row or column. That is fine because we're only enabling visibility, so which quadrant updates a cell last doesn't matter.</p>
+					
+					<section>
+						<h3>Relative Directions</h3>
+						
+						<p>Our algorithm doesn't care in which direction it runs, as long as it is consistent. We'll support the other quadrants by flipping north-south, east-west, or both dimensions. To do this we introduce an inner <code>Quadrant</code> struct type that contains the flip state and flags for all passages that we need to check, which are north, east, south, northwest, northeast, and southeast. Give it a constructor that sets these flags based on given flip states.</p>
+						
+						<pre translate="no">partial struct OcclusionJob
+{
+	readonly struct Quadrant
+	{
+		public readonly MazeFlags north, east, south, northwest, northeast, southeast;
+
+		public readonly bool flipNS, flipEW;
+
+		public Quadrant(bool flipNS, bool flipEW)
+		{
+			this.flipNS = flipNS;
+			this.flipEW = flipEW;
+
+			north = flipNS ? MazeFlags.PassageS : MazeFlags.PassageN;
+			south = flipNS ? MazeFlags.PassageN : MazeFlags.PassageS;
+			east = flipEW ? MazeFlags.PassageW : MazeFlags.PassageE;
+
+			if (flipEW)
+			{
+				if (flipNS)
+				{
+					northwest = MazeFlags.PassageSE;
+					northeast = MazeFlags.PassageSW;
+					southeast = MazeFlags.PassageNW;
+				}
+				else
+				{
+					northwest = MazeFlags.PassageNE;
+					northeast = MazeFlags.PassageNW;
+					southeast = MazeFlags.PassageSW;
+				}
+			}
+			else if (flipNS)
+			{
+				northwest = MazeFlags.PassageSW;
+				northeast = MazeFlags.PassageSE;
+				southeast = MazeFlags.PassageNE;
+			}
+			else
+			{
+				northwest = MazeFlags.PassageNW;
+				northeast = MazeFlags.PassageNE;
+				southeast = MazeFlags.PassageSE;
+			}
+		}
+	}
+}</pre>
+						
+						<p>Then add a static array containing the northeast, southeast, southwest, and northwest quadrants. This will be static data hard-coded into the job.</p>
+						
+						<pre translate="no">partial struct OcclusionJob
+{
+	&hellip;
+	
+	<ins>readonly static Quadrant[] quadrants = {</ins>
+		<ins>new(false, false), // NE</ins>
+		<ins>new(true, false), // SE</ins>
+		<ins>new(true, true), // SW</ins>
+		<ins>new(false, true), // NW</ins>
+	<ins>};</ins>
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Northeast Quadrant</h3>
+						
+						<p>Change <code>CellData.UpdateForNextCell</code> so it works for a given quadrant.</p>
+						
+						<pre translate="no">		public void UpdateForNextCell(MazeFlags cell<ins>, Quadrant quadrant</ins>) {
+			northEastCornerSlope = east / north;
+
+			if (cell.Has(<ins>quadrant.south</ins>) &amp;&amp;
+				cell.HasNot(<ins>quadrant.southeast</ins>) &amp;&amp;
+				SouthInset > 0f)
+			{
+				RightSlope = min(RightSlope, EastInset / SouthInset);
+			}
+
+			if (cell.Has(<ins>quadrant.north</ins>))
+			{
+				if (cell.HasNot(<ins>quadrant.northwest</ins>) &amp;&amp; WestInset > 0f)
+				{
+					LeftSlope = max(LeftSlope, WestInset / NorthInset);
+				}
+
+				RightSlopeForNorthNeighbor = min(RightSlope,
+					cell.Has(<ins>quadrant.northeast</ins>) ?
+						northEastCornerSlope : EastInset / north);
+
+				IsNorthVisible = LeftSlope &lt; RightSlopeForNorthNeighbor;
+			}
+			else
+			{
+				RightSlopeForNorthNeighbor = 0f;
+				IsNorthVisible = false;
+			}
+
+			IsEastVisible =
+				cell.Has(<ins>quadrant.east</ins>) &amp;&amp;
+				LeftSlope &lt; RightSlope &amp;&amp;
+				(cell.Has(<ins>quadrant.northeast</ins>) ?
+					northEastCornerSlope &lt; RightSlope :
+					NorthInset > 0f &amp;&amp; east / NorthInset &lt; RightSlope);
+		}</pre>
+						
+						<p>The scan, starting with the first, will depend on the quadrant, so add an output parameter for the quadrant to <code>OcclusionJob.TryGetFirstScan</code>, which simply returns the northeast quadrant.</p>
+						
+						<pre translate="no">	bool TryGetFirstScan(out Scan scan, <ins>out Quadrant quadrant,</ins> out float2 origin)
+	{
+		<ins>quadrant = quadrants[0];</ins>
+		&hellip;
+	}</pre>
+						
+						<p>Then adjust <code>Execute</code> to use the quadrant as well. The step directions are now also variable, based on which directions are flipped.</p>
+						
+						<pre translate="no">	public void Execute(int i)
+	{
+		if (!TryGetFirstScan(out Scan scan, <ins>out Quadrant quadrant,</ins> out float2 origin))
+		{
+			return;
+		}
+
+		<ins>int stepEast = quadrant.flipEW ? maze.StepW : maze.StepE;</ins>
+		<ins>int stepNorth = quadrant.flipNS ? maze.StepS : maze.StepN;</ins>
+
+		var stack = new ScanStack(maze.SizeEW, scan);
+		while (stack.TryPop(out scan))
+		{
+			&hellip;
+
+			while (true)
+			{
+				MazeFlags cell = maze.Set(currentIndex, MazeFlags.Visible);
+				data.UpdateForNextCell(cell<ins>, quadrant</ins>);
+
+				if (data.IsNorthVisible)
+				{
+					if (!isPreviousNorthVisible)
+					{
+						scan.ShiftEast(currentIndex, currentXOffset, data.LeftSlope);
+					}
+					else if (cell.HasNot(<ins>quadrant.northwest</ins>))
+					{
+						stack.Push(scan.ShiftedNorth(
+							<ins>stepNorth</ins>, previousRightSlopeForNorthNeighbor));
+						scan.ShiftEast(currentIndex, currentXOffset, data.LeftSlope);
+					}
+				}
+				else if (isPreviousNorthVisible)
+				{
+					stack.Push(scan.ShiftedNorth(
+						<ins>stepNorth</ins>, previousRightSlopeForNorthNeighbor));
+				}
+
+				if (data.IsEastVisible)
+				{
+					currentIndex += <ins>stepEast</ins>;
+					&hellip;
+				}
+				else
+				{
+					if (data.IsNorthVisible)
+					{
+						stack.Push(scan.ShiftedNorth(
+							<ins>stepNorth</ins>, data.RightSlopeForNorthNeighbor));
+					}
+					break;
+				}
+			}
+		}
+	}</pre>
+						
+						<figure>
+							<img src="quadrants/northeast.png" width="260" height="260">
+							<figcaption>Northeast quadrant; player position (3, 0, &minus;3).</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Southeast Quadrant</h3>
+						
+						<p>Now switch to the southeast quadrant, by incrementing the index used in <code>TryGetFirstScan</code>. This flips the north-south direction of the algorithm. We also have to flip the origin's relative north-south position inside the cell to match and have to make sure that it stays less than 1.</p>
+						
+						<pre translate="no">		quadrant = quadrants[<ins>1</ins>];
+		origin = frac(position);
+
+		<ins>if (quadrant.flipNS)</ins>
+		<ins>{</ins>
+			<ins>origin.y = min(1f - origin.y, 0.999999f);</ins>
+		<ins>}</ins></pre>
+						
+						<figure>
+							<img src="quadrants/southeast.png" width="260" height="260">
+							<figcaption>Southeast quadrant.</figcaption>
+						</figure>
+						
+						<p>At this point we should see correct visibility data for the southeast quadrant. The algorithm doesn't care that we flipped one dimension.</p>
+					</section>
+					
+					<section>
+						<h3>Northwest Quadrant</h3>
+						
+						<p>Next we skip to the final quadrant, which is northwest, for which we have to flip the origin's relative east-west position.</p>
+						
+						<pre translate="no">		quadrant = quadrants[<ins>3</ins>];
+		origin = frac(position);
+
+		<ins>if (quadrant.flipEW)</ins>
+		<ins>{</ins>
+			<ins>origin.x = min(1f - origin.x, 0.999999f);</ins>
+		<ins>}</ins></pre>
+						
+						<figure>
+							<img src="quadrants/northwest.png" width="260" height="260">
+							<figcaption>Northwest quadrant.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Southwest Quadrant</h3>
+						
+						<p>The last quadrant to check is southwest, which flips both dimensions.</p>
+						
+						<pre translate="no">		quadrant = quadrants[<ins>2</ins>];</pre>
+						
+						<figure>
+							<img src="quadrants/southwest.png" width="260" height="260">
+							<figcaption>Southwest quadrant.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>All Quadrants</h3>
+						
+						<p>To support all quadrants pass the job index from <code>Execute</code> to <code>TryGetFirstScan</code> and use it to retrieve a quadrant.</p>
+						
+						<pre translate="no">	public void Execute(int i)
+	{
+		if (!TryGetFirstScan(<ins>i,</ins> out Scan scan, out Quadrant quadrant, out float2 origin))
+		{
+			return;
+		}
+		
+		&hellip;
+	}
+		
+	bool TryGetFirstScan(<ins>int i,</ins> out Scan scan, out Quadrant quadrant, out float2 origin)
+	{
+		quadrant = quadrants[<ins>i</ins>];
+		&hellip;
+	}</pre>
+						
+						<p>Then increase the job length to four in <code>Game.UpdateOcclusion</code>.</p>
+						
+						<pre translate="no">		handle = new OcclusionJob
+		{
+			maze = maze,
+			position = maze.WorldToMazePosition(playerPosition),
+			wallExtents = maze.WorldToMazeDistance(wallExtents)
+		}.ScheduleParallel(<ins>4</ins>, 1, handle);</pre>
+						
+						<figure>
+							<img src="quadrants/all-quadrants.png" width="260" height="260">
+							<figcaption>All quadrants.</figcaption>
+						</figure>
+						
+						<p>Our occlusion algorithm now generates complete vision data for the player.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Agents</h2>
+					
+					<p>We can also determine visibility for our agents. This is needed because they contain shadow-casting lights. Cells that aren't visible to the player but are visible to an agent might cast shadows for light that the player could otherwise see.</p>
+					
+					<figure>
+						<img src="agents/light-leaking.png" width="235" height="350">
+						<figcaption>Blue light leaking due to hiding cells invisible to player.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Visibility Flags</h3>
+						
+						<p>Add visibility flags to <code>MazeFlags</code> for our agents, along with masks for what's visible to them and what's visible to everyone. We support up to three agents, but more could be added. Also rename the generic <code>Visible</code> to the more specific <code>VisibleToPlayer</code>.</p>
+						
+						<pre translate="no">	<ins>VisibleToPlayer</ins> = 0b0001_0000_0000<ins>,</ins>
+
+	<ins>VisbleToAgentA = 0b0010_0000_0000,</ins>
+	<ins>VisbleToAgentB = 0b0100_0000_0000,</ins>
+	<ins>VisbleToAgentC = 0b1000_0000_0000,</ins>
+
+	<ins>VisibleToAllAgents = 0b1110_0000_0000,</ins>
+	<ins>VisibleToAll = 0b1111_0000_0000</ins></pre>
+						
+						<p><code>ClearOcclusionJob</code> now has to clear all visibility flags.</p>
+						
+						<pre translate="no">	public void Execute(int i) => maze.Unset(i, MazeFlags.<ins>VisibleToAll</ins>);</pre>
+						
+						<p>And <code>OcclusionJob</code> needs a configuration field for the visibility flag that it has to set.</p>
+						
+						<pre translate="no">	<ins>public MazeFlags visibilityFlag;</ins>
+
+	public void Execute(int i)
+	{
+		&hellip;
+				MazeFlags cell = maze.Set(currentIndex, <ins>visibilityFlag</ins>);
+		&hellip;
+	}</pre>
+						
+						<p>Pass the player's visibility flag to the job in <code>Game.UpdateOcclusion</code>.</p>
+						
+						<pre translate="no">		handle = new OcclusionJob
+		{
+			maze = maze,
+			position = maze.WorldToMazePosition(playerPosition),
+			wallExtents = maze.WorldToMazeDistance(wallExtents)<ins>,</ins>
+			<ins>visibilityFlag = MazeFlags.VisibleToPlayer</ins>
+		}.ScheduleParallel(4, 1, handle);</pre>
+					</section>
+					
+					<section>
+						<h3>Occlusion for Agents</h3>
+						
+						<p>To also calculate occlusion for agents schedule jobs for them, after the player. We have to run them sequentially because they set different visibility flags, though each still processes its quadrants in parallel.</p>
+						
+						<pre translate="no">		<ins>float wallExtentsInMazeSpace = maze.WorldToMazeDistance(wallExtents);</ins>
+		handle = new OcclusionJob
+		{
+			maze = maze,
+			position = maze.WorldToMazePosition(playerPosition),
+			wallExtents = <ins>wallExtentsInMazeSpace</ins>,
+			visibilityFlag = MazeFlags.VisibleToPlayer
+		}.ScheduleParallel(4, 1, handle);
+		
+		<ins>for (int i = 0; i &lt; agents.Length; i++)</ins>
+		<ins>{</ins>
+			<ins>handle = new OcclusionJob</ins>
+			<ins>{</ins>
+				<ins>maze = maze,</ins>
+				<ins>position = maze.WorldToMazePosition(agents[i].transform.localPosition),</ins>
+				<ins>wallExtents = wallExtentsInMazeSpace,</ins>
+				<ins>visibilityFlag = (MazeFlags)((int)MazeFlags.VisbleToAgentA &lt;&lt; i)</ins>
+			<ins>}.ScheduleParallel(4, 1, handle);</ins>
+		<ins>}</ins></pre>
+						
+						<p>Adjust <code>OnDrawGizmosSelected</code> so it shows all visible cells, using green for those visible to the player, red for those visible to agents, and yellow for those visible to both the player and an agent. Then add the red, blue, and yellow agents to the <em translate="no">Agents</em> array of <em translate="no">Game</em> again.</p>
+						
+						<pre translate="no">		<del>//Gizmos.color = Color.green;</del>
+		var size = new Vector3(1.75f, 0.01f, 1.75f);
+		for (int i = 0; i &lt; cellObjects.Length; i++)
+		{
+			<ins>MazeFlags flags = maze[i];</ins>
+			if (<ins>flags.HasAny(MazeFlags.VisibleToAll)</ins>)
+			{
+				<ins>Gizmos.color = flags.Has(MazeFlags.VisibleToPlayer) ?</ins>
+					<ins>flags.HasAny(MazeFlags.VisibleToAllAgents) ?</ins>
+						<ins>Color.yellow : Color.green :</ins>
+					<ins>Color.red;</ins>
+				&hellip;
+			}
+		}</pre>
+						
+						<figure>
+							<img src="agents/player-agent-visibility.png" width="260" height="260">
+							<figcaption>Both player and agent visibility.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Overlapping Visibility</h3>
+						
+						<p>We only care about light shed by agents that the player could potentially see. This is the case when the set of visible cells of the player and an agent overlap. We can detect this in <code>OcclusionJob</code> by keeping track of the flags that we spotted while running the algorithm. As the player goes first, if an agent spots the <code>VisibleToPlayer</code> flag then its light is visible to the player. We store that information in a native <code>bool</code> array with one element per agent. We also need a configuration field for the index to use. Then set the appropriate element to <code>true</code> at the end of the job, if needed and only for agents.</p>
+						
+						<pre translate="no">	<ins>[NativeDisableParallelForRestriction]</ins>
+	<ins>public NativeArray&lt;bool> isVisibleToPlayer;</ins>
+
+	<ins>public int isVisibleToPlayerIndex;</ins>
+
+	&hellip;
+
+	public void Execute(int i)
+	{
+		&hellip;
+		<ins>var spottedFlags = MazeFlags.Empty;</ins>
+
+		var stack = new ScanStack(maze.SizeEW, scan);
+		while (stack.TryPop(out scan))
+		{
+			&hellip;
+			while (true)
+			{
+				MazeFlags cell = maze.Set(currentIndex, visibilityFlag);
+				data.UpdateForNextCell(cell, quadrant);
+				<ins>spottedFlags |= cell;</ins>
+
+				&hellip;
+			}
+		}
+		
+		<ins>if (visibilityFlag != MazeFlags.VisibleToPlayer &amp;&amp;</ins>
+			<ins>spottedFlags.Has(MazeFlags.VisibleToPlayer))</ins>
+		<ins>{</ins>
+			<ins>isVisibleToPlayer[isVisibleToPlayerIndex] = true;</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>Create a temporary array for the jobs, initialized to <code>false</code> in <code>Game.UpdateOcclusion</code>. We also have to pass the native array to the player's job even through it doesn't use it, otherwise the job system will complain.</p>
+						
+						<pre translate="no">	void UpdateOcclusion(Vector3 playerPosition)
+	{
+		<ins>var isVisibleToPlayer = new NativeArray&lt;bool>(agents.Length, Allocator.TempJob);</ins>
+		JobHandle handle = new ClearOcclusionJob
+		{
+			maze = maze
+		}.ScheduleParallel(maze.Length, maze.Length / 4, default);
+
+		float wallExtentsInMazeSpace = maze.WorldToMazeDistance(wallExtents);
+		handle = new OcclusionJob
+		{
+			<ins>isVisibleToPlayer = isVisibleToPlayer,</ins>
+			&hellip;
+		}.ScheduleParallel(4, 1, handle);
+		
+		for (int i = 0; i &lt; agents.Length; i++)
+		{
+			handle = new OcclusionJob
+			{
+				<ins>isVisibleToPlayer = isVisibleToPlayer,</ins>
+				<ins>isVisibleToPlayerIndex = i,</ins>
+				&hellip;
+			}.ScheduleParallel(4, 1, handle);
+		}
+		
+		handle.Complete();
+
+		<ins>isVisibleToPlayer.Dispose();</ins>
+	}</pre>
+						
+						<p>Then we can use the array to set a visibility mask, for the player and all agents visible to the player. Make it a field so we can also access it in <code>OnDrawGizmosSelected</code>.</p>
+						
+						<pre translate="no">	<ins>MazeFlags visibilityMask;</ins>
+
+	&hellip;
+
+	void UpdateOcclusion(Vector3 playerPosition)
+	{
+		&hellip;
+
+		<ins>visibilityMask = MazeFlags.VisibleToPlayer;</ins>
+		<ins>for (int i = 0; i &lt; agents.Length; i++)</ins>
+		<ins>{</ins>
+			<ins>if (isVisibleToPlayer[i])</ins>
+			<ins>{</ins>
+				<ins>visibilityMask |= (MazeFlags)((int)MazeFlags.VisbleToAgentA &lt;&lt; i);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		isVisibleToPlayer.Dispose();
+	}</pre>
+						
+						<p>Use the visibility mask to give cells that are safe to ignore a blue color.</p>
+						
+						<pre translate="no">				Gizmos.color = flags.Has(MazeFlags.VisibleToPlayer) ?
+					flags.HasAny(MazeFlags.VisibleToAllAgents) ?
+						Color.yellow : Color.green :
+					<ins>flags.HasAny(visibilityMask) ?</ins>
+						Color.red <ins>: Color.blue</ins>;</pre>
+						
+						<figure>
+							<img src="agents/blue-can-be-hidden.png" width="260" height="260">
+							<figcaption>Blue cells can also be hidden.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Finalizing</h2>
+					
+					<p>At this point we have a fully-functional algorithm, but it can be improved a bit further before we use it to hide cells.</p>
+					
+					<section>
+						<h3>Range</h3>
+						
+						<p>The lights of the agents have limited range, which we currently ignore. Let's support a maximum vision range as this can drastically reduce the amount of visible cells.</p>
+						
+						<p>Add a range parameter to <code>CellData.UpdateForNextCell</code> and use that to check whether the north and east neighbors are in range, which can be done via a squared-distance comparison. North can only be visible if the northwest corner is in range. However, this might fail if west lies outside the quadrant. So clamp west to zero for this check. East can only be visible if the southeast corner is in range, with south clamped for the same reason.</p>
+						
+						<figure>
+							<img src="finalizing/range-check-failure.png" width="210" height="210">
+							<figcaption>Range checks could fail without clamping.</figcaption>
+						</figure>
+						
+						<pre translate="no">		public void UpdateForNextCell(MazeFlags cell, Quadrant quadrant<ins>, float range</ins>) {
+			&hellip;
+
+			if (cell.Has(quadrant.north) <ins>&amp;&amp; IsInRange(max(0f, west), north, range)</ins>)
+			{
+				&hellip;
+			}
+			else
+			{
+				RightSlopeForNorthNeighbor = 0f;
+				IsNorthVisible = false;
+			}
+
+			IsEastVisible =
+				cell.Has(quadrant.east) &amp;&amp;
+				LeftSlope &lt; RightSlope &amp;&amp;
+				<ins>IsInRange(east, max(0f, south), range) &amp;&amp;</ins>
+				(cell.Has(quadrant.northeast) ?
+					northEastCornerSlope &lt; RightSlope :
+					NorthInset > 0f &amp;&amp; east / NorthInset &lt; RightSlope);
+		}
+
+		<ins>static bool IsInRange(float x, float y, float range) =></ins>
+			<ins>(x * x + y * y) &lt; range * range;</ins></pre>
+						
+						<p>Add a configuration field for the range to <code>OcclusionJob</code> and use it when updating the cell data.</p>
+						
+						<pre translate="no">	<ins>public float range;</ins>
+
+	&hellip;
+
+	public void Execute(int i)
+	{
+		&hellip;
+				data.UpdateForNextCell(cell, quadrant<ins>, range</ins>);
+		&hellip;
+	}</pre>
+						
+						<p>Make <code>Agent</code> keep track of its point light and expose its range via a property.</p>
+						
+						<pre translate="no">	<ins>Light pointLight;</ins>
+
+	<ins>public float LightRange => pointLight.range;</ins>
+	
+	public string TriggerMessage => triggerMessage;
+
+	void Awake()
+	{
+		<ins>pointLight =</ins> GetComponent&lt;Light>()<ins>;</ins>
+		<ins>pointLight.color</ins> = color;
+		&hellip;
+	}</pre>
+						
+						<p>Then pass the ranges to the occlusion jobs in <code>Game.UpdateOcclusion</code>, converted to maze space. We also have to provide a range for the player, for which we'll use 1000.</p>
+						
+						<pre translate="no">		handle = new OcclusionJob
+		{
+			&hellip;
+			position = maze.WorldToMazePosition(playerPosition),
+			<ins>range = 1000f,</ins>
+			&hellip;
+		}.ScheduleParallel(4, 1, handle);
+
+		for (int i = 0; i &lt; agents.Length; i++)
+		{
+			<ins>Agent agent = agents[i];</ins>
+			handle = new OcclusionJob
+			{
+				&hellip;
+				position = maze.WorldToMazePosition(<ins>agent</ins>.transform.localPosition),
+				<ins>range = maze.WorldToMazeDistance(agent.LightRange),</ins>
+				&hellip;
+			}.ScheduleParallel(4, 1, handle);
+		}</pre>
+						
+						<figure>
+							<img src="finalizing/range.png" width="260" height="260">
+							<figcaption>Limited light range.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Could we also limit the view range of the player?</h3>
+							<div>
+								<p>Yes, but that requires special care so agents and their lights and trails don't suddenly pop in and out of view. It can be done by adding fully-blocking fog to the maze. That's a potential feature to add in the future.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Field of View</h3>
+						
+						<p>The player has a limited field of view cone, that we currently ignore. Let's add support for it. Begin by introducing a convenient <code>FieldOfView</code> struct that combines 2D left and right sight lines with a view range. Also add an indication whether the field of view is omnidirectional, in which case the sight lines will be ignored.</p>
+						
+						<pre translate="no">using Unity.Mathematics;
+
+public struct FieldOfView
+{
+	public float2 leftLine, rightLine;
+
+	public float range;
+
+	public bool omnidirectional;
+}</pre>
+						
+						<p>Add a field for the field of view to <code>Player</code> with a range of 1000, along with a property to get it. Also make it keep track of its eye camera.</p>
+						
+						<pre translate="no">	<ins>Camera eyeCamera;</ins>
+
+	<ins>FieldOfView vision;</ins>
+
+	<ins>public FieldOfView Vision => vision;</ins>
+
+	void Awake()
+	{
+		characterController = GetComponent&lt;CharacterController>();
+		eye = transform.GetChild(0);
+		<ins>eyeCamera = eye.GetComponent&lt;Camera>();</ins>
+		<ins>vision.range = 1000f;</ins>
+	}</pre>
+						
+						<p>We set the view lines in <code>UpdateEyeAngles</code>. Use the eye camera to find the X and Y view factors. Use the X factor to create left and right lines in the XZ plane and apply the eye rotation to them, then use that to set the vision lines.</p>
+						
+						<pre translate="no">	void UpdateEyeAngles()
+	{
+		&hellip;
+		<ins>var rotation =</ins> eye.localRotation = Quaternion.Euler(eyeAngles.y, eyeAngles.x, 0f);
+
+		<ins>float viewFactorY = Mathf.Tan(eyeCamera.fieldOfView * 0.5f * Mathf.Deg2Rad);</ins>
+		<ins>float viewFactorX = viewFactorY * eyeCamera.aspect;</ins>
+
+		<ins>Vector3</ins>
+			<ins>leftLine = rotation * new Vector3(-viewFactorX, 0f, 1f),</ins>
+			<ins>rightLine = rotation * new Vector3(viewFactorX, 0f, 1f);</ins>
+		<ins>vision.leftLine = float2(leftLine.x, leftLine.z);</ins>
+		<ins>vision.rightLine = float2(rightLine.x, rightLine.z);</ins>
+	}</pre>
+						
+						<aside>
+							<h3>How did you find those view factors?</h3>
+							<div>
+								<p>See <a href="../../tutorials/prototypes/runner-2/index.html#3.1">Runner 2 / Skyline / Filling the View</a>.</p>
+							</div>
+						</aside>
+						
+						<p>This would work if we always look straight ahead, but when looking up or down the vision cone widens when projected on the XZ plane. We can take that into account by making the lines point up or down before rotating, based on the Y factor. If the vertical rotation is negative then we're looking up and should use the top lines of the view frustum, otherwise the bottom lines.</p>
+						
+						<pre translate="no">		<ins>float y = eyeAngles.y &lt; 0f ? viewFactorY : -viewFactorY;</ins>
+		Vector3
+			leftLine = rotation * new Vector3(-viewFactorX, <ins>y</ins>, 1f),
+			rightLine = rotation * new Vector3(viewFactorX, <ins>y</ins>, 1f);</pre>
+						
+						<p>Next, replace the range configuration field of <code>OcclusionJob</code> with one for the field of view.</p>
+						
+						<pre translate="no">	<del>//public float range;</del>
+	<ins>public FieldOfView fieldOfView;</ins>
+
+	public MazeFlags visibilityFlag;
+
+	public void Execute(int i)
+	{
+		&hellip;
+				data.UpdateForNextCell(cell, quadrant, <ins>fieldOfView.</ins>range);
+		&hellip;
+	}</pre>
+						
+						<p>Provide the player's field of view in <code>Game.UpdateOcclusion</code> and create omnidirectional ones for the agents.</p>
+						
+						<pre translate="no">		handle = new OcclusionJob
+		{
+			&hellip;
+			<del>//range = 1000f,</del>
+			<ins>fieldOfView = player.Vision,</ins>
+			&hellip;
+		}.ScheduleParallel(4, 1, handle);
+
+		for (int i = 0; i &lt; agents.Length; i++)
+		{
+			Agent agent = agents[i];
+			handle = new OcclusionJob
+			{
+				&hellip;
+				<ins>fieldOfView = new FieldOfView</ins>
+				<ins>{</ins>
+					range = maze.WorldToMazeDistance(agent.LightRange),
+					<ins>omnidirectional = true</ins>
+				<ins>},</ins>
+				&hellip;
+			}.ScheduleParallel(4, 1, handle);
+		}</pre>
+						
+						<p>Before we can apply the sight lines in <code>OcclusionJob.TryGetFirstScan</code> we must first adapt them to the quadrant we're working on. If east-west is flipped then negate their X coordinates. If north-south is flipped then negate their Y coordinates. Also, if there is only a single flip then we have to first swap the left and right lines.</p>
+						
+						<pre translate="no">
+		<ins>float2 leftLine, rightLine;</ins>
+		<ins>if (quadrant.flipEW != quadrant.flipNS)</ins>
+		<ins>{</ins>
+			<ins>leftLine = fieldOfView.rightLine;</ins>
+			<ins>rightLine = fieldOfView.leftLine;</ins>
+		<ins>}</ins>
+		<ins>else</ins>
+		<ins>{</ins>
+			<ins>leftLine = fieldOfView.leftLine;</ins>
+			<ins>rightLine = fieldOfView.rightLine;</ins>
+		<ins>}</ins>
+
+		if (quadrant.flipEW)
+		{
+			<ins>leftLine.x = -leftLine.x;</ins>
+			<ins>rightLine.x = -rightLine.x;</ins>
+			origin.x = min(1f - origin.x, 0.999999f);
+		}
+
+		if (quadrant.flipNS)
+		{
+			<ins>leftLine.y = -leftLine.y;</ins>
+			<ins>rightLine.y = -rightLine.y;</ins>
+			origin.y = min(1f - origin.y, 0.999999f);
+		}</pre>
+						
+						<p>Unless the field of view is omnidirectional, we can potentially skip up to three quadrants. If the left line's X coordinate is at least zero while its Y coordinate is at most zero then we're looking to the right of the quadrant and can skip it. Otherwise, if right X is at most zero while its Y is at least zero then we're looking to the left of the quadrant and can skip it. Otherwise, if both left Y and right X are at most zero then we're looking in the opposite direction of the quadrant and can skip it. This works because the angle between the lines is less than 180&deg;.</p>
+						
+						<pre translate="no">		<ins>if (fieldOfView.omnidirectional)</ins>
+		<ins>{</ins>
+			<ins>return true;</ins>
+		<ins>}</ins>
+
+		<ins>if (</ins>
+			<ins>leftLine.x >= 0f &amp;&amp; leftLine.y &lt;= 0f ||</ins>
+			<ins>rightLine.x &lt;= 0f &amp;&amp; rightLine.y >= 0f ||</ins>
+			<ins>leftLine.y &lt;= 0f &amp;&amp; rightLine.x &lt;= 0f)</ins>
+		<ins>{</ins>
+			<ins>return false;</ins>
+		<ins>}</ins>
+
+		return true;</pre>
+						
+						<figure>
+							<img src="finalizing/skipped-quadrants.png" width="260" height="260">
+							<figcaption>Skipped two quadrants; fully open maze.</figcaption>
+						</figure>
+						
+						<p>If we do get a valid scan without omnidirectional vision then constrain the scan's slopes based on the lines.</p>
+						
+						<pre translate="no">		<ins>scan.leftSlope = leftLine.x &lt;= 0f ? 0f : leftLine.x / leftLine.y;</ins>
+		<ins>scan.rightSlope = rightLine.y &lt;= 0f ? float.MaxValue : rightLine.x / rightLine.y;</ins>
+		return true;</pre>
+						
+						<figure>
+							<img src="finalizing/field-of-view.png" width="260" height="260">
+							<figcaption>Applied field of view; fully open maze.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Could we use this for spotlights as well?</h3>
+							<div>
+								<p>Yes. For maximum benefit you should also adjust the light range depending on how much the light points up or down. The same is true for the player if we would support limited sight range for it.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Hiding Cells and Lights</h3>
+						
+						<p>To finally take advantage of our occlusion system, activate or deactivate all cell objects based on the visibility mask, at the end of <code>Game.UpdateOcclusion</code>.</p>
+						
+						<pre translate="no">		isVisibleToPlayer.Dispose();
+
+		<ins>for (int i = 0; i &lt; cellObjects.Length; i++)</ins>
+		<ins>{</ins>
+			<ins>cellObjects[i].gameObject.SetActive(maze[i].HasAny(visibilityMask));</ins>
+		<ins>}</ins></pre>
+						
+						<figure>
+							<img src="finalizing/hiding-cells-without-gizmos.png" width="260" height="260" alt="without">
+							<img src="finalizing/hiding-cells-with-gizmos.png" width="260" height="260" alt="with">
+							<figcaption>Hiding cells; without and with visibility gizmos.</figcaption>
+						</figure>
+						
+						<p>We should also turn off the lights of agents that are completely hidden. Add a <code>SetLightEnabled</code> method for that to <code>Agent</code>.</p>
+						
+						<pre translate="no">	<ins>public void SetLightEnabled (bool enabled) => pointLight.enabled = enabled;</ins></pre>
+						
+						<p>Then enable or disable their lights in <code>Game.UpdateOcclusion</code>, which can be done while we construct the visibility mask.</p>
+						
+						<pre translate="no">		for (int i = 0; i &lt; agents.Length; i++)
+		{
+			<ins>bool isVisible = isVisibleToPlayer[i];</ins>
+			<ins>agents[i].SetLightEnabled(isVisible);</ins>
+			if (<ins>isVisible</ins>)
+			{
+				visibilityMask |= (MazeFlags)((int)MazeFlags.VisbleToAgentA &lt;&lt; i);
+			}
+		}</pre>
+						
+						<p>Our occlusion system is now fully operational. It won't provide much benefit for wide-open mazes, but it can drastically reduce the amount of work needed to render a typical maze with winding passages.</p>
+						
+						<figure>
+							<img src="finalizing/one-agent-visible.png" width="260" height="260">
+							<figcaption>Only light from one agent visible; open arbitrary probability 0.25.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../2-2-0/index.html">Maze 2.2.0</a>.</p>
+					</section>
+					
+					<a href="../../tutorials/license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecoding-projects/maze-project/src/7421043de10808d91ff6bde2f203c1b16826a9bd/?at=release%2F2.1.0" class="repository">repository</a>
+					<a href="Maze-2-1-0.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../tutorials/index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../tutorials/become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../tutorials/donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials/tutorials.js"></script>
+	</body>
+</html>

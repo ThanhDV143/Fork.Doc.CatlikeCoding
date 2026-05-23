@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/movement/physics/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/movement/physics/tutorial-image.jpg">
+		<meta property="og:title" content="Physics">
+		<meta property="og:description" content="A Unity Movement tutorial about controlling a rigidbody sphere.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Physics</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/movement/physics/#article",
+				"headline": "Physics",
+				"alternativeHeadline": "Pushing a Sphere Around",
+				"datePublished": "2019-11-19",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Movement tutorial about controlling a rigidbody sphere.",
+				"image": "https://catlikecoding.com/unity/tutorials/movement/physics/tutorial-image.jpg",
+				"dependencies": "Unity 2019.2.11f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/movement/", "name": "Movement" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				MovingSphere: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Movement</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Physics</h1>
+					<p>Pushing a Sphere Around</p>
+					<ul>
+						<li>Control the velocity of a rigidbody sphere.</li>
+						<li>Support vertical movement via jumping.</li>
+						<li>Detect the ground and its angle.</li>
+						<li>Use a <em translate="no">ProBuilder</em> to create test scenes.</li>
+						<li>Move along slopes.</li>
+					</ul>
+				</header>
+				
+				<p>This is the second installment of a tutorial series about controlling the <a href="../index.html">movement</a> of a character. This time we'll use the physics engine to create more realistic motion and support more complex environments.</p>
+				
+				<p>This tutorial is made with Unity 2019.2.11f1. It also uses the ProBuilder package.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Unruly spheres on an unfair race track.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Rigidbody</h2>
+					
+					<p>In the previous tutorial we constrained our sphere to remain inside a rectangular area. It made sense to explicitly program such a restriction because it's simple. But if we want our sphere to move around a complex 3D environment then we have to support interaction with arbitrary geometry. Rather than implement that ourselves we'll make use of Unity's existing physics engine, which is NVIDIA's PhysX.</p>
+										
+					<p>There are two general ways to approach controlling a character in combination with a physics engine. First is the rigidbody approach, which is to have the character behave like a regular physics object while indirectly controlling it, either by applying forces or changing its velocity. Second is the kinematic approach, which is to have direct control while only querying the physics engine to perform custom collision detection.</p>
+					
+					<section>
+						<h3>Rigidbody Component</h3>
+						
+						<p>We'll use the first approach to control the sphere, which means that we have to add a <code>Rigidbody</code> component to it. We can use the default configuration of the rigidbody.</p>
+						
+						<figure>
+							<img src="rigidbody/rigidbody-component.png" width="320" height="206">
+							<figcaption>Rigidbody component.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why is it known as a  rigid body?</h3>
+							<div>
+								<p>It's used for simulating the interaction between ideal rigid bodies, meaning that there is no deformation to worry about, which greatly simplifies physics calculations. There's also soft-body physics, which is more complicated and unstable.</p>
+							</div>
+						</aside>
+						
+						<p>Adding the component is enough to turn our sphere into a physics object, provided that it still has its <code>SphereCollider</code> component as well. We defer to the physics engine for collisions from now on, so remove the area code from <code>Update</code>.</p>
+						
+						<pre translate="no">		Vector3 newPosition = transform.localPosition + displacement;
+		<del>//if (newPosition.x &lt; allowedArea.xMin) {</del>
+		<del>//	newPosition.x = allowedArea.xMin;</del>
+		<del>//	velocity.x = -velocity.x * bounciness;</del>
+		<del>//}</del>
+		<del>//&hellip;</del>
+		transform.localPosition = newPosition;</pre>
+						
+						<p>With our own constraints removed the sphere is again free to move past the edges of the plane, at which point it plummets due to gravity. This happens because we never override the sphere's Y position.</p>
+						
+						<figure>
+							<img src="rigidbody/falling.png" width="180" height="160">
+							<figcaption>Falling.</figcaption>
+						</figure>
+						
+						<p>We no longer need the configuration options for the allowed area. Our custom bounciness is also no longer necessary.</p>
+						
+						<pre translate="no">	<del>//[SerializeField, Range(0f, 1f)]</del>
+	<del>//float bounciness = 0.5f;</del>
+
+	<del>//[SerializeField]</del>
+	<del>//Rect allowedArea = new Rect(-5f, -5f, 10f, 10f);</del></pre>
+						
+						<p>If we still want to constrain the sphere to remain on the plane we can do that by adding other objects to block its path. For example create four cubes, scaling and positioning them so they form a wall around the plane. That will prevent the sphere from falling, although it behaves weird when colliding with the walls. Because we have 3D geometry at this point it's also a good idea to enable shadows again, to get a better sense of depth.</p>
+						
+						<figure>
+							<video width="160" height="160" controls loop muted>
+								<source src="rigidbody/physics-weirdness.mp4" type="video/mp4">
+							</video>
+							<figcaption>Physics weirdness.</figcaption>
+						</figure>
+						
+						<p>When trying to move into a corner the sphere becomes jittery, as the physics engine and our own code fight to position the sphere. We move it into the wall, then PhysX resolves the collision by pushing it back out. If we stop forcing it into the wall then PhysX will keep the sphere moving due to momentum.</p>
+						
+					</section>
+					
+					<section>
+						<h3>Controlling Rigidbody Velocity</h3>
+						
+						<p>If we want to use the physics engine then we should let it control the position of our sphere. Adjusting the position directly would effectively be teleporting, which is not what we want. Instead, we have to indirectly control the sphere, either by applying forces to it or by adjusting its velocity.</p>
+						
+						<p>We already have this indirect control over position, as we influence velocity instead. All we have to do is change our code so it overrides the velocity of the <code>Rigidbody</code> component instead of adjusting the position ourselves. We need to access the component for that, so keep track of it via a <code>body</code> field that gets initialized in an <code>Awake</code> method.</p>
+						
+						<pre translate="no">	<ins>Rigidbody body;</ins>
+
+	<ins>void Awake () {</ins>
+		<ins>body = GetComponent&lt;Rigidbody>();</ins>
+	<ins>}</ins></pre>
+						
+						<p>Remove the displacement code from <code>Update</code> and instead assign our velocity to the body's.</p>
+						
+						<pre translate="no">		<del>//Vector3 displacement = velocity * Time.deltaTime;</del>
+		<del>//Vector3 newPosition = transform.localPosition + displacement;</del>
+		<del>//transform.localPosition = newPosition;</del>
+		<ins>body.velocity = velocity;</ins></pre>
+						
+						<p>But physics collisions and such also affect velocity, so retrieve it from the body before adjusting it to match the desired velocity.</p>
+						
+						<pre translate="no">		<ins>velocity = body.velocity;</ins>
+		float maxSpeedChange = maxAcceleration * Time.deltaTime;
+		velocity.x =
+			Mathf.MoveTowards(velocity.x, desiredVelocity.x, maxSpeedChange);
+		velocity.z =
+			Mathf.MoveTowards(velocity.z, desiredVelocity.z, maxSpeedChange);
+		body.velocity = velocity;</pre>
+						
+						<figure>
+							<video width="160" height="160" controls loop muted>
+								<source src="rigidbody/controlling-body-velocity.mp4" type="video/mp4">
+							</video>
+							<figcaption>Controlling body velocity.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Isn't the advice to not adjust velocity directly?</h3>
+							<div>
+								<p>That's generic advice based on the idea that an instantaneous change in velocity is unrealistic. What we're doing is effectively applying an acceleration, just in a controlled way so we reach a target velocity. If you know what you're doing adjusting velocity directly is fine.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Frictionless Movement</h3>
+						
+						<p>We now adjust the velocity of the sphere, which PhysX uses to move it. Then collision are resolved, which can adjust the velocity, which we then adjust again, and so on. The resulting motion looks like what we had before, although the sphere is more sluggish and doesn't reach its max speed. That's because PhysX applies friction. While that is more realistic it makes it harder to configure our sphere, so let's eliminate friction and also bounciness. That's done by creating a new physics material via <em translate="no">Asset / Create / Physic Material</em>&mdash;yes it's spelled <em translate="no">Physic</em> in the menu&mdash;and setting all values to zero and the <em translate="no">Combine</em> modes to <em translate="no">Minimum</em>.</p>
+						
+						<figure>
+							<img src="rigidbody/physics-material.png" width="320" height="136">
+							<figcaption>Physics material.</figcaption>
+						</figure>
+						
+						<p>Assign this physics material to the sphere's collider.
+						
+						<figure>
+							<img src="rigidbody/physics-material-assigned.png" width="320" height="38">
+							<figcaption>Physics material assigned.</figcaption>
+						</figure>
+						
+						<p>Now it is no longer subject to any friction nor any bounciness.</p>
+						
+						<figure>
+							<video width="169" height="169" controls loop muted>
+								<source src="rigidbody/frictionless-movement.mp4" type="video/mp4">
+							</video>
+							<figcaption>Frictionless movement.</figcaption>
+						</figure>
+						
+						<p>It might appear that the sphere still bounces a tiny bit when colliding with a wall. That happens because PhysX doesn't prevent collisions, it instead detects them after they happened and then moves rigidbodies so they're no longer intersecting. In the case of fast movement this might take more than one physics simulation step, so we can see this depenetration happen.</p>
+						
+						<p>If movement is really fast then the sphere might end up passing through the wall entirely or get depenetrated toward the other side, which is more likely with a thin wall. You can prevent this by changing the <em translate="no">Collision Detection</em> mode of the <code>Rigidbody</code>, but that's usually only needed when moving really fast.</p>
+						
+						<p>Also, the sphere now slides instead of rolls, so we might as well freeze its rotation in all dimensions, which we can do via the <em translate="no">Constraints</em> checkboxes of the <code>Rigidbody</code> component.</p>
+						
+						<figure>
+							<img src="rigidbody/frozen-rotation.png" width="320" height="56">
+							<figcaption>Frozen rotation.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Fixed Update</h3>
+						
+						<p>The physics engine uses a fixed time step, regardless of the frame rate.  Although we already have given control over the sphere to PhysX we still influence its velocity. For best results we should adjust velocity in lockstep with the fixed time step. We do that by splitting our <code>Update</code> method in two parts. The part where we check for input and set the desired velocity can remain in <code>Update</code>, while the adjustment of the velocity should move to a new <code>FixedUpdate</code> method. To make that work we have to store the desired velocity in a field.</p>
+						
+						<pre translate="no">	Vector3 velocity<ins>, desiredVelocity;</ins></pre>
+						
+						<pre translate="no">	void Update () {
+		Vector2 playerInput;
+		playerInput.x = Input.GetAxis("Horizontal");
+		playerInput.y = Input.GetAxis("Vertical");
+		playerInput = Vector2.ClampMagnitude(playerInput, 1f);
+
+		<del>//Vector3 desiredVelocity =</del>
+		<ins>desiredVelocity =</ins>
+			new Vector3(playerInput.x, 0f, playerInput.y) * maxSpeed;
+	<ins>}</ins>
+
+	<ins>void FixedUpdate () {</ins>
+		velocity = body.velocity;
+		float maxSpeedChange = maxAcceleration * Time.deltaTime;
+		velocity.x =
+			Mathf.MoveTowards(velocity.x, desiredVelocity.x, maxSpeedChange);
+		velocity.z =
+			Mathf.MoveTowards(velocity.z, desiredVelocity.z, maxSpeedChange);
+		body.velocity = velocity;
+	}</pre>
+						
+						<p>The <code>FixedUpdate</code> method gets invoked at the start of each physics simulation step. How often that happens depends on the time step, which is 0.02&mdash;fifty times per second&mdash;by default, but you can change it via the <em translate="no">Time</em> project settings or via <code>Time.fixedDeltaTime</code>.</p>
+						
+						<aside>
+							<h3>Can we use <code>Time.deltaTime</code> in <code>FixedUpdate</code>?</h3>
+							<div>
+								<p>Yes. When <code>FixedUpdate</code> gets invoked <code>Time.deltaTime</code> is equal to <code>Time.fixedDeltaTime</code>.</p>
+							</div>
+						</aside>
+						
+						<p>Depending on your frame rate <code>FixedUpdate</code> can get invoked zero, one, or multiple times per invocation of <code>Update</code>. Each frame a sequence of <code>FixedUpdate</code> invocations happen, then <code>Update</code> gets invoked, then the frame gets rendered. This can make the discrete nature of the physics simulation obvious when the physics time step is too large relative to the frame time.</p>
+						
+						<figure>
+							<video width="180" height="180" controls loop muted>
+								<source src="rigidbody/discrete-physics.mp4" type="video/mp4">
+							</video>
+							<figcaption>0.2 physics time step.</figcaption>
+						</figure>
+						
+						<p>You can solve that by either decreasing the fixed time step or by enabling the <em translate="no">Interpolate</em> mode of a <code>Rigidbody</code>. Setting it to <em translate="no">Interpolate</em> makes it linearly interpolate between its last and current position, so it will lag a bit behind its actual position according to PhysX. The other option is <em translate="no">Extrapolate</em>, which interpolates to its guessed position according to its velocity, which is only really acceptable for objects that have a mostly constant velocity.</p>
+						
+						<figure>
+							<video width="180" height="180" controls loop muted>
+								<source src="rigidbody/interpolated-physics.mp4" type="video/mp4">
+							</video>
+							<figcaption>0.2 physics time step with interpolation.</figcaption>
+						</figure>
+						
+						<p>Note that increasing the time step means the sphere covers more distance per physics update, which can result in it tunneling through the walls when using discrete collision detection.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Jumping</h2>
+					
+					<p>As our sphere can now navigate a 3D physics world let's give it the ability to jump.</p>
+					
+					<section>
+						<h3>Jumping on Command</h3>
+						
+						<p>We can use <code>Input.GetButtonDown("Jump")</code> to detect whether the player pressed a jump button for this frame, which is the space key by default. We do this in <code>Update</code>, but just like adjusting the velocity we'll delay the actual jump until the next invocation of <code>FixedUpdate</code>. So keep track of whether a jump is desired via a boolean <code>desiredJump</code> field.</p>
+						
+						<pre translate="no">	<ins>bool desiredJump;</ins>
+
+	&hellip;
+
+	void Update () {
+		&hellip;
+		
+		<ins>desiredJump = Input.GetButtonDown("Jump");</ins>
+	}</pre>
+						
+						<p>But we might end up not invoking <code>FixedUpdate</code> next frame, in which case <code>desiredJump</code> is set back to <code>false</code> and the desire to jump will be forgotten. We can prevent that by combining the check with its previous value via the boolean OR operation, or the OR assignment. That way it remains <code>true</code> once enabled until we explicitly set it back to <code>false</code>.</p>
+						
+						<pre translate="no">		desiredJump <ins>|=</ins> Input.GetButtonDown("Jump");</pre>
+						
+						<p>Check whether a jump is desired after adjusting the velocity and before applying it in <code>FixedUpdate</code>. If so, reset <code>desiredJump</code> and invoke a new <code>Jump</code> method, which initially simply adds 5 to the velocity's Y component, simulating a sudden upward acceleration.</p>
+						
+						<pre translate="no">	void FixedUpdate () {
+		&hellip;
+
+		<ins>if (desiredJump) {</ins>
+			<ins>desiredJump = false;</ins>
+			<ins>Jump();</ins>
+		<ins>}</ins>
+		body.velocity = velocity;
+	}
+	
+	<ins>void Jump() {</ins>
+		<ins>velocity.y += 5f;</ins>
+	<ins>}</ins>
+	</pre>
+						
+						<p>This will make the sphere move upward until it inevitably falls back down due to gravity.</p>
+						
+						<figure>
+							<video width="130" height="165" controls loop muted>
+								<source src="jumping/jumping.mp4" type="video/mp4">
+							</video>
+							<figcaption>Jumping.</figcaption>
+						</figure>
+						
+					</section>
+					
+					<section>
+						<h3>Jump Height</h3>
+						
+						<p>Let's make it configurable how high our sphere can jump. We could do that by directly controlling the jump velocity, but that's not intuitive as the relationship between initial jump velocity and jump height isn't trivial. It's more convenient to control the jump height directly, so let's do that.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Range(0f, 10f)]</ins>
+	<ins>float jumpHeight = 2f;</ins></pre>
+						
+						<figure>
+							<img src="jumping/jump-height.png" width="320" height="56">
+							<figcaption>Jump height.</figcaption>
+						</figure>
+						
+						<p>Jumping requires overcoming gravity, so the vertical speed needed depends on it. Specifically, `v_y=sqrt(-2gh)` where `g` is gravity and `h` is the desired height. The minus sign is in there because `g` is assumed to be negative. We can retrieve it via <code>Physics.gravity.y</code>, which can also be configured via the <em translate="no">Physics</em> project settings. We're using the default gravity vector, which is 9.81 straight down, matching Earth's average gravity.</p>
+						
+						<pre translate="no">	void Jump () {
+		velocity.y += <ins>Mathf.Sqrt(-2f * Physics.gravity.y * jumpHeight)</ins>;
+	}</pre>
+						
+						<aside>
+							<h3>How is the required velocity derived?</h3>
+							<div>
+								<p>We start with an initial jump velocity `j`, which gets reduced by gravity until it reaches zero, after which we start to fall back down. Gravity `g` is a constant acceleration that pulls us down, for which we use a positive number in this derivation as that saves us from writing a bunch of minuses. So at any time `t` since jumping the vertical velocity is `v=j-g t`. When `v` reaches zero we're at the top of the jump, so exactly at the desired height. This happens when `j-g t=0`, so when `j=g t`. Thus the top of the jump is reached when `t=j/g`.</p>
+								
+								<p>Because `g` is constant the average speed at any time is `v_(av) = j-(g t)/2`, thus the height at any time is `h = v_(av)t = jt-(g t^2)/2`. This means that at the top of the jump `h = j(j/g)-(g (j/g)^2)/2`, which we can rewrite to `h = j^2/g - (j^2/g)/2 = j^2/g - j^2/(2g) = j^2/(2g)`</p>
+								
+								<p>Now we know that `h = j^2/(2g)` at the top, thus `j^2 = 2gh` and `j = sqrt(2gh)`. When `g` is a negative number instead then `j = sqrt(-2gh)`.</p>
+							</div>
+						</aside>
+						
+						<p>Note that we most likely fall a bit short of the desired height due to the discrete nature of the physics simulation. The maximum would be reached somewhere in between time steps.</p>
+						
+					</section>
+					
+					<section>
+						<h3>Jumping While on the Ground</h3>
+						
+						<p>Currently we can jump at any moment, even while already in the air, which makes it possible to remain airborne forever. A proper jump can only be initiated while the sphere is on the ground. We cannot directly ask the <code>Rigidbody</code> whether it is currently touching the ground, but we can get notified when it collided with something, so we'll use that.</p>
+						
+						<p>If <code>MovingSphere</code> has an <code>OnCollisionEnter</code> method then it will get invoked after PhysX detected a new collision. A collision remains alive as long as the objects stay in contact with another. After that an <code>OnCollisionExit</code> method gets invoked, if it exists. Add both methods to <code>MovingSphere</code>, setting a new <code>onGround</code> boolean field to <code>true</code> in the first and to <code>false</code> in the latter.</p>
+						
+						<pre translate="no">	<ins>bool onGround;</ins>
+
+	&hellip;
+
+	<ins>void OnCollisionEnter () {</ins>
+		<ins>onGround = true;</ins>
+	<ins>}</ins>
+
+	<ins>void OnCollisionExit () {</ins>
+		<ins>onGround = false;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can jump only when we're on the ground, which for now we assume to be the case when we're touching something. If we're not in contact with anything then a desired jump should be ignored.</p>
+						
+						<pre translate="no">	void Jump () {
+		<ins>if (onGround) {</ins>
+			velocity.y += Mathf.Sqrt(-2f * Physics.gravity.y * jumpHeight);
+		<ins>}</ins>
+	}</pre>
+						
+						<p>This works when the sphere is only touching the ground plane, but if it also briefly touches a wall then jumping will become impossible. That happens because <code>OnCollisionExit</code> got invoked for the wall, while we're still in contact with the ground. The solution is to not rely on <code>OnCollisionExit</code> but instead add an <code>OnCollisionStay</code> method, which gets invoked each physics step as long as the collision remains alive. Set <code>onGround</code> to <code>true</code> in this method as well.</p>
+						
+						<pre translate="no">	<del>//void OnCollisionExit () {</del>
+	<del>//	onGround = false;</del>
+	<del>//}</del>
+
+	<ins>void OnCollisionStay () {</ins>
+		<ins>onGround = true;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Each physics step begins with invoking all <code>FixedUpdate</code> methods, after which PhysX does its thing, and at the end the collision methods get invoked. So when <code>FixedUpdate</code> gets invoked <code>onGround</code> will have been set to <code>true</code> during the last step if there were any active collisions. All we have to do to keep <code>onGround</code> valid is to set it back to <code>false</code> at the end of <code>FixedUpdate</code>.</p>
+						
+						<pre translate="no">	void FixedUpdate () {
+		&hellip;
+		<ins>onGround = false;</ins>
+	}</pre>
+						
+						<p>Now we can jump as long as we're in contact with something.</p>
+						
+					</section>
+					
+					<section>
+						<h3>No Wall Jumping</h3>
+						
+						<p>Allowing a jump when touching anything means that we could also jump when in the air but touching a wall instead of the ground. If we want to prevent that we have to be able to distinguish between the ground and something else.</p>
+						
+						<p>It makes sense to define the ground as a mostly horizontal plane. We could check whether what we're colliding with satisfied this criteria by inspecting the normal vector of the contact points of the collision.</p>
+						
+						<aside>
+							<h3>What's a normal vector?</h3>
+							<div>
+								<p>It's a unit-length vector that indicates a direction. It's usually the direction straight away from something. So a plane has a single normal vector while each point on a sphere has a different normal vector pointing away from its center.</p>
+							</div>
+						</aside>
+						
+						<p>A simple collision has a single point where both shapes touch, for example when our sphere touches the ground plane. Usually the sphere penetrated the plane a bit, which PhysX resolved by pushing the sphere directly away from the plane. The direction of the push is the normal vector of the contact point. Because we're using a sphere this vector always points from the contact point on the sphere's surface to its center.</p>
+						
+						<figure>
+							<img src="jumping/contact.png" width="150" height="150">
+							<figcaption>Contact point and normal.</figcaption>
+						</figure>
+						
+						<p>In reality it can get more messy than that because there can be multiple collisions and penetration might persist for more than one simulation step, but we don't really need to worry about that at this point. What we do need to realize is that a single collision can consist of multiple contacts. That's not possible for a plane-sphere collision, but is possible when a concave mesh collider is involved.</p>
+						
+						<p>We can get the collision information by adding a <code>Collision</code> parameter to both <code>OnCollisionEnter</code> and <code>OnCollisionStay</code>. Instead of directly setting <code>onGround</code> to <code>true</code> we'll forward that responsibility to a new <code>EvaluateCollision</code> method, passing it the data.</p>
+						
+						<pre translate="no">	void OnCollisionEnter (<ins>Collision collision</ins>) {
+		<del>//onGround = true;</del>
+		<ins>EvaluateCollision(collision);</ins>
+	}
+
+	void OnCollisionStay (<ins>Collision collision</ins>) {
+		<del>//onGround = true;</del>
+		<ins>EvaluateCollision(collision);</ins>
+	}
+	
+	<ins>void EvaluateCollision (Collision collision) {}</ins></pre>
+						
+						<p>The amount of contact points can by found via the <code>contactCount</code> property of <code>Collision</code>. We can use that to loop through all points via the <code>GetContact</code> method, passing it an index. Then we can access the point's <code>normal</code> property.
+						
+						<pre translate="no">	void EvaluateCollision (Collision collision) {
+		<ins>for (int i = 0; i &lt; collision.contactCount; i++) {</ins>
+			<ins>Vector3 normal = collision.GetContact(i).normal;</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>The normal is the direction that the sphere should be pushed, which is directly away from the collision surface. Assuming that it is a plane, the vector matches the plane's normal vector. If the plane were horizontal then its normal would point straight up, so its Y component should be exactly 1. If this is the case then we're touching the ground. But let's be lenient and accept Y components that are 0.9 or greater.</p>
+						
+						<pre translate="no">			Vector3 normal = collision.GetContact(i).normal;
+			<ins>onGround |= normal.y >= 0.9f;</ins></pre>
+						
+					</section>
+					
+					<section>
+						<h3>Air Jumps</h3>
+						
+						<p>At this point we can only jump while on the ground, but games often allow double or even triple jumps while in the air. Let's support that and make it configurable how many air jumps are allowed.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Range(0, 5)]</ins>
+	<ins>int maxAirJumps = 0;</ins></pre>
+						
+						<figure>
+							<img src="jumping/max-air-jumps.png" width="320" height="38">
+							<figcaption>Max air jumps.</figcaption>
+						</figure>
+						
+						<p>We now have to keep track of the jump phase so we know whether another jump is allowed. We can do that via an integer field that we set to zero at the start of <code>FixedUpdate</code> if we're on the ground. But let's move that code along with the velocity retrieval to a separate <code>UpdateState</code> method, to keep <code>FixedUpdate</code> short.</p>
+						
+						<pre translate="no">	<ins>int jumpPhase;</ins>
+	
+	&hellip;
+	
+	void FixedUpdate () {
+		<del>//velocity = body.velocity;</del>
+		<ins>UpdateState();</ins>
+		&hellip;
+	}
+
+	<ins>void UpdateState () {</ins>
+		<ins>velocity = body.velocity;</ins>
+		<ins>if (onGround) {</ins>
+			<ins>jumpPhase = 0;</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>From now on we increment the jump phase each time we jump. And we are allowed to jump either when on the ground or while we haven't reached the maximum allowed air jumps yet.</p>
+						
+						<pre translate="no">	void Jump () {
+		if (onGround <ins>|| jumpPhase &lt; maxAirJumps</ins>) {
+			<ins>jumpPhase += 1;</ins>
+			velocity.y += Mathf.Sqrt(-2f * Physics.gravity.y * jumpHeight);
+		}
+	}</pre>
+						
+						<aside>
+							<h3>Shouldn't it be <code>&lt;= maxAirJumps</code> instead?</h3>
+							<div>
+								<p>The jump phase gets set back to zero directly after a jump. We'll discover why in the next tutorial.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Limiting Upward Velocity</h3>
+						
+						<p>Air jumping in quick succession makes it possible to achieve an upward speed that is much higher than that of a single jump. We're going to change that so we cannot exceed the jump speed needed to achieve the desired height with a single jump. The first step is to isolate the calculated jump speed in <code>Jump</code>.</p>
+						
+						<pre translate="no">			jumpPhase += 1;
+			<ins>float jumpSpeed = Mathf.Sqrt(-2f * Physics.gravity.y * jumpHeight);</ins>
+			velocity.y += <ins>jumpSpeed</ins>;</pre>
+						
+						<p>If we already have an upward speed then subtract it from the jump speed before adding it to the velocity's Y component. That way we'll never exceed the jump speed.</p>
+						
+						<pre translate="no">			float jumpSpeed = Mathf.Sqrt(-2f * Physics.gravity.y * jumpHeight);
+			<ins>if (velocity.y > 0f) {</ins>
+				<ins>jumpSpeed = jumpSpeed - velocity.y;</ins>
+			<ins>}</ins>
+			velocity.y += jumpSpeed;</pre>
+						
+						<p>But if we're already going faster than the jump speed then we do not want a jump to slow us down. We can prevent that by ensuring that the modified jump speed never goes negative. That's done by taking the maximum of the modified jump speed and zero.</p>
+						
+						<pre translate="no">			if (velocity.y > 0f) {
+				jumpSpeed = <ins>Mathf.Max(</ins>jumpSpeed - velocity.y<ins>, 0f)</ins>;
+			}</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Air Movement</h3>
+						
+						<p>We currently do not care whether the sphere is on the ground or in the air when controlling it, but it might make sense that an airborne sphere is harder to control. The amount of control can vary between none and total. It depends on the game. So let's make it configurable, by adding a separate max air acceleration, set to 1 by default. That drastically reduces the control while in the air but doesn't entirely remove it.</p>
+						
+						<pre translate="no">	[SerializeField, Range(0f, 100f)]
+	float maxAcceleration = 10f<ins>, maxAirAcceleration = 1f</ins>;</pre>
+						
+						<figure>
+							<img src="jumping/two-max-accelerations.png" width="320" height="38">
+							<figcaption>Two max accelerations.</figcaption>
+						</figure>
+						
+						<p>Which acceleration we use when calculating the max speed change in <code>FixedUpdate</code> now depends on whether we're on the ground or not.</p>
+						
+						<pre translate="no">		<ins>float acceleration = onGround ? maxAcceleration : maxAirAcceleration;</ins>
+		float maxSpeedChange = <ins>acceleration</ins> * Time.deltaTime;</pre>
+						
+					</section>
+				</section>
+				
+				<section>
+					<h2>Slopes</h2>
+					
+					<p>We're using physics to move our sphere on a small flat plane, collide with walls, and jump around. This all works fine, so it's time to consider more complex environments. In the rest of this tutorial we'll investigate basic movement when slopes are involved.</p>
+					
+					<section>
+						<h3>ProBuilder Test Scene</h3>
+						
+						<p>You can create a slope by rotating a plane or cube, but that's an inconvenient way to create a level. So we'll import the <em translate="no">ProBuilder</em> package and use that to create some slopes. The <em translate="no">ProGrids</em> package is also handy for grid snapping, though it's not needed in Unity 2019.3 if you happen to use that. <em translate="no">ProBuilder</em> is fairly straightforward to use, but might take some time to get comfortable with. I won't explain how to use it, just keep in mind  that it's primarily about faces, with edges and vertices being secondary.</p>
+						
+						<p>I created a slope by starting with a <em translate="no">ProBuilder</em> cube, stretching it to 10&times;5&times;3, extruding it another 10 units in the X dimension, and collapsing the X faces to their bottom edges. That produces a triangular double ramp with slopes on both sides that are ten units long and 5 units high.</p>
+						
+						<figure>
+							<img src="slopes/slope.png" width="280" height="120">
+							<figcaption>Ramp made of two 10&times;5&times;3 slopes.</figcaption>
+						</figure>
+						
+						<p>I placed ten of those next to each other on a plane, varying their height from one to ten units. Including the flat ground, that gives us slopes with angles that are roughly 0.0&deg;, 5.7&deg;, 11.3&deg;, 16.7&deg;, 21.8&deg;, 26.6&deg;, 31.0&deg;, 35.0&deg;, 38.7&deg;, 42.0&deg;, and 45.0&deg;.</p>
+						
+						<p>After that I placed another ten slopes, this time starting with the 45&deg; version and pulling the tip to the left one unit per slope until I ended up with a vertical wall. That gives us angles that are roughly 48.0&deg;, 51.3&deg;, 55.0&deg;, 59.0&deg;, 63.4&deg;, 68.2&deg;, 73.3&deg;, 78.7&deg;, 84.3&deg;, and 90.0&deg;.</p>
+						
+						<p>I finished the test scene by turning our sphere into a prefab and adding 21 instances, one per slope, from fully horizontal to fully vertical.</p>
+						
+						<figure>
+							<img src="slopes/slope-test.png" width="380" height="200">
+							<figcaption>Slope test scene.</figcaption>
+						</figure>
+						
+						<p>If you don't want to design the level yourself you can grab it from this tutorial's <a href="https://bitbucket.org/catlikecodingunitytutorials/movement-02-physics/">repository</a>.</p>
+					</section>
+					
+					<section>
+						<h3>Slope Testing</h3>
+						
+						<p>Because all sphere instances respond to user input we can control them all at the same time. This makes it possible to test the behavior of the sphere when interacting with many slope angles at once. For most of these tests I'll enter play mode and then continually press right.</p>
+						
+						<figure>
+							<video width="300" height="130" controls loop muted>
+								<source src="slopes/slope-test.mp4" type="video/mp4">
+							</video>
+							<figcaption>Slope test.</figcaption>
+						</figure>
+						
+						<p>With the default sphere configuration we see that the first five spheres move at almost exactly the same horizontal speed regardless of the slope angle. The sixth barely makes it across a bit later while the rest roll back or are fully blocked by the steep slopes.</p>
+						
+						<p>Because most spheres end up effectively in the air let's set the max air acceleration to zero. That way we only take acceleration while grounded into consideration.</p>
+						
+						<figure>
+							<img src="slopes/air-acceleration-1.png" width="400" height="120" alt="1">
+							<img src="slopes/air-acceleration-0.png" width="400" height="120" alt="0">
+							<figcaption>Air acceleration one and zero.</figcaption>
+						</figure>
+						
+						<p>The difference between one and zero air acceleration doesn't matter much for the spheres that go flying because they launch themselves off the ramp. But the sixth sphere now no longer makes it to the other side and the other spheres are also stopped earlier by gravity. That happened because their slopes are too steep to keep sufficient momentum. In the case of the sixth sphere its air acceleration was just enough to push it over the top.</p>
+						
+					</section>
+					
+					<section>
+						<h3>Ground Angle</h3>
+						
+						<p>Currently we use 0.9 as the threshold to classify something as ground or not, but that is arbitrary. We could use any threshold in the 0&ndash;1 range. Trying both extremes produces very different results.</p>
+						
+						<figure>
+							<img src="slopes/ground-threshold-1.png" width="400" height="120" alt="1">
+							<img src="slopes/ground-threshold-0.png" width="400" height="190" alt="0">
+							<figcaption>Ground threshold one and zero.</figcaption>
+						</figure>
+						
+						<p>Let's make the threshold configurable, by controlling a max ground angle as that's more intuitive than the Y component of the slope's normal vector. Let's use 25&deg; as the default.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Range(0f, 90f)]</ins>
+	<ins>float maxGroundAngle = 25f;</ins></pre>
+						
+						<figure>
+							<img src="slopes/max-ground-angle.png" width="320" height="38">
+							<figcaption>Max ground angle.</figcaption>
+						</figure>
+						
+						<p>When a surface is horizontal the Y component of its normal vector is 1. For a perfectly vertical wall the Y component is zero. The Y component varies between those extremes based on the slope angle: it's the cosine of the angle. We're dealing with the unit circle here, where Y is the vertical axis and the horizontal axis lies somewhere in the XZ plane. Another way to say this is that we're looking at the dot product of the up vector and the surface normal.</p>
+						
+						<figure>
+							<img src="slopes/cos-slope-angle.png" width="150" height="150">
+							<figcaption>Cosine of slope angle.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What's a dot product?</h3>
+							<div>
+								<p>The dot product between two vectors is geometrically defined as `A * B =  ||A|| &nbsp; ||B|| &nbsp; cos theta`. This means that it is the cosine of the angle between the vectors, multiplied by their lengths. So in the case of two unit vectors, `A * B = cos theta`.</p>
+								
+								<p>Algebraically, it is defined as `A * B = sum_(i=1)^n A_i B_i = A_1 B_1 + A_2 B_2 + &hellip; + A_n B_n`. This means that you can compute it by multiplying all component pairs and sum them.</p>
+								
+								<pre translate="no">float dotProduct = a€.x * b€.x + a€.y * b€.y + a€.z * b€.z;</pre>
+								
+								<p>Visually, this operation projects one vector straight down to the other, as if casting a shadow on it. In doing so, you end up with a right triangle of which the bottom side's length is the result of the dot product. And if both vectors are unit length, that's the cosine of their angle.</p>
+								
+								<figure>
+									<img src="slopes/dot-product.png" width="135" height="110">
+									<figcaption>Dot product.</figcaption>
+								</figure>
+							</div>
+						</aside>
+						
+						<p>The configured angle defines the minimum result that still counts as ground. Let's store the threshold in a field and compute it via <code>Mathf.Cos</code> in an <code>OnValidate</code> method. That way it remains synchronized with the angle when we change it via the inspector while in play mode. Also invoke it in <code>Awake</code> so it gets calculated in builds.</p>
+						
+						<pre translate="no">	<ins>float minGroundDotProduct;</ins>
+
+	<ins>void OnValidate () {</ins>
+		<ins>minGroundDotProduct = Mathf.Cos(maxGroundAngle);</ins>
+	<ins>}</ins>
+	
+	void Awake () {
+		body = GetComponent&lt;Rigidbody>();
+		<ins>OnValidate();</ins>
+	}</pre>
+						
+						<p>We specify the angle in degrees, but <code>Mathf.Cos</code> expects it to be expressed as radians. We can convert it by multiplying with <code>Mathf.Deg2Rad</code>.</p>
+						
+						<pre translate="no">		minGroundDotProduct = Mathf.Cos(maxGroundAngle <ins>* Mathf.Deg2Rad</ins>);</pre>	
+						
+						<p>Now we can adjust the max ground angle and see how that influences the movement of the spheres. I'll set the angle to 40&deg; from now on.</p>
+						
+						<pre translate="no">	void EvaluateCollision (Collision collision) {
+		for (int i = 0; i &lt; collision.contactCount; i++) {
+			Vector3 normal = collision.GetContact(i).normal;
+			onGround |= normal.y >= <ins>minGroundDotProduct</ins>;
+		}
+	}</pre>
+						
+						<figure>
+							<img src="slopes/max-ground-angle-25.png" width="400" height="120" alt="25">
+							<img src="slopes/max-ground-angle-40.png" width="400" height="190" alt="40">
+							<figcaption>Max ground angle 25 and 40.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why doesn't adjusting the prefab in play mode change the behavior?</h3>
+							<div>
+								<p>In play mode the sphere instances aren't kept synchronized with the prefab. You'd have to select the spheres and change their max ground angle directly.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Jumping While on a Slope</h3>
+						
+						<p>Our sphere always jumps straight up, no matter the angle of the ground it's currently on.</p>
+						
+						<figure>
+							<img src="slopes/jumping-straight-up.png" width="400" height="190">
+							<figcaption>Always jumping straight up.</figcaption>
+						</figure>
+						
+						<p>Another approach is to jump away from the ground surface, in the direction of its normal vector. That will produce different jumps per slope test lane, so let's do that.</p>
+						
+						<p>We need to keep track of the current contact normal in a field and store it whenever we encounter a ground contact in <code>EvaluateCollision</code>.</p>
+						
+						<pre translate="no">	<ins>Vector3 contactNormal;</ins>
+
+	&hellip;
+
+	void EvaluateCollision (Collision collision) {
+		for (int i = 0; i &lt; collision.contactCount; i++) {
+			Vector3 normal = collision.GetContact(i).normal;
+			<del>//onGround |= normal.y >= minGroundDotProduct;</del>
+			<ins>if (normal.y >= minGroundDotProduct) {</ins>
+				<ins>onGround = true;</ins>
+				<ins>contactNormal = normal;</ins>
+			<ins>}</ins>
+		}
+	}</pre>
+						
+						<p>But we might end up not touching the ground. In that case we'll use the up vector for the contact normal, so air jumps still go straight up. Set it in <code>UpdateState</code> if needed.</p>
+						
+						<pre translate="no">	void UpdateState () {
+		velocity = body.velocity;
+		if (onGround) {
+			jumpPhase = 0;
+		}
+		<ins>else {</ins>
+			<ins>contactNormal = Vector3.up;</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>Now we have to add the jump contact normal scaled by the jump speed to the velocity when jumping, instead of always only increasing the Y component. This means that the jump height is an indication of how far up we jump when on flat ground or in the air only. Jumps while on a slope won't reach as high but will affect horizontal velocity.</p>
+						
+						<pre translate="no">	void Jump () {
+		if (onGround || jumpPhase &lt; maxAirJumps) {
+			&hellip;
+			<del>//velocity.y += jumpSpeed;</del>
+			<ins>velocity += contactNormal * jumpSpeed;</ins>
+		}
+	}</pre>
+						
+						<p>But this means that the check for a positive vertical speed is also no longer correct. It has to become a check for the speed aligned with the contact normal. We can find that speed by projecting the velocity on the contact normal, by calculating their dot product via <code>Vector3.Dot</code>.</p>
+						
+						<pre translate="no">			float jumpSpeed = Mathf.Sqrt(-2f * Physics.gravity.y * jumpHeight);
+			<ins>float alignedSpeed = Vector3.Dot(velocity, contactNormal);</ins>
+			if (<ins>alignedSpeed</ins> > 0f) {
+				jumpSpeed = Mathf.Max(jumpSpeed - <ins>alignedSpeed</ins>, 0f);
+			}
+			velocity += contactNormal * jumpSpeed;</pre>
+						
+						<figure>
+							<img src="slopes/jumping-away-from-surface.png" width="400" height="190">
+							<figcaption>Jumping away from the surface.</figcaption>
+						</figure>
+						
+						<p>Now that the jumps are aligned with the slopes each sphere in our test scene gets a unique jump trajectory. Spheres on steeper slopes no longer jump straight into their slopes but do get slowed down as the jump pushes them in the opposite direction that they're moving. You can see that more clearly on all slopes by trying it with a drastically reduced max speed.</p>
+						
+						<figure>
+							<img src="slopes/jumping-backwards.png" width="160" height="120">
+							<figcaption>Jumping backwards; max speed 1.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Moving Along Slopes</h3>
+						
+						<p>So far we've always defined the desired velocity in the horizontal XZ plane, no matter the ground angle. If a sphere is going up a slope it's because PhysX pushes it upward to resolve the collision that happened because we gave it a horizontal velocity that points into the slope. That can work fine while going up slopes, but when going down a slope spheres move away from the ground and can end up falling when their acceleration is high enough. The result is bouncy movement that is hard to control. You can clearly see this when reversing direction while going up the slopes, especially when setting max acceleration to a high value.</p>
+						
+						<figure>
+							<video width="190" height="180" controls loop muted>
+								<source src="slopes/losing-contact-with-ground.mp4" type="video/mp4">
+							</video>
+							<figcaption>Losing contact with ground; max acceleration 100.</figcaption>
+						</figure>
+						
+						<p>We can avoid this by aligning our desired velocity with the ground. It works similar to how we projected the velocity on a normal to get a jump speed, only now we have to project the velocity on a plane to get a new velocity. We do that by taking the dot product of the vector and normal as before, and then subtracting the normal scaled by that from the original velocity vector. Let's create a <code>ProjectOnContactPlane</code> method for that which does it with an arbitrary vector parameter.</p>
+						
+						<figure>
+							<img src="slopes/projecting-vector.png" width="160" height="110">
+							<figcaption>Projecting vector on plane.</figcaption>
+						</figure>
+						
+						<pre translate="no">	<ins>Vector3 ProjectOnContactPlane (Vector3 vector) {</ins>
+		<ins>return vector - contactNormal * Vector3.Dot(vector, contactNormal);</ins>
+	<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Why not use <code>Vector3.ProjectOnPlane</code>?</h3>
+							<div>
+								<p>That method does the same but doesn't assume that the provided normal vector is of unit length. It divides the result by the squared length of the normal, which is always 1 so not needed.</p>
+							</div>
+						</aside>
+						
+						<p>Let's create a new <code>AdjustVelocity</code> method to take care of adjusting the velocity. Begin with determining the projected X and Z axes by projecting the right and forward vectors on the contact plane.</p>
+						
+						<pre translate="no">	<ins>void AdjustVelocity () {</ins>
+		<ins>Vector3 xAxis = ProjectOnContactPlane(Vector3.right);</ins>
+		<ins>Vector3 zAxis = ProjectOnContactPlane(Vector3.forward);</ins>
+	<ins>}</ins></pre>
+						
+						<p>That gives us vectors aligned with the ground, but they are only of unit length when the ground is perfectly flat. In general we have to normalize the vectors to get proper directions.</p>
+						
+						<pre translate="no">		Vector3 xAxis = ProjectOnContactPlane(Vector3.right)<ins>.normalized</ins>;
+		Vector3 zAxis = ProjectOnContactPlane(Vector3.forward)<ins>.normalized</ins>;</pre>
+						
+						<p>Now we can project the current velocity on both vectors to get the relative X and Z speeds.</p>
+						
+						<pre translate="no">		Vector3 xAxis = ProjectOnContactPlane(Vector3.right).normalized;
+		Vector3 zAxis = ProjectOnContactPlane(Vector3.forward).normalized;
+
+		<ins>float currentX = Vector3.Dot(velocity, xAxis);</ins>
+		<ins>float currentZ = Vector3.Dot(velocity, zAxis);</ins></pre>
+						
+						<p>We can use those to calculate new X and Z speeds as before, but now relative to the ground.</p>
+						
+						<pre translate="no">		float currentX = Vector3.Dot(velocity, xAxis);
+		float currentZ = Vector3.Dot(velocity, zAxis);
+
+		<ins>float acceleration = onGround ? maxAcceleration : maxAirAcceleration;</ins>
+		<ins>float maxSpeedChange = acceleration * Time.deltaTime;</ins>
+
+		<ins>float newX =</ins>
+			<ins>Mathf.MoveTowards(currentX, desiredVelocity.x, maxSpeedChange);</ins>
+		<ins>float newZ =</ins>
+			<ins>Mathf.MoveTowards(currentZ, desiredVelocity.z, maxSpeedChange);</ins></pre>
+						
+						<p>Finally, adjust the velocity by adding the differences between the new and old speeds along the relative axes.</p>
+						
+						<pre translate="no">		float newX =
+			Mathf.MoveTowards(currentX, desiredVelocity.x, maxSpeedChange);
+		float newZ =
+			Mathf.MoveTowards(currentZ, desiredVelocity.z, maxSpeedChange);
+
+		<ins>velocity += xAxis * (newX - currentX) + zAxis * (newZ - currentZ);</ins></pre>
+						
+						<p>Invoke this new method in <code>FixedUpdate</code> in place of the old velocity adjustment code.</p>
+						
+						<pre translate="no">	void FixedUpdate () {
+		UpdateState();
+		<ins>AdjustVelocity();</ins>
+		<del>//float acceleration = onGround ? maxAcceleration : maxAirAcceleration;</del>
+		<del>//float maxSpeedChange = acceleration * Time.deltaTime;</del>
+
+		<del>//velocity.x =</del>
+		<del>//	Mathf.MoveTowards(velocity.x, desiredVelocity.x, maxSpeedChange);</del>
+		<del>//velocity.z =</del>
+		<del>//	Mathf.MoveTowards(velocity.z, desiredVelocity.z, maxSpeedChange);</del>
+
+		if (desiredJump) {
+			desiredJump = false;
+			Jump();
+		}
+		body.velocity = velocity;
+		onGround = false;
+	}</pre>
+						
+						<figure>
+							<video width="190" height="180" controls loop muted>
+								<source src="slopes/staying-aligned-with-ground.mp4" type="video/mp4">
+							</video>
+							<figcaption>Staying aligned with ground; max acceleration 100.</figcaption>
+						</figure>
+						
+						<p>With our new velocity adjustment approach the spheres no longer lose contact with the ground when suddenly reversing direction while moving up a slope. Besides that, because the desired velocity adjusts its direction to match the slope the absolute desired horizontal speed now varies per lane.</p>
+						
+						<figure>
+							<img src="slopes/max-ground-angle-40.png" width="400" height="120" alt="absolute">
+							<img src="slopes/max-ground-angle-40-relative.png" width="400" height="190" alt="relative">
+							<figcaption>Absolute and relative desired velocity.</figcaption>
+						</figure>
+						
+						<p>Note that if the slope isn't aligned with either the X or Z axis the angle between the relative projected axes will not be 90&deg;. This isn't really noticeable unless the slopes are quite steep. You could still move in all directions, but it would be harder to precisely steer in some directions than others. That somewhat mimics the awkwardness of trying to walk across but not aligned with a steep slope.</p>
+					</section>
+					
+					<section>
+						<h3>Multiple Ground Normals</h3>
+						
+						<p>Using the contact normal to adjust the desired velocity and jump direction works fine when there is only a single ground contact point, but the behavior can become weird and unpredictable when multiple ground contacts exist at the same time. To illustrate this I created another test scene with some depressions in the ground, allowing for up to four contact points at once.</p>
+						
+						<figure>
+							<img src="slopes/jump-test-scene.png" width="360" height="180">
+							<figcaption>Jump test scene.</figcaption>
+						</figure>
+						
+						<p>When jumping, in which directions will the spheres go? In my case, those with four contacts tend to prefer one direction but can end up going in four different directions. Likewise, the sphere with two contacts arbitrarily picks between two directions. And the spheres with three contacts consistently jump the same way to match the nearby spheres that touch only a single slope.</p>
+						
+						<figure>
+							<img src="slopes/arbitrary-jump-directions.png" width="360" height="180">
+							<figcaption>Arbitrary jump directions.</figcaption>
+						</figure>
+						
+						<p>This behavior manifests because we set the normal in <code>EvaluateCollision</code> whenever we find a ground contact. So if we find multiple then the last one wins. The order is either arbitrary due to movement or always the same due to the order in which PhysX evaluates collisions.</p>
+						
+						<p>Which direction is the best? There isn't one. It makes most sense to combine them all into a single normal that represents an average ground plane. To do that we have to accumulate the normal vectors. That requires us to set the contact normal to zero at the end of <code>FixedUpdate</code>. Let's put the code for that along with resetting <code>onGround</code> in a new <code>ClearState</code> method.</p>
+						
+						<pre translate="no">	void FixedUpdate () {
+		&hellip;
+		body.velocity = velocity;
+		<del>//onGround = false;</del>
+		<ins>ClearState();</ins>
+	}
+
+	<ins>void ClearState () {</ins>
+		<ins>onGround = false;</ins>
+		<ins>contactNormal = Vector3.zero;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now accumulate normals in <code>EvaluateCollision</code> instead of overriding the previous one.</p>
+						
+						<pre translate="no">	void EvaluateCollision (Collision collision) {
+		for (int i = 0; i &lt; collision.contactCount; i++) {
+			Vector3 normal = collision.GetContact(i).normal;
+			if (normal.y >= minGroundDotProduct) {
+				onGround = true;
+				contactNormal <ins>+=</ins> normal;
+			}
+		}
+	}</pre>
+						
+						<p>Finally, normalize the contact normal in <code>UpdateState</code> when on the ground to make it a proper normal vector.</p>
+						
+						<pre translate="no">	void UpdateState () {
+		velocity = body.velocity;
+		if (onGround) {
+			jumpPhase = 0;
+			<ins>contactNormal.Normalize();</ins>
+		}
+		else {
+			contactNormal = Vector3.up;
+		}
+	}</pre>
+						
+						<figure>
+							<img src="slopes/consistent-jump-directions.png" width="360" height="180">
+							<figcaption>Consistent jump directions.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Counting Ground Contacts</h3>
+						
+						<p>While not essential, we could count how many ground contact points we have instead of just tracking whether there is at least one. We do that by replacing the boolean field with an integer. We then introduce a boolean <code>OnGround</code> readonly property&mdash;note the capitalization&mdash;that checks whether the count is greater that zero, replacing the <code>onGround</code> field.</p>
+						
+						<pre translate="no">	<del>//bool onGround;</del>
+	<ins>int groundContactCount;</ins>
+
+	<ins>bool OnGround => groundContactCount > 0;</ins></pre>
+						
+						<aside>
+							<h3>How does that code work?</h3>
+							<div>
+								<p>It's a shorthand way to define a single-statement readonly property. It's the same as the following:</p>
+								
+								<pre translate="no">	bool OnGround {
+		get {
+			return groundContactCount > 0;
+		}
+	}</pre>
+								
+							</div>
+						</aside>
+						
+						<p><code>ClearState</code> now has to set the count to zero.</p>
+						
+						<pre translate="no">	void ClearState () {
+		<del>//onGround = false;</del>
+		<ins>groundContactCount = 0;</ins>
+		contactNormal = Vector3.zero;
+	}</pre>
+						
+						<p>And <code>UpdateState</code> has to rely on the property instead of the field. Besides that we can also optimize it a little bit by only bothering to normalize the contact normal if it's an aggregate, as it's already unit-length otherwise.</p>
+						
+						<pre translate="no">	void UpdateState () {
+		velocity = body.velocity;
+		if (<ins>OnGround</ins>) {
+			jumpPhase = 0;
+			<ins>if (groundContactCount > 1) {</ins>
+				contactNormal.Normalize();
+			<ins>}</ins>
+		}
+		&hellip;
+	}</pre>
+						
+						<p>Also increment the count in <code>Evaluate</code> when appropriate.</p>
+						
+						<pre translate="no">	void EvaluateCollision (Collision collision) {
+		for (int i = 0; i &lt; collision.contactCount; i++) {
+			Vector3 normal = collision.GetContact(i).normal;
+			if (normal.y >= minGroundDotProduct) {
+				<del>//onGround = true;</del>
+				<ins>groundContactCount += 1;</ins>
+				contactNormal += normal;
+			}
+		}
+	}</pre>
+						
+						<p>Finally, replace <code>onGround</code> with <code>OnGround</code> in <code>AdjustVelocity</code> and <code>Jump</code>.</p>
+						
+						<p>Besides the optimization in <code>UpdateState</code> the ground contact count could also be useful for debugging. You could for example either log the count or adjust the sphere's color based on the count to get a better idea of its state.</p>
+						
+						<figure>
+							<img src="slopes/ground-contact-count-color.png" width="360" height="180">
+							<figcaption>Colored based on ground contact count.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>How did you change the color?</h3>
+							<div>
+								<p>I added the following code to <code>Update</code>:</p>
+								
+								<pre translate="no">		GetComponent&lt;Renderer>().material.SetColor(
+			"_Color", Color.white * (groundContactCount * 0.25f)
+		);</pre>
+								
+								<p>That assumes that the sphere's material has a <em translate="no">_Color</em> property, which is the case for the standard shader of the default render pipeline. If you're using the default shader of the Lightweight/Universal pipeline then you'd need to use <em translate="no">_BaseColor</em> instead.</p>
+							</div>
+						</aside>
+						
+						<p>The next tutorial is <a href="../surface-contact/index.html">Surface Contact</a>.</p>
+						
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/movement-02-physics/" class="repository">repository</a>
+					<a href="Physics.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

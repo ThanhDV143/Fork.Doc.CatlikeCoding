@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/pseudorandom-noise/perlin-noise/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/pseudorandom-noise/perlin-noise/tutorial-image.jpg">
+		<meta property="og:title" content="Perlin Noise">
+		<meta property="og:description" content="A Unity C# Pseudorandom Noise tutorial about implementing Perlin noise.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Perlin Noise</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/pseudorandom-noise/perlin-noise/#article",
+				"headline": "Perlin Noise",
+				"alternativeHeadline": "Gradient Noise",
+				"datePublished": "2021-06-18",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity C# Pseudorandom Noise tutorial about implementing Perlin noise.",
+				"image": "https://catlikecoding.com/unity/tutorials/pseudorandom-noise/perlin-noise/tutorial-image.jpg",
+				"dependencies": "Unity 2020.3.6f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/pseudorandom-noise/", "name": "Pseudorandom Noise" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				G: 1,
+				HashJob: 1,
+				HashVisualization: 1,
+				IGradient: 1,
+				INoise: 1,
+				IShape: 1,
+				Job: 1,
+				Lattice1D: 1,
+				Lattice2D: 1,
+				Lattice3D: 1,
+				LatticeSpan4 : 1,
+				MathExtensions: 1,
+				N: 1,
+				Noise: 1,
+				NoiseType: 1,
+				NoiseVisualization: 1,
+				Perlin: 1,
+				Plane : 1,
+				Point4: 1,
+				S: 1,
+				ScheduleDelegate: 1,
+				Shape: 1,
+				Shapes: 1,
+				SmallXXHash: 1,
+				SmallXXHash4: 1,
+				SpaceTRS: 1,
+				Sphere: 1,
+				Torus: 1,
+				Value: 1,
+				Visualization: 1
+			};
+			
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Pseudorandom Noise</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Perlin Noise</h1>
+					<p>Gradient Noise</p>
+					<ul>
+						<li>Make lattice noise generic.</li>
+						<li>Add support for gradient noise.</li>
+						<li>Generate 1D, 2D, and 3D Perlin noise.</li>
+					</ul>
+				</header>
+				
+				<p>This is the fourth tutorial in a series about <a href="../index.html">pseudorandom noise</a>. It enhances our lattice noise job to also support Perlin noise.</p>
+				
+				<p>This tutorial is made with Unity 2020.3.6f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>A sphere showing 3D Perlin noise.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Generic Gradient Noise</h2>
+					
+					<p>Value noise is lattice noise that defines constant values at the lattice points. Interpolation of these values produces a smooth pattern, but the lattice is still quite obvious. An alternative approach is to interpolate between functions instead of constant values. This means that each lattice point has its own function. To keep it simple and uniform all points should get the same kind of function, only the parameterization varies. The simplest function is a constant value, which would be Value noise. One step up from that would be a function that is linearly dependent on the sample coordinates relative to the lattice point. The most straightforward is `f(x)=x` where `x` is the relative coordinate. This would produce linear ramps or gradients centered on lattice points. Hence this type of noise is known as gradient noise.</p>
+					
+					<p>As Value noise can be considered a trivial case of gradient noise let's adjust our lattice noise so it always functions as gradient noise.</p>
+					
+					<section>
+						<h3>Gradient Interface</h3>
+						
+						<p>We begin by introducing a new partial class asset for <code>Noise</code>, this time named <em translate="no">Noise.Gradient</em>. In it we declare the <code>IGradient</code> interface.</p>
+						
+						<pre translate="no"><ins>using Unity.Mathematics;</ins>
+
+<ins>using static Unity.Mathematics.math;</ins>
+
+<ins>public static partial class Noise {</ins>
+
+	<ins>public interface IGradient {}</ins>
+<ins>}</ins></pre>
+						
+						<p>The purpose of a gradient is to evaluate a function, with a hash and a relative coordinate as parameters. Define a vectorized <code>Evaluate</code> method signature for this, initially for 1D noise, which means that besides the hash it needs to have parameter for the X coordinates.</p>
+						
+					<pre translate="no">	public interface IGradient {
+		<ins>float4 Evaluate (SmallXXHash4 hash, float4 x);</ins>
+	}</pre>	
+						
+						<p>Now we can add a <code>Value</code> struct type in the same partial class that implements <code>IGradient</code> for 1D Value noise. It simply ignores the coordinates and returns the A floats of the hash, like our lattice noise currently does.</p>
+						
+						<pre translate="no">	<ins>public struct Value : IGradient {</ins>
+
+		<ins>public float4 Evaluate (SmallXXHash4 hash, float4 x) => hash.Floats01A;</ins>
+	<ins>}</ins></pre>
+						
+						<p>To also support 2D and 3D noise add <code>Evaluate</code> variants with two and three coordinate parameters to <code>IGradient</code>.</p>
+						
+						<pre translate="no">	public interface IGradient {
+		float4 Evaluate (SmallXXHash4 hash, float4 x);
+
+		<ins>float4 Evaluate (SmallXXHash4 hash, float4 x, float4 y);</ins>
+
+		<ins>float4 Evaluate (SmallXXHash4 hash, float4 x, float4 y, float4 z);</ins>
+	}</pre>
+						
+						<p><code>Value</code> must implement these methods as well, again by simply returning the hash value and ignoring the coordinates. The unused parameters will not affect performance because <em translate="no">Burst</em> eliminates all method invocation overhead and unused values.</p>
+						
+						<pre translate="no">	public struct Value : IGradient {
+
+		public float4 Evaluate (SmallXXHash4 hash, float4 x) => hash.Floats01A;
+
+		<ins>public float4 Evaluate (SmallXXHash4 hash, float4 x, float4 y) => hash.Floats01A;</ins>
+
+		<ins>public float4 Evaluate (SmallXXHash4 hash, float4 x, float4 y, float4 z) =></ins>
+			<ins>hash.Floats01A;</ins>
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Gradient Input</h3>
+						
+						<p>To provide the relative coordinates for gradients we'll add a vectorized float field named <code>g</code> to <code>LatticeSpan4</code> in <em translate="no">Noise.Lattice</em>.</p>
+						
+						<pre translate="no">	struct LatticeSpan4 {
+		public int4 p0, p1;
+		<ins>public float4 g;</ins>
+		public float4 t;
+	}</pre>
+						
+						<p>We find the relative coordinates by subtracting <code>p0</code> from the coordinates in <code>GetLatticeSpan4</code>.</p>
+						
+						<pre translate="no">		span.p0 = (int4)points;
+		span.p1 = span.p0 + 1;
+		<ins>span.g = coordinates - span.p0;</ins></pre>
+						
+						<p>Now we can adjust <code>Lattice1D.GetNoise4</code> so it invokes <code>Evaluate</code> on <code>Value</code> instead of directly getting a value from the hash. Pass the relevant hash and the relative coordinates as arguments to <code>Evaluate</code>.</p>
+						
+						<pre translate="no">	public struct Lattice1D : INoise {
+
+		public float4 GetNoise4(float4x3 positions, SmallXXHash4 hash) {
+			LatticeSpan4 x = GetLatticeSpan4(positions.c0);
+
+			<ins>var g = default(Value);</ins>
+			return lerp(
+				<ins>g.Evaluate(</ins>hash.Eat(x.p0)<ins>, x.g)</ins>, <ins>g.Evaluate(</ins>hash.Eat(x.p1)<ins>, x.g)</ins>, x.t
+			) * 2f - 1f;
+		}
+	}</pre>
+						
+						<p>At this point we still get the same result as before for 1D Value noise and the generated assembly code for the job is also exactly the same. But to get an idea of how gradient noise works we can temporarily change <code>Value.Evaluate</code> so it becomes the simple gradient function `f(x)=x`.</p>
+						
+						<pre translate="no">		public float4 Evaluate (SmallXXHash4 hash, float4 x) => <ins>x</ins>;</pre>
+						
+						<figure>
+							<img src="generic-gradient-noise/raw-gradient.png" width="424" height="100">
+							<figcaption>Raw gradient; 1D noise on a plane; resolution 128.</figcaption>
+						</figure>
+						
+						<p>The resulting pattern is a sequence of linear 1D ramps that go from &minus;1 to 1 in between lattice points. There is no apparent blending because we use the exact same gradient on both sides of each span, relative to <code>p0</code> on both ends. To turn it into proper gradient noise the second gradient must be based on coordinates relative to <code>p1</code>. So replace the single <code>g</code> field in <code>LatticeSpan4</code> with <code>g0</code> and add a new <code>g1</code> field.</p>
+						
+						<pre translate="no">	struct LatticeSpan4 {
+		public int4 p0, p1;
+		public float4 <ins>g0, g1</ins>;
+		public float4 t;
+	}</pre>
+						
+						<p>Because the second lattice point of a span sits one unit further along that dimension, we find <code>g1</code> in <code>GetLatticeSpan4</code> by subtracting one from <code>g0</code>.</p>
+						
+						<pre translate="no">		span.p0 = (int4)points;
+		span.p1 = span.p0 + 1;
+		span.<ins>g0</ins> = coordinates - span.p0;
+		<ins>span.g1 = span.g0 - 1f;</ins></pre>
+						
+						<p>Adjust <code>Lattice1D.GetNoise4</code> so it uses the correct relative coordinates: <code>p0</code> together with <code>g0</code> and <code>p1</code> together with <code>g1</code>.</p>
+						
+						<pre translate="no">			return lerp(
+				g.Evaluate(hash.Eat(x.p0), x.<ins>g0</ins>), g.Evaluate(hash.Eat(x.p1), x.<ins>g1</ins>), x.t
+			) * 2f - 1f;</pre>
+						
+						<figure>
+							<img src="generic-gradient-noise/interpolated-gradients.png" width="424" height="50">
+							<figcaption>Interpolated gradients.</figcaption>
+						</figure>
+						
+						<p>If we had used linear interpolation the resulting pattern would be flat because the gradients would have canceled each other. But because we use smooth C2-continuous interpolation each gradient is dominant near its lattice point and we get a wave pattern.</p>
+						
+						<figure>
+							<img src="generic-gradient-noise/gradients-graph.png" width="400" height="400">
+							<figcaption>Interpolating three gradients across two spans.</figcaption>
+						</figure>
+						
+						<p>Note that the gradients are zero at their lattice points and that the interpolated pattern is also zero in the middle of a span, where the gradients cancel each other.</p>
+						
+						<p>The pattern that we get is wholly negative because we apply a range adjustment afterwards. This adjustment is specific to Value noise, so let's restore the noise and move the adjustment to the <code>Value</code> methods.</p>
+						
+						<pre translate="no">	public struct Value : IGradient {
+
+		public float4 Evaluate (SmallXXHash4 hash, float4 x) => <ins>hash.Floats01A * 2f - 1f</ins>;
+
+		public float4 Evaluate (SmallXXHash4 hash, float4 x, float4 y) =>
+			hash.Floats01A <ins>* 2f - 1f</ins>;
+
+		public float4 Evaluate (SmallXXHash4 hash, float4 x, float4 y, float4 z) =>
+			hash.Floats01A <ins>* 2f - 1f</ins>;
+	}</pre>
+						
+						<p>Then remove it from <code>Lattice1D.GetNoise4</code>.</p>
+						
+						<pre translate="no">			return lerp(
+				g.Evaluate(hash.Eat(x.p0), x.g0), g.Evaluate(hash.Eat(x.p1), x.g1), x.t
+			<ins>);</ins>
+			<del>//) * 2f - 1f;</del></pre>
+						
+						<aside>
+							<h3>Is the interpolation of gradients still C2-continuous?</h3>
+							<div>
+								<p>Because gradients have a slope at the lattice points the first derivative is no longer zero there, but it is still continuous across spans because the gradient is the same on both sides. The second derivative is indeed still zero at the lattice points and thus also continuous.</p>
+								
+								<figure>
+									<img src="generic-gradient-noise/gradient-derivatives-graph.png" width="400" height="400">
+									<figcaption>Interpolated gradients with 1<sup>st</sup> and 2<sup>nd</sup> derivatives, divided by 6 to fit.</figcaption>
+								</figure>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Generic Lattice</h3>
+						
+						<p>Now that we have a gradient version of Value noise we can make <code>Lattice1D</code> generic by giving it an <code>IGradient</code> struct type parameter, like we did for <code>Noise.Job</code>.</p>
+						
+						<pre translate="no">	public struct Lattice1D<ins>&lt;G></ins> : INoise <ins>where G : struct, IGradient</ins> {
+
+		public float4 GetNoise4(float4x3 positions, SmallXXHash4 hash) {
+			LatticeSpan4 x = GetLatticeSpan4(positions.c0);
+
+			var g = default(<ins>G</ins>);
+			return lerp(
+				g.Evaluate(hash.Eat(x.p0), x.g0), g.Evaluate(hash.Eat(x.p1), x.g1), x.t
+			);
+		}
+	}</pre>
+						
+						<p>Adjustment <code>Lattice2D</code> in the same way, this time using the 2D variant of <code>IGradient.Evaluate</code>. Make sure to use the correct relative coordinates for all lattice points.</p>
+						
+						<pre translate="no">	public struct Lattice2D<ins>&lt;G></ins> : INoise <ins>where G: struct, IGradient</ins> {
+
+		public float4 GetNoise4 (float4x3 positions, SmallXXHash4 hash) {
+			&hellip;
+
+			<ins>var g = default(G);</ins>
+			return lerp(
+				lerp(
+					<ins>g.Evaluate(</ins>h0.Eat(z.p0)<ins>, x.g0, z.g0)</ins>,
+					<ins>g.Evaluate(</ins>h0.Eat(z.p1)<ins>, x.g0, z.g1)</ins>,
+					z.t
+				),
+				lerp(
+					<ins>g.Evaluate(</ins>h1.Eat(z.p0)<ins>, x.g1, z.g0)</ins>,
+					<ins>g.Evaluate(</ins>h1.Eat(z.p1)<ins>, x.g1, z.g1)</ins>,
+					z.t
+				),
+				x.t
+			<ins>);</ins>
+			<del>//) * 2f - 1f;</del>
+		}
+	}</pre>
+						
+						<p>And update <code>Lattice3D</code> as well.</p>
+						
+						<pre translate="no">	public struct Lattice3D<ins>&lt;G></ins> : INoise <ins>where G : struct, IGradient</ins> {
+
+		public float4 GetNoise4 (float4x3 positions, SmallXXHash4 hash) {
+			&hellip;
+
+			<ins>var g = default(G);</ins>
+			return lerp(
+				lerp(
+					lerp(
+						<ins>g.Evaluate(</ins>h00.Eat(z.p0)<ins>, x.g0, y.g0, z.g0)</ins>,
+						<ins>g.Evaluate(</ins>h00.Eat(z.p1)<ins>, x.g0, y.g0, z.g1)</ins>,
+						z.t
+					),
+					lerp(
+						<ins>g.Evaluate(</ins>h01.Eat(z.p0)<ins>, x.g0, y.g1, z.g0)</ins>,
+						<ins>g.Evaluate(</ins>h01.Eat(z.p1)<ins>, x.g0, y.g1, z.g1)</ins>,
+						z.t
+					),
+					y.t
+				),
+				lerp(
+					lerp(
+						<ins>g.Evaluate(</ins>h10.Eat(z.p0)<ins>, x.g1, y.g0, z.g0)</ins>,
+						<ins>g.Evaluate(</ins>h10.Eat(z.p1)<ins>, x.g1, y.g0, z.g1)</ins>,
+						z.t
+					),
+					lerp(
+						<ins>g.Evaluate(</ins>h11.Eat(z.p0)<ins>, x.g1, y.g1, z.g0)</ins>,
+						<ins>g.Evaluate(</ins>h11.Eat(z.p1)<ins>, x.g1, y.g1, z.g1)</ins>,
+						z.t
+					),
+					y.t
+				),
+				x.t
+			<ins>);</ins>
+			<del>//) * 2f - 1f;</del>
+		}
+	}</pre>
+						
+						<p>We now have to explicitly declare that we are using the Value noise versions of lattice noise jobs in <code>NoiseVisualization</code>.</p>
+						
+						<pre translate="no">	static ScheduleDelegate[] noiseJobs = {
+		Job&lt;Lattice1D<ins>&lt;Value></ins>>.ScheduleParallel,
+		Job&lt;Lattice2D<ins>&lt;Value></ins>>.ScheduleParallel,
+		Job&lt;Lattice3D<ins>&lt;Value></ins>>.ScheduleParallel
+	};</pre>
+						
+						<p>Everything works the same as before, but it is now possible to add other gradient noise types with only a little bit of extra code.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Perlin Noise</h2>
+					
+					<p>Ken Perlin came up with the first version of gradient noise, hence this classical version of noise is known as Perlin noise. Compared to what we already know of gradient noise at this point, Perlin noise adds the idea that gradient vectors can have different orientations. The interpolation of these different gradients produces a more varied and less blocky pattern than Value noise.</p>
+					
+					<aside>
+						<h3>Isn't Perlin noise based on a permutation table?</h3>
+						<div>
+							<p>Yes, but a permutation table is just one way of generating pseudorandom values for lattice points. It works well for simple hardware but suffers from a small domain and cannot be seeded. It also doesn't vectorize because it requires multiple array lookups, for which there are no SIMD instructions. So we base it on <code>SmallXXHash4</code> instead.</p>
+						</div>
+					</aside>
+					
+					<section>
+						<h3>Second Gradient Noise Type</h3>
+						
+						<p>To implement Perlin noise, add a <code>Perlin</code> struct type to <em translate="no">Noise.Gradient</em> that implements <code>IGradient</code>, just like <code>Value</code>. Intially set all evaluations to zero.</p>
+						
+						<pre translate="no">	<ins>public struct Perlin : IGradient {</ins>
+
+		<ins>public float4 Evaluate (SmallXXHash4 hash, float4 x) => 0f;</ins>
+
+		<ins>public float4 Evaluate (SmallXXHash4 hash, float4 x, float4 y) => 0f;</ins>
+
+		<ins>public float4 Evaluate (SmallXXHash4 hash, float4 x, float4 y, float4 z) => 0f;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Then turn the noise jobs array in <code>NoiseVisualization</code> into a two-dimensional array. Elements of such arrays have two index components, so the array type changes from <code>ScheduleDelegate[]</code> to <code>ScheduleDelegate[,]</code>. Then wrap the existing initialization in a second set of curly braces and insert a new set for the Perlin noise jobs before the Value noise set.</p>
+						
+						<pre translate="no">	static ScheduleDelegate[<ins>,</ins>] noiseJobs = {
+		<ins>{</ins>
+			<ins>Job&lt;Lattice1D&lt;Perlin>>.ScheduleParallel,</ins>
+			<ins>Job&lt;Lattice2D&lt;Perlin>>.ScheduleParallel,</ins>
+			<ins>Job&lt;Lattice3D&lt;Perlin>>.ScheduleParallel</ins>
+		<ins>},</ins>
+		<ins>{</ins>
+			Job&lt;Lattice1D&lt;Value>>.ScheduleParallel,
+			Job&lt;Lattice2D&lt;Value>>.ScheduleParallel,
+			Job&lt;Lattice3D&lt;Value>>.ScheduleParallel
+		<ins>}</ins>
+	};</pre>
+						
+						<p>To make switching between the noise types possible add an enum configuration field for Perlin and Value noise and use it as the first array index argument in <code>UpdateVisualization</code>.</p>
+						
+						<pre translate="no">	<ins>public enum NoiseType { Perlin€, Value€ }</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>NoiseType type;</ins>
+	
+	&hellip;
+	
+	protected override void UpdateVisualization (
+		NativeArray&lt;float3x4> positions, int resolution, JobHandle handle
+	) {
+		noiseJobs[<ins>(int)type,</ins> dimensions - 1](
+			positions, noise, seed, domain, resolution, handle
+		).Complete();
+		noiseBuffer.SetData(noise);
+	}</pre>
+						
+						<figure>
+							<img src="perlin-noise/noise-type-option.png" width="320" height="62">
+							<figcaption>Noise type configuration option.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>1D Gradients</h3>
+						
+						<p>Ken Perlin never made a proper 1D noise variant, because it isn't very useful, but we do because it makes understanding higher dimensions easier. We already tested 1D gradient noise earlier, with the fixed gradient function `f(x)=x`. The idea of Perlin noise is that the gradients of lattice points can be different. In the case of 1D the most obvious other gradient would simple be the negative version of what we already used: `f(x)=-x`. We can use the first bit of the hash to determine whether we select the positive or negative version.</p>
+						
+						<pre translate="no">	public struct Perlin : IGradient {
+		
+		public float4 Evaluate (SmallXXHash4 hash, float4 x) =>
+			<ins>select(-x, x, ((uint4)hash &amp; 1) == 0)</ins>;
+		
+		&hellip;
+	}</pre>
+						
+						<p>This leads to four possible gradient interpolations per lattice span: positive-positive, negative-negative, positive-negative, and negative-negative. As positive and negative mirror each other there are only two unique cases: same and different gradients.</p>
+						
+						<aside>
+							<h3>Is the noise still C2-continuous when using varying gradients?</h3>
+							<div>
+								<p>Yes. The second derivative is always zero at the lattice points and the first derivative is continuous because the same gradient is still used on both sides of the lattice point.</p>
+								
+								<figure>
+									<img src="perlin-noise/n-p-n-graph.png" width="400" height="400">
+									<figcaption>Negative-positive-negative gradients, derivatives divided by 8 to fit.</figcaption>
+								</figure>
+								
+								<figure>
+									<img src="perlin-noise/p-p-n-graph.png" width="400" height="400">
+									<figcaption>Positive-positive-negative gradients, derivatives divided by 8 to fit.</figcaption>
+								</figure>
+							</div>
+						</aside>
+						
+						<p>The noise reaches a maximum amplitude of 0.5 halfway between lattice points with opposite gradients. This is the case because both are 0.5 at that point and we end up with their average. Ideally the noise has a maximum amplitude of 1, which we can achieve by doubling the gradients.</p>
+						
+						<pre translate="no">		public float4 Evaluate (SmallXXHash4 hash, float4 x) =>
+			<ins>2f *</ins> select(-x, x, ((uint4)hash &amp; 1) == 0);</pre>
+						
+						<figure>
+							<img src="perlin-noise/1d-binary.png" width="420" height="100">
+							<figcaption>1D binary Perlin noise; domains scale 16; resolution 256.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Variable Gradients</h3>
+						
+						<p>I name the noise that we get at this point binary Perlin noise, because its gradients can only have two states. Thus the noise consists of sequences of gradients that all point in the same direction, except when there is a sign flip. The flips show up as maximum-amplitude waves while the rest of the pattern consists of small identical small waves. This looks very rigid, so let's try a different approach.</p>
+						
+						<p>Instead of performing a binary selection, use the hash to scale the relative coordinates by a factor in the &minus;1&ndash;1 range. We still need to double that to achieve a maximum amplitude of 1.</p>
+						
+						<pre translate="no">		public float4 Evaluate (SmallXXHash4 hash, float4 x) =>
+			2f * <ins>(hash.Floats01A * 2f - 1f) * x</ins>;</pre>
+						
+						<figure>
+							<img src="perlin-noise/1d-variable.png" width="420" height="100">
+							<figcaption>Variable gradients.</figcaption>
+						</figure>
+						
+						<p>This looks more interesting, as we get a large variety of gradients with different amplitudes, both positive and negative. This does make it far less likely that the maximum amplitude is reached, so the average amplitude of the noise is reduced.</p>
+						
+						<p>We can also combine the variable and the binary approach, using the first bit to select the sign and scaling by float A.</p>
+						
+						<pre translate="no">		public float4 Evaluate (SmallXXHash4 hash, float4 x) =>
+			2f * <ins>hash.Floats01A * select(-x, x, ((uint4)hash &amp; 1) == 0)</ins>;</pre>
+						
+						<p>But that would include the first bit in both choices, which introduces a dependency. To keep the choices independent use the ninth bit to determine the sign instead.</p>
+						
+						<pre translate="no">			2f * hash.Floats01A * select(-x, x, ((uint4)hash &amp; 1 <ins>&lt;&lt; 8</ins>) == 0);</pre>
+						
+						<figure>
+							<img src="perlin-noise/1d-variable-different.png" width="420" height="100">
+							<figcaption>Different variable gradients.</figcaption>
+						</figure>
+						
+						<p>The advantage of this approach is that we can introduce a minimum amplitude, regardless of the gradient direction. This way we can prevent degenerate areas from appearing, where the scale ends up close to zero for multiple successive lattice points, which would produce a flat region. The simplest approach is to set the minimum amplitude to 1 and add the hash float to that. The result can be considered a mix of the binary and variable approaches, guaranteeing a minimum wave amplitude but adding some variety on top of that.</p>
+						
+						<pre translate="no">		public float4 Evaluate (SmallXXHash4 hash, float4 x) =>
+			<ins>(1f + hash.Floats01A)</ins> * select(-x, x, ((uint4)hash &amp; 1 &lt;&lt; 8) == 0);</pre>
+						
+						<figure>
+							<img src="perlin-noise/1d-mix.png" width="420" height="100">
+							<figcaption>Binary-variable mix.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>2D Gradients</h3>
+						
+						<p>Moving on to 2D Perlin noise, we again start with binary gradients in a single dimension, based on the first hash bit, and see how that looks.</p>
+						
+						<pre translate="no">		public float4 Evaluate (SmallXXHash4 hash, float4 x, float4 y) =>
+			<ins>select(-x, x, ((uint4)hash & 1) == 0)</ins>;</pre>
+						
+						<figure>
+							<img src="perlin-noise/2d-binary.png" width="300" height="300">
+							<figcaption>2D binary Perlin noise plane; domain scale 8; top-down view.</figcaption>
+						</figure>
+						
+						<p>The result is an interpolation of different binary 1D noise bands in one dimension along the other dimension. Let's again replace this with an approach based on float A to make the gradients more varied.</p>
+						
+						<pre translate="no">		public float4 Evaluate (SmallXXHash4 hash, float4 x, float4 y) =>
+			<ins>(hash.Floats01A * 2f - 1f) * x</ins>;</pre>
+						
+						<figure>
+							<img src="perlin-noise/2d-variable.png" width="300" height="300">
+							<figcaption>Variable gradients along X.</figcaption>
+						</figure>
+						
+						<p>In the case of 2D noise we are not limited to axis-aligned gradients, the gradient vector can rotate a full 360&deg;. To generate such a vector we can use an approach similar to how we generate an octahedron-sphere shape, but reduced to two dimensions.</p>
+						
+						<p>We start with a line along X, from &minus;1 to 1. Then we make Y equal to 0.5 minus the absolute of X, like we defined Z when creating the first half of an octahedron, but now in one less dimension. This creates a wedge that can be considered an opened square. Then we subtract X plus 0.5 floored from X to shift the negative portions of the square so it is closed.</p>
+						
+						<figure>
+							<img src="perlin-noise/2d-gradient-y-graph.png" width="160" height="160" alt="y">
+							<img src="perlin-noise/2d-gradient-xy-graph.png" width="160" height="160" alt="x and y">
+							<img src="perlin-noise/2d-gradient-square-graph.png" width="160" height="160" alt="square">
+							<figcaption>The process of creating a square from a line.</figcaption>
+						</figure>
+						
+						<p>The result is a square with its corners on the X and Y axes at distance 0.5 from the origin. The gradient vectors thus point from the origin to somewhere on the edge of this square.</p>
+						
+						<p>To evaluate the gradient in 2D we sum its X and Y components. Finally, we double the result so the axis-aligned vectors end up with a length of 1.</p>
+						
+						<pre translate="no">		public float4 Evaluate (SmallXXHash4 hash, float4 x, float4 y) <ins>{</ins>
+			<ins>float4 gx = hash.Floats01A * 2f - 1f;</ins>
+			<ins>float4 gy = 0.5f - abs(gx);</ins>
+			<ins>gx -= floor(gx + 0.5f);</ins>
+			<ins>return (gx * x + gy * y) * 2f;</ins>
+		<ins>}</ins></pre>
+						
+						<figure>
+							<img src="perlin-noise/2d-square-based.png" width="300" height="300">
+							<figcaption>Square-based gradients.</figcaption>
+						</figure>
+						
+						<p>If we want to turn the square distribution into a proper circle we can do so by normalizing the gradient vectors via division by their length. Note that this doesn't produce a uniform circular distribution of gradients, because they're uniformly distributed along the square instead. They're more concentrated near the square's corners, just like the point on the octahedron sphere are more concentrated near the corners of the octahedron. However this isn't a problem because the distribution is symmetrical and varied enough.</p>
+						
+						<pre translate="no">			return (gx * x + gy * y) * <ins>rsqrt(gx * gx + gy * gy)</ins>;</pre>
+						
+						<figure>
+							<img src="perlin-noise/2d-normalized.png" width="300" height="300">
+							<figcaption>Normalized gradients.</figcaption>
+						</figure>
+						
+						<p>However, this doesn't make much difference so we can omit that part to make the noise code run faster. Normalization does make the diagonal gradients stronger, but the noise itself still needs to be normalized, which will also take care of that.</p>
+						
+						<pre translate="no">			return (gx * x + gy * y) * <ins>2f</ins>;</pre>
+					</section>
+					
+					<section>
+						<h3>Normalized 2D Noise</h3>
+						
+						<p>To normalize the noise we need to determine its current maximum amplitude. If a lattice square has four gradients that all point to its center then its maximum value will be reached in the middle. As that will be the average of four gradients that are equal, we only need to calculate the value of a single gradient at that point. A perfectly diagonal gradient is `f(x,y)=(x+y)/2` so the amplitude at the middle would be `f(0.5,0.5)=1/2`. However, this is not the maximum amplitude of the entire noise. There is another gradient configuration that has a greater amplitude.</p>
+						
+						<p>The maximum in a single dimension is 0.5, in the middle of a lattice span when both gradients point straight toward each other along that axis. This is unnormalized 1D binary Perlin noise. If the two gradients of the other span of a lattice square both point straight at the opposite span, then during interpolation along the second dimension we might end up with a value that exceeds 0.5 somewhere.</p>
+						
+						<figure>
+							<img src="perlin-noise/2d-max-gradients.png" width="310" height="290">
+							<figcaption>Gradients for maximum amplitude.</figcaption>
+						</figure>
+						
+						<p>The maximum lies at the halfway point in the first dimension and somewhere along the interpolation in the second dimension. So this is effectively a smooth interpolation between an axis-aligned gradient and 0.5. Thus we have to find the maximum of the function `xs(1-x)+0.5s(x)` with `s(t)=6t^5-15t^4+10t^3` with 0&ndash;1 for the domain of `x`.</p>
+						
+						<p>The expanded form of that function is `6x(1-x)^5-15x(1-x)^4+10x(1-x)^3+3x^5-7.5x^4+5x^3`, which simplifies to `-6x^6+18x^5-17.5x^4+5x^3+x`.</p>
+						
+						<p>To find the maximum we have to take the derivative of that function and solve for zero, because where the rate of change is zero the function has reached a maximum or minimum. Solving that equation is possible but nontrivial. To get an idea of what the function looks like we can visualize it with <a href="https://www.desmos.com/calculator/l4otmowqbe">Desmos</a>. By selecting the graph line we can also immediately learn that the maximum is 0.5353 at X coordinate 0.6509. So it is indeed higher than 0.5.</p>
+						
+						<figure>
+							<img src="perlin-noise/2d-max-graph.png" width="160" height="160">
+							<figcaption>2D maximum graph.</figcaption>
+						</figure>
+						
+						<p>We can get a more precise answer by asking <a href="https://www.wolframalpha.com/input/?i=Maximize%5B%7B-6x%5E6%2B18x%5E5-17.5x%5E4%2B5x%5E3%2Bx%2C0%3C%3Dx%3C%3D1%7D%2C%7Bx%7D%5D">Wolfram|Alpha</a> to maximize the function. It can even give us an exact answer but it is quite complex, so we make do with the approximation. 0.53528 will do, one digit more precise than what Desmos showed. Divide the gradient by that value to arrive at normalized 2D Perlin noise.</p>
+						
+						<pre translate="no">			return (gx * x + gy * y) * <ins>(2f / 0.53528f)</ins>;</pre>
+						
+						<figure>
+							<img src="perlin-noise/2d-normalized-top.png" width="300" height="300" alt="top"><br>
+							<img src="perlin-noise/2d-normalized-perspective.png" width="320" height="210" alt="perspective">
+							<figcaption>Normalized 2D Perlin noise.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What would be the maximum amplitude for circular gradients?</h3>
+							<div>
+								<p>The circular version of a perfectly diagonal gradient is `f(x,y)=(x+y)/sqrt(2)`. So the maximum amplitude found at the center of a lattice square with all gradients pointing at its center is `f(0.5,0.5)=1/sqrt(2)~~0.7071`. Thus to normalize the noise we'd have to divide by that, which is the same as multiplying with `sqrt(2)~~1.4142`.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>3D Gradients</h3>
+						
+						<p>To create 3D Perlin noise we have to do the same thing that we did for the 2D version, expanded to include the third dimension. For this we can use the same octahedron-based approach that we used to generate the octahedron sphere. In this case we need two random values in the &minus;1&ndash;1 range. We'll use floats A and D for this. D is preferred over B or C because a single bit shift is faster than both a shift and a mask operation.</p>
+						
+						<pre translate="no">		public float4 Evaluate (SmallXXHash4 hash, float4 x, float4 y, float4 z) <ins>{</ins>
+			<ins>float4 gx = hash.Floats01A * 2f - 1f, gy = hash.Floats01D * 2f - 1f;</ins>
+			<ins>float4 gz = 1f - abs(gx) - abs(gy);</ins>
+			<ins>float4 offset = max(-gz, 0f);</ins>
+			<ins>gx += select(-offset, offset, gx &lt; 0f);</ins>
+			<ins>gy += select(-offset, offset, gy &lt; 0f);</ins>
+			<ins>return (gx * x + gy * y + gz * z);</ins>
+		}</pre>
+						
+						<aside>
+							<h3>Doesn't 3D Perlin noise use just twelve gradient vectors?</h3>
+							<div>
+								<p>Perlin's reference implementation indeed picks from a set of twelve 2D diagonal gradient vectors with different orientations&mdash;pointing to the middle of the edges of a cube&mdash;with some repetition to get to a total of sixteen options. This way four bits can be converted to gradients. While this approach can be efficient for regular code or dedicated hardware, the nested binary branching isn't suitable for SIMD code. Our octahedron-based approach is both faster&mdash;if we don't normalize the gradients&mdash;and offers more variety.</p>
+							</div>
+						</aside>
+						
+						<p>Finding the maximum amplitude works the same as for 2D. It is found while interpolating along the third dimension with a gradient that points along that axis, towards a 2D lattice rect that has achieved its maximum value, which is 0.53528. So we have to maximize the same function as before, except with the constant 0.5 replaced with 0.53528: `xs(1-x)+0.53528s(x)`, which can be expanded to `6x(1-x)^5-15x(1-x)^4+10x(1-x)^3+ 0.53528(6x^5-15x^4+10x^3)`. Feeding that to <a href="https://www.desmos.com/calculator/vbypftfk0x">Desmos</a> yields 0.5629 at X coordinate 0.6732.</p>
+						
+						<figure>
+							<img src="perlin-noise/3d-max-graph.png" width="160" height="160">
+							<figcaption>3D maximum graph.</figcaption>
+						</figure>
+						
+						<p>And <a href="https://www.wolframalpha.com/input/?i=Maximize%5B%7B6x%281-x%29%5E5-15x%281-x%29%5E4%2B10x%281-x%29%5E3%2B0.53528%286x%5E5-15x%5E4%2B10x%5E3%29%2C0%3C%3Dx%3C%3D1%7D%2C%7Bx%7D%5D">Wolfram|Alpha</a> tell us it is 0.56290 at 0.67321.</p>
+						
+						<pre translate="no">return (gx * x + gy * y + gz * z) <ins>* (1f / 0.56290f)</ins>;</pre>
+						
+						<figure>
+							<img src="perlin-noise/3d-sphere.png" width="280" height="280">
+							<figcaption>Octahedron-based 3D Perlin noise.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>What would be the maximum amplitude for spherical 3D gradients?</h3>
+							<div>
+								<p>For gradient vectors based on a sphere instead of an octahedron, the gradient vector pointing straight at the center of a lattice cube is `f(x,y,z)=(x+y+z)/sqrt(3)`. So the maximum amplitude found in the middle of a lattice cube with all gradients pointing at its center is `f(0.5,0.5,0.5)=1.5/sqrt(3)~~0.8660`. Thus to normalize the noise we'd have to divide by that.</p>
+							</div>
+						</aside>
+						
+						<p>The next tutorial is <a href="../noise-variants/index.html">Noise Variants</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/pseudorandom-noise-04-perlin-noise/" class="repository">repository</a>
+					<a href="Perlin-Noise.pdf" download rel="nofollow">PDF</a>
+				</section>
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

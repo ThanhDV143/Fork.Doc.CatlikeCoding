@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/movement/complex-gravity/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/movement/complex-gravity/tutorial-image.jpg">
+		<meta property="og:title" content="Complex Gravity">
+		<meta property="og:description" content="A Unity Movement tutorial about supporting gravity planes, spheres, and boxes.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Complex Gravity</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/movement/complex-gravity/#article",
+				"headline": "Complex Gravity",
+				"alternativeHeadline": "Gravity Planes, Spheres, and Boxes",
+				"datePublished": "2020-03-27",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Movement tutorial about supporting gravity planes, spheres, and boxes.",
+				"image": "https://catlikecoding.com/unity/tutorials/movement/complex-gravity/tutorial-image.jpg",
+				"dependencies": "Unity 2019.2.21f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/movement/", "name": "Movement" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				CustomGravity: 1,
+				CustomGravityRigidbody: 1,
+				GravityBox: 1,
+				GravityPlane: 1,
+				GravitySource: 1,
+				GravitySphere: 1,
+				MovingSphere: 1,
+				OrbitCamera: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Movement</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Complex Gravity</h1>
+					<p>Gravity Planes, Spheres, and Boxes</p>
+					<ul>
+						<li>Support multiple gravity sources.</li>
+						<li>Limit the range of gravity.</li>
+						<li>Make gravity decrease with distance.</li>
+						<li>Create planar, spherical, and box-shaped gravity sources.</li>
+					</ul>
+				</header>
+				
+				<p>This is the sixth installment of a tutorial series about controlling the <a href="../index.html">movement</a> of a character. It extends our custom gravity by supporting multiple gravity sources, including planes, spheres, and boxes.</p>
+				
+				<p>This tutorial is made with Unity 2019.2.21f1. It also uses the ProBuilder package.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Jumping between two spheres and a box.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Multiple Gravity Sources</h2>
+					
+					<p>If you only ever need the same gravity source then the approach introduced in the previous tutorial can suffice. But if you need to use different kinds of gravity&mdash;either a different one per scene or multiple in the same scene&mdash;then a more generic approach is needed.</p>
+					
+					<section>
+						<h3>Default Gravity Source</h3>
+						
+						<p>To support multiple gravity sources in a scene we'll create a new <code>GravitySource</code> component type, with a public <code>GetGravity</code> method similar to the one in <code>CustomGravity</code> that has a single position parameter, only in this case it isn't static. The simplest implementation is to just return <code>Physics.gravity</code>, so we'll do that. This can be used as a default gravity source that can be added to any scene, which would make our sphere work with standard physics gravity.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class GravitySource : MonoBehaviour {</ins>
+
+	<ins>public Vector3 GetGravity (Vector3 position) {</ins>
+		<ins>return Physics.gravity;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+					</section>
+					
+					<section>
+						<h3>Gravity Source List</h3>
+						
+						<p>To support more than one gravity source per scene <code>CustomGravity</code> will have to keep track of all the active sources. We'll do that by giving it a static list of sources. </p>
+						
+						<pre translate="no">using UnityEngine;
+<ins>using System.Collections.Generic;</ins>
+
+public static class CustomGravity {
+
+	<ins>static List&lt;GravitySource> sources = new List&lt;GravitySource>();</ins>
+
+	&hellip;
+}</pre>
+						
+						<aside>
+							<h3>How does that list work?</h3>
+							<div>
+								<p>See the explanation of generic lists in section 1.5 of the <a href="../../object-management/persisting-objects/index.html">Persisting Objects</a> tutorial.</p>
+							</div>
+						</aside>
+						
+						<p>Adjust the <code>GetGravity</code> method that has only a position parameter so it loops through the sources and accumulates their gravity.</p>
+						
+						<pre translate="no">	public static Vector3 GetGravity (Vector3 position) {
+		<ins>Vector3 g = Vector3.zero;</ins>
+		<ins>for (int i = 0; i &lt; sources.Count; i++) {</ins>
+			<ins>g += sources[i].GetGravity(position);</ins>
+		<ins>}</ins>
+		<ins>return g;</ins>
+	}</pre>
+						
+						<p>Do the same thing in the other <code>GetGravity</code> method, which also provides the up axis. Now we have no choice but to derive the axis by normalizing and negating the final gravity vector.</p>
+						
+						<pre translate="no">	public static Vector3 GetGravity (Vector3 position, out Vector3 upAxis) {
+		<ins>Vector3 g = Vector3.zero;</ins>
+		<ins>for (int i = 0; i &lt; sources.Count; i++) {</ins>
+			<ins>g += sources[i].GetGravity(position);</ins>
+		<ins>}</ins>
+		<ins>upAxis = -g.normalized;</ins>
+		<ins>return g;</ins>
+	}</pre>
+						
+						<aside>
+							<h3>Couldn't we optimize this when there is only a single source?</h3>
+							<div>
+								<p>Yes, but we won't make any assumptions about the amount of sources. If you only ever use a single source at a time them a loop won't be necessary at all.</p>
+							</div>
+						</aside>
+						
+						<p><code>GetUpAxis</code> has to be adjusted in the same way.</p>
+						
+						<pre translate="no">	public static Vector3 GetUpAxis (Vector3 position) {
+		<ins>Vector3 g = Vector3.zero;</ins>
+		<ins>for (int i = 0; i &lt; sources.Count; i++) {</ins>
+			<ins>g += sources[i].GetGravity(position);</ins>
+		<ins>}</ins>
+		<ins>return -g.normalized;</ins>
+	}</pre>
+						
+						<aside>
+							<h3>Is using a list the best approach?</h3>
+							<div>
+								<p>A list is the simplest approach and also the best one if only a few gravity sources are active at the same time. Only when many sources are in play could it become beneficial to start thinking about smarter space partitioning strategies, like bounding volume hierarchies. An alternative approach is to use colliders and triggers to figure out what objects are affected by what gravity sources, but that adds a lot of overhead. Yet another approach would be to disable sources that are too far away from the player to affect the play experience. But this tutorial keeps it as simple as possible.</p>
+								
+								<p>Also keep in mind that an area with multiple strong gravity sources in close proximity of each other is unintuitive. We have no experience with anything like that. A scene with a few can be fun, but a space with many gravity sources might be frustrating to navigate.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Registering and Unregistering Sources</h3>
+						
+						<p>To make it possible to change the active gravity sources add public <code>Register</code> and an <code>Unregister</code> methods. They simply add or remove a given gravity source to or from the list.</p>
+						
+						<pre translate="no">	<ins>public static void Register (GravitySource source) {</ins>
+		<ins>sources.Add(source);</ins>
+	<ins>}</ins>
+
+	<ins>public static void Unregister (GravitySource source) {</ins>
+		<ins>sources.Remove(source);</ins>
+	<ins>}</ins></pre>
+						
+						<p>The idea is that a single source is only ever registered once, otherwise its effect would be multiplied. Likewise, it only makes sense to unregister a source that's been registered earlier. It's fine to register and unregistered the same source more than once though, to temporarily deactivate it. We can add assertions to verify this by invoking <code>Debug.Assert</code>, to catch programming mistakes.</p>
+						
+						<pre translate="no">	public static void Register (GravitySource source) {
+		<ins>Debug.Assert(</ins>
+			<ins>!sources.Contains(source),</ins>
+			<ins>"Duplicate registration of gravity source!", source</ins>
+		<ins>);</ins>
+		sources.Add(source);
+	}
+
+	public static void Unregister (GravitySource source) {
+		<ins>Debug.Assert(</ins>
+			<ins>sources.Contains(source),</ins>
+			<ins>"Unregistration of unknown gravity source!", source</ins>
+		<ins>);</ins>
+		sources.Remove(source);
+	}</pre>
+						
+						<aside>
+							<h3>What does <code>Debug.Assert</code> do?</h3>
+							<div>
+								<p>If the first argument is <code>false</code>, it logs an assertion error, using the second argument message if provided. The third argument is what gets highlighted in the editor if the message is selected in the console. This invocation is only included in development builds, not in release builds. It would be as if the <code>Debug.Assert(&hellip;);</code> code was never written. So it's a good way to add checks during development that won't affect the final release.</p>
+							</div>
+						</aside>
+						
+						<p>We can make <code>GravitySource</code> register and unregister itself when appropriate by doing so in its <code>OnEnable</code> and <code>OnDisable</code> methods, respectively. That way it works when a source gets created, destroyed, activated, deactivated, enabled, disabled, and also across hot reloads of the editor.</p>
+						
+						<pre translate="no">	<ins>void OnEnable () {</ins>
+		<ins>CustomGravity.Register(this);</ins>
+	<ins>}</ins>
+
+	<ins>void OnDisable () {</ins>
+		<ins>CustomGravity.Unregister(this);</ins>
+	<ins>}</ins>
+</pre>
+						
+						<p>Now we can adjust all our scenes to once again use default gravity, simply by adding a game object with the <code>GravitySource</code> component to each.</p>
+						
+						<figure>
+							<img src="multiple-gravity-sources/physics-gravity-source.png" width="320" height="106">
+							<figcaption>Gravity source for default physics.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Allowing Extension</h3>
+						
+						<p>The idea is that <code>GravitySource</code> is the basis for other kinds of gravity sources, just like <code>MonoBehaviour</code> is the basis for all custom component types that we create. New gravity source types will do their work by overriding the <code>GetGravity</code> method with their own implementation. To make this possible we have to declare this method to be <code>virtual</code>.</p>
+						
+						<pre translate="no">	public <ins>virtual</ins> Vector3 GetGravity (Vector3 position) {
+		return Physics.gravity;
+	}</pre>
+						
+						<aside>
+							<h3>What does the <code>virtual</code> keyword mean?</h3>
+							<div>
+								<p>See the explanation at the end of the <a href="../../object-management/persisting-objects/index.html">Persisting Objects</a> tutorial.</p>
+							</div>
+						</aside>
+						
+					</section>
+				</section>
+				
+				<section>
+					<h2>Gravity Planes</h2>
+					
+					<p>The default physics gravity only defines a single vector that represents a universal downward pull. The simplest extension of that idea is to define a gravity plane. This does exactly the same except that a plane also splits space into everything above and below it. We can use that to limit the range of the plane's gravity.</p>
+					
+					<section>
+						<h3>New Gravity Source Type</h3>
+						
+						<p>Create a new <code>GravityPlane</code> component type that extends <code>GravitySource</code>. Give it a configurable gravity field. This is the acceleration it applies to everything in its range, pulling it down. So a positive value represents normal attraction via gravity, while a negative value would repel, representing antigravity.</p>
+						
+						<p>Override <code>GetGravity</code> to have it return a vector pointing straight up, scaled by the negated configured gravity. Overriding a method must be done explicitly by adding the <code>override</code> keyword to it.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class GravityPlane : GravitySource {</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>float gravity = 9.81f;</ins>
+
+	<ins>public override Vector3 GetGravity (Vector3 position) {</ins>
+		<ins>Vector3 up = Vector3.up;</ins>
+		<ins>return -gravity * up;</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>We can now create a gravity plane that works just like the default physics gravity vector, if it were configured to point straight down.</p>
+						
+						<figure>
+							<img src="gravity-planes/gravity-plane.png" width="320" height="59">
+							<figcaption>Gravity plane component.</figcaption>
+						</figure>
+						
+						<p>We can also support planes with any orientation, by using the up vector of the game object's transformation instead.</p>
+						
+						<pre translate="no">		Vector3 up = <ins>transform.up</ins>;</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Visualizing the Plane</h3>
+						
+						<p>To make it easier to see where our plane is we'll visualize it with some gizmos. These are drawn in the scene window, and also in the game window of the editor if you enable the toggle option for that. Although the plane is infinite we have to use a finite visualization, so we'll use a square.</p>
+						
+						<p>Drawing gizmos is done by adding a <code>OnDrawGizmos</code> method and using various static methods and properties of the <code>Gizmos</code> class. Begin by setting <code>Gizmos.color</code> to yellow and drawing a wireframe cube via <code>Gizmos.DrawWireCube</code>, positioned at the origin, with its size set to (1,0,1) so it gets flattened to a square.</p>
+						
+						<pre translate="no">	<ins>void OnDrawGizmos () {</ins>
+		<ins>Gizmos.color = Color.yellow;</ins>
+		<ins>Gizmos.DrawWireCube(Vector3.zero, new Vector3(1f, 0f, 1f));</ins>
+	<ins>}</ins></pre>
+						
+						<p>Gizmos are drawn in world space by default. To correctly position and rotate the square we'll have to use the transformation matrix of our plane, by assigning its <code>localToWorldMatrix</code> to <code>Gizmos.matrix</code>. This also allows us to scale the plane object so the square is easier to see, even though that doesn't influence the plane's gravity.</p>
+						
+						<pre translate="no">		<ins>Gizmos.matrix = transform.localToWorldMatrix;</ins>
+		Gizmos.color = Color.yellow;
+		Gizmos.DrawWireCube(Vector3.zero, new Vector3(1f, 0f, 1f));</pre>
+						
+						<p>As an example, I made a small scene containing two opposite 20&times;20 rectangular areas with accompanying gravity planes, positioned a bit above and below them. The bottom area is normal while the top one represents an upside-down area. The top plane is rotated so it is upside down as well, which means that its gravity is flipped.</p>
+						
+						<figure>
+							<img src="gravity-planes/opposite-planes.png" width="320" height="160">
+							<figcaption>Two opposite planes, scaled by 20.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Do we have to reset the color and matrix in <code>OnDrawGizmos</code>?</h3>
+							<div>
+								<p>No, that happens automatically.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Gravity Range</h3>
+						
+						<p>When two planes with the same gravity are pulling in opposite directions they cancel each other, resulting in no gravity at all. If we want a scene where gravity pulls down in one place and up in another we have to limit the influence of each plane. We'll do that by adding a configurable range to <code>GravityPlane</code>. It represents how far above&mdash;relative to the plane itself&mdash;its gravity is in effect, so the minimum range is zero. The plane's influence has no limit below itself, going on forever.</p>
+						
+						<p>We can find the distance of the position in <code>GetGravity</code> by taking the dot product of the plane's up vector and the position minus the plane's position. If the distance is greater than the range then the resulting gravity should be zero.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Min(0f)]</ins>
+	<ins>float range = 1f;</ins>
+	
+	public override Vector3 GetGravity (Vector3 position) {
+		Vector3 up = transform.up;
+		<ins>float distance = Vector3.Dot(up, position - transform.position);</ins>
+		<ins>if (distance > range) {</ins>
+			<ins>return Vector3.zero;</ins>
+		<ins>}</ins>
+		return -gravity * up;
+	}</pre>
+						
+						<aside>
+							<h3>Can't we just cut off gravity above the plane?</h3>
+							<div>
+								<p>Yes, but we'll use the range to reduce gravity gradually later, instead of making it binary.</p>
+							</div>
+						</aside>
+						
+						<p>We can visualize this range by drawing a second square, initially one unit up. Let's give it a cyan color.</p>
+						
+						<pre translate="no">	void OnDrawGizmos () {
+		Gizmos.matrix = transform.localToWorldMatrix;
+		<ins>Vector3 size = new Vector3(1f, 0f, 1f);</ins>
+		Gizmos.color = Color.yellow;
+		Gizmos.DrawWireCube(Vector3.zero, <ins>size</ins>);
+		<ins>Gizmos.color = Color.cyan;</ins>
+		<ins>Gizmos.DrawWireCube(Vector3.up, size);</ins>
+	}</pre>
+						
+						<p>But in this case we want to use the range for the offset, unmodified by the scale of the plane's game object. We can do that by constructing a matrix ourselves via the <code>Matrix4x4.TRS</code> method, passing it a position, rotation, and scale. We only need to replace the Y component of the object's local scale with the range.</p>
+						
+						<pre translate="no">		<ins>Vector3 scale = transform.localScale;</ins>
+		<ins>scale.y = range;</ins>
+		Gizmos.matrix =
+			<ins>Matrix4x4.TRS(transform.position, transform.rotation, scale);</ins></pre>
+						
+						<p>I configured the planes so their range squares end up in the exact same place. Thus it shows the plane where gravity flips.</p>
+						
+						<figure>
+							<img src="gravity-planes/gravity-range-inspector.png" width="320" height="77" alt="inspector"><br>
+							<img src="gravity-planes/gravity-range-scene.png" width="320" height="160" alt="scene">
+							<figcaption>Planes with range 4, distance between them is 8.</figcaption>
+						</figure>
+						
+						<p>If the range is zero then we need not bother drawing the cyan square.</p>
+						
+						<pre translate="no">		<ins>if (range > 0f) {</ins>
+			Gizmos.color = Color.cyan;
+			Gizmos.DrawWireCube(Vector3.up, size);
+		<ins>}</ins></pre>
+						
+					</section>
+					
+					<section>
+						<h3>Camera Alignment Speed</h3>
+						
+						<p>We can now walk on one of the sides of the scene and jump to go to the other side, assuming that we can jump high enough. When we do so gravity flips, which also suddenly flips the camera, which is disorienting. We can improve the experience of a sudden gravity change by slowing down the realignment of <code>OrbitCamera</code>.</p>
+						
+						<p>Add a configurable up alignment speed that limits how fast the camera adjusts its up vector, expressed in degrees per second. Let's use 360&deg; as the default so a full gravity flip takes half a second to complete.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Min(0f)]</ins>
+	<ins>float upAlignmentSpeed = 360f;</ins></pre>
+						
+						<figure>
+							<img src="gravity-planes/up-alignment-speed.png" width="320" height="56">
+							<figcaption>Up alignment speed.</figcaption>
+						</figure>
+						
+						<p>We now have to adjust how the gravity alignment quaternion get's adjusted. Begin by moving that code to a separate <code>UpdateGravityAlignment</code> method and use variables to track the current and desired up vectors.</p>
+						
+						<pre translate="no">	void LateUpdate () {
+		<del>//gravityAlignment =</del>
+		<del>//	Quaternion.FromToRotation(</del>
+		<del>//		gravityAlignment * Vector3.up,</del>
+		<del>//		CustomGravity.GetUpAxis(focusPoint)</del>
+		<del>//	) * gravityAlignment;</del>
+		<ins>UpdateGravityAlignment();</ins>
+		UpdateFocusPoint();
+		&hellip;
+	}
+
+	<ins>void UpdateGravityAlignment () {</ins>
+		<ins>Vector3 fromUp = gravityAlignment * Vector3.up;</ins>
+		<ins>Vector3 toUp = CustomGravity.GetUpAxis(focusPoint);</ins>
+
+		<ins>Quaternion newAlignment =</ins>
+			<ins>Quaternion.FromToRotation(fromUp, toUp) * gravityAlignment;</ins>
+		<ins>gravityAlignment = newAlignment;</ins>
+	<ins>}</ins></pre>
+						
+						<p>We can find the angle between the up vectors by taking their dot product and converting the result to degrees via <code>Mathf.Acos</code> and multiplying with <code>Mathf.Rad2Deg</code>. The maximum allowed angle is the up alignment speed scaled by the time delta.</p>
+						
+						<pre translate="no">		Vector3 fromUp = gravityAlignment * Vector3.up;
+		Vector3 toUp = CustomGravity.GetUpAxis(focusPoint);
+		<ins>float dot = Vector3.Dot(fromUp, toUp);</ins>
+		<ins>float angle = Mathf.Acos(dot) * Mathf.Rad2Deg;</ins>
+		<ins>float maxAngle = upAlignmentSpeed * Time.deltaTime;</ins></pre>
+						
+						<p>The arccos function only produces valid results for inputs that fall within the &minus;1&ndash;1 range, inclusive. Due to precision limitations it is possible that the dot product ends up a tiny bit outside that range, which would produce not-a-number&mdash;NaN&mdash;values. To prevent this use <code>Mathf.Clamp</code> to sanitize the dot product.</p>
+						
+						<pre translate="no">		float dot = <ins>Mathf.Clamp(</ins>Vector3.Dot(fromUp, toUp)<ins>, -1f, 1f)</ins>;</pre>
+						
+						<p>If the angle is sufficiently small then we can directly use the new alignment as usual. Otherwise we have to interpolate between the current and desired rotation, with the maximum angle divided by the desired angle as the interpolator. We use <code>Quaternion.Slerp</code> for that, which performs spherical interpolation so we get proper rotations.</p>
+						
+						<pre translate="no">		Quaternion newAlignment =
+			Quaternion.FromToRotation(fromUp, toUp) * gravityAlignment;
+		<ins>if (angle &lt;= maxAngle) {</ins>
+			gravityAlignment = newAlignment;
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>gravityAlignment = Quaternion.Slerp(</ins>
+				<ins>gravityAlignment, newAlignment, maxAngle / angle</ins>
+			<ins>);</ins>
+		<ins>}</ins></pre>
+						
+						<p>As we've already made sure that we only interpolate when necessary the interpolator is guaranteed to lie within the 0&ndash;1 range, so we can use <code>SlerpUnclamped</code> instead, avoiding unnecessary extra clamping.</p>
+						
+						<pre translate="no">			gravityAlignment = Quaternion.<ins>SlerpUnclamped</ins>(
+				gravityAlignment, newAlignment, maxAngle / angle
+			);</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="gravity-planes/reversing-gravity-realignment.mp4" type="video/mp4">
+							</video>
+							<figcaption>Realigning in half a second.</figcaption>
+						</figure>
+						
+						<p>The interpolation takes the shortest path, but in the case of a 180&deg; flip it could go in any direction. The math prefers a certain orientation so it will always go the same way, even if that might appear weird.</p>
+					</section>
+					
+					<section>
+						<h3>Gravity Falloff</h3>
+						
+						<p>The point of the plane's range is to gradually decrease its gravity instead of suddenly cutting it off. To demonstrate the usefulness of this I returned to the gravity box scene and added a gravity plane to all of the six sides of the box. I limited their range so most of the open space in the middle of the box has no gravity. Anything floating there either remains motionless or keeps the momentum it already had.</p>
+						
+						<figure>
+							<img src="gravity-planes/six-gravity-planes.png" width="230" height="240">
+							<figcaption>Box with six gravity planes.</figcaption>
+						</figure>
+						
+						<p>With a binary cutoff of gravity per plane, weird things happen near the edges and corners of the cube. Gravity suddenly changes by steep angles and it's hard to navigate. We can improve this by linearly decreasing the gravity of <code>GravityPlane</code> as distance goes from zero up to the maximum range. That's done by simply multiplying it by one minus the distance divided by the range, if the position lies above the plane.</p>
+						
+						<pre translate="no">	public override Vector3 GetGravity (Vector3 position) {
+		&hellip;
+		if (distance > range) {
+			return Vector3.zero;
+		}
+		
+		<ins>float g = -gravity;</ins>
+		<ins>if (distance > 0f) {</ins>
+			<ins>g *= 1f - distance / range;</ins>
+		<ins>}</ins>
+		return <ins>g</ins> * up;
+	}</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="gravity-planes/walking-on-inside-of-box.mp4" type="video/mp4">
+							</video>
+							<figcaption>Walking on the inside of a box.</figcaption>
+						</figure>
+						
+						<p>Gravity now transitions more smoothly as we approach an edge or corner of the box. It's still weird though and it can be hard to escape from corners, because three planes are pulling there which results in increased gravity. We'll come up with a better solution later.</p>
+						
+						<aside>
+							<h3>Shouldn't gravity be divided by squared distance?</h3>
+							<div>
+								<p>Indeed realistic gravity decreases based on squared distance. But that assumes roughly spherical gravity sources, measured from their center of mass. This doesn't make sense for our gravity plane, because it's flat, infinite, and doesn't have a center of mass. You could square the falloff, but that won't make it realistic because there isn't a maximum range for gravity. The range is there to create unrealistic scenes where different areas are affected by only some of the gravity sources. It usually doesn't matter whether the falloff is linear or quadratic. Linear is easier to design with, so that's what I use.</p>
+							</div>
+						</aside>
+						
+					</section>
+					
+				</section>
+				
+				<section>
+					<h2>Gravity Spheres</h2>
+					
+					<p>Now that we have a functional gravity plane let's apply the same approach to a sphere.</p>
+					
+					<section>
+						<h3>Radius and Falloff</h3>
+						
+						<p>Create a <code>GravitySphere</code> with a configurable gravity, outer radius, and outer falloff radius. I use the term outer radius instead of just radius because it represents the distance up to which gravity is at full strength. This need not match a sphere's surface radius. In fact, it's a good idea to extend it far enough so the regular play area experiences gravity of a constant strength. That makes it much easier to design for. Otherwise you'll find that a regular jump at a slightly elevated position could already send you into space.</p>
+						
+						<p>In this case we can use <code>Gizmos.DrawWireSphere</code> to visualize the gravity, again using yellow for the first and cyan for the second threshold. We only need to show the falloff sphere if it's larger than the outer sphere.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class GravitySphere : GravitySource {</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>float gravity = 9.81f;</ins>
+
+	<ins>[SerializeField, Min(0f)]</ins>
+	<ins>float outerRadius = 10f, outerFalloffRadius = 15f;</ins>
+	
+	<ins>void OnDrawGizmos () {</ins>
+		<ins>Vector3 p = transform.position;</ins>
+		<ins>Gizmos.color = Color.yellow;</ins>
+		<ins>Gizmos.DrawWireSphere(p, outerRadius);</ins>
+		<ins>if (outerFalloffRadius > outerRadius) {</ins>
+			<ins>Gizmos.color = Color.cyan;</ins>
+			<ins>Gizmos.DrawWireSphere(p, outerFalloffRadius);</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<figure>
+							<img src="gravity-spheres/sphere-inspector.png" width="320" height="95">
+							<figcaption>Gravity sphere component.</figcaption>
+						</figure>
+						
+						<p>It doesn't make sense for the falloff radius to be smaller than the outer radius, so enforce that it is always at least as large as that in <code>Awake</code> and <code>OnValidate</code> methods.</p>
+						
+						<pre translate="no">	
+	<ins>void Awake () {</ins>
+		<ins>OnValidate();</ins>
+	<ins>}</ins>
+
+	<ins>void OnValidate () {</ins>
+		<ins>outerFalloffRadius = Mathf.Max(outerFalloffRadius, outerRadius);</ins>
+	<ins>}</ins></pre>
+						
+					</section>
+					
+					<section>
+						<h3>Applying Gravity</h3>
+						
+						<p>In the case of a sphere <code>GetGravity</code> works by finding the vector pointing from the position to the sphere's center. The distance is that vector's magnitude. If it's beyond the outer falloff radius then there's no gravity. Otherwise it's the normalized vector scaled by the configured gravity. Note that again we use a positive gravity to represent standard pulling, while negative gravity would push objects away.</p>
+						
+						<pre translate="no">	<ins>public override Vector3 GetGravity (Vector3 position) {</ins>
+		<ins>Vector3 vector = transform.position - position;</ins>
+		<ins>float distance = vector.magnitude;</ins>
+		<ins>if (distance > outerFalloffRadius) {</ins>
+			<ins>return Vector3.zero;</ins>
+		<ins>}</ins>
+		<ins>float g = gravity;</ins>
+		<ins>return g * vector.normalized;</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="gravity-spheres/sphere-scene.png" width="210" height="200">
+							<figcaption>Walking on a sphere again.</figcaption>
+						</figure>
+						
+						<p>We already calculated the vector's length, so we can divide the configured gravity by that to account for the vector's length instead of normalizing it.</p>
+						
+						<pre translate="no">		float g = gravity <ins>/ distance</ins>;
+		return g * <ins>vector</ins>;</pre>
+						
+						<aside>
+							<h3>Couldn't we start with comparing the squared distance?</h3>
+							<div>
+								<p>Yes, that would be an optimization, avoiding a square root operation when the position ends up out of range. You'd have to either square the configured radii in the method or store them in fields.</p>
+							</div>
+						</aside>
+						
+						<p>Linearly reducing gravity between the outer radius and outer falloff radius works like the reduction for the plane. We just have to change the math so it falls in the correct range. So we multiply by one minus the distance beyond the outer radius divided by the falloff range. That range is equal to the falloff radius minus the outer radius. I isolated that last bit in a separate falloff factor and stored in it a field, initializing it in <code>OnValidate</code>. This avoids a little math, but I mostly did it because it keeps the code in <code>GetGravity</code> a bit shorter.</p>
+						
+						<pre translate="no">	<ins>float outerFalloffFactor;</ins>
+
+	public override Vector3 GetGravity (Vector3 position) {
+		&hellip;
+		float g = gravity / distance;
+		<ins>if (distance > outerRadius) {</ins>
+			<ins>g *= 1f - (distance - outerRadius) * outerFalloffFactor;</ins>
+		<ins>}</ins>
+		return g * vector;
+	}
+	
+	&hellip;
+	
+	void OnValidate () {
+		outerFalloffRadius = Mathf.Max(outerFalloffRadius, outerRadius);
+		<ins>outerFalloffFactor = 1f / (outerFalloffRadius - outerRadius);</ins>
+	}</pre>
+						
+						<p>With the falloff operational it is now possible to use multiple gravity spheres with overlapping falloff areas, allowing smooth transitions between them. Note that there exists a cancellation zone where objects could end up orbiting in circles in between the spheres, but it's rare to get caught in it when entering the zone with momentum.</p>
+						
+						<figure>
+							<img src="gravity-spheres/jumping-between-planets.png" width="320" height="220" alt="scene"><br>
+							<video width="250" height="216" controls loop muted>
+								<source src="gravity-spheres/jumping-between-planets.mp4" type="video/mp4">
+							</video>
+							<figcaption>Jumping between planets.</figcaption>
+						</figure>
+						
+						<p>Jumping from sphere to sphere might require some practice. Especially when strong gravity fields overlap in large areas you can end up in pretty long unstable orbits. Also, gravity can get a little weird when part of one sphere is strongly affected by another gravity source.</p>
+					</section>
+					
+					<section>
+						<h3>Inverted Spheres</h3>
+						
+						<p>We can also support inverted gravity spheres. Simply negating gravity is not enough, because we might want a gravity dead zone in the center of the sphere. This is an area where the sphere's gravity cancels itself out, which would be true for both normal and inverted planets. It also makes it possible to put another gravity source inside that isn't affected by the larger source. Add a configurable inner falloff radius and inner radius to make this possible. Let's again visualize them with cyan and yellow, but only if they are greater than zero.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Min(0f)]</ins>
+	<ins>float innerFalloffRadius = 1f, innerRadius = 5f;</ins>
+	
+	&hellip;
+	
+	void OnDrawGizmos () {
+		Vector3 p = transform.position;
+		<ins>if (innerFalloffRadius > 0f &amp;&amp; innerFalloffRadius &lt; innerRadius) {</ins>
+			<ins>Gizmos.color = Color.cyan;</ins>
+			<ins>Gizmos.DrawWireSphere(p, innerFalloffRadius);</ins>
+		<ins>}</ins>
+		Gizmos.color = Color.yellow;
+		<ins>if (innerRadius > 0f &amp;&amp; innerRadius &lt; outerRadius) {</ins>
+			<ins>Gizmos.DrawWireSphere(p, innerRadius);</ins>
+		<ins>}</ins>
+		Gizmos.DrawWireSphere(p, outerRadius);
+		if (outerFalloffRadius > outerRadius) {
+			Gizmos.color = Color.cyan;
+			Gizmos.DrawWireSphere(p, outerFalloffRadius);
+		}
+	}</pre>
+						
+						<figure>
+							<img src="gravity-spheres/inner-radius-falloff.png" width="320" height="131">
+							<figcaption>Inner radius and falloff.</figcaption>
+						</figure>
+						
+						<p>The inner falloff radius has a minimum of zero, it sets the minimum for the inner radius, which in turn sets the minimum for the outer radius. Also add an inner falloff factor, which works the same as the other factor except that the order of the radii is reversed.</p>
+						
+						<pre translate="no">	float <ins>innerFalloffFactor,</ins> outerFalloffFactor;
+	
+	&hellip;
+	
+	void OnValidate () {
+		<ins>innerFalloffRadius = Mathf.Max(innerFalloffRadius, 0f);</ins>
+		<ins>innerRadius = Mathf.Max(innerRadius, innerFalloffRadius);</ins>
+		<ins>outerRadius = Mathf.Max(outerRadius, innerRadius);</ins>
+		outerFalloffRadius = Mathf.Max(outerFalloffRadius, outerRadius);
+		
+		<ins>innerFalloffFactor = 1f / (innerRadius - innerFalloffRadius);</ins>
+		outerFalloffFactor = 1f / (outerFalloffRadius - outerRadius);
+	}</pre>
+						
+						<p>Now we can abort <code>GetGravity</code> also when the distance is less than the inner falloff radius. If not, we also have to check whether the distance falls inside the inner falloff region and if so scale gravity appropriately.</p>
+						
+						<pre translate="no">	public override Vector3 GetGravity (Vector3 position) {
+		Vector3 vector = transform.position - position;
+		float distance = vector.magnitude;
+		if (distance > outerFalloffRadius <ins>|| distance &lt; innerFalloffRadius</ins>) {
+			return Vector3.zero;
+		}
+		float g = gravity / distance;
+		if (distance > outerRadius) {
+			g *= 1f - (distance - outerRadius) * outerFalloffFactor;
+		}
+		<ins>else if (distance &lt; innerRadius) {</ins>
+			<ins>g *= 1f - (innerRadius - distance) * innerFalloffFactor;</ins>
+		<ins>}</ins>
+		return g * vector;
+	}</pre>
+						
+						<figure>
+							<img src="gravity-spheres/planet-inside-inverted-planet.png" width="260" height="260" alt="scene"><br>
+							<video width="250" height="216" controls loop muted>
+								<source src="gravity-spheres/jumping-between-planet-and-inverted-planet.mp4" type="video/mp4">
+							</video>
+							<figcaption>Planet inside inverted planet, slightly off-center.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Gravity Boxes</h2>
+					
+					<p>We end this tutorial by returning to the gravity box scene. Instead of using six planes to make it possible to walk on the inside of the box, we'll create a single box-shaped gravity source.</p>
+					
+					<section>
+						<h3>Boundary Distance</h3>
+						
+						<p>Create a new <code>GravityBox</code> type for gravity sources that are based on a box. The idea is similar to a sphere, but gravity pulls straight down to the nearest face instead of varying smoothly with direction. We need a configurable gravity for that along with a way to define the box's shape. We'll use a boundary distance vector for that, which acts somewhat like a radius, but for all three dimensions separately. Thus these are the distances from the center straight to the faces, which means that the box's size is twice its boundary distance. The minimum boundary is the zero vector, which we can enforce via the <code>Vector3.Max</code> method. We'll visualize this boundary with a red wireframe cube via <code>Gizmos.DrawWireCube</code>.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class GravityBox : GravitySource {</ins>
+	
+	<ins>[SerializeField]</ins>
+	<ins>float gravity = 9.81f;</ins>
+	
+	<ins>[SerializeField]</ins>
+	<ins>Vector3 boundaryDistance = Vector3.one;</ins>
+
+	<ins>void Awake () {</ins>
+		<ins>OnValidate();</ins>
+	<ins>}</ins>
+
+	<ins>void OnValidate () {</ins>
+		<ins>boundaryDistance = Vector3.Max(boundaryDistance, Vector3.zero);</ins>
+	<ins>}</ins>
+
+	<ins>void OnDrawGizmos () {</ins>
+		<ins>Gizmos.matrix =</ins>
+			<ins>Matrix4x4.TRS(transform.position, transform.rotation, Vector3.one);</ins>
+
+		<ins>Gizmos.color = Color.red;</ins>
+		<ins>Gizmos.DrawWireCube(Vector3.zero, 2f * boundaryDistance);</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<figure>
+							<img src="gravity-boxes/boundary-inspector.png" width="320" height="93" alt="inspector"><br>
+							<img src="gravity-boxes/boundary-scene.png" width="240" height="240" alt="scene">
+							<figcaption>Gravity box boundary.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Inner Distances</h3>
+						
+						<p>We'll again define an inner area where gravity is at full strength, plus an area inside that where it decreases to zero, and inside that an area without gravity. This time radii don't make sense, so we'll define them as inner distances, inward relative to the boundary. These distances are the same for all three dimensions so we can suffice with two configurable values.</p>
+						
+						<pre translate="no">	<ins>[SerializeField, Min(0f)]</ins>
+	<ins>float innerDistance = 0f, innerFalloffDistance = 0f;</ins></pre>
+						
+						<p>The maximum for both inner distances is equal to the smallest boundary distance. Besides that the inner falloff distance must be at least as big as the inner distance.</p>
+						
+						<pre translate="no">	void OnValidate () {
+		boundaryDistance = Vector3.Max(boundaryDistance, Vector3.zero);
+		<ins>float maxInner = Mathf.Min€(</ins>
+			<ins>Mathf.Min€(boundaryDistance.x, boundaryDistance.y), boundaryDistance.z</ins>
+		<ins>);</ins>
+		<ins>innerDistance = Mathf.Min€(innerDistance, maxInner);</ins>
+		<ins>innerFalloffDistance =</ins>
+			<ins>Mathf.Max(Mathf.Min€(innerFalloffDistance, maxInner), innerDistance);</ins>
+	}</pre>
+						
+						<p>Both distances can be visualized with wireframe cubes, their size equal to the boundary distance minus the relevant distance, doubled.</p>
+						
+						<pre translate="no">	void OnDrawGizmos () {
+		Gizmos.matrix =
+			Matrix4x4.TRS(transform.position, transform.rotation, Vector3.one);
+		<ins>Vector3 size;</ins>
+		<ins>if (innerFalloffDistance > innerDistance) {</ins>
+			<ins>Gizmos.color = Color.cyan;</ins>
+			<ins>size.x = 2f * (boundaryDistance.x - innerFalloffDistance);</ins>
+			<ins>size.y = 2f * (boundaryDistance.y - innerFalloffDistance);</ins>
+			<ins>size.z = 2f * (boundaryDistance.z - innerFalloffDistance);</ins>
+			<ins>Gizmos.DrawWireCube(Vector3.zero, size);</ins>
+		<ins>}</ins>
+		<ins>if (innerDistance > 0f) {</ins>
+			<ins>Gizmos.color = Color.yellow;</ins>
+			<ins>size.x = 2f * (boundaryDistance.x - innerDistance);</ins>
+			<ins>size.y = 2f * (boundaryDistance.y - innerDistance);</ins>
+			<ins>size.z = 2f * (boundaryDistance.z - innerDistance);</ins>
+			<ins>Gizmos.DrawWireCube(Vector3.zero, size);</ins>
+		<ins>}</ins>
+		Gizmos.color = Color.red;
+		Gizmos.DrawWireCube(Vector3.zero, 2f * boundaryDistance);
+	}</pre>
+						
+						<figure>
+							<img src="gravity-boxes/inner-distances-inspector.png" width="320" height="72" alt="inspector"><br>
+							<img src="gravity-boxes/inner-distances-scene.png" width="240" height="240" alt="scene">
+							<figcaption>Inner distances, with reduced Y boundary.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Falloff</h3>
+						
+						<p>Calculating the gravity falloff for a box is a bit more complex than for a sphere, but we can once again use a single inner falloff factor.</p>
+						
+						<pre translate="no">	<ins>float innerFalloffFactor;</ins>
+
+	&hellip;
+
+	void OnValidate () {
+		&hellip;
+
+		<ins>innerFalloffFactor = 1f / (innerFalloffDistance - innerDistance);</ins>
+	}</pre>
+						
+						<p>It's easiest to first consider a single gravity component, which is similar to a plane. Create a <code>GetGravityComponent</code> method for that, with two parameters. The first is the relevant position coordinate relative to the box's center. The second is the distance to the nearest face along the relevant axis. It returns the gravity component along the same axis.</p>
+						
+						<pre translate="no">	<ins>float GetGravityComponent (float coordinate, float distance) {</ins>
+		<ins>float g = gravity;</ins>
+		<ins>return g;</ins>
+	<ins>}</ins></pre>
+						
+						<p>If the distance is greater than the inner falloff distance then we're in the null-gravity zone so the result is zero. Otherwise we have to check whether we have to reduce gravity, exactly like we did for the sphere. The only extra step is that we have to flip gravity if the coordinate is less than zero, because that means we're on the opposite side of the center.</p>
+						
+						<pre translate="no">	float GetGravityComponent (float coordinate, float distance) {
+		<ins>if (distance > innerFalloffDistance) {</ins>
+			<ins>return 0f;</ins>
+		<ins>}</ins>
+		float g = gravity;
+		<ins>if (distance > innerDistance) {</ins>
+			<ins>g *= 1f - (distance - innerDistance) * innerFalloffFactor;</ins>
+		<ins>}</ins>
+		return <ins>coordinate > 0f ? -g :</ins> g;
+	}</pre>
+						
+						<p>The <code>GetGravity</code> method then has to make the position relative to the box's postion and start with a zero vector. Then calculate the absolute distances from the center, invoke <code>GetGravityComponent</code> for the smallest distance, and assign the result to the appropriate component of the vector. The result is gravity that pulls straight down relative to the nearest face, or pushes toward it in case of negative gravity.</p>
+						
+						<pre translate="no">	<ins>public override Vector3 GetGravity (Vector3 position) {</ins>
+		<ins>position -= transform.position;</ins>
+		<ins>Vector3 vector = Vector3.zero;</ins>
+		<ins>Vector3 distances;</ins>
+		<ins>distances.x = boundaryDistance.x - Mathf.Abs(position.x);</ins>
+		<ins>distances.y = boundaryDistance.y - Mathf.Abs(position.y);</ins>
+		<ins>distances.z = boundaryDistance.z - Mathf.Abs(position.z);</ins>
+		<ins>if (distances.x &lt; distances.y) {</ins>
+			<ins>if (distances.x &lt; distances.z) {</ins>
+				<ins>vector.x = GetGravityComponent(position.x, distances.x);</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>vector.z = GetGravityComponent(position.z, distances.z);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>else if (distances.y &lt; distances.z) {</ins>
+			<ins>vector.y = GetGravityComponent(position.y, distances.y);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>vector.z = GetGravityComponent(position.z, distances.z);</ins>
+		<ins>}</ins>
+		<ins>return vector;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Finally, to support cubes with arbitrary rotation we have to rotate the relative position to align with the cube. We do that by passing it through <code>InverseTransformDirection</code> of its transformation, which ignores its scale. The final gravity vector must be rotated in the opposite way, via <code>TransformDirection</code>.</p>
+						
+						<pre translate="no">	<del>//position -= transform.position;</del>
+		<ins>position =</ins>
+			<ins>transform.InverseTransformDirection(position - transform.position);</ins>
+		&hellip;
+		return <ins>transform.TransformDirection(</ins>vector<ins>)</ins>;</pre>
+						
+						<p>The result of this approach is that gravity suddenly changes orientation when the nearest face changes. This works fine when floating inside the box, but makes traveling between faces on its inside difficult. We'll improve on this shortly.</p>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="gravity-boxes/walking-on-inside-of-box.mp4" type="video/mp4">
+							</video>
+							<figcaption>Walking on the inside of a box.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Outside the Box</h3>
+						
+						<p>Like for the sphere, we'll also support an outer distance and outer falloff distance, along with an outer falloff factor.
+						
+						<pre translate="no">	<ins>[SerializeField, Min(0f)]</ins>
+	<ins>float outerDistance = 0f, outerFalloffDistance = 0f;</ins>
+
+	float innerFalloffFactor<ins>, outerFalloffFactor</ins>;
+
+	&hellip;
+
+	void OnValidate () {
+		&hellip;
+		<ins>outerFalloffDistance = Mathf.Max(outerFalloffDistance, outerDistance);</ins>
+
+		innerFalloffFactor = 1f / (innerFalloffDistance - innerDistance);
+		<ins>outerFalloffFactor = 1f / (outerFalloffDistance - outerDistance);</ins>
+	}</pre>
+						
+						<p>Inside the box gravity must change suddenly, but on its outside it gets fuzzier. Suppose that we are moving on the outside of the box, being pulled toward it. If we move past the edge of a face gravity should still pull us down, but if we keep aligning it with the nearest edge then we would fall past the box instead of toward it. This suggests that we should fall toward the nearest edge or corner if we're not directly above a face. Also, distance should be determined relative to that edge or face, so we end up with areas in the shape of rounded cubes.</p>
+						
+						<p>There is no convenient way to visualize rounded cubes with gizmos, so let's create a simple approximation. Begin by adding a method that draws a closed loop through four points, which we'll use to draw a rectangle.</p>
+						
+						<pre translate="no">	<ins>void DrawGizmosRect (Vector3 a, Vector3 b, Vector3 c, Vector3 d) {</ins>
+		<ins>Gizmos.DrawLine(a, b);</ins>
+		<ins>Gizmos.DrawLine(b, c);</ins>
+		<ins>Gizmos.DrawLine(c, d);</ins>
+		<ins>Gizmos.DrawLine(d, a);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Next, create a method to draw an outer cube, given a distance. Give it four vector variables and set them up so that we draw a square for the right face at the appropriate distance.</p>
+						
+						<pre translate="no">	<ins>void DrawGizmosOuterCube (float distance) {</ins>
+		<ins>Vector3 a, b, c, d;</ins>
+		<ins>a.y = b.y = boundaryDistance.y;</ins>
+		<ins>d.y = c.y = -boundaryDistance.y;</ins>
+		<ins>b.z = c.z = boundaryDistance.z;</ins>
+		<ins>d.z = a.z = -boundaryDistance.z;</ins>
+		<ins>a.x = b.x = c.x = d.x = boundaryDistance.x + distance;</ins>
+		<ins>DrawGizmosRect(a, b, c, d);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Then negate the X coordinates of the points so we can draw the left face.</p>
+						
+						<pre translate="no">		DrawGizmosRect(a, b, c, d);
+		<ins>a.x = b.x = c.x = d.x = -a.x;</ins>
+		<ins>DrawGizmosRect(a, b, c, d);</ins></pre>
+						
+						<p>Repeat this process for the other four faces.</p>
+						
+						<pre translate="no">		DrawGizmosRect(a, b, c, d);
+
+		<ins>a.x = d.x = boundaryDistance.x;</ins>
+		<ins>b.x = c.x = -boundaryDistance.x;</ins>
+		<ins>a.z = b.z = boundaryDistance.z;</ins>
+		<ins>c.z = d.z = -boundaryDistance.z;</ins>
+		<ins>a.y = b.y = c.y = d.y = boundaryDistance.y + distance;</ins>
+		<ins>DrawGizmosRect(a, b, c, d);</ins>
+		<ins>a.y = b.y = c.y = d.y = -a.y;</ins>
+		<ins>DrawGizmosRect(a, b, c, d);</ins>
+
+		<ins>a.x = d.x = boundaryDistance.x;</ins>
+		<ins>b.x = c.x = -boundaryDistance.x;</ins>
+		<ins>a.y = b.y = boundaryDistance.y;</ins>
+		<ins>c.y = d.y = -boundaryDistance.y;</ins>
+		<ins>a.z = b.z = c.z = d.z = boundaryDistance.z + distance;</ins>
+		<ins>DrawGizmosRect(a, b, c, d);</ins>
+		<ins>a.z = b.z = c.z = d.z = -a.z;</ins>
+		<ins>DrawGizmosRect(a, b, c, d);</ins></pre>
+						
+						<p>Draw the two outer cubes in <code>OnDrawGizmos</code>, if needed.</p>
+						
+						<pre translate="no">	void OnDrawGizmos () {
+		&hellip;
+		<ins>if (outerDistance > 0f) {</ins>
+			<ins>Gizmos.color = Color.yellow;</ins>
+			<ins>DrawGizmosOuterCube(outerDistance);</ins>
+		<ins>}</ins>
+		<ins>if (outerFalloffDistance > outerDistance) {</ins>
+			<ins>Gizmos.color = Color.cyan;</ins>
+			<ins>DrawGizmosOuterCube(outerFalloffDistance);</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<img src="gravity-boxes/outer-distances-inspector.png" width="320" height="74" alt="inspector"><br>
+							<img src="gravity-boxes/outer-distance-scene.png" width="280" height="270" alt="scene">
+							<figcaption>Outer distances, reduced boundary.</figcaption>
+						</figure>
+						
+						<p>This shows us the flat areas of the rounded outer cubes, but their rounded boundaries are not shown. We could create a very detailed visualization to show them, but that would require a lot of code. Let's instead suffice with a single additional wireframe cube between the rounded corner points of the cube. These points are at the provided distance from the boundary cubes, offset equally in all three dimensions. Thus the distance that we need is equal to the boundary cube's plus the relevant distance scaled by &radic;(1/3).</p>
+						
+						<pre translate="no">	void DrawGizmosOuterCube (float distance) {
+		&hellip;
+
+		<ins>distance *= 0.5773502692f;</ins>
+		<ins>Vector3 size = boundaryDistance;</ins>
+		<ins>size.x = 2f * (size.x + distance);</ins>
+		<ins>size.y = 2f * (size.y + distance);</ins>
+		<ins>size.z = 2f * (size.z + distance);</ins>
+		<ins>Gizmos.DrawWireCube(Vector3.zero, size);</ins>
+	}</pre>
+						
+						<figure>
+							<img src="gravity-boxes/corner-indicator.png" width="280" height="290">
+							<figcaption>Corner indicators, with reduced boundary.</figcaption>
+						</figure>
+						
+						<p>You could also draw lines along the middle of rounded edges, using a distance scaled by &radic;(1/2) in two dimensions, but our current approach should suffice.</p>
+						
+					</section>
+					
+					<section>
+						<h3>Detecting the Sides</h3>
+						
+						<p>Now we must determine whether the given position lies inside or outside the box in <code>GetGravity</code>. We determine this per dimension and count along how many we end up outside. First, check if the position lies beyond the right face. If so, set the vector's X component to the X boundary minus the X position. That adjust the vector to point straight to the face instead of to the center. Also, increment the outside count.</p>
+						
+						<pre translate="no">	public override Vector3 GetGravity (Vector3 position) {
+		position =
+			transform.InverseTransformDirection(position - transform.position);
+		
+		Vector3 vector = Vector3.zero;
+		<ins>int outside = 0;</ins>
+		<ins>if (position.x > boundaryDistance.x) {</ins>
+			<ins>vector.x = boundaryDistance.x - position.x;</ins>
+			<ins>outside = 1;</ins>
+		<ins>}</ins>
+		
+		&hellip;
+	}</pre>
+						
+						<p>If we're not beyond the right face, check if we're beyond the left face instead. If so, adjust the vector accordingly, this time subtracting the position from the negative boundary distance.</p>
+						
+						<pre translate="no">		if (position.x > boundaryDistance.x) {
+			vector.x = boundaryDistance.x - position.x;
+			outside = 1;
+		}
+		<ins>else if (position.x &lt; -boundaryDistance.x) {</ins>
+			<ins>vector.x = -boundaryDistance.x - position.x;</ins>
+			<ins>outside = 1;</ins>
+		<ins>}</ins></pre>
+						
+						<p>Do the same for the Y and Z faces, independently.</p>
+						
+						<pre translate="no">		else if (position.x &lt; -boundaryDistance.x) {
+			vector.x = -boundaryDistance.x - position.x;
+			outside = 1;
+		}
+
+		<ins>if (position.y > boundaryDistance.y) {</ins>
+			<ins>vector.y = boundaryDistance.y - position.y;</ins>
+			<ins>outside += 1;</ins>
+		<ins>}</ins>
+		<ins>else if (position.y &lt; -boundaryDistance.y) {</ins>
+			<ins>vector.y = -boundaryDistance.y - position.y;</ins>
+			<ins>outside += 1;</ins>
+		<ins>}</ins>
+
+		<ins>if (position.z > boundaryDistance.z) {</ins>
+			<ins>vector.z = boundaryDistance.z - position.z;</ins>
+			<ins>outside += 1;</ins>
+		<ins>}</ins>
+		<ins>else if (position.z &lt; -boundaryDistance.z) {</ins>
+			<ins>vector.z = -boundaryDistance.z - position.z;</ins>
+			<ins>outside += 1;</ins>
+		<ins>}</ins></pre>
+						
+						<p>After that's done, check whether we're outside at least one face. If so, the distance to the boundary is equal to the length of the adjusted vector. We can then use the same approach that we used for outside the sphere. Otherwise we have to determine gravity for the inside.</p>
+						
+						<pre translate="no">		else if (position.z &lt; -boundaryDistance.z) {
+			vector.z = -boundaryDistance.z - position.z;
+			outside += 1;
+		}
+
+		<ins>if (outside > 0) {</ins>
+			<ins>float distance = vector.magnitude;</ins>
+			<ins>if (distance > outerFalloffDistance) {</ins>
+				<ins>return Vector3.zero;</ins>
+			<ins>}</ins>
+			<ins>float g = gravity / distance;</ins>
+			<ins>if (distance > outerDistance) {</ins>
+				<ins>g *= 1f - (distance - outerDistance) * outerFalloffFactor;</ins>
+			<ins>}</ins>
+			<ins>return transform.TransformDirection(g * vector);</ins>
+		<ins>}</ins>
+
+		Vector3 distances;</pre>
+						
+						<p>Note that if we end up outside exactly one face then we're directly above it, which means that only one of the vector's components is nonzero. If the box is large then that's a common case. We can suffice with taking the absolute sum of the vector components here, which is quicker than calculating the length of an arbitrary vector.</p>
+						
+						<pre translate="no">			float distance = <ins>outside == 1 ?</ins>
+				<ins>Mathf.Abs(vector.x + vector.y + vector.z) :</ins> vector.magnitude;</pre>
+						
+						<p>With this approach gravity once again smoothly changes along edges and corners, if we make the boundary box smaller than the surface box. Gravity also no longer becomes stronger in those areas. You do have to make sure that the outer distance is sufficient to reach all the way to the corners.</p>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="gravity-boxes/walking-with-rounded-box-gravity.mp4" type="video/mp4">
+							</video>
+							<figcaption>Walking with rounded box gravity.</figcaption>
+						</figure>
+						
+						<p>It is now also possible create box-like planets with their own weird gravity. Note that running off a face will make you fall past the box for a bit, unless you move slowly. This can be mitigated by making the gravity box's boundary smaller than the surface boundary, which starts curving gravity earlier when you approach an edge or corner. Even then you might want to increase the box's gravity to stick close to the surface when moving fast.</p>
+						
+						<figure>
+							<img src="gravity-boxes/walking-on-outside.png" width="300" height="240" alt="scene"><br>
+							<video width="250" height="216" controls loop muted>
+								<source src="gravity-boxes/walking-on-outside-of-box.mp4" type="video/mp4">
+							</video>
+							<figcaption>Walking on the outside of a box, double gravity.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../moving-the-ground/index.html">Moving the Ground</a>.</p>
+						
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/movement-06-complex-gravity/" class="repository">repository</a>
+					<a href="Complex-Gravity.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

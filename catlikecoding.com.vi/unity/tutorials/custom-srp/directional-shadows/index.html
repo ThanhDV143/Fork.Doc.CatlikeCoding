@@ -1,0 +1,2454 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/custom-srp/directional-shadows/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/custom-srp/directional-shadows/tutorial-image.jpg">
+		<meta property="og:title" content="Directional Shadows">
+		<meta property="og:description" content="A Unity Custom SRP tutorial about applying shadows to directional lights.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Directional Shadows</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/custom-srp/directional-shadows/#article",
+				"headline": "Directional Shadows",
+				"alternativeHeadline": "Cascaded Shadow Maps",
+				"datePublished": "2019-12-30",
+				"dateModified": "2023-08-03",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Custom SRP tutorial about applying shadows directional lights.",
+				"image": "https://catlikecoding.com/unity/tutorials/custom-srp/directional-shadows/tutorial-image.jpg",
+				"dependencies": "Unity 2022.3.5f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/custom-srp/", "name": "Custom SRP" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				CameraRenderer: 1,
+				CascadeBlendMode: 1,
+				CustomRenderPipeline: 1,
+				CustomRenderPipelineAsset: 1,
+				CustomShaderGUI: 1,
+				Directional: 1,
+				DirectionalShadowData: 1,
+				FilterMode: 1,
+				Lighting: 1,
+				MeshBall: 1,
+				PerObjectMaterialProperties: 1,
+				ShadowData: 1,
+				ShadowedDirectionalLight: 1,
+				Shadows: 1,
+				ShadowMode: 1,
+				ShadowSettings: 1,
+				MapSize: 1
+			};
+			
+ 			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../../scriptable-render-pipeline/reflections/index.html">Custom SRP</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Directional Shadows</h1>
+					<p>Cascaded Shadow Maps</p>
+					<ul>
+						<li>Render and sample shadow maps.</li>
+						<li>Support multiple shadowed directional lights.</li>
+						<li>Use cascaded shadow maps.</li>
+						<li>Blend, fade, and filter shadows.</li>
+					</ul>
+				</header>
+				
+				<p>This is the fourth part of a tutorial series about creating a <a href="../../scriptable-render-pipeline/reflections/index.html">custom scriptable render pipeline</a>. It adds support for cascaded shadow maps.</p>
+				
+				<p>This tutorial is made with Unity 2019.2.14f1 and upgraded to 2022.3.5f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Preventing light from reaching where it shouldn't.</figcaption>
+				</figure>
+								
+				<section>
+					<h2>Rendering Shadows</h2>
+					
+					<p>When drawing something the surface and light information is enough to calculating lighting. But there could be something in between both that blocks the light, casting a shadow on the surface that we're drawing. To make shadows possible we have to somehow make the shader aware of the shadow-casting objects. There are multiple techniques for this. The most common approach is to generate a shadow map that stores how far light can travel away from its source before hitting a surface. Anything further away in the same direction cannot be lit by that same light. Unity's RPs use this approach and so will we.</p>
+					
+					<section>
+						<h3>Shadow Settings</h3>
+						
+						<p>Before we get to rendering shadows we first have to make some decisions about quality, specifically up to how far away we will render shadows and how big our shadow map will be.</p>
+						
+						<p>While we could render shadows as far as the camera can see, that would require a lot of drawing and a very large map to cover the area adequately, which is almost never practical. So we'll introduce a maximum distance for shadows, with a minimum of zero and set to 100 units by default. Create a new serializable <code>ShadowSettings</code> class to contain this option. This class is purely a container for configuration options, so we'll give it a public <code>maxDistance</code> field.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>[System.Serializable]</ins>
+<ins>public class ShadowSettings {</ins>
+
+	<ins>[Min(0f)]</ins>
+	<ins>public float maxDistance = 100f;</ins>
+<ins>}</ins></pre>
+						
+						<p>For the map size we'll introduce a <code>MapSize</code> enum type nested inside <code>ShadowSettings</code>. Use it to defined the allowed texture sizes, all being powers of two in the 256&mdash;8192 range.</p>
+						
+						<pre translate="no">	<ins>public enum MapSize {</ins>
+		<ins>_256 = 256, _512 = 512, _1024 = 1024,</ins>
+		<ins>_2048 = 2048, _4096 = 4096, _8192 = 8192</ins>
+	<ins>}</ins></pre>
+						
+						<p>Then add a size field for the shadow map, with 1024 as its default. We'll use a single texture to contain multiple shadow maps, so name it <code>atlasSize</code>. As we only support directional lights for now we also exclusively works with directional shadow maps at this points. But we'll support other light types in the future, which will get their own shadows settings. So put <code>atlasSize</code> inside an inner <code>Directional</code> struct. That way we automatically get an hierarchical configuration in the inspector.</p>
+						
+						<pre translate="no">	<ins>[System.Serializable]</ins>
+	<ins>public struct Directional {</ins>
+
+		<ins>public MapSize atlasSize;</ins>
+	<ins>}</ins>
+
+	<ins>public Directional directional = new Directional {</ins>
+		<ins>atlasSize = MapSize._1024</ins>
+	<ins>};</ins></pre>
+						
+						<p>Add a field for the shadow settings to <code>CustomRenderPipelineAsset</code>.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>ShadowSettings shadows = default;</ins></pre>
+						
+						<figure>
+							<img src="rendering-shadows/shadow-settings.png" width="320" height="92">
+							<figcaption>Shadow settings.</figcaption>
+						</figure>
+						
+						<p>Pass these settings to the  <code>CustomRenderPipeline</code> instance when it gets constructed.</p>
+						
+						<pre translate="no">	protected override RenderPipeline CreatePipeline () {
+		return new CustomRenderPipeline(
+			useDynamicBatching, useGPUInstancing, useSRPBatcher<ins>, shadows</ins>
+		);
+	}</pre>
+						
+						<p>And make it keep track of them.</p>
+						
+						<pre translate="no">	<ins>ShadowSettings shadowSettings;</ins>
+
+	public CustomRenderPipeline (
+		bool useDynamicBatching, bool useGPUInstancing, bool useSRPBatcher<ins>,</ins>
+		<ins>ShadowSettings shadowSettings</ins>
+	) {
+		<ins>this.shadowSettings = shadowSettings;</ins>
+		&hellip;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Passing Along Settings</h3>
+						
+						<p>From now on we'll pass these settings to the camera renderer when we invoke its <code>Render</code> method. That way it would be easy to add support for changing the shadow settings at runtime, but we won't deal with that in this tutorial.</p>
+						
+						<pre translate="no">	protected override void Render (
+		ScriptableRenderContext context, List&lt;Camera> cameras
+	) {
+		for (int i = 0; i &lt; cameras.Count; i++) {
+			renderer.Render(
+				context, cameras[i], useDynamicBatching, useGPUInstancing<ins>,</ins>
+				<ins>shadowSettings</ins>
+			);
+		}
+	}</pre>
+						
+						<p><code>CameraRenderer.Render</code> then passes it to <code>Lighting.Setup</code> and also to its own <code>Cull</code> method.</p>
+						
+						<pre translate="no">	public void Render (
+		ScriptableRenderContext context, Camera camera,
+		bool useDynamicBatching, bool useGPUInstancing<ins>,</ins>
+		<ins>ShadowSettings shadowSettings</ins>
+	) {
+		&hellip;
+		if (!Cull(<ins>shadowSettings.maxDistance</ins>)) {
+			return;
+		}
+
+		Setup();
+		lighting.Setup(context, cullingResults<ins>, shadowSettings</ins>);
+		&hellip;
+	}</pre>
+						
+						<p>We need the settings in <code>Cull</code> because the shadow distance is set via the culling parameters.</p>
+						
+						<pre translate="no">	bool Cull (<ins>float maxShadowDistance</ins>) {
+		if (camera.TryGetCullingParameters(out ScriptableCullingParameters p)) {
+			<ins>p.shadowDistance = maxShadowDistance;</ins>
+			cullingResults = context.Cull(ref p);
+			return true;
+		}
+		return false;
+	}</pre>
+						
+						<p>It doesn't make sense to render shadows that are further away than the camera can see, so take the minimum of the max shadow distance and the camera's far clip plane.</p>
+						
+						<pre translate="no">			p.shadowDistance = <ins>Mathf.Min(</ins>maxShadowDistance<ins>, camera.farClipPlane)</ins>;</pre>
+						
+						<p>To make the code compile we also have to add a parameter for the shadows settings to <code>Lighting.Setup</code>, but we won't do anything with them just yet.</p>
+						
+						<pre translate="no">	public void Setup (
+		ScriptableRenderContext context, CullingResults cullingResults<ins>,</ins>
+		<ins>ShadowSettings shadowSettings</ins>
+	) { &hellip; }</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Shadows Class</h3>
+						
+						<p>Although shadows are logically a part of lighting they're rather complex, so let's create a new <code>Shadows</code> class dedicated to them. It starts as a stripped-down stub copy of <code>Lighting</code>, with its own buffer, fields for the context, culling results, and settings, a <code>Setup</code> method to initialize the fields, and an <code>ExecuteBuffer</code> method.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+<ins>using UnityEngine.Rendering;</ins>
+
+<ins>public class Shadows {</ins>
+
+	<ins>const string bufferName = "Shadows";</ins>
+
+	<ins>CommandBuffer buffer = new CommandBuffer {</ins>
+		<ins>name = bufferName</ins>
+	<ins>};</ins>
+
+	<ins>ScriptableRenderContext context;</ins>
+
+	<ins>CullingResults cullingResults;</ins>
+
+	<ins>ShadowSettings settings;</ins>
+
+	<ins>public void Setup (</ins>
+		<ins>ScriptableRenderContext context, CullingResults cullingResults,</ins>
+		<ins>ShadowSettings settings</ins>
+	<ins>) {</ins>
+		<ins>this.context = context;</ins>
+		<ins>this.cullingResults = cullingResults;</ins>
+		<ins>this.settings = settings;</ins>
+	<ins>}</ins>
+
+	<ins>void ExecuteBuffer () {</ins>
+		<ins>context.ExecuteCommandBuffer(buffer);</ins>
+		<ins>buffer.Clear();</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Then all <code>Lighting</code> needs to do is keep track of a <code>Shadows</code> instance and invoke its <code>Setup</code> method before <code>SetupLights</code> in its own <code>Setup</code> method.</p>
+						
+						<pre translate="no">	<ins>Shadows shadows = new Shadows();</ins>
+
+	public void Setup (&hellip;) {
+		this.cullingResults = cullingResults;
+		buffer.BeginSample(bufferName);
+		<ins>shadows.Setup(context, cullingResults, shadowSettings);</ins>
+		SetupLights();
+		&hellip;
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Lights with Shadows</h3>
+						
+						<p>As rendering shadows requires extra work it can slow down the frame rate, so we'll limit how many shadowed directional lights there can be, independent of how many directional lights are supported. Add a constant for that to <code>Shadows</code>, initially set to just one.</p>
+						
+						<pre translate="no">	<ins>const int maxShadowedDirectionalLightCount = 1;</ins></pre>
+						
+						<p>We don't know which visible light will get shadows, so we have to keep track of that. Besides that we'll also keep track of some more data per shadowed light later, so let's define an inner <code>ShadowedDirectionalLight</code> struct that only contains the index for now and keep track of an array of those.</p>
+						
+						<pre translate="no">	<ins>struct ShadowedDirectionalLight {</ins>
+		<ins>public int visibleLightIndex;</ins>
+	<ins>}</ins>
+
+	<ins>ShadowedDirectionalLight[] ShadowedDirectionalLights =</ins>
+		<ins>new ShadowedDirectionalLight[maxShadowedDirectionalLightCount];</ins></pre>
+						
+						<p>To figure out which light gets shadows we'll add a public <code>ReserveDirectionalShadows</code> method with a light and visible light index parameters. It's job is to reserve space in the shadow atlas for the light's shadow map and store the information needed to render them.</p>
+						
+						<pre translate="no">	<ins>public void ReserveDirectionalShadows (Light light, int visibleLightIndex) {}</ins></pre>
+						
+						<p>As the amount of shadowed lights are limited we have to keep track of how many have already been reserved. Reset the count to zero in <code>Setup</code>. Then check whether we haven't reached the max yet in <code>ReserveDirectionalShadows</code>. If there's space left then store the light's visible index and increment the count.</p>
+						
+						<pre translate="no">	<ins>int ShadowedDirectionalLightCount;</ins>
+
+	&hellip;
+	
+	public void Setup (&hellip;) {
+		&hellip;
+		<ins>ShadowedDirectionalLightCount = 0;</ins>
+	}
+	
+	public void ReserveDirectionalShadows (Light light, int visibleLightIndex) {
+		<ins>if (ShadowedDirectionalLightCount &lt; maxShadowedDirectionalLightCount) {</ins>
+			<ins>ShadowedDirectionalLights[ShadowedDirectionalLightCount++] =</ins>
+				<ins>new ShadowedDirectionalLight {</ins>
+					<ins>visibleLightIndex = visibleLightIndex</ins>
+				<ins>};</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>But shadows should only be reserved for lights that have any. If a light's shadow mode is set to none or its shadows strength is zero then it has no shadows and should be ignored.</p>
+						
+						<pre translate="no">		if (
+			ShadowedDirectionalLightCount &lt; maxShadowedDirectionalLightCount <ins>&amp;&amp;</ins>
+			<ins>light.shadows != LightShadows.None &amp;&amp; light.shadowStrength > 0f</ins>
+		) { &hellip; }</pre>
+						
+						<p>Besides that, it's possible that a visible light ends up not affecting any objects that cast shadows, either because they're configured not to or because the light only affects objects beyond the max shadow distance. We can check this by invoking <code>GetShadowCasterBounds</code> on the culling results for a visible light index. It has a second output parameter for the bounds&mdash;which we don't need&mdash;and returns whether the bounds are valid. If not the there are no shadows to render for this light and it should be ignored.</p>
+						
+						<pre translate="no">		if (
+			ShadowedDirectionalLightCount &lt; maxShadowedDirectionalLightCount &amp;&amp;
+			light.shadows != LightShadows.None &amp;&amp; light.shadowStrength > 0f <ins>&amp;&amp;</ins>
+			<ins>cullingResults.GetShadowCasterBounds(visibleLightIndex, out Bounds b)</ins>
+		) { &hellip; }</pre>
+						
+						<p>Now we can reserve shadows in <code>Lighting.SetupDirectionalLight</code>.</p>
+						
+						<pre translate="no">	void SetupDirectionalLight (int index, ref VisibleLight visibleLight) {
+		dirLightColors[index] = visibleLight.finalColor;
+		dirLightDirections[index] = -visibleLight.localToWorldMatrix.GetColumn(2);
+		<ins>shadows.ReserveDirectionalShadows(visibleLight.light, index);</ins>
+	}</pre>
+						
+					</section>
+					
+					<section>
+						<h3>Creating the Shadow Atlas</h3>
+						
+						<p>After reserving shadows we need to render them. We do that after <code>SetupLights</code> finishes in <code>Lighting.Render</code>, by invoking a new <code>Shadows.Render</code> method.</p>
+						
+						<pre translate="no">		shadows.Setup(context, cullingResults, shadowSettings);
+		SetupLights();
+		<ins>shadows.Render();</ins></pre>
+						
+						<p>The <code>Shadows.Render</code> method will delegate rendering of directional shadows to another <code>RenderDirectionalShadows</code> method, but only if there are any shadowed lights.</p>
+						
+						<pre translate="no">	<ins>public void Render () {</ins>
+		<ins>if (ShadowedDirectionalLightCount > 0) {</ins>
+			<ins>RenderDirectionalShadows();</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	<ins>void RenderDirectionalShadows () {}</ins></pre>
+						
+						<p>Creating the shadow map is done by drawing shadow-casting objects to a texture. We'll use <em translate="no">_DirectionalShadowAtlas</em> to refer to the directional shadow atlas. Retrieve the atlas size as an integer from the settings and then invoke <code>GetTemporaryRT</code> on the command buffer, with the texture identifier as an argument, plus the size for both its width and height in pixels.</p>
+						
+						<pre translate="no">	<ins>static int dirShadowAtlasId = Shader.PropertyToID("_DirectionalShadowAtlas");</ins>
+	
+	&hellip;
+	
+	void RenderDirectionalShadows () {
+		<ins>int atlasSize = (int)settings.directional.atlasSize;</ins>
+		<ins>buffer.GetTemporaryRT(dirShadowAtlasId, atlasSize, atlasSize);</ins>
+	}</pre>
+						
+						<p>That claims a square render texture, but it's a normal ARGB texture by default. We need a shadow map, which we specify by adding another three arguments to the invocation. First is the amount of bits for the depth buffer. We want this to be as high as possible, so let's use 32. Second is the filter mode, for which we use the default bilinear filtering. Third is the render texture type, which has to be <code>RenderTextureFormat.Shadowmap</code>. This gives us a texture suitable for rendering shadow maps, though the exact format depends on the target platform.</p>
+						
+						<pre translate="no">		buffer.GetTemporaryRT(
+			dirShadowAtlasId, atlasSize, atlasSize<ins>,</ins>
+			<ins>32, FilterMode.Bilinear, RenderTextureFormat.Shadowmap</ins>
+		);</pre>
+						
+						<aside>
+							<h3>What kind of texture format do we get?</h3>
+							<div>
+								<p>It's typically a 24 or 32 bits integer or floating-point texture. You could also choose 16 bits, which is what Unity's RPs do.</p>
+							</div>
+						</aside>
+						
+						<p>When we get a temporary render texture we should also release it when we're done with it. We have to keep hold of it until we're finished rendering with the camera, after which we can release it by invoking <code>ReleaseTemporaryRT</code> with the texture identifier of the buffer and then execute it. We'll do this in a new public <code>Cleanup</code> method.</p>
+						
+						<pre translate="no">	<ins>public void Cleanup () {</ins>
+		<ins>buffer.ReleaseTemporaryRT(dirShadowAtlasId);</ins>
+		<ins>ExecuteBuffer();</ins>
+	<ins>}</ins></pre>
+						
+						<p>Give <code>Lighting</code> a public <code>Cleanup</code> method as well, which forwards the invocation to <code>Shadows</code>.</p>
+						
+						<pre translate="no">	<ins>public void Cleanup () {</ins>
+		<ins>shadows.Cleanup();</ins>
+	<ins>}</ins></pre>
+						
+						<p>Then <code>CameraRenderer</code> can request cleanup directly before submitting.</p>
+						
+						<pre translate="no">	public void Render (&hellip;) {
+		&hellip;
+		<ins>lighting.Cleanup();</ins>
+		Submit();
+	}</pre>
+						
+						<p>We can only release a texture if we first claimed it, which we're currently only doing if there are directional shadows to render. The obvious solution is to only release the texture when we have shadows. However, not claiming a texture will lead to problems for WebGL 2.0 because it binds textures and samplers together. When a material with our shader is loaded while a texture is missing it will fail, because it'll get a default texture which won't be compatible with a shadow sampler. We could avoid this by introducing a shader keyword to generate shader variants that omit the shadow sampling code. An alternative approach is to instead get a 1&times;1 dummy texture when no shadows are needed, avoiding extra shader variants. Let's do that.</p>
+						
+						<pre translate="no">	public void Render () {
+		if (shadowedDirLightCount > 0) {
+			RenderDirectionalShadows();
+		}
+		<ins>else {</ins>
+			<ins>buffer.GetTemporaryRT(</ins>
+				<ins>dirShadowAtlasId, 1, 1,</ins>
+				<ins>32, FilterMode.Bilinear, RenderTextureFormat.Shadowmap</ins>
+			<ins>);</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>After requesting the render texture <code>Shadows.RenderDirectionalShadows</code> must also instruct the GPU to render to this texture instead of the camera's target. that's done by invoking <code>SetRenderTarget</code> on the buffer, identifying a render texture and how its data should be loaded and stored. We don't care about its initial state as we'll immediately clear it, so we'll use <code>RenderBufferLoadAction.DontCare</code>. And the purpose of the texture is to contain the shadow data, so we'll need to use <code>RenderBufferStoreAction.Store</code> as the third argument.</p>
+						
+						<pre translate="no">		buffer.GetTemporaryRT(&hellip;);
+		<ins>buffer.SetRenderTarget(</ins>
+			<ins>dirShadowAtlasId,</ins>
+			<ins>RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store</ins>
+		<ins>);</ins></pre>
+						
+						<p>Once that's done we can use <code>ClearRenderTarget</code> the same way we clear the camera target, in this case only caring about the depth buffer. Finish by executing the buffer. If you have at least one shadowed directional light active then you'll see the clear action of the shadow atlas show up in the frame debugger.</p>
+						
+						<pre translate="no">		buffer.SetRenderTarget(
+			dirShadowAtlasId,
+			RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store
+		);
+		<ins>buffer.ClearRenderTarget(true, false, Color.clear);</ins>
+		<ins>ExecuteBuffer();</ins></pre>
+						
+						<figure>
+							<img src="rendering-shadows/clearing-two-render-targets.png" width="240" height="82">
+							<figcaption>Clearing two render targets.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Why am I getting an error about dimensions not matching?</h3>
+							<div>
+								<p>This can happen in Unity 2020 at this point. Just continue, it will get resolved in the next section.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Shadows First</h3>
+						
+						<p>As we're setting up the regular camera before the shadow atlas we end up switching to the shadow atlas before rendering the regular geometry, which is not what we want. We should render the shadows before invoking <code>CameraRenderer.Setup</code> in <code>CameraRenderer.Render</code> so regular rendering will not be affected.
+						
+						<pre translate="no">		<del>//Setup();</del>
+		lighting.Setup(context, cullingResults, shadowSettings);
+		<ins>Setup();</ins>
+		DrawVisibleGeometry(useDynamicBatching, useGPUInstancing);</pre>
+						
+						<figure>
+							<img src="rendering-shadows/shadows-first.png" width="240" height="82">
+							<figcaption>Shadows first.</figcaption>
+						</figure>
+						
+						<p>We can keep the shadows entry nested inside the camera's in the frame debugger by beginning a sample before setting up lighting and ending the sample immediately after it, before clearing the camera's target.</p>
+						
+						<pre translate="no">		<ins>buffer.BeginSample(SampleName);</ins>
+		<ins>ExecuteBuffer();</ins>
+		lighting.Setup(context, cullingResults, shadowSettings);
+		<ins>buffer.EndSample(SampleName);</ins>
+		Setup();</pre>
+						
+						<figure>
+							<img src="rendering-shadows/nested-shadows.png" width="240" height="82">
+							<figcaption>Nested shadows.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Rendering</h3>
+						
+						<p>To render shadows for a single light we'll add a variant <code>RenderDirectionalShadows</code> method to <code>Shadow</code>, with two parameters: first the shadowed light index and second the size of its tile in the atlas. Then invoke this method for all shadowed lights in the other <code>RenderDirectionalShadows</code> method, wrapped by <code>BeginSample</code> and <code>EndSample</code> invocations. As we're currently supporting only a single shadowed light its tile size is equal to the atlas size.</p>
+						
+						<pre translate="no">	void RenderDirectionalShadows () {
+		&hellip;
+		buffer.ClearRenderTarget(true, false, Color.clear);
+		<ins>buffer.BeginSample(bufferName);</ins>
+		ExecuteBuffer();
+
+		<ins>for (int i = 0; i &lt; ShadowedDirectionalLightCount; i++) {</ins>
+			<ins>RenderDirectionalShadows(i, atlasSize);</ins>
+		<ins>}</ins>
+		
+		<ins>buffer.EndSample(bufferName);</ins>
+		<ins>ExecuteBuffer();</ins>
+	}	
+
+	<ins>void RenderDirectionalShadows (int index, int tileSize) {}</ins></pre>
+						
+						<p>To render shadow we need a <code>ShadowDrawingSettings</code> struct value. We can create a properly-configured one by invoking its constructor method with the culling results and appropriate visible light index, which we stored earlier.</p>
+						
+						<pre translate="no">	void RenderDirectionalShadows (int index, int tileSize) {
+		<ins>ShadowedDirectionalLight light = ShadowedDirectionalLights[index];</ins>
+		<ins>var shadowSettings =</ins>
+			<ins>new ShadowDrawingSettings(cullingResults, light.visibleLightIndex);</ins>
+	}</pre>
+						
+						<p>Unity 2022 also requires us to provide an extra argument to indicate that we use an orthographic projection, although this requirement is removed again in 2023.</p>
+						
+						<pre translate="no">		var shadowSettings = new ShadowDrawingSettings(
+			cullingResults, light.visibleLightIndex<ins>,</ins>
+			<ins>BatchCullingProjectionType.Orthographic</ins>
+		);</pre>
+						
+						<p>The idea of a shadow map is that we render the scene from the light's point of view, only storing the depth information. The result tells us how far the light travels before it hits something.</p>
+						
+						<p>However, directional lights are assumed to be infinitely far away and thus don't have a true position. So what we do instead is figure out view and projection matrices that match the light's orientation and gives us a clip space cube that overlaps the area visible to the camera that can contain the light's shadows. Rather than figure this out ourselves we can use the <code>ComputeDirectionalShadowMatricesAndCullingPrimitives</code> method of the culling results to do it for us, passing it nine arguments.</p>
+						
+						<p>The first argument is the visible light index. The next three arguments are two integers and a <code>Vector3</code>, which control the shadow cascade. We'll deal with cascades later, so for now use zero, one, and the zero vector. After that comes the texture size, for which we need to use the tile size. The sixth argument is the shadow near plane, which we'll ignore and set to zero for now.</p>
+						
+						<p>Those were the input arguments, the remaining three are output arguments. First is the view matrix, then the projection matrix, and the last argument is a <code>ShadowSplitData</code> struct.
+						
+						<pre translate="no">		var shadowSettings = &hellip;;
+		<ins>cullingResults.ComputeDirectionalShadowMatricesAndCullingPrimitives(</ins>
+			<ins>light.visibleLightIndex, 0, 1, Vector3.zero, tileSize, 0f,</ins>
+			<ins>out Matrix4x4 viewMatrix, out Matrix4x4 projectionMatrix,</ins>
+			<ins>out ShadowSplitData splitData</ins>
+		<ins>);</ins></pre>
+						
+						<p>The split data contains information about how shadow-casting objects should be culled, which we have to copy to the shadow settings. And we have to apply the view and projection matrices by invoking <code>SetViewProjectionMatrices</code> on the buffer.</p>
+						
+						<pre translate="no">		cullingResults.ComputeDirectionalShadowMatricesAndCullingPrimitives(&hellip;);
+		<ins>shadowSettings.splitData = splitData;</ins>
+		<ins>buffer.SetViewProjectionMatrices(viewMatrix, projectionMatrix);</ins></pre>
+						
+						<p>We finally schedule drawing of the shadow casters by executing the buffer and then invoking <code>DrawShadows</code> on the context, with the shadows settings passed to it by reference.</p>
+						
+						<pre translate="no">		shadowSettings.splitData = splitData;
+		buffer.SetViewProjectionMatrices(viewMatrix, projectionMatrix);
+		<ins>ExecuteBuffer();</ins>
+		<ins>context.DrawShadows(ref shadowSettings);</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Shadow Caster Pass</h3>
+						
+						<p>At this point shadow casters should get rendered, but the atlas remains empty. That's because <code>DrawShadows</code> only renders objects with materials that have a <em translate="no">ShadowCaster</em> pass. So add a second <code class="shader">Pass</code> block to our <em translate="no">Lit</em> shader, with its light mode set to <em translate="no">ShadowCaster</em>. Use the same target level, give it support for instancing, plus the <em translate="no">_CLIPPING</em> shader feature. Then make it use special shadow-caster functions, which we'll define in a new <em translate="no">ShadowCasterPass</em> HLSL file. Also, because we only need to write depth disable writing color data, by adding <code class="shader">ColorMask 0</code> before the HLSL program.</p>
+						
+						<pre class="shader" translate="no">	SubShader {
+		Pass {
+			Tags {
+				"LightMode" = "CustomLit"
+			}
+
+			&hellip;
+		}
+
+		<ins>Pass {</ins>
+			<ins>Tags {</ins>
+				<ins>"LightMode" = "ShadowCaster"</ins>
+			<ins>}</ins>
+
+			<ins>ColorMask 0</ins>
+
+			<ins>HLSLPROGRAM</ins>
+			<ins>#pragma target 3.5</ins>
+			<ins>#pragma shader_feature _CLIPPING</ins>
+			<ins>#pragma multi_compile_instancing</ins>
+			<ins>#pragma vertex ShadowCasterPassVertex</ins>
+			<ins>#pragma fragment ShadowCasterPassFragment</ins>
+			<ins>#include "ShadowCasterPass.hlsl"</ins>
+			<ins>ENDHLSL</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<p>Create the <em translate="no">ShadowCasterPass</em> file by duplicating <em translate="no">LitPass</em> and removing everything that isn't necessary for shadow casters. So we only need the clip-space position, plus the base color for clipping. The fragment function has nothing to return so becomes <code>void</code> without semantics. The only thing it does is potentially clip fragments.</p>
+						
+						<pre class="shader" translate="no">#ifndef CUSTOM_SHADOW_CASTER_PASS_INCLUDED
+#define CUSTOM_SHADOW_CASTER_PASS_INCLUDED
+
+<ins>#include "../ShaderLibrary/Common.hlsl"</ins>
+
+TEXTURE2D(_BaseMap);
+SAMPLER(sampler_BaseMap);
+
+UNITY_INSTANCING_BUFFER_START(UnityPerMaterial)
+	<ins>UNITY_DEFINE_INSTANCED_PROP(float4, _BaseMap_ST)</ins>
+	<ins>UNITY_DEFINE_INSTANCED_PROP(float4, _BaseColor)</ins>
+	<ins>UNITY_DEFINE_INSTANCED_PROP(float, _Cutoff)</ins>
+UNITY_INSTANCING_BUFFER_END(UnityPerMaterial)
+
+struct Attributes {
+	<ins>float3 positionOS : POSITION;</ins>
+	<ins>float2 baseUV : TEXCOORD0;</ins>
+	UNITY_VERTEX_INPUT_INSTANCE_ID
+};
+
+struct Varyings {
+	<ins>float4 positionCS : SV_POSITION;</ins>
+	<ins>float2 baseUV : VAR_BASE_UV;</ins>
+	UNITY_VERTEX_INPUT_INSTANCE_ID
+};
+
+Varyings <ins>ShadowCasterPassVertex</ins> (Attributes input) {
+	Varyings output;
+	UNITY_SETUP_INSTANCE_ID(input);
+	UNITY_TRANSFER_INSTANCE_ID(input, output);
+	<ins>float3 positionWS</ins> = TransformObjectToWorld(input.positionOS);
+	output.positionCS = TransformWorldToHClip(<ins>positionWS</ins>);
+
+	float4 baseST = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseMap_ST);
+	output.baseUV = input.baseUV * baseST.xy + baseST.zw;
+	return output;
+}
+
+<ins>void ShadowCasterPassFragment (Varyings input) {</ins>
+	UNITY_SETUP_INSTANCE_ID(input);
+	float4 baseMap = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.baseUV);
+	float4 baseColor = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseColor);
+	float4 base = baseMap * baseColor;
+	#if defined(_CLIPPING)
+		clip(base.a - UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Cutoff));
+	#endif
+}
+
+#endif</pre>
+						
+						<p>We're now able to render shadow casters. I created a simple test scene containing some opaque objects on top of a plane, with one directional light that has shadows enabled at full strength to try it out. It' doesn't matter whether the light is set to use hard or soft shadows.</p>
+						
+						<figure>
+							<img src="rendering-shadows/test-scene.png" width="320" height="240">
+							<figcaption>Shadow test scene.</figcaption>
+						</figure>
+						
+						<p>Shadows don't affect the final rendered image yet, but we can already see what get's rendered into the the shadow atlas via the frame debugger. It's usually visualized as a monochrome texture, going from white to black as distance increases, but it's red and goes the other way when using OpenGL.</p>
+						
+						<figure>
+							<img src="rendering-shadows/distance-100.png" width="256" height="256">
+							<figcaption>512 atlas; max distance 100.</figcaption>
+						</figure>
+						
+						<p>With the max shadow distances set to 100 we end up with everything rendered to only a small portion of the texture. Reducing the max distance effectively makes the shadow map zoom in on what's in front of the camera.</p>
+						
+						<figure>
+							<img src="rendering-shadows/distance-20.png" width="256" height="256" alt="20">
+							<img src="rendering-shadows/distance-10.png" width="256" height="256" alt="10">
+							<figcaption>Max distance 20 and 10.</figcaption>
+						</figure>
+						
+						<p>Note that the shadow casters are rendered with an orthographic projection, because we're rendering for a directional light.</p>
+					</section>
+					
+					<section>
+						<h3>Multiple Lights</h3>
+						
+						<p>We can have up to four directional lights, so let's support up to four shadowed directional lights as well.</p>
+						
+						<pre translate="no">	const int maxShadowedDirectionalLightCount = <ins>4</ins>;</pre>
+						
+						<p>As a quick test I used four equivalent directional lights, except that I adjusted their Y rotation by 90&deg; increments.</p>
+						
+						<figure>
+							<img src="rendering-shadows/four-lights.png" width="256" height="256">
+							<figcaption>Shadow casters for four lights, superimposed.</figcaption>
+						</figure>
+						
+						<p>Although we end up correctly rendering the shadow casters for all lights, they are superimposed as we render to the entire atlas for each light. We have to split our atlas so we can give each light its own tile to render to.</p>
+						
+						<p>We support up to four shadowed lights and we'll give each light a square tile in our square atlas. So if we end up with more than one shadowed light we have to split the atlas in four tiles, by halving the tile size. Determine the split amount and tile size in <code>Shadows.RenderDirectionalShadows</code> and pass both to the other method per light.</p>
+						
+						<pre translate="no">	void RenderDirectionalShadows () {
+		&hellip;
+		
+		<ins>int split = ShadowedDirectionalLightCount &lt;= 1 ? 1 : 2;</ins>
+		<ins>int tileSize = atlasSize / split;</ins>
+
+		for (int i = 0; i &lt; ShadowedDirectionalLightCount; i++) {
+			RenderDirectionalShadows(i, <ins>split, tileSize</ins>);
+		}
+	}
+	
+	void RenderDirectionalShadows (int index, <ins>int split,</ins> int tileSize) { &hellip; }</pre>
+						
+						<p>We can render to a single tile by adjusting the render viewport. Create a new method for this that has a tile index and split as parameters. It first calculates the tile offset, with the index modulo the split as the X offset and the index divided by the split as the Y offset. These are integer operations but we end up defining a <code>Rect</code>, so store the result as a <code>Vector2</code>.</p>
+						
+						<pre translate="no">	<ins>void SetTileViewport (int index, int split) {</ins>
+		<ins>Vector2 offset = new Vector2(index % split, index / split);</ins>
+	<ins>}</ins></pre>
+						
+						<p>Then invoke <code>SetViewPort</code> on the buffer with a <code>Rect</code>, with the offset scaled by the tile size, which should become a third parameter, which can immediately be a float.</p>
+						
+						<pre translate="no">	void SetTileViewport (int index, int split<ins>, float tileSize</ins>) {
+		Vector2 offset = new Vector2(index % split, index / split);
+		<ins>buffer.SetViewport(new Rect(</ins>
+			<ins>offset.x * tileSize, offset.y * tileSize, tileSize, tileSize</ins>
+		<ins>));</ins>
+	}</pre>
+						
+						<p>Invoke <code>SetTileViewport</code> in <code>RenderDirectionalShadows</code> when setting the matrices.</p>
+						
+						<pre translate="no">		<ins>SetTileViewport(index, split, tileSize);</ins>
+		buffer.SetViewProjectionMatrices(viewMatrix, projectionMatrix);</pre>
+						
+						<figure>
+							<img src="rendering-shadows/four-tiles.png" width="256" height="256">
+							<figcaption>Shadow atlas with four tiles in use.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Sampling Shadows</h2>
+					
+					<p>Now we're rendering shadows casters, but that doesn't affect the final image yet. To make shadows show up we have to sample the shadow map in the <em translate="no">CustomLit</em> pass and us it to determine whether a surface fragment is shadowed or not.</p>
+					
+					<section>
+						<h3>Shadow Matrices</h3>
+						
+						<p>For each fragment we have to sample the depth information from the appropriate tile in the shadow atlas. So we have to find the shadow texture coordinates for a give world-space position. We'll make this possible by creating a shadow transformation matrix for each shadowed directional light and sending them to the GPU. Add a <em translate="no">_DirectionalShadowMatrices</em> shader property identifier and static matrix array to <code>Shadows</code> to make this possible.</p>
+						
+						<pre translate="no">	static int
+		dirShadowAtlasId = Shader.PropertyToID("_DirectionalShadowAtlas")<ins>,</ins>
+		<ins>dirShadowMatricesId = Shader.PropertyToID("_DirectionalShadowMatrices");</ins>
+		
+	<ins>static Matrix4x4[]</ins>
+		<ins>dirShadowMatrices = new Matrix4x4[maxShadowedDirectionalLightCount];</ins></pre>
+						
+						<p>We can create a conversion matrix from world space to light space by multiplying the light's shadow projection matrix and view matrix in <code>RenderDirectionalShadows</code>.</p>
+						
+						<pre translate="no">	void RenderDirectionalShadows (int index, int split, int tileSize) {
+		&hellip;
+		SetTileViewport(index, split, tileSize);
+		<ins>dirShadowMatrices[index] = projectionMatrix * viewMatrix;</ins>
+		buffer.SetViewProjectionMatrices(viewMatrix, projectionMatrix);
+		&hellip;
+	}</pre>
+						
+						<p>Then once all shadowed lights are rendered send the matrices to the GPU by invoking <code>SetGlobalMatrixArray</code> on the buffer.</p>
+						
+						<pre translate="no">	void RenderDirectionalShadows () {
+		&hellip;
+
+		<ins>buffer.SetGlobalMatrixArray(dirShadowMatricesId, dirShadowMatrices);</ins>
+		buffer.EndSample(bufferName);
+		ExecuteBuffer();
+	}</pre>
+						
+						<p>However, that ignores the fact that we're using a shadow atlas. Let's create a <code>ConvertToAtlasMatrix</code> method that takes a light matrix, tile offset, and split, and returns a matrix that converts from world space to shadow tile space.</p>
+						
+						<pre translate="no">	<ins>Matrix4x4 ConvertToAtlasMatrix (Matrix4x4 m, Vector2 offset, int split) {</ins>
+		<ins>return m;</ins>
+	<ins>}</ins></pre>
+						
+						<p>We already calculate the tile offset in <code>SetTileViewport</code>, so make it return that.</p>
+						
+						<pre translate="no">	<ins>Vector2</ins> SetTileViewport (int index, int split, float tileSize) {
+		&hellip;
+		<ins>return offset;</ins>
+	}</pre>
+						
+						<p>Then adjust <code>RenderDirectionalShadows</code> so it invokes <code>ConvertToAtlasMatrix</code>.</p>
+						
+						<pre translate="no">		<del>//SetTileViewport(index, split, tileSize);</del>
+		dirShadowMatrices[index] = <ins>ConvertToAtlasMatrix(</ins>
+			projectionMatrix * viewMatrix<ins>,</ins>
+			<ins>SetTileViewport(index, split, tileSize), split</ins>
+		);</pre>
+						
+						<p>The first thing that we should do in <code>ConvertToAtlasMatrix</code> is negate the Z dimension if a reversed Z buffer is used. We can check this via <code>SystemInfo.usesReversedZBuffer</code>.</p>
+						
+						<pre translate="no">	Matrix4x4 ConvertToAtlasMatrix (Matrix4x4 m, Vector2 offset, int split) {
+		<ins>if (SystemInfo.usesReversedZBuffer) {</ins>
+			<ins>m.m20 = -m.m20;</ins>
+			<ins>m.m21 = -m.m21;</ins>
+			<ins>m.m22 = -m.m22;</ins>
+			<ins>m.m23 = -m.m23;</ins>
+		<ins>}</ins>
+		return m;
+	}</pre>
+						
+						<aside>
+							<h3>Why are Z buffers reversed?</h3>
+							<div>
+								<p>It is most intuitive to have zero represent zero depth and one represent maximum depth. That's what OpenGL does. But due to the way precision is limited in the depth buffer and the fact that it is stored nonlinearly we make better use of the bits by reversing that. Other graphics API used the reversed approach. We usually we don't need to worry about it, except when we're explicitly working with clip space.</p>
+							</div>
+						</aside>
+						
+						<p>Second, clip space is defined inside a cube with with coordinates going from &minus;1 to 1, with zero at its center. But textures coordinates and depth go from zero to one. We can bake this conversion into the matrix by scaling and offsetting the XYZ dimensions by half. We could do this with a matrix multiplication, but it would result in a lot of multiplications with zero and needless additions. So let's adjust the matrix directly.</p>
+						
+						<pre translate="no">		<ins>m.m00 = 0.5f * (m.m00 + m.m30);</ins>
+		<ins>m.m01 = 0.5f * (m.m01 + m.m31);</ins>
+		<ins>m.m02 = 0.5f * (m.m02 + m.m32);</ins>
+		<ins>m.m03 = 0.5f * (m.m03 + m.m33);</ins>
+		<ins>m.m10 = 0.5f * (m.m10 + m.m30);</ins>
+		<ins>m.m11 = 0.5f * (m.m11 + m.m31);</ins>
+		<ins>m.m12 = 0.5f * (m.m12 + m.m32);</ins>
+		<ins>m.m13 = 0.5f * (m.m13 + m.m33);</ins>
+		<ins>m.m20 = 0.5f * (m.m20 + m.m30);</ins>
+		<ins>m.m21 = 0.5f * (m.m21 + m.m31);</ins>
+		<ins>m.m22 = 0.5f * (m.m22 + m.m32);</ins>
+		<ins>m.m23 = 0.5f * (m.m23 + m.m33);</ins>
+		return m;</pre>
+						
+						<p>Finally, we have to apply the tile offset and scale. Once again we can do this directly to avoid a lot of unnecessary calculations.</p>
+						
+						<pre translate="no">		<ins>float scale = 1f / split;</ins>
+		m.m00 = <ins>(</ins>0.5f * (m.m00 + m.m30) <ins>+ offset.x * m.m30) * scale</ins>;
+		m.m01 = <ins>(</ins>0.5f * (m.m01 + m.m31) <ins>+ offset.x * m.m31) * scale</ins>;
+		m.m02 = <ins>(</ins>0.5f * (m.m02 + m.m32) <ins>+ offset.x * m.m32) * scale</ins>;
+		m.m03 = <ins>(</ins>0.5f * (m.m03 + m.m33) <ins>+ offset.x * m.m33) * scale</ins>;
+		m.m10 = <ins>(</ins>0.5f * (m.m10 + m.m30) <ins>+ offset.y * m.m30) * scale</ins>;
+		m.m11 = <ins>(</ins>0.5f * (m.m11 + m.m31) <ins>+ offset.y * m.m31) * scale</ins>;
+		m.m12 = <ins>(</ins>0.5f * (m.m12 + m.m32) <ins>+ offset.y * m.m32) * scale</ins>;
+		m.m13 = <ins>(</ins>0.5f * (m.m13 + m.m33) <ins>+ offset.y * m.m33) * scale</ins>;</pre>
+					</section>
+					
+					<section>
+						<h3>Storing Shadow Data Per Light</h3>
+						
+						<p>To sample shadows for a light we need to know the index of its tile in the shadow atlas, if it has one. This is something that has to be stored per light, so let's make <code>ReserveDirectionalShadows</code> return the required data. We'll provide two values: the shadow strength and the shadow tile offset, packed in a <code>Vector2</code>. If the light doesn't get shadows then the result is the zero vector.</p>
+						
+						<pre translate="no">	public <ins>Vector2</ins> ReserveDirectionalShadows (&hellip;) {
+		if (&hellip;) {
+			ShadowedDirectionalLights[<ins>ShadowedDirectionalLightCount</ins>] =
+				new ShadowedDirectionalLight {
+					visibleLightIndex = visibleLightIndex
+				};
+			<ins>return new Vector2(</ins>
+				<ins>light.shadowStrength, ShadowedDirectionalLightCount++</ins>
+			<ins>);</ins>
+		}
+		<ins>return Vector2.zero;</ins>
+	}</pre>
+						
+						<p>Have <code>Lighting</code> make this data available to shaders via a <em translate="no">_DirectionalLightShadowData</em> vector array.</p>
+						
+						<pre translate="no">	static int
+		dirLightCountId = Shader.PropertyToID("_DirectionalLightCount"),
+		dirLightColorsId = Shader.PropertyToID("_DirectionalLightColors"),
+		dirLightDirectionsId = Shader.PropertyToID("_DirectionalLightDirections")<ins>,</ins>
+		<ins>dirLightShadowDataId =</ins>
+			<ins>Shader.PropertyToID("_DirectionalLightShadowData");</ins>
+
+	static Vector4[]
+		dirLightColors = new Vector4[maxDirLightCount],
+		dirLightDirections = new Vector4[maxDirLightCount]<ins>,</ins>
+		<ins>dirLightShadowData = new Vector4[maxDirLightCount];</ins>
+
+	&hellip;
+
+	void SetupLights () {
+		&hellip;
+		<ins>buffer.SetGlobalVectorArray(dirLightShadowDataId, dirLightShadowData);</ins>
+	}
+
+	void SetupDirectionalLight (int index, ref VisibleLight visibleLight) {
+		dirLightColors[index] = visibleLight.finalColor;
+		dirLightDirections[index] = -visibleLight.localToWorldMatrix.GetColumn(2);
+		<ins>dirLightShadowData[index] =</ins>
+			shadows.ReserveDirectionalShadows(visibleLight.light, index);
+	}</pre>
+						
+						<p>And add it to the <em translate="no">_CustomLight</em> buffer in the <em translate="no">Light</em> HLSL file as well.</p>
+						
+						<pre class="shader" translate="no">CBUFFER_START(_CustomLight)
+	int _DirectionalLightCount;
+	float4 _DirectionalLightColors[MAX_DIRECTIONAL_LIGHT_COUNT];
+	float4 _DirectionalLightDirections[MAX_DIRECTIONAL_LIGHT_COUNT];
+	<ins>float4 _DirectionalLightShadowData[MAX_DIRECTIONAL_LIGHT_COUNT];</ins>
+CBUFFER_END</pre>
+					</section>
+					
+					<section>
+						<h3>Shadows HLSL File</h3>
+						
+						<p>We'll also create a dedicated <em translate="no">Shadows</em> HLSL file for shadow sampling. Define the same max shadowed directional light count, along with the <em translate="no">_DirectionalShadowAtlas</em> texture, plus the <em translate="no">_DirectionalShadowMatrices</em> array in a <code>_CustomShadows</code> buffer.</p>
+						
+						<pre class="shader" translate="no"><ins>#ifndef CUSTOM_SHADOWS_INCLUDED</ins>
+<ins>#define CUSTOM_SHADOWS_INCLUDED</ins>
+
+<ins>#define MAX_SHADOWED_DIRECTIONAL_LIGHT_COUNT 4</ins>
+
+<ins>TEXTURE2D(_DirectionalShadowAtlas);</ins>
+<ins>SAMPLER(sampler_DirectionalShadowAtlas);</ins>
+
+<ins>CBUFFER_START(_CustomShadows)</ins>
+	<ins>float4x4 _DirectionalShadowMatrices[MAX_SHADOWED_DIRECTIONAL_LIGHT_COUNT];</ins>
+<ins>CBUFFER_END</ins>
+
+<ins>#endif</ins></pre>
+						
+						<p>As the atlas isn't a regular texture let's define it via the <code class="shader">TEXTURE2D_SHADOW</code> macro instead to be clear, even though it doesn't make a difference for the platforms that we support. And we'll use a special <code class="shader">SAMPLER_CMP</code> macro to define the sampler state, as this does define a different way to sample shadow maps, because regular bilinear filtering doesn't make sense for depth data.</p>
+						
+						<pre class="shader" translate="no"><ins>TEXTURE2D_SHADOW</ins>(_DirectionalShadowAtlas);
+<ins>SAMPLER_CMP</ins>(sampler_DirectionalShadowAtlas);</pre>
+						
+						<p>In fact, there's only one appropriate way to sample the shadow map, so we can define an explicit sampler state instead of relying on the one Unity deduces for our render texture. Sampler states can be defined inline by creating one with specific words in its name. We can use <code class="shader">sampler_linear_clamp_compare</code>. Let's also define a shorthand <code class="shader">SHADOW_SAMPLER</code> macro for it.</p>
+						
+						<pre class="shader" translate="no">TEXTURE2D_SHADOW(_DirectionalShadowAtlas);
+<ins>#define SHADOW_SAMPLER sampler_linear_clamp_compare</ins>
+SAMPLER_CMP(<ins>SHADOW_SAMPLER</ins>);</pre>
+						
+						<p>Include <em translate="no">Shadows</em> before <em translate="no">Light</em> in <em translate="no">LitPass</em>.</p>
+						
+						<pre class="shader" translate="no">#include "../ShaderLibrary/Surface.hlsl"
+<ins>#include "../ShaderLibrary/Shadows.hlsl"</ins>
+#include "../ShaderLibrary/Light.hlsl"</pre>
+					</section>
+					
+					<section>
+						<h3>Sampling Shadows</h3>
+						
+						<p>To sample shadows we need to know the per-light shadow data, so let's defined a struct for that in <em translate="no">Shadows</em>, specifically for directional lights. It contains the strength and tile offset, but the code in <em translate="no">Shadows</em> doesn't know where it is stored.</p>
+						
+						<pre class="shader" translate="no"><ins>struct DirectionalShadowData {</ins>
+	<ins>float strength;</ins>
+	<ins>int tileIndex;</ins>
+};</pre>
+						
+						<p>We also need to know the surface position, so add it to the <code class="shader">Surface</code> struct.</p>
+						
+						<pre class="shader" translate="no">struct Surface {
+	<ins>float3 position;</ins>
+	&hellip;
+};</pre>
+						
+						<p>And assign it in <code class="shader">LitPassFragment</code>.</p>
+						
+						<pre class="shader" translate="no">	Surface surface;
+	<ins>surface.position = input.positionWS;</ins>
+	surface.normal = normalize(input.normalWS);
+</pre>
+						
+						<p>Add a <code class="shader">SampleDirectionalShadowAtlas</code> function to <em translate="no">Shadows</em> that samples the shadow atlas via the <code class="shader">SAMPLE_TEXTURE2D_SHADOW</code> macro, passing it the atlas, shadow sampler, and position in shadow texture space, which a corresponding parameter.</p>
+						
+						<pre class="shader" translate="no"><ins>float SampleDirectionalShadowAtlas (float3 positionSTS) {</ins>
+	<ins>return SAMPLE_TEXTURE2D_SHADOW(</ins>
+		<ins>_DirectionalShadowAtlas, SHADOW_SAMPLER, positionSTS</ins>
+	<ins>);</ins>
+<ins>}</ins></pre>
+						
+						<p>Then add a <code class="shader">GetDirectionalShadowAttenuation</code> function that returns the shadow attenuation, given directional shadow data and a surface, which should be defined in world space. It uses the tile offset to retrieve the correct matrix, converts the surface position to shadow tile space, and then samples the atlas.</p>
+						
+						<pre class="shader" translate="no"><ins>float GetDirectionalShadowAttenuation (DirectionalShadowData data, Surface surfaceWS) {</ins>
+	<ins>float3 positionSTS = mul(</ins>
+		<ins>_DirectionalShadowMatrices[data.tileIndex],</ins>
+		<ins>float4(surfaceWS.position, 1.0)</ins>
+	<ins>).xyz;</ins>
+	<ins>float shadow = SampleDirectionalShadowAtlas(positionSTS);</ins>
+	<ins>return shadow;</ins>
+<ins>}</ins></pre>
+						
+						<p>The result of sampling the shadow atlas is a factor that determines how much of the light reaches the surface, taking only shadows into account. It's a value in the 0&ndash;1 range that's know as an attenuation factor. If the fragment is fully shadowed then we get zero and when it's not shadowed at all then we get one. Values in between indicate that the fragment is partially shadowed.</p>
+						
+						<p>Besides that, a light's shadow strength can be reduced, either for artistic reasons or to represent shadows of semitransparent surfaces. When the strength is reduced to zero then attenuation isn't affected by shadows at all and should be one. So the final attenuation is found via linear interpolation between one and the sampled attenuation, based on strength.</p>
+						
+						<pre class="shader" translate="no">	return <ins>lerp(1.0,</ins> shadow<ins>, data.strength)</ins>;</pre>
+						
+						<p>But when the shadow strength is zero then it isn't needed to sample shadows at all, as they have no effect and haven't even been rendered. In that case we have an unshadowed light and should always return one.</p>
+						
+						<pre class="shader" translate="no">float GetDirectionalShadowAttenuation (DirectionalShadowData data, Surface surfaceWS) {
+	<ins>if (data.strength &lt;= 0.0) {</ins>
+		<ins>return 1.0;</ins>
+	<ins>}</ins>
+	&hellip;
+}</pre>
+						
+						<aside>
+							<h3>Is it a good idea to branch in shaders?</h3>
+							<div>
+								<p>Branching used to be inefficient, but modern GPUs can deal with them just fine. What you have to keep in mind is that blocks of fragments are shaded in parallel. If even one fragment branches a specific way then the entire block does, even if all other fragments ignore the results of that code path. In this case we branch based on the light's strength, which is&mdash;at least at this point&mdash;the same for all fragments.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Attenuating Light</h3>
+						
+						<p>We'll store the light's attenuation in the <code class="shader">Light</code> struct.</p>
+						
+						<pre class="shader" translate="no">struct Light {
+	float3 color;
+	float3 direction;
+	<ins>float attenuation;</ins>
+};</pre>
+						
+						<p>Add a function to <em translate="no">Light</em> that gets the directional shadow data.</p>
+						
+						<pre class="shader" translate="no"><ins>DirectionalShadowData GetDirectionalShadowData (int lightIndex) {</ins>
+	<ins>DirectionalShadowData data;</ins>
+	<ins>data.strength = _DirectionalLightShadowData[lightIndex].x;</ins>
+	<ins>data.tileIndex = _DirectionalLightShadowData[lightIndex].y;</ins>
+	<ins>return data;</ins>
+<ins>}</ins></pre>
+						
+						<p>Then add a world-space surface parameter to <code>GetDirectionalLight</code>, have it retrieve the directional shadow data and use <code class="shader">GetDirectionalShadowAttenuation</code> to set the light's attenuation.</p>
+						
+						<pre class="shader" translate="no">Light GetDirectionalLight (int index<ins>, Surface surfaceWS</ins>) {
+	Light light;
+	light.color = _DirectionalLightColors[index].rgb;
+	light.direction = _DirectionalLightDirections[index].xyz;
+	<ins>DirectionalShadowData shadowData = GetDirectionalShadowData(index);</ins>
+	<ins>light.attenuation = GetDirectionalShadowAttenuation(shadowData, surfaceWS);</ins>
+	return light;
+}</pre>
+						
+						<p>Now <code class="shader">GetLighting</code> in <em translate="no">Lighting</em> must also pass the surface to <code>GetDirectionalLight</code>. And the surface is now expected to be defined in world space, so rename the parameter accordingly. Only <em translate="no">BRDF</em> doesn't care about the space of the light and surface, as long as they match.</p>
+						
+						<pre class="shader" translate="no">float3 GetLighting (Surface <ins>surfaceWS</ins>, BRDF brdf) {
+	float3 color = 0.0;
+	for (int i = 0; i &lt; GetDirectionalLightCount(); i++) {
+		color += GetLighting(<ins>surfaceWS</ins>, brdf, GetDirectionalLight(i<ins>, surfaceWS</ins>));
+	}
+	return color;
+}</pre>
+						
+						<p>The final step to get shadows working is factoring attenuation into the light's intensity.</p>
+						
+						<pre class="shader" translate="no">float3 IncomingLight (Surface surface, Light light) {
+	return
+		saturate(dot(surface.normal, light.direction) <ins>* light.attenuation</ins>) *
+		light.color;
+}</pre>
+						
+						<figure>
+							<img src="sampling-shadows/one-shadowed-light.png" width="420" height="230">
+							<figcaption>One light with shadows; max distance 10; atlas size 512.</figcaption>
+						</figure>
+						
+						<p>We finally get shadows, but they look terrible. Surfaces that shouldn't get shadowed end up covered with shadow artifacts that form pixelated bands. These are caused by self-shadowing, resulting from the limited resolution of the shadow map. Using a different resolution changes the artifact patterns but won't eliminate them. The surfaces end up partially shadowing themselves, but we'll deal with this problem later. The artifact makes it easy to see the area covered by the shadow map, so we'll keep them for now.</p>
+						
+						<p>For example, we can see that the shadow map only covers part of the visible area, controlled by the max shadow distance. Changing the max grows or shrinks the area. The shadow map is aligned with light direction, not with the camera. Some shadows are visible beyond the max distance, but some are missing and it gets weird when shadows are sampled beyond the edge of the map. If only a single shadowed light is active then the results are clamped, otherwise the samples can cross tile boundaries and a light ends up using shadows from another light.</p>
+						
+						<figure>
+							<img src="sampling-shadows/two-shadowed-lights.png" width="420" height="230">
+							<figcaption>Two lights with shadows, both at half intensity.</figcaption>
+						</figure>
+						
+						<p>We'll correctly cut off shadows at the max distance later, but for now these invalid shadows remain visible.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Cascaded Shadow Maps</h2>
+					
+					<p>Because directional lights affect everything up to the max shadow distance their shadow maps end up covering a large area. As the shadow map uses an orthographic projecting each texel in the shadow map has a fixed world-space size. If this size is too large then individual shadow texels are clearly visible, resulting in jagged shadow edges and small shadows that can disappear. This can be alleviated by increasing the atlas size, but only up to a point.</p>
+					
+					<p>When using a perspective camera things further away appear smaller. At some visual distance a shadow map texel will map to a single display pixel, which means that the shadow resolution is theoretically optimal. Closer to the camera we'd need a higher shadow resolution, while further away a lower resolution would suffice. This suggests that ideally we'd use a variable shadow map resolution, based on the view distance of the shadow receiver.</p>
+					
+					<p>Cascaded shadows maps are a solution to this problem. The idea is that shadow casters are rendered more than once, so each light gets multiple tiles in the atlas, known as cascades. The first cascade covers only a small region close to the camera and successive cascades zoom out to cover an increasingly larger area with the same amount of texels. The shader then samples the best cascade available for each fragment.</p>
+										
+					<section>
+						<h3>Settings</h3>
+						
+						<p>Unity's shadow code supports up to four cascades per directional light. So far we've only used a single cascade that covers everything up to the max shadow distances. To support more we'll add a cascade count slider to the directional shadow settings. While we could use a different amount per directional light it makes most sense to use the same for all shadowed directional lights.</p>
+						
+						<p>Each cascade covers a portion of the shadowed region up, to the max shadow distance. We'll make the exact portions configurable by adding ratio sliders for the first three cascades. The last cascade always covers the entire range so doesn't need a slider. Set the cascade count to four by default, with cascade ratios 0.1, 0.25, and 0.5. These ratios should increase per cascade, but we won't enforce that in the UI.</p>
+						
+						<pre translate="no">	public struct Directional {
+
+		public MapSize atlasSize;
+
+		<ins>[Range(1, 4)]</ins>
+		<ins>public int cascadeCount;</ins>
+
+		<ins>[Range(0f, 1f)]</ins>
+		<ins>public float cascadeRatio1, cascadeRatio2, cascadeRatio3;</ins>
+	}
+
+	public Directional directional = new Directional {
+		atlasSize = MapSize._1024<ins>,</ins>
+		<ins>cascadeCount = 4,</ins>
+		<ins>cascadeRatio1 = 0.1f,</ins>
+		<ins>cascadeRatio2 = 0.25f,</ins>
+		<ins>cascadeRatio3 = 0.5f</ins>
+	};</pre>
+						
+						<figure>
+							<img src="cascaded-shadow-maps/cascade-count-ratios.png" width="320" height="94">
+							<figcaption>Cascade counts and ratios.</figcaption>
+						</figure>
+						
+						<p>The <code>ComputeDirectionalShadowMatricesAndCullingPrimitives</code> method requires us to provide the ratios packed in a <code>Vector3</code>, so let's add a convenient property to the settings to retrieve them in that form.</p>
+						
+						<pre translate="no">		<ins>public Vector3 CascadeRatios =></ins>
+			<ins>new Vector3(cascadeRatio1, cascadeRatio2, cascadeRatio3);</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Rendering Cascades</h3>
+						
+						<p>Each cascade requires its own transformation matrix, so the shadow matrix array size of <code>Shadows</code> has to be multiplied by the maximum amount of cascades per light, which is four.</p>
+						
+						<pre translate="no">	const int maxShadowedDirectionalLightCount = 4<ins>, maxCascades = 4</ins>;
+
+	&hellip;
+
+	static Matrix4x4[]
+		dirShadowMatrices = new Matrix4x4[maxShadowedDirectionalLightCount <ins>* maxCascades</ins>];</pre>
+						
+						<p>Increase the array's size in <em translate="no">Shadows</em> as well.</p>
+						
+						<pre class="shader" translate="no">#define MAX_SHADOWED_DIRECTIONAL_LIGHT_COUNT 4
+<ins>#define MAX_CASCADE_COUNT 4</ins>
+
+&hellip;
+
+CBUFFER_START(_CustomShadows)
+	float4x4 _DirectionalShadowMatrices
+		[MAX_SHADOWED_DIRECTIONAL_LIGHT_COUNT <ins>* MAX_CASCADE_COUNT</ins>];
+CBUFFER_END</pre>
+						
+						<p>After doing this Unity will complain that the shader's array size has changed, but it cannot use the new size. that's because once fixed arrays are claimed by the shader their size can not be changed on the GPU during the same session. We have to restart Unity to reinitialize it.</p>
+						
+						<p>After that's done,  multiply the returned tile offset in <code>Shadows.ReserveDirectionalShadows</code> by the configured cascade amount, as each directional light will now claim multiple successive tiles.</p>
+						
+						<pre translate="no">			return new Vector2(
+				light.shadowStrength,
+				<ins>settings.directional.cascadeCount *</ins> ShadowedDirectionalLightCount++
+			);</pre>
+						
+						<p>Likewise, the amount of used tiles gets multiplied in <code>RenderDirectionalShadows</code>, which means that we could end up with a total of sixteen tiles, requiring a split by four.</p>
+						
+						<pre translate="no">		<ins>int tiles = ShadowedDirectionalLightCount * settings.directional.cascadeCount;</ins>
+		int split = <ins>tiles &lt;= 1 ? 1 : tiles &lt;= 4 ? 2 : 4</ins>;
+		int tileSize = atlasSize / split;</pre>
+						
+						<aside>
+							<h3>Why not also support a split by 3?</h3>
+							<div>
+								<p>We limit ourselves to powers of two, the same restriction we apply to the atlas size. That way an integer division is always possible, otherwise we can get misalignment issues. This means that some light configurations won't use all available tiles, wasting texture space. If this is a problem then you could add support for a rectangular atlas that doesn't need to be square. However, you're more likely to by limited by the amount of tiles that you can render than texture space.</p>
+							</div>
+						</aside>
+						
+						<p>Now <code>RenderDirectionalShadows</code> has to draw shadows for each cascade. Put the code from <code>ComputeDirectionalShadowMatricesAndCullingPrimitives</code> up to and including <code>DrawShadows</code> in a loop for each configured cascade. The second argument of <code>ComputeDirectionalShadowMatricesAndCullingPrimitives</code> now becomes the cascade index, followed by the cascade count and the cascade ratios. Also adjust the tile index so it becomes the light's tile offset plus the cascade index.</p>
+						
+						<pre translate="no">	void RenderDirectionalShadows (int index, int split, int tileSize) {
+		ShadowedDirectionalLight light = shadowedDirectionalLights[index];
+		var shadowSettings = &hellip;;
+		<ins>int cascadeCount = settings.directional.cascadeCount;</ins>
+		<ins>int tileOffset = index * cascadeCount;</ins>
+		<ins>Vector3 ratios = settings.directional.CascadeRatios;</ins>
+		
+		<ins>for (int i = 0; i &lt; cascadeCount; i++) {</ins>
+			cullingResults.ComputeDirectionalShadowMatricesAndCullingPrimitives(
+				light.visibleLightIndex, <ins>i</ins>, <ins>cascadeCount</ins>, <ins>ratios</ins>, tileSize, 0f,
+				out Matrix4x4 viewMatrix, out Matrix4x4 projectionMatrix,
+				out ShadowSplitData splitData
+			);
+			shadowSettings.splitData = splitData;
+			<ins>int tileIndex = tileOffset + i;</ins>
+			dirShadowMatrices[<ins>tileIndex</ins>] = ConvertToAtlasMatrix(
+				projectionMatrix * viewMatrix,
+				SetTileViewport(<ins>tileIndex</ins>, split, tileSize), split
+			);
+			buffer.SetViewProjectionMatrices(viewMatrix, projectionMatrix);
+			ExecuteBuffer();
+			context.DrawShadows(ref shadowSettings);
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<img src="cascaded-shadow-maps/one-light-four-cascades.png" width="256" height="256" alt="one">
+							<img src="cascaded-shadow-maps/four-lights-four-cascades.png" width="256" height="256" alt="two">
+							<figcaption>One and four lights with four cascades; max distance 30; ratios 0.3, 0.4, 0.5.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Culling Spheres</h3>
+						
+						<p>Unity determines the region covered by each cascade by creating a culling sphere for it. As the shadow projections are orthographic and square they end up closely fitting their culling sphere but also cover some space around them. That's why some shadows can be seen outside the culling regions. Also, the light direction doesn't matter to the sphere, so all directional lights end up using the same culling spheres.</p>
+						
+						<figure>
+							<img src="cascaded-shadow-maps/culling-spheres.png" width="300" height="240">
+							<figcaption>Culling spheres visualized with transparent spheres.</figcaption>
+						</figure>
+						
+						<p>These spheres are also needed to determine which cascade to sample from, so we have to send them to the GPU. Add an identifier for a cascade count and a cascaded culling sphere array, plus a static array for the sphere data. They're defined by four-component vectors, containing their XYZ position plus their radius in the W component.</p>
+						
+						<pre translate="no">	static int
+		dirShadowAtlasId = Shader.PropertyToID("_DirectionalShadowAtlas"),
+		dirShadowMatricesId = Shader.PropertyToID("_DirectionalShadowMatrices")<ins>,</ins>
+		<ins>cascadeCountId = Shader.PropertyToID("_CascadeCount"),</ins>
+		<ins>cascadeCullingSpheresId = Shader.PropertyToID("_CascadeCullingSpheres")</ins>;
+
+	<ins>static Vector4[] cascadeCullingSpheres = new Vector4[maxCascades];</ins></pre>
+						
+						<p>The cascade's culling sphere is part of the split data that <code>ComputeDirectionalShadowMatricesAndCullingPrimitives</code> outputs. Assign it to the sphere array in the loop in <code>RenderDirectionalShadows</code>. But we only need to do this for the first light, as the cascades of all lights are equivalent.</p>
+						
+						<pre translate="no">		for (int i = 0; i &lt; cascadeCount; i++) {
+			cullingResults.ComputeDirectionalShadowMatricesAndCullingPrimitives(&hellip;);
+			shadowSettings.splitData = splitData;
+			<ins>if (index == 0) {</ins>
+				<ins>cascadeCullingSpheres[i] = splitData.cullingSphere;</ins>
+			<ins>}</ins>
+			&hellip;
+		}</pre>
+						
+						<p>We need the spheres in the shader to check whether a surface fragment lies inside them, which can be done by comparing the square distance from the sphere's center with its square radius. So let's store the square radius instead, so we don't have to calculate it in the shader.</p>
+						
+						<pre translate="no">				<ins>Vector4 cullingSphere = splitData.cullingSphere;</ins>
+				<ins>cullingSphere.w *= cullingSphere.w;</ins>
+				cascadeCullingSpheres[i] = <ins>cullingSphere</ins>;</pre>
+						
+						<p>Send the cascade count and spheres to the GPU after rendering the cascades.</p>
+						
+						<pre translate="no">	void RenderDirectionalShadows () {
+		&hellip;
+		
+		<ins>buffer.SetGlobalInt(cascadeCountId, settings.directional.cascadeCount);</ins>
+		<ins>buffer.SetGlobalVectorArray(</ins>
+			<ins>cascadeCullingSpheresId, cascadeCullingSpheres</ins>
+		<ins>);</ins>
+		buffer.SetGlobalMatrixArray(dirShadowMatricesId, dirShadowMatrices);
+		buffer.EndSample(bufferName);
+		ExecuteBuffer();
+	}</pre>
+					</section>
+					
+					<section>
+						<h3>Sampling Cascades</h3>
+						
+						<p>Add the cascade count and culling spheres array to <em translate="no">Shadows</em>.</p>
+						
+						<pre class="shader" translate="no">CBUFFER_START(_CustomShadows)
+	<ins>int _CascadeCount;</ins>
+	<ins>float4 _CascadeCullingSpheres[MAX_CASCADE_COUNT];</ins>
+	float4x4 _DirectionalShadowMatrices
+		[MAX_SHADOWED_DIRECTIONAL_LIGHT_COUNT * MAX_CASCADE_COUNT];
+CBUFFER_END</pre>
+						
+						<p>The cascade index is determined per fragment, not per light. So let's introduce a global <code class="shader">ShadowData</code> struct that contains it. We'll add some more data to it later. Also add a <code>GetShadowData</code> function that returns the shadow data for a world-space surface, initially with the cascade index always set to zero.</p>
+						
+						<pre class="shader" translate="no"><ins>struct ShadowData {</ins>
+	<ins>int cascadeIndex;</ins>
+<ins>};</ins>
+
+<ins>ShadowData GetShadowData (Surface surfaceWS) {</ins>
+	<ins>ShadowData data;</ins>
+	<ins>data.cascadeIndex = 0;</ins>
+	<ins>return data;</ins>
+<ins>}</ins></pre>
+						
+						<p>Add the new data as a parameter to <code class="shader">GetDirectionalShadowData</code>, so it can select the correct tile index by adding the cascade index to the light's shadow tile offset.</p>
+						
+						<pre class="shader" translate="no">DirectionalShadowData GetDirectionalShadowData (
+	int lightIndex<ins>, ShadowData shadowData</ins>
+) {
+	DirectionalShadowData data;
+	data.strength = _DirectionalLightShadowData[lightIndex].x;
+	data.tileIndex =
+		_DirectionalLightShadowData[lightIndex].y <ins>+ shadowData.cascadeIndex</ins>;
+	return data;
+}</pre>
+						
+						<p>Also add the same parameter to <code>GetDirectionalLight</code> so it can forward the data to <code class="shader">GetDirectionalShadowData</code>. Rename the directional shadow data variable appropriately.</p>
+						
+						<pre class="shader" translate="no">Light GetDirectionalLight (int index, Surface surfaceWS<ins>, ShadowData shadowData</ins>) {
+	&hellip;
+	DirectionalShadowData <ins>dirShadowData</ins> =
+		GetDirectionalShadowData(index<ins>, shadowData</ins>);
+	light.attenuation = GetDirectionalShadowAttenuation(<ins>dirShadowData</ins>, surfaceWS);
+	return light;
+}</pre>
+						
+						<p>Get the shadow data in <code class="shader">GetLighting</code> and pass it along.</p>
+						
+						<pre class="shader" translate="no">float3 GetLighting (Surface surfaceWS, BRDF brdf) {
+	<ins>ShadowData shadowData = GetShadowData(surfaceWS);</ins>
+	float3 color = 0.0;
+	for (int i = 0; i &lt; GetDirectionalLightCount(); i++) {
+		<ins>Light light = GetDirectionalLight(i, surfaceWS, shadowData);</ins>
+		color += GetLighting(surfaceWS, brdf, <ins>light</ins>);
+	}
+	return color;
+}</pre>
+						
+						<figure>
+							<img src="cascaded-shadow-maps/cascade-first.png" width="420" height="230" alt="first">
+							<img src="cascaded-shadow-maps/cascade-last.png" width="420" height="230" alt="last">
+							<figcaption>Always using the first vs. the last cascade.</figcaption>
+						</figure>
+						
+						<p>To select the correct cascade we need to calculate the square distance between two points. Let's add a convenient function to <code class="shader">Common</code> for that.</p>
+						
+						<pre class="shader" translate="no"><ins>float DistanceSquared(float3 pA, float3 pB) {</ins>
+	<ins>return dot(pA - pB, pA - pB);</ins>
+<ins>}</ins></pre>
+						
+						<p>Loop through all cascade culling spheres in <code class="shader">GetShadowData</code> until we find one that contains the surface position. Break out of the loop once it's found and then use the current loop iterator as the cascade index. This means we end up with an invalid index if the fragment lies outside all spheres, but we'll ignore that for now.</p>
+						
+						<pre class="shader" translate="no">	<ins>int i;</ins>
+	<ins>for (i = 0; i &lt; _CascadeCount; i++) {</ins>
+		<ins>float4 sphere = _CascadeCullingSpheres[i];</ins>
+		<ins>float distanceSqr = DistanceSquared(surfaceWS.position, sphere.xyz);</ins>
+		<ins>if (distanceSqr &lt; sphere.w) {</ins>
+			<ins>break;</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+	data.cascadeIndex = <ins>i</ins>;</pre>
+						
+						<figure>
+							<img src="cascaded-shadow-maps/selecting-cascade.png" width="420" height="230">
+							<figcaption>Selecting the best cascade.</figcaption>
+						</figure>
+						
+						<p>We now get shadows with a much better distribution of texel density. The curved transition borders between cascades are also visible due to the self-shadowing artifacts, though we can make them easier to spot by replacing the shadow attenuation with the cascade index, divided by four.</p>
+						
+						<pre class="shader" translate="no">Light GetDirectionalLight (int index, Surface surfaceWS, ShadowData shadowData) {
+	&hellip;
+	light.attenuation = GetDirectionalShadowAttenuation(dirShadowData, surfaceWS);
+	<ins>light.attenuation = shadowData.cascadeIndex * 0.25;</ins>
+	return light;
+}</pre>
+						
+						<figure>
+							<img src="cascaded-shadow-maps/cascade-indices.png" width="420" height="230">
+							<figcaption>Shadowing with cascade indices.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Culling Shadow Sampling</h3>
+						
+						<p>If we end up beyond the last cascade them there is most likely no valid shadow data and we should not sample shadows at all. An easy way to enforce this is by adding a strength field to <code class="shader">ShadowData</code>, setting it to one by default and to zero if we end up beyond the last cascade.</p>
+						
+						<pre class="shader" translate="no">struct ShadowData {
+	int cascadeIndex;
+	<ins>float strength;</ins>
+};
+
+ShadowData GetShadowData (Surface surfaceWS) {
+	ShadowData data;
+	<ins>data.strength = 1.0;</ins>
+	int i;
+	for (i = 0; i &lt; _CascadeCount; i++) {
+		&hellip;
+	}
+
+	<ins>if (i == _CascadeCount) {</ins>
+		<ins>data.strength = 0.0;</ins>
+	<ins>}</ins>
+
+	data.cascadeIndex = i;
+	return data;
+}</pre>
+						
+						<p>Then factor the global shadow strength into the directional shadow strength in <code class="shader">GetDirectionalShadowData</code>. This culls all shadows beyond the last cascade.</p>
+						
+						<pre class="shader" translate="no">	data.strength =
+		_DirectionalLightShadowData[lightIndex].x <ins>* shadowData.strength</ins>;</pre>
+						
+						<p>Also, restore the correct attenuation in <code class="shader">GetDirectionalLight</code>.</p>
+						
+						<pre class="shader" translate="no">	light.attenuation = GetDirectionalShadowAttenuation(dirShadowData, surfaceWS);
+	<del>//light.attenuation = shadowData.cascadeIndex * 0.25;</del></pre>
+						
+						<figure>
+							<img src="cascaded-shadow-maps/culled-shadows.png" width="420" height="230">
+							<figcaption>Culled shadows; max distance 12.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Max Distance</h3>
+						
+						<p>Some experimentation with the max shadow distance will reveal that some shadow casters suddenly disappear while still inside the culling sphere of the last cascade. This happens because the outermost culling sphere doesn't end exactly at the configured max distance but extends a bit beyond it. This discrepancy is most noticeable with a small max distance.</p>
+						
+						<p>We can fix the popping of shadows by also stopping to sample shadows at the max distance. To make this possible we have to send the max distance to the GPU in <code>Shadows</code>.</p>
+						
+						<pre translate="no">	static int
+		&hellip;
+		cascadeCullingSpheresId = Shader.PropertyToID("_CascadeCullingSpheres")<ins>,</ins>
+		<ins>shadowDistanceId = Shader.PropertyToID("_ShadowDistance")</ins>;
+
+	&hellip;
+
+	void RenderDirectionalShadows () {
+		&hellip;
+		<ins>buffer.SetGlobalFloat(shadowDistanceId, settings.maxDistance);</ins>
+		buffer.EndSample(bufferName);
+		ExecuteBuffer();
+	}</pre>
+						
+						<p>The max distance is based on view-space depth, not distance to the camera's position. So to perform this culling we need to know the depth of the surface. Add a field for that to <code class="shader">Surface</code>.</p>
+						
+						<pre class="shader" translate="no">struct Surface {
+	float3 position;
+	float3 normal;
+	float3 viewDirection;
+	<ins>float depth;</ins>
+	&hellip;
+};</pre>
+						
+						<p>The depth can be found in <code class="shader">LitPassFragment</code> by converting from world space to view space via <code class="shader">TransformWorldToView</code> and taking the negated Z coordinate. As this conversion is only a rotation and offset relative to world space the depth is the same in both view space and world space.</p>
+						
+						<pre class="shader" translate="no">	surface.viewDirection = normalize(_WorldSpaceCameraPos - input.positionWS);
+	<ins>surface.depth = -TransformWorldToView(input.positionWS).z;</ins></pre>
+						
+						<p>Now instead of always initializing the strength to one in <code class="shader">GetShadowData</code> do this only when the surface depth is less than the max distance, otherwise set it to zero.</p>
+						
+						<pre class="shader" translate="no">CBUFFER_START(_CustomShadows)
+	&hellip;
+	<ins>float _ShadowDistance;</ins>
+CBUFFER_END
+
+&hellip;
+float FadedShadowStrength (float distance, float scale, float fade) {
+	return saturate((1.0 - distance * scale) * fade);
+}
+
+ShadowData GetShadowData (Surface surfaceWS) {
+	ShadowData data;
+	data.strength = <ins>surfaceWS.depth &lt; _ShadowDistance ? 1.0 : 0.0</ins>;
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="cascaded-shadow-maps/depth-culled-shadows.png" width="420" height="230">
+							<figcaption>Also culled based on depth.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Fading Shadows</h3>
+						
+						<p>Suddenly cutting off shadows at the max distance can by very obvious, so let's make the transition smoother by linearly fading them. The fading starts some distance before the max, until we reach a strength of zero at the max. We can use the function `(1-d/m)/f` clamped to 0&ndash;1 for that, where `d` is the surface depth, `m` is the max shadow distance, and `f` is a fade range, expressed as a fraction of the max distance.</p> 
+						
+						<figure>
+							<img src="cascaded-shadow-maps/distance-fade-graph.png" width="200" height="200">
+							<figcaption>`f` 0.1, 0.2, and 0.5.</figcaption>
+						</figure>
+						
+						<p>Add a slider for the distance fade to the shadow settings. As both the fade and max values are used as divisors they shouldn't be zero, so set their minimum values to 0.001.</p>
+						
+						<pre translate="no">	[Min(<ins>0.001f</ins>)]
+	public float maxDistance = 100f;
+	
+	<ins>[Range(0.001f, 1f)]</ins>
+	<ins>public float distanceFade = 0.1f;</ins></pre>
+						
+						<p>Replace the shadow distance identifier in <code>Shadows</code> with one for both the distance value and the fade value.</p>
+						
+						<pre translate="no">		<del>//shadowDistanceId = Shader.PropertyToID("_ShadowDistance");</del>
+		<ins>shadowDistanceFadeId = Shader.PropertyToID("_ShadowDistanceFade");</ins>
+						</pre>
+						
+						<p>When sending them as the XY components of a vector to the GPU, use one divided by the values so we can avoid divisions in the shader, as multiplications are faster.</p>
+						
+						<pre translate="no">		<del>buffer.SetGlobalFloat(shadowDistanceId, settings.maxDistance);</del>
+		<ins>buffer.SetGlobalVector(</ins>
+			<ins>shadowDistanceFadeId,</ins>
+			<ins>new Vector4(1f / settings.maxDistance, 1f / settings.distanceFade)</ins>
+		<ins>);</ins></pre>
+						
+						<p>Adjust the <code class="shader">_CustomShadows</code> buffer in <em translate="no">Shadows</em> to match.</p>
+						
+						<pre class="shader" translate="no">	<del>//float _ShadowDistance;</del>
+	<ins>float4 _ShadowDistanceFade;</ins></pre>
+						
+						<p>Now we can calculate the faded shadow strength using `(1-ds)f` saturated, with `1/m` used for the scale `s` and `1/f` used for the new fade multiplier `f`. Create a <code class="shader">FadedShadowStrength</code> function for that and use it in <code>GetShadowData</code>.</p>
+						
+						<pre class="shader" translate="no"><ins>float FadedShadowStrength (float distance€, float scale, float fade) {</ins>
+	<ins>return saturate((1.0 - distance€ * scale) * fade);</ins>
+<ins>}</ins>
+
+ShadowData GetShadowData (Surface surfaceWS) {
+	ShadowData data;
+	data.strength = <ins>FadedShadowStrength(</ins>
+		<ins>surfaceWS.depth, _ShadowDistanceFade.x, _ShadowDistanceFade.y</ins>
+	<ins>);</ins>
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="cascaded-shadow-maps/distance-fade-inspector.png" width="320" height="40" alt="inspector">
+							<img src="cascaded-shadow-maps/distance-fade-scene.png" width="420" height="230" alt="scene">
+							<figcaption>Distance fade.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Fading Cascades</h3>
+						
+						<p>We can fade shadows at the edge of the last cascade as well instead of cutting them off, using the same approach. Add a cascade fade shadow setting slider for that.</p>
+						
+						<pre translate="no">	public struct Directional {
+
+		&hellip;
+
+		<ins>[Range(0.001f, 1f)]</ins>
+		<ins>public float cascadeFade;</ins>
+	}
+
+	public Directional directional = new Directional {
+		&hellip;
+		cascadeRatio3 = 0.5f<ins>,</ins>
+		<ins>cascadeFade = 0.1f</ins>
+	};</pre>
+						
+						<p>The only difference is that we're working with the square distance and radius for cascades, instead of a linear depth and max. This means that the transition becomes nonlinear: `(1-d^2/r^2)/f` with `r` being the culling sphere radius. The difference isn't that great, but to keep the configured fade ratio the same we have to replace `f` with `1-(1-f)^2`. Then we store it in the Z component of the shadow distance fade vector, once again inverted.</p>
+						
+						<figure>
+							<img src="cascaded-shadow-maps/cascade-fade-graph.png" width="200" height="200">
+							<figcaption>`f` 0.1, 0.2, and 0.5 with square distance.</figcaption>
+						</figure>
+						
+						<pre translate="no">		<ins>float f = 1f - settings.directional.cascadeFade;</ins>
+		buffer.SetGlobalVector(
+			shadowDistanceFadeId, new Vector4(
+				1f / settings.maxDistance, 1f / settings.distanceFade<ins>,</ins>
+				<ins>1f / (1f - f * f)</ins>
+			)
+		);</pre>
+						
+						<p>To perform the cascade fade, check whether we're in the last cascade while still inside the loop in <code class="shader">GetShadowData</code>. If so, calculate the faded shadow strength for the cascade and factor it into the final strength.</p>
+						
+						<pre class="shader" translate="no">	for (i = 0; i &lt; _CascadeCount; i++) {
+		float4 sphere = _CascadeCullingSpheres[i];
+		float distanceSqr = DistanceSquared(surfaceWS.position, sphere.xyz);
+		if (distanceSqr &lt; sphere.w) {
+			<ins>if (i == _CascadeCount - 1) {</ins>
+				<ins>data.strength *= FadedShadowStrength(</ins>
+					<ins>distanceSqr, 1.0 / sphere.w, _ShadowDistanceFade.z</ins>
+				<ins>);</ins>
+			<ins>}</ins>
+			break;
+		}
+	}</pre>
+						
+						<figure>
+							<img src="cascaded-shadow-maps/cascade-fade-inspector.png" width="320" height="38" alt="inspector">
+							<img src="cascaded-shadow-maps/cascade-fade-scene.png" width="420" height="230" alt="scene">
+							<figcaption>Both cascade and distance fade.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Shadow Quality</h2>
+					
+					<p>Now that we have functional cascading shadow maps let's focus on improving the quality of the shadows. The artifacts that we've observed all this time are known as shadow acne, which is caused by incorrect self-shadowing of surfaces that aren't perfectly aligned with the light direction. Acne gets worse as the surface gets closer to being parallel to the light direction.</p>
+					
+					<figure>
+						<img src="shadow-quality/shadow-acne.png" width="250" height="250">
+						<figcaption>Shadow acne.</figcaption>
+					</figure>
+					
+					<p>Increasing the atlas size decreases the world-space size of the texels, so the acne artifacts get smaller. However, the amount of artifacts also increases, so the problem cannot be solved by simply increasing the atlas size.</p>
+					
+					<section>
+						<h3>Depth Bias</h3>
+						
+						<p>There are various approaches to mitigate shadow acne. The simplest is adding a constant bias to the depth of shadow casters, pushing them away from the light so incorrect self-shadowing no longer happens. The quickest way to add this technique is by applying a global depth bias when rendering, invoking <code>SetGlobalDepthBias</code> on the buffer before <code>DrawShadows</code> and setting it back to zero afterwards. This is a depth bias applied in clip space and a multiple of a very small value, the specifics depending on the exact format used for shadow maps. We can get an idea of how it works by using a large value, like 50000. There is also a second argument for a slope-scale bias, but we'll keep that at zero for now.</p>
+						
+						<pre translate="no">			<ins>buffer.SetGlobalDepthBias(50000f, 0f);</ins>
+			ExecuteBuffer();
+			context.DrawShadows(ref shadowSettings);
+			<ins>buffer.SetGlobalDepthBias(0f, 0f);</ins></pre>
+						
+						<figure>
+							<img src="shadow-quality/constant-depth-bias.png" width="250" height="250">
+							<figcaption>Constant depth bias.</figcaption>
+						</figure>
+						
+						<p>A constant bias is simple but is only able to remove artifacts for surfaces that are mostly lit head-on. Removing all acne requires a much larger bias, like an order of magnitude bigger.</p>
+						
+						<pre translate="no">			buffer.SetGlobalDepthBias(<ins>500000f</ins>, 0f);</pre>
+						
+						<figure>
+							<img src="shadow-quality/large-depth-bias.png" width="250" height="250">
+							<figcaption>Larger depth bias.</figcaption>
+						</figure>
+						
+						<p>However, as the depth bias pushes shadow casters away from the light the sampled shadows are also moved in the same direction. Biases that are large enough to remove most acne invariable move shadow so far away that they appear to detach from their casters, causing visual artifacts known as Peter-Panning.</p>
+						
+						<figure>
+							<img src="shadow-quality/without-peter-panning.png" width="250" height="250" alt="without">
+							<img src="shadow-quality/with-peter-panning.png" width="250" height="250" alt="with">
+							<figcaption>Bias causes peter-panning.</figcaption>
+						</figure>
+						
+						<p>An alternative approach is to apply a slope-scale bias, which is done by using a nonzero value for the second argument of <code>SetGlobalDepthBias</code>. This value is used to scale the highest of the absolute clip-space depth derivative along the X and Y dimensions. So it is zero for surfaces that are lit head-on, it's 1 when the light hits at a 45&deg; angle in at least one of the two dimensions, and approaches infinity when the dot product of the surface normal and light direction reaches zero. So the bias increases automatically when more is needed, but there's no upper bound. As a result a much lower factor is needed to eliminate acne, for example 3 instead of 500000.</p>
+						
+						<pre class="shader" translate="no">			buffer.SetGlobalDepthBias(<ins>0f, 3f</ins>);</pre>
+						
+						<figure>
+							<img src="shadow-quality/slope-scale-bias.png" width="250" height="250">
+							<figcaption>Slope scale bias.</figcaption>
+						</figure>
+						
+						<p>Slope scale bias is effective but not intuitive. Experimentation is needed to arrive at an acceptable result that trades acne for Peter-Panning. So let's disable it for now and look for a more intuitive and predictable approach.</p>
+						
+						<pre translate="no">			<del>//buffer.SetGlobalDepthBias(0f, 3f);</del>
+			ExecuteBuffer();
+			context.DrawShadows(ref shadowSettings);
+			<del>//buffer.SetGlobalDepthBias(0f, 0f);</del></pre>
+					</section>
+					
+					<section>
+						<h3>Cascade Data</h3>
+						
+						<p>Because the size of the acne depends on the world-space texel size a consistent approach that works in all cases must take this into account. As the texel size varies per cascade this means that we'll have to send some more cascade data to the GPU. Add a generic cascade data vector array to <code>Shadows</code> for that.</p>
+						
+						<pre translate="no">	static int
+		&hellip;
+		cascadeCullingSpheresId = Shader.PropertyToID("_CascadeCullingSpheres"),
+		<ins>cascadeDataId = Shader.PropertyToID("_CascadeData"),</ins>
+		shadowDistanceFadeId = Shader.PropertyToID("_ShadowDistanceFade");
+
+	static Vector4[]
+		cascadeCullingSpheres = new Vector4[maxCascades]<ins>,</ins>
+		<ins>cascadeData = new Vector4[maxCascades]</ins>;</pre>
+						
+						<p>Send it to the GPU along with everything else.</p>
+						
+						<pre translate="no">		buffer.SetGlobalVectorArray(
+			cascadeCullingSpheresId, cascadeCullingSpheres
+		);
+		<ins>buffer.SetGlobalVectorArray(cascadeDataId, cascadeData);</ins></pre>
+						
+						<p>One thing we can already do is put the inverse of the squared cascade radius in the X component of these vectors. That way we don't have to perform this division in the shader. Do this in a new <code>SetCascadeData</code> method, along with storing the culling sphere and invoke it in <code>RenderDirectionalShadows</code>. Pass it the cascade index, culling sphere, and tile size as a float.</p>
+						
+						<pre translate="no">	void RenderDirectionalShadows (int index, int split, int tileSize) {
+		&hellip;
+		
+		for (int i = 0; i &lt; cascadeCount; i++) {
+			&hellip;
+			if (index == 0) {
+				<ins>SetCascadeData(i, splitData.cullingSphere, tileSize);</ins>
+			}
+			&hellip;
+		}
+	}
+
+	<ins>void SetCascadeData (int index, Vector4 cullingSphere, float tileSize) {</ins>
+		<ins>cascadeData[index].x = 1f / cullingSphere.w;</ins>
+		cullingSphere.w *= cullingSphere.w;
+		cascadeCullingSpheres[index] = cullingSphere;
+	}</pre>
+						
+						<p>Add the cascade data to the <code class="shader">_CustomShadows</code> buffer in <em translate="no">Shadows</em>.</p>
+						
+						<pre class="shader" translate="no">CBUFFER_START(_CustomShadows)
+	int _CascadeCount;
+	float4 _CascadeCullingSpheres[MAX_CASCADE_COUNT];
+	<ins>float4 _CascadeData[MAX_CASCADE_COUNT];</ins>
+	&hellip;
+CBUFFER_END</pre>
+						
+						<p>And use the new precomputed inverse in <code class="shader">GetShadowData</code>.</p>
+						
+						<pre class="shader" translate="no">				data.strength *= FadedShadowStrength(
+					distanceSqr, <ins>_CascadeData[i].x</ins>, _ShadowDistanceFade.z
+				);</pre>
+					</section>
+					
+					<section>
+						<h3>Normal Bias</h3>
+						
+						<p>Incorrect self-shadowing happens because a shadow caster depth texel covers more than one fragment, which causes the caster's volume to poke out of its surface. So if we shrink the caster enough this should no longer happen. However, shrinking shadows caster will make shadows smaller than they should be and can introduce holes that shouldn't exist.</p>
+						
+						<p>We can also do the opposite: inflate the surface while sampling shadows. Then we're sampling a bit away from the surface, just far enough to avoid incorrect self-shadowing. This will adjust the positions of shadows a bit, potentially causing misalignment along edges and adding false shadows, but these artifacts tend to be far less obvious than Peter-Panning.</p>
+						
+						<p>We can do that by moving the surface position a bit along its normal vector for the purpose of sampling shadows. If we only consider a single dimension then an offset equal to the world-space texel size should be sufficient. We can find the texel size in <code>SetCascadeData</code> by dividing the diameter of the culling sphere by the tile size. Store it in the Y component of the cascade data vector.</p>
+						
+						<pre translate="no">		<ins>float texelSize = 2f * cullingSphere.w / tileSize;</ins>
+		cullingSphere.w *= cullingSphere.w;
+		cascadeCullingSpheres[index] = cullingSphere;
+		<del>//cascadeData[index].x = 1f / cullingSphere.w;</del>
+		<ins>cascadeData[index] = new Vector4(</ins>
+			<ins>1f / cullingSphere.w,</ins>
+			<ins>texelSize</ins>
+		<ins>);</ins></pre>
+						
+						<p>However, this isn't always sufficient because texels are squares. In the worst case we end up having to offset along the square's diagonal, so let's scale it by &radic;2.</p>
+						
+						<pre translate="no">			texelSize <ins>* 1.4142136f</ins></pre>
+						
+						<p>On the shader side, add a parameter for the global shadow data to <code class="shader">GetDirectionalShadowAttenuation</code>. Multiply the surface normal with the offset to find the normal bias and add it to the world position before calculating the position in shadow tile space.</p>
+						
+						<pre class="shader" translate="no">float GetDirectionalShadowAttenuation (
+	DirectionalShadowData <ins>directional, ShadowData global</ins>, Surface surfaceWS
+) {
+	if (<ins>directional</ins>.strength &lt;= 0.0) {
+		return 1.0;
+	}
+	<ins>float3 normalBias = surfaceWS.normal * _CascadeData[global.cascadeIndex].y;</ins>
+	float3 positionSTS = mul(
+		_DirectionalShadowMatrices[<ins>directional</ins>.tileIndex],
+		float4(surfaceWS.position <ins>+ normalBias</ins>, 1.0)
+	).xyz;
+	float shadow = SampleDirectionalShadowAtlas(positionSTS);
+	return lerp(1.0, shadow, <ins>directional</ins>.strength);
+}</pre>
+						
+						<p>Pass the extra data to it in <code class="shader">GetDirectionalLight</code>.</p>
+						
+						<pre class="shader" translate="no">	light.attenuation =
+		GetDirectionalShadowAttenuation(dirShadowData, <ins>shadowData,</ins> surfaceWS);</pre>
+						
+						<figure>
+							<img src="shadow-quality/normal-bias-sphere.png" width="250" height="250" alt="sphere">
+							<img src="shadow-quality/normal-bias-cube.png" width="250" height="250" alt="cube">
+							<figcaption>Normal bias equal to texel size.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Configurable Biases</h3>
+						
+						<p>The normal bias gets rid of shadow acne without introducing obvious new artifacts, but it cannot eliminate all shadow problems. For example, there are shadow lines visible on the floor below walls that shouldn't be there. This isn't self-shadowing, but shadows poking out of the wall affecting the floor below it. Adding a little slope-scale bias can deal with those, but there is no perfect value for it. So we'll configure it per light, using their existing <em translate="no">Bias</em> slider. Add a field for it to the <code>ShadowedDirectionalLight</code> struct in <code>Shadows</code>.</p>
+						
+						<pre translate="no">	struct ShadowedDirectionalLight {
+		public int visibleLightIndex;
+		<ins>public float slopeScaleBias;</ins>
+	}</pre>
+						
+						<p>The light's bias is made available via its <code>shadowBias</code> property. Add it to the data in <code>ReserveDirectionalShadows</code>.</p>
+						
+						<pre translate="no">			shadowedDirectionalLights[ShadowedDirectionalLightCount] =
+				new ShadowedDirectionalLight {
+					visibleLightIndex = visibleLightIndex<ins>,</ins>
+					<ins>slopeScaleBias = light.shadowBias</ins>
+				};</pre>
+						
+						<p>And use it to configure the slope-scale bias in <code>RenderDirectionalShadows</code>.</p>
+						
+						<pre translate="no">			<ins>buffer.SetGlobalDepthBias(0f, light.slopeScaleBias);</ins>
+			ExecuteBuffer();
+			context.DrawShadows(ref shadowSettings);
+			<ins>buffer.SetGlobalDepthBias(0f, 0f);</ins></pre>
+						
+						<p>Let's also use the light's existing <em translate="no">Normal Bias</em> slider to modulate the normal bias that we apply. Make <code>ReserveDirectionalShadows</code> return a <code>Vector3</code> and use the light's <code>shadowNormalBias</code> for the new Z component.</p>
+						
+						<pre translate="no">	public <ins>Vector3</ins> ReserveDirectionalShadows (
+		Light light, int visibleLightIndex
+	) {
+		if (&hellip;) {
+			&hellip;
+			return new <ins>Vector3</ins>(
+				light.shadowStrength,
+				settings.directional.cascadeCount * ShadowedDirectionalLightCount++<ins>,</ins>
+				<ins>light.shadowNormalBias</ins>
+			);
+		}
+		return <ins>Vector3</ins>.zero;
+	}</pre>
+						
+						<p>Add the new normal bias to <code class="shader">DirectionalShadowData</code> and apply it in <code class="shader">GetDirectionalShadowAttenuation</code> in <em translate="no">Shadows</em>.</p>
+						
+						<pre class="shader" translate="no">struct DirectionalShadowData {
+	float strength;
+	int tileIndex;
+	<ins>float normalBias;</ins>
+};
+
+&hellip;
+
+float GetDirectionalShadowAttenuation (&hellip;) {
+	&hellip;
+	float3 normalBias = surfaceWS.normal *
+		<ins>(directional.normalBias *</ins> _CascadeData[global.cascadeIndex].y<ins>)</ins>;
+	&hellip;
+}</pre>
+						
+						<p>And configure it in <code class="shader">GetDirectionalShadowData</code> in <em translate="no">Light</em>.</p>
+						
+						<pre class="shader" translate="no">	data.tileIndex =
+		_DirectionalLightShadowData[lightIndex].y + shadowData.cascadeIndex;
+	<ins>data.normalBias = _DirectionalLightShadowData[lightIndex].z;</ins></pre>
+						
+						<p>We can now tweak both biases per light. Zero for the slope-scale bias and one for the normal bias is a good default. If you increase the first you could decrease the second. But keep in mind that we're interpreting these light settings differently than their original purpose. They used to be a clip-space depth bias and world-space shrinking normal bias. So when you create a new light you'll get heavy Peter-Panning until you adjust the biases.</p>
+						
+						<figure>
+							<img src="shadow-quality/light-settings.png" width="320" height="94" alt="settings"><br>
+							<img src="shadow-quality/configured-bias-sphere.png" width="250" height="250" alt="sphere">
+							<img src="shadow-quality/configured-bias-cube.png" width="250" height="250" alt="cube">
+							<figcaption>Both biases set to 0.6.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Shadow Pancaking</h3>
+						
+						<p>Another potential problem that can cause artifacts is that Unity applies shadow pancaking. The idea is that when rendering shadow casters for a directional light the near plane is moved forward as much as possible. This increases depth precision, but it means that shadow casters that aren't in view of the camera can end up in front of the near plane, which causes them to get clipped while they shouldn't.</p>
+						
+						<figure>
+							<img src="shadow-quality/clipped-shadows.png" width="320" height="160">
+							<figcaption>Shadows get clipped.</figcaption>
+						</figure>
+						
+						<p>This is solved by clamping the vertex positions to the near plane in <code class="shader">ShadowCasterPassVertex</code>, effectively flattening shadow casters that lie in front of the near plane, turning them into pancakes stuck to the near plane. We do this by taking the maximum of the clip space Z and W coordinates, or their minimum when <code class="shader">UNITY_REVERSED_Z</code> is defined. To use the correct sign for the W coordinate multiply it with <code class="shader">UNITY_NEAR_CLIP_VALUE</code>.</p>
+						
+						<pre class="shader" translate="no">	output.positionCS = TransformWorldToHClip(positionWS);
+
+	<ins>#if UNITY_REVERSED_Z</ins>
+		<ins>output.positionCS.z =</ins>
+			<ins>min(output.positionCS.z, output.positionCS.w * UNITY_NEAR_CLIP_VALUE);</ins>
+	<ins>#else</ins>
+		<ins>output.positionCS.z =</ins>
+			<ins>max(output.positionCS.z, output.positionCS.w * UNITY_NEAR_CLIP_VALUE);</ins>
+	<ins>#endif</ins></pre>
+						
+						<figure>
+							<img src="shadow-quality/clamped-shadows.png" width="320" height="160">
+							<figcaption>Shadows get clamped.</figcaption>
+						</figure>
+						
+						<p>This works perfectly for shadow casters that are fully on either side of the near plane, but shadows casters that cross the plane get deformed as only some of their vertices are affected. This isn't noticeable for small triangles, but large triangles can end up deforming a lot, bending them and often causing them to sink into surfaces.</p>
+						
+						<figure>
+							<img src="shadow-quality/deformed-shadows.png" width="230" height="150">
+							<figcaption>Deformed shadows of very long cube.</figcaption>
+						</figure>
+						
+						<p>The problem can be alleviated by pulling the near plane back a bit. That's what the <em translate="no">Near Plane</em> slider of lights is for. Add a field for the near plane offset to <code>ShadowedDirectionalLight</code>.</p>
+						
+						<pre translate="no">	struct ShadowedDirectionalLight {
+		public int visibleLightIndex;
+		public float slopeScaleBias;
+		<ins>public float nearPlaneOffset;</ins>
+	}</pre>
+						
+						<p>And copy the light's <code>shadowNearPlane</code> property to it.</p>
+						
+						<pre translate="no">			shadowedDirectionalLights[ShadowedDirectionalLightCount] =
+				new ShadowedDirectionalLight {
+					visibleLightIndex = visibleLightIndex,
+					slopeScaleBias = light.shadowBias<ins>,</ins>
+					<ins>nearPlaneOffset = light.shadowNearPlane</ins>
+				};</pre>
+						
+						<p>We apply it by filling in the last argument of <code>ComputeDirectionalShadowMatricesAndCullingPrimitives</code> that we still gave a fixed value of zero.</p>
+						
+						<pre translate="no">			cullingResults.ComputeDirectionalShadowMatricesAndCullingPrimitives(
+				light.visibleLightIndex, i, cascadeCount, ratios, tileSize,
+				<ins>light.nearPlaneOffset</ins>, out Matrix4x4 viewMatrix,
+				out Matrix4x4 projectionMatrix, out ShadowSplitData splitData
+			);</pre>
+						
+						<figure>
+							<img src="shadow-quality/near-plane-offset.png" width="230" height="150">
+							<figcaption>With near plane offset.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>PCF Filtering</h3>
+						
+						<p>Up to this point we've only used hard shadows, by sampling the shadow map once per fragment. The shadow compare sampler uses a special form of bilinear interpolation, performing a depth comparison before interpolating. This is known as percentage closer filtering&mdash;PCF for short&mdash;specifically a 2&times;2 PCF filter because four texels are involved.</p>
+						
+						<p>But this isn't the only way we can filter the shadow map. We could also use a larger filter, making the shadows softer and less aliased, though less accurate as well. Let's add support for 2&times;2, 3&times;3, 5&times;5, and 7&times;7 filtering. We won't use the existing soft shadow mode to control this per light. We'll instead make all directional lights use the same filter. Add a <code>FilterMode</code> enum to <code>ShadowSettings</code> for that, along with a filter option to <code>Directional</code>, set to 2&times;2 by default.</p>
+						
+						<pre translate="no">	<ins>public enum FilterMode {</ins>
+		<ins>PCF2x2, PCF3x3, PCF5x5, PCF7x7</ins>
+	<ins>}</ins>
+
+	&hellip;
+
+	[System.Serializable]
+	public struct Directional {
+
+		public MapSize atlasSize;
+
+		<ins>public FilterMode filter;</ins>
+
+		&hellip;
+	}
+
+	public Directional directional = new Directional {
+		atlasSize = MapSize._1024,
+		<ins>filter = FilterMode.PCF2x2,</ins>
+		&hellip;
+	};</pre>
+						
+						<figure>
+							<img src="shadow-quality/filter.png" width="320" height="38">
+							<figcaption>Filter set to PCF 2x2.</figcaption>
+						</figure>
+						
+						<p>We'll create shader variants for the new filter modes. Add a static array with three keywords for that to <code>Shadows</code>.</p>
+						
+						<pre translate="no">	<ins>static string[] directionalFilterKeywords = {</ins>
+		<ins>"_DIRECTIONAL_PCF3",</ins>
+		<ins>"_DIRECTIONAL_PCF5",</ins>
+		<ins>"_DIRECTIONAL_PCF7",</ins>
+	<ins>};</ins></pre>
+						
+						<p>Create a <code>SetKeywords</code> method that either enables or disables the appropriate keywords. Invoke it in <code>RenderDirectionalShadows</code> before executing the buffer.</p>
+						
+						<pre translate="no">	void RenderDirectionalShadows () {
+		&hellip;
+		<ins>SetKeywords();</ins>
+		buffer.EndSample(bufferName);
+		ExecuteBuffer();
+	}
+
+	<ins>void SetKeywords () {</ins>
+		<ins>int enabledIndex = (int)settings.directional.filter - 1;</ins>
+		<ins>for (int i = 0; i &lt; directionalFilterKeywords.Length; i++) {</ins>
+			<ins>if (i == enabledIndex) {</ins>
+				<ins>buffer.EnableShaderKeyword(directionalFilterKeywords[i]);</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				<ins>buffer.DisableShaderKeyword(directionalFilterKeywords[i]);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Larger filters require more texture samples. We need to know both the atlas size and texel size in the shader to do this. Add a shader identifier for this data.</p>
+						
+						<pre translate="no">		cascadeDataId = Shader.PropertyToID("_CascadeData"),
+		<ins>shadowAtlasSizeId = Shader.PropertyToID("_ShadowAtlasSize"),</ins>
+		shadowDistanceFadeId = Shader.PropertyToID("_ShadowDistanceFade");</pre>
+						
+						<p>And add it to <code class="shader">_CustomShadow</code> on the shader side.</p>
+						
+						<pre class="shader" translate="no">CBUFFER_START(_CustomShadows)
+	&hellip;
+	<ins>float4 _ShadowAtlasSize;</ins>
+	float4 _ShadowDistanceFade;
+CBUFFER_END</pre>
+						
+						<p>Store the size in its X component and texel size in its Y component.</p>
+						
+						<pre translate="no">		SetKeywords();
+		<ins>buffer.SetGlobalVector(</ins>
+			<ins>shadowAtlasSizeId, new Vector4(atlasSize, 1f / atlasSize)</ins>
+		<ins>);</ins></pre>
+						
+						<p>Add a <code class="shader">#pragma multi_compile</code> directive to the <em translate="no">CustomLit</em> pass of <em translate="no">Lit</em> for the three keywords, plus and underscore for the no-keyword option matching the 2&times;2 filter.</p>
+						
+						<pre class="shader" translate="no">			#pragma shader_feature _PREMULTIPLY_ALPHA
+			<ins>#pragma multi_compile _ _DIRECTIONAL_PCF3 _DIRECTIONAL_PCF5 _DIRECTIONAL_PCF7</ins>
+			#pragma multi_compile_instancing</pre>
+						
+						<p>We'll use functions defined in the <em translate="no">Shadow/ShadowSamplingTent</em> HLSL file of the <em translate="no">Core RP Library</em>, so include it at the top of <em translate="no">Shadows</em>. If the 3&times;3 keyword is defined we need a total of four filter samples, which we'll set up with the <code class="shader">SampleShadow_ComputeSamples_Tent_3x3</code> function. We only need to take four samples because each one uses the bilinear 2&times;2 filter. A square of those offset by half a texel in all directions covers 3&times;3 texels with a tent filter, with the center having a stronger weight than the edges.</p>
+						
+						<aside>
+							<h3>How does a tent filter work?</h3>
+							<div>
+								<p>The <a href="../../advanced-rendering/bloom/index.html">Bloom</a> tutorial covers filter kernels that take advantage of bilinear texture sampling, while the <a href="../../advanced-rendering/depth-of-field/index.html">Depth of Field</a> tutorial contains an example of a 3×3 tent filter.</p>
+							</div>
+						</aside>
+						
+						<pre class="shader" translate="no"><small><ins>#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Shadow/ShadowSamplingTent.hlsl"</ins></small>
+
+<ins>#if defined(_DIRECTIONAL_PCF3)</ins>
+	<ins>#define DIRECTIONAL_FILTER_SAMPLES 4</ins>
+	<ins>#define DIRECTIONAL_FILTER_SETUP SampleShadow_ComputeSamples_Tent_3x3</ins>
+<ins>#endif</ins>
+
+#define MAX_SHADOWED_DIRECTIONAL_LIGHT_COUNT 4
+#define MAX_CASCADE_COUNT 4</pre>
+						
+						<p>For the same reason we can suffice with nine samples for the 5&times;5 filter and sixteen samples for the 7&times;7 filter, plus appropriately-named functions.</p>
+						
+						<pre class="shader" translate="no">#if defined(_DIRECTIONAL_PCF3)
+	#define DIRECTIONAL_FILTER_SAMPLES 4
+	#define DIRECTIONAL_FILTER_SETUP SampleShadow_ComputeSamples_Tent_3x3
+<ins>#elif defined(_DIRECTIONAL_PCF5)</ins>
+	<ins>#define DIRECTIONAL_FILTER_SAMPLES 9</ins>
+	<ins>#define DIRECTIONAL_FILTER_SETUP SampleShadow_ComputeSamples_Tent_5x5</ins>
+<ins>#elif defined(_DIRECTIONAL_PCF7)</ins>
+	<ins>#define DIRECTIONAL_FILTER_SAMPLES 16</ins>
+	<ins>#define DIRECTIONAL_FILTER_SETUP SampleShadow_ComputeSamples_Tent_7x7</ins>
+#endif</pre>
+						
+						<p>Create a new <code class="shader">FilterDirectionalShadow</code> function for a shadow tile space position. When <code class="shader">DIRECTIONAL_FILTER_SETUP</code> is defined it needs to sample multiple times, otherwise it can suffice with invoking <code class="shader">SampleDirectionalShadowAtlas</code> once.</p>
+						
+						<pre class="shader" translate="no"><ins>float FilterDirectionalShadow (float3 positionSTS) {</ins>
+	<ins>#if defined(DIRECTIONAL_FILTER_SETUP)</ins>
+		<ins>float shadow = 0;</ins>
+		<ins>return shadow;</ins>
+	<ins>#else</ins>
+		<ins>return SampleDirectionalShadowAtlas(positionSTS);</ins>
+	<ins>#endif</ins>
+<ins>}</ins></pre>
+						
+						<p>The filter setup function has four parameters. First the size in a <code class="shader">float4</code>, with the X and Y texel sizes in the first two components and the total texture sizes in Z and W. Then the original sample position, followed by output arguments for the weights and positions of each sample. They are defined as <code class="shader">float</code> and <code class="shader">float2</code> arrays. After that we can loop through all samples, accumulating them modulated by their weights.</p>
+						
+						<pre class="shader" translate="no">	#if defined(DIRECTIONAL_FILTER_SETUP)
+		<ins>float weights[DIRECTIONAL_FILTER_SAMPLES];</ins>
+		<ins>float2 positions[DIRECTIONAL_FILTER_SAMPLES];</ins>
+		<ins>float4 size = _ShadowAtlasSize.yyxx;</ins>
+		<ins>DIRECTIONAL_FILTER_SETUP(size, positionSTS.xy, weights, positions);</ins>
+		float shadow = 0;
+		<ins>for (int i = 0; i &lt; DIRECTIONAL_FILTER_SAMPLES; i++) {</ins>
+			<ins>shadow += weights[i] * SampleDirectionalShadowAtlas(</ins>
+				<ins>float3(positions[i].xy, positionSTS.z)</ins>
+			<ins>);</ins>
+		<ins>}</ins>
+		return shadow;
+	#else</pre>
+						
+						<p>Invoke this new function in <code class="shader">GetDirectionalShadowAttenuation</code> instead of going directly to <code class="shader">SampleDirectionalShadowAtlas</code>.</p>
+						
+						<pre class="shader" translate="no">	float shadow = <ins>FilterDirectionalShadow</ins>(positionSTS);
+	return lerp(1.0, shadow, directional.strength);</pre>
+						
+						<figure>
+							<img src="shadow-quality/pcf2.png" width="250" height="250" alt="PCF 2x2">
+							<img src="shadow-quality/pcf3.png" width="250" height="250" alt="PCF 3x3">
+							<img src="shadow-quality/pcf5.png" width="250" height="250" alt="PCF 5x5">
+							<img src="shadow-quality/pcf7.png" width="250" height="250" alt="PCF 7x7">
+							<figcaption>PCF 2x2, 3x3, 5x5, and 7x7.</figcaption>
+						</figure>
+						
+						<p>Increasing the filter size makes shadows smoother, but also causes acne to appear again. We have to increase the normal bias to match the filter size. We can do this automatically by multiplying the texel size by one plus the filter mode in <code>SetCascadeData</code>.</p>
+						
+						<pre translate="no">	void SetCascadeData (int index, Vector4 cullingSphere, float tileSize) {
+		float texelSize = 2f * cullingSphere.w / tileSize;
+		<ins>float filterSize = texelSize * ((float)settings.directional.filter + 1f);</ins>
+		&hellip;
+			1f / cullingSphere.w,
+			<ins>filterSize</ins> * 1.4142136f
+		);
+	}</pre>
+						
+						<p>Besides that, increasing the sample region also means that we can end up sampling outside of the cascade's culling sphere. We can avoid that by reducing the sphere's radius by the filter size before squaring it.</p>
+						
+						<pre translate="no">		<ins>cullingSphere.w -= filterSize;</ins>
+		cullingSphere.w *= cullingSphere.w;</pre>
+						
+						<figure>
+							<img src="shadow-quality/pcf5-scaled-bias.png" width="250" height="250" alt="PCF 5x5">
+							<img src="shadow-quality/pcf7-scaled-bias.png" width="250" height="250" alt="PCF 7x7">
+							<figcaption>PCF 5x5 and 7x7 with scaled bias.</figcaption>
+						</figure>
+						
+						<p>This solves shadow acne again, but the increased filter size aggravates the downside of applying a normal bias and makes the wall shadow problem that we saw earlier worse as well. Some slope-scale bias or a larger atlas size is needed to alleviate these artifacts.</p>
+						
+						<aside>
+							<h3>Shouldn't we also decrease the radius to account for the normal bias?</h3>
+							<div>
+								<p>The normal bias is defined per light, so cannot be set per cascade. Fortunately, it only becomes an issue when the bias would push the shadow sampling outside the chosen cascade. This only reliable happens for normals that point away from the camera, which means it's almost always limited to surfaces that aren't visible. It the bias does cause issues then you could increase the radius reduction by some configurable factor.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Blending Cascades</h3>
+						
+						<p>Softer shadows look better, but they also make the sudden transition between cascades a lot more obvious.</p>
+						
+						<figure>
+							<img src="shadow-quality/hard-cascade-transition.png" width="440" height="240">
+							<figcaption>Hard cascade transitions; PCF 7x7</figcaption>
+						</figure>
+						
+						<p>We can make the transitions less noticeable&mdash;though not hidden completely&mdash;by adding a transition region between cascades where we blend both. We already have a cascade fade factor that we can use for this purpose.</p>
+						
+						<p>First, add a cascade blend value to <code class="shader">ShadowData</code> in <em translate="no">Shadows</em>, which we'll use to interpolate between adjacent cascades.</p>
+						
+						<pre class="shader" translate="no">struct ShadowData {
+	int cascadeIndex;
+	<ins>float cascadeBlend;</ins>
+	float strength;
+};</pre>
+						
+						<p>Initially set the blend to 1 in <code class="shader">GetShadowData</code>, indicating that the selected cascade is at full strength. Then always calculate the fade factor when the cascade is found in the loop. If we're at the last cascade factor it into the strength as before, otherwise use it for the blend.</p>
+						
+						<pre class="shader" translate="no">	<ins>data.cascadeBlend = 1.0;</ins>
+	data.strength = FadedShadowStrength(
+		surfaceWS.depth, _ShadowDistanceFade.x, _ShadowDistanceFade.y
+	);
+	int i;
+	for (i = 0; i &lt; _CascadeCount; i++) {
+		float4 sphere = _CascadeCullingSpheres[i];
+		float distanceSqr = DistanceSquared(surfaceWS.position, sphere.xyz);
+		if (distanceSqr &lt; sphere.w) {
+			<ins>float fade = FadedShadowStrength(</ins>
+				<ins>distanceSqr, _CascadeData[i].x, _ShadowDistanceFade.z</ins>
+			<ins>);</ins>
+			if (i == _CascadeCount - 1) {
+				data.strength *= <ins>fade</ins>;
+			}
+			<ins>else {</ins>
+				<ins>data.cascadeBlend = fade;</ins>
+			<ins>}</ins>
+			break;
+		}
+	}</pre>
+						
+						<p>Now check in <code class="shader">GetDirectionalShadowAttenuation</code> whether the cascade blend is less than one after retrieving the first shadow value. If so we're in a transition zone and have to also sample from the next cascade and interpolate between both values.</p>
+						
+						<pre class="shader" translate="no">	float shadow = FilterDirectionalShadow(positionSTS);
+	<ins>if (global.cascadeBlend &lt; 1.0) {</ins>
+		<ins>normalBias = surfaceWS.normal *</ins>
+			<ins>(directional.normalBias * _CascadeData[global.cascadeIndex + 1].y);</ins>
+		<ins>positionSTS = mul(</ins>
+			<ins>_DirectionalShadowMatrices[directional.tileIndex + 1],</ins>
+			<ins>float4(surfaceWS.position + normalBias, 1.0)</ins>
+		<ins>).xyz;</ins>
+		<ins>shadow = lerp(</ins>
+			<ins>FilterDirectionalShadow(positionSTS), shadow, global.cascadeBlend</ins>
+		<ins>);</ins>
+	<ins>}</ins>
+	return lerp(1.0, shadow, directional.strength);
+</pre>
+						
+						<figure>
+							<img src="shadow-quality/soft-cascade-transition.png" width="440" height="240">
+							<figcaption>Soft cascade transitions.</figcaption>
+						</figure>
+						
+						<p>Note that the cascade fade ratio applies to the entire radius of every cascade, not just its visible part. So make sure that the ratio doesn't extend all the way to a lower cascade. In general this isn't a problem because you'd want to keep the transition region small.</p> 
+					</section>
+					
+					<section>
+						<h3>Dithered Transition</h3>
+						
+						<p>Although blending between cascades looks better it also doubles the amount of times we have to sample the shadow map in blend regions. An alternative approach is to always sample from one cascade, based on a dither pattern. This doesn't look as good but is a lot cheaper, especially when using a large filter.</p>
+						
+						<p>Add a cascade blend mode option to <code>Directional</code>, supporting a hard, soft, or dither approach.</p>
+						
+						<pre translate="no">		<ins>public enum CascadeBlendMode {</ins>
+			<ins>Hard, Soft, Dither</ins>
+		<ins>}</ins>
+
+		<ins>public CascadeBlendMode cascadeBlend;</ins>
+	}
+
+	public Directional directional = new Directional {
+		&hellip;
+		cascadeFade = 0.1f<ins>,</ins>
+		<ins>cascadeBlend = Directional.CascadeBlendMode.Hard</ins>
+	};</pre>
+						
+						<figure>
+							<img src="shadow-quality/cascade-blend-mode.png" width="320" height="38">
+							<figcaption>Cascade blend mode.</figcaption>
+						</figure>
+						
+						<p>Add a static array for soft and dither cascade blending keywords to <code>Shadows</code>.</p>
+						
+						<pre translate="no">	<ins>static string[] cascadeBlendKeywords = {</ins>
+		<ins>"_CASCADE_BLEND_SOFT",</ins>
+		<ins>"_CASCADE_BLEND_DITHER"</ins>
+	<ins>};</ins></pre>
+						
+						<p>Adjust <code>SetKeywords</code> so it works for an arbitrary keyword array and index, then also set the cascade blend keywords.</p>
+						
+						<pre translate="no">	void RenderDirectionalShadows () {
+		SetKeywords(
+			<ins>directionalFilterKeywords, (int)settings.directional.filter - 1</ins>
+		);
+		<ins>SetKeywords(</ins>
+			<ins>cascadeBlendKeywords, (int)settings.directional.cascadeBlend - 1</ins>
+		<ins>);</ins>
+		buffer.SetGlobalVector(
+			shadowAtlasSizeId, new Vector4(atlasSize, 1f / atlasSize)
+		);
+		buffer.EndSample(bufferName);
+		ExecuteBuffer();
+	}
+
+	void <ins>SetKeywords (string[] keywords, int enabledIndex)</ins> {
+		<del>//int enabledIndex = (int)settings.directional.filter - 1;</del>
+		for (int i = 0; i &lt; <ins>keywords</ins>.Length; i++) {
+			if (i == enabledIndex) {
+				buffer.EnableShaderKeyword(<ins>keywords</ins>[i]);
+			}
+			else {
+				buffer.DisableShaderKeyword(<ins>keywords</ins>[i]);
+			}
+		}
+	}</pre>
+						
+						<p>Add the required multi-compile direction to the <em translate="no">CustomLit</em> pass.</p>
+						
+						<pre class="shader" translate="no">			<ins>#pragma multi_compile _ _CASCADE_BLEND_SOFT _CASCADE_BLEND_DITHER</ins>
+			#pragma multi_compile_instancing</pre>
+						
+						<p>To perform dithering we need a dither <code class="shader">float</code> value, which we can add to <code class="shader">Surface</code>.</p>
+						
+						<pre class="shader" translate="no">struct Surface {
+	&hellip;
+	<ins>float dither;</ins>
+};</pre>
+						
+						<p>There are multiple ways to generate a dither value in <code class="shader">LitPassFragment</code>. The easiest is to use the <code class="shader">InterleavedGradientNoise</code> function from the <em translate="no">Core RP Library</em>, which generates a rotated tiled dither pattern given a screen-space XY position. In the fragment function that's equal to the clip-space XY position. It also requires a second argument which is used to animate it, which we don't need and can leave at zero.</p>
+						
+						<pre class="shader" translate="no">	surface.smoothness =
+		UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Smoothness);
+	<ins>surface.dither = InterleavedGradientNoise(input.positionCS.xy, 0);</ins></pre>
+						
+						<p>Before setting the cascade index in <code class="shader">GetShadowData</code>, set the cascade blend to zero when soft blending isn't used. That way the entire branch will be eliminated from those shader variants.</p>
+						
+						<pre class="shader" translate="no">	if (i == _CascadeCount) {
+		data.strength = 0.0;
+	}
+	<ins>#if !defined(_CASCADE_BLEND_SOFT)</ins>
+		<ins>data.cascadeBlend = 1.0;</ins>
+	<ins>#endif</ins>
+	data.cascadeIndex = i;</pre>
+						
+						<p>And when dither blending is used, if we're not in the last cascade, jump to the next cascade if the blend value is less than the dither value.</p>
+						
+						<pre class="shader" translate="no">	if (i == _CascadeCount) {
+		data.strength = 0.0;
+	}
+	<ins>#if defined(_CASCADE_BLEND_DITHER)</ins>
+		<ins>else if (data.cascadeBlend &lt; surfaceWS.dither) {</ins>
+			<ins>i += 1;</ins>
+		<ins>}</ins>
+	<ins>#endif</ins>
+	#if !defined(_CASCADE_BLEND_SOFT)
+		data.cascadeBlend = 1.0;
+	#endif</pre>
+						
+						<figure>
+							<img src="shadow-quality/dithered-cascades.png" width="440" height="240">
+							<figcaption>Dithered cascades.</figcaption>
+						</figure>
+						
+						<p>How acceptable dither blending is depends on the resolution at which we render the frame. If a post effect is used that smudges the final result then it can be quite effective, for example in combination with temporal anti-aliasing and an animated dither pattern.</p>
+						
+						<figure>
+							<img src="shadow-quality/dithered-zoomed-in.png" width="140" height="170">
+							<figcaption>Dithered zoomed in.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Culling Bias</h3>
+						
+						<p>One downside of using cascaded shadow maps is that we end up rendering the same shadow casters more than once per light. It makes sense to try and cull some shadow casters from larger cascades if it can be guaranteed that their results will always be covered by a smaller cascade. Unity makes this possible by setting the <code>shadowCascadeBlendCullingFactor</code> of the split data to one. Do this in <code>RenderDirectionalShadows</code> before applying it to the shadow settings.</p>
+						
+						<pre translate="no">			<ins>splitData.shadowCascadeBlendCullingFactor = 1f;</ins>
+			shadowSettings.splitData = splitData;</pre>
+						
+						<figure>
+							<img src="shadow-quality/culling-bias-0.png" width="256" height="256" alt="0">
+							<img src="shadow-quality/culling-bias-1.png" width="256" height="256" alt="1">
+							<figcaption>Culling bias 0 and 1.</figcaption>
+						</figure>
+						
+						<p>The value is a factor that modulates the radius of the previous cascade used to perform the culling. Unity is fairly conservative when culling, but we should decrease it by the cascade fade ratio and a little extra to make sure that shadow casters in the transition region never get culled. So let's use 0.8 minus the fade range, with a minimum of zero. If you see holes appear in shadows around cascade transitions then it must be reduced even further.</p>
+						
+						<pre translate="no">		<ins>float cullingFactor =</ins>
+			<ins>Mathf.Max(0f, 0.8f - settings.directional.cascadeFade);</ins>
+		
+		for (int i = 0; i &lt; cascadeCount; i++) {
+			&hellip;
+			splitData.shadowCascadeBlendCullingFactor = <ins>cullingFactor</ins>;
+			&hellip;
+		}</pre>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Transparency</h2>
+					
+					<p>We'll wrap up this tutorial by considering transparent shadow casters. Both clip, fade, and transparent materials can receive shadows like opaque materials, but only clip materials currently cast correct shadows themselves. Transparent objects behave as if they're solid shadow casters.</p>
+					
+					<figure>
+						<img src="transparency/clipped.png" width="230" height="240" alt="clipped">
+						<img src="transparency/transparent.png" width="230" height="240" alt="transparent">
+						<figcaption>Clipped and transparent with shadows.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Shadow Modes</h3>
+						
+						<p>There are a few ways that we can modify shadow casters. As it involves writing to the depth buffer our shadows are binary, either existing or not, but that still gives us some flexibility. They could be turned on and fully solid, clipped, dithered, or completely off. We could do this independent of the other material properties, to support maximum flexibility. So let's add a separate <em translate="no">_Shadows</em> shader property for it. We can use the <code class="shader">KeywordEnum</code> attribute to create a keyword dropdown menu for it, with shadows turned on by default.</p>
+						
+						<pre class="shader" translate="no">		<ins>[KeywordEnum(On€, Clip, Dither, Off€)] _Shadows ("Shadows", Float) = 0</ins></pre>
+						
+						<figure>
+							<img src="transparency/shadow-modes.png" width="320" height="36">
+							<figcaption>Shadows enabled.</figcaption>
+						</figure>
+						
+						<p>Add a shader feature for these modes, replacing the existing <em translate="no">_CLIPPING</em> feature. We only need three variants, using no keyword for on and off, <em translate="no">_SHADOWS_CLIP</em>, and <em translate="no">_SHADOWS_DITHER</em>.</p>
+						
+						<pre class="shader" translate="no">			<del>//#pragma shader_feature _CLIPPING</del>
+			<ins>#pragma shader_feature _ _SHADOWS_CLIP _SHADOWS_DITHER</ins></pre>
+						
+						<p>Create a setter property for shadows in <code>CustomShaderGUI</code>.</p>
+						
+						<pre translate="no">	<ins>enum ShadowMode {</ins>
+		<ins>On, Clip, Dither, Off</ins>
+	<ins>}</ins>
+
+	<ins>ShadowMode Shadows€ {</ins>
+		<ins>set {</ins>
+			<ins>if (SetProperty("_Shadows", (float)value)) {</ins>
+				<ins>SetKeyword("_SHADOWS_CLIP", value == ShadowMode.Clip);</ins>
+				<ins>SetKeyword("_SHADOWS_DITHER", value == ShadowMode.Dither);</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Then set the shadows appropriately in the preset methods. That would be on for opaque, clip for clip, and let's use dither for both fade and transparent.</p>
+					</section>
+					
+					<section>
+						<h3>Clipped Shadows</h3>
+						
+						<p>In <code class="shader">ShadowCasterPassFragment</code>, replace the check for <em translate="no">_CLIPPED</em> with one for <em translate="no">_SHADOWS_CLIP</em>.
+						
+						<pre class="shader" translate="no">	#if defined(<ins>_SHADOWS_CLIP</ins>)
+		clip(base.a - UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Cutoff));
+	#endif</pre>
+						
+						<p>It is now possible to give transparent materials clipped shadows, which might be appropriate for surfaces that have parts that are mostly fully opaque or transparent but for which alpha blending is needed.</p>
+						
+						<figure>
+							<img src="transparency/transparent-clipped-shadows.png" width="230" height="240">
+							<figcaption>Transparent with clipped shadows.</figcaption>
+						</figure>
+						
+						<p>Note that clipped shadows aren't as stable as solid shadows, because the shadow matrix changes when the view moves, which causes fragments to shift a bit. This can cause a texel of the shadow map to suddenly transition from clipped to not clipped.</p>
+					</section>
+					
+					<section>
+						<h3>Dithered Shadows</h3>
+						
+						<p>Dithered shadows work just like clipped shadows, except that the criteria is different. In this case we subtract a dither value from the surface alpha and clip based on that. We can again use the <code class="shader">InterleavedGradientNoise</code> function.</p>
+						
+						<pre class="shader" translate="no">	#if defined(_SHADOWS_CLIP)
+		clip(base.a - UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Cutoff));
+	<ins>#elif defined(_SHADOWS_DITHER)</ins>
+		<ins>float dither = InterleavedGradientNoise(input.positionCS.xy, 0);</ins>
+		<ins>clip(base.a - dither);</ins>
+	#endif</pre>
+						
+						<figure>
+							<img src="transparency/dithered-shadows.png" width="230" height="240">
+							<figcaption>Dithered shadows.</figcaption>
+						</figure>
+						
+						<p>Dithering can be used to approximate semitransparent shadow casters, but it's a rather crude approach. Hard dithered shadows look bad, but it might look acceptable when larger PCF filters are used.</p>
+						
+						<figure>
+							<img src="transparency/dithered-pcf7.png" width="230" height="240">
+							<figcaption>Dithered with PCF7x7.</figcaption>
+						</figure>
+						
+						<p>Because the dither pattern is fixed per texel, overlapping semitransparent shadow casters do not cast a combined darker shadow. The effect is as strong as the most opaque shadow caster. Also, because the resulting pattern is noisy it suffers a lot more from temporal artifacts when the shadow matrix changes, which can make the shadows appear to tremble. This approach works better for other light types with fixed projections, as long as objects don't move. It is usually more practical to either used clipped shadows or no shadows at all for semitransparent objects.</p>
+					</section>
+					
+					<section>
+						<h3>No Shadows</h3>
+						
+						<p>It's possible to turn off shadow casting per object, by adjusting the <em translate="no">Cast Shadows</em> settings of an object's <code>MeshRenderer</code> component. However, this isn't practical if you want to disable shadows for everything that uses the same material, so we'll also support disabling them per material. We do that by disabling the material's <em translate="no">ShadowCaster</em> pass.</p>
+						
+						<p>Add a <code>SetShadowCasterPass</code> method to <code>CustomShaderGUI</code> that begins by checking whether the <em translate="no">_Shadows</em> shader property exists. If so, also check whether all selected materials are set to the same mode, via its <code>hasMixedValue</code> property. If there is no mode or it's mixed abort. Otherwise, either enable or disable the <em translate="no">ShadowCaster</em> pass for all materials, by invoking <code>SetShaderPassEnabled</code> on them, with the pass name and enabled state as arguments.</p>
+						
+						<pre translate="no">	<ins>void SetShadowCasterPass () {</ins>
+		<ins>MaterialProperty shadows = FindProperty("_Shadows", properties, false);</ins>
+		<ins>if (shadows == null || shadows.hasMixedValue) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+		<ins>bool enabled = shadows.floatValue &lt; (float)ShadowMode.Off;</ins>
+		<ins>foreach (Material m in materials) {</ins>
+			<ins>m.SetShaderPassEnabled("ShadowCaster", enabled);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>The simplest way to make sure that the pass is set correctly is by always invoking <code>SetShadowCasterPass</code> when the material got changed via the GUI. We can do that by invoking <code>EditorGUI.BeginChangeCheck</code> at the start of <code>OnGUI</code> and <code>EditorGUI.EndChangeCheck</code> at its end. The latter method returns whether something changed since we began the check. If so, set the shadow caster pass.</p>
+						
+						<pre translate="no">	public override void OnGUI (
+		MaterialEditor materialEditor, MaterialProperty[] properties
+	) {
+		<ins>EditorGUI.BeginChangeCheck();</ins>
+		&hellip;
+		<ins>if (EditorGUI.EndChangeCheck()) {</ins>
+			<ins>SetShadowCasterPass();</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<img src="transparency/not-casting-shadows.png" width="230" height="240">
+							<figcaption>Not casting shadows.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Unlit Shadow Casters</h3>
+						
+						<p>Although unlit materials aren't affected by lighting you might want them to cast shadows. We can support that by simply copying the <em translate="no">ShadowCaster</em> pass from <em translate="no">Lit</em> to the <em translate="no">Unlit</em> shader.</p>
+						
+						<figure>
+							<img src="transparency/unlit-shadow-casters.png" width="230" height="240">
+							<figcaption>Unlit but casting shadows.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Receiving Shadows</h3>
+						
+						<p>Finally, we can also make lit surfaces ignore shadows, which might be useful for things like holograms, or just for artistic purposes. Add a <em translate="no">_RECEIVE_SHADOWS</em> keyword toggle property to <em translate="no">Lit</em> for this.</p>
+						
+						<pre class="shader" translate="no">		<ins>[Toggle(_RECEIVE_SHADOWS)] _ReceiveShadows ("Receive Shadows", Float) = 1</ins></pre>
+						
+						<p>Plus the accompanying shader feature in the <em translate="no">CustomLit</em> pass.</p>
+						
+						<pre class="shader" translate="no">			<ins>#pragma shader_feature _RECEIVE_SHADOWS</ins></pre>
+						
+						<figure>
+							<img src="transparency/receiving-shadows.png" width="320" height="36">
+							<figcaption>Receiving shadows.</figcaption>
+						</figure>
+						
+						<p>All we have to do is force the shadow attenuation to one in <code class="shader">GetDirectionalShadowAttenuation</code> when the keyword is defined.</p>
+						
+						<pre class="shader" translate="no">float GetDirectionalShadowAttenuation (&hellip;) {
+	<ins>#if !defined(_RECEIVE_SHADOWS)</ins>
+		<ins>return 1.0;</ins>
+	<ins>#endif</ins>
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="transparency/not-receiving-shadows.png" width="230" height="240">
+							<figcaption>Casting but not receiving shadows.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../baked-light/index.html">Baked Light</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/custom-srp-04-directional-shadows/" class="repository">repository</a>
+					<a href="Directional-Shadows.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

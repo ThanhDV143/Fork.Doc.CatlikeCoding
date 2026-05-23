@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/movement/reactive-environment/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/movement/reactive-environment/tutorial-image.jpg">
+		<meta property="og:title" content="Reactive Environment">
+		<meta property="og:description" content="A Unity Movement tutorial about the environment reacting to movement.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>Reactive Environment</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/movement/climbing/#article",
+				"headline": "Reactive Environment",
+				"alternativeHeadline": "Movement with Consequences",
+				"datePublished": "2020-07-17",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Movement tutorial about the environment reacting to movement.",
+				"image": "https://catlikecoding.com/unity/tutorials/movement/climbing/tutorial-image.jpg",
+				"dependencies": "Unity 2019.4.4f1",
+				"proficiencyLevel": "Beginner"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/movement/", "name": "Movement" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				AccelerationZone: 1,
+				AutomaticSlider: 1,
+				CustomGravity: 1,
+				CustomGravityRigidbody: 1,
+				DetectionZone: 1,
+				GravityBox: 1,
+				GravityPlane: 1,
+				GravitySource: 1,
+				GravitySphere: 1,
+				MaterialSelector: 1,
+				MovingSphere: 1,
+				OnValueChangedEvent: 1,
+				OrbitCamera: 1,
+				PositionInterpolator: 1,
+				StableFloatingRigidbody: 1
+			};
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../index.html">Movement</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>Reactive Environment</h1>
+					<p>Movement with Consequences</p>
+					<ul>
+						<li>Create jump pads and levitation via an acceleration zone.</li>
+						<li>Make a multi-purpose detection zone.</li>
+						<li>Reactively swap materials and activate or deactivate objects.</li>
+						<li>Move objects via simple interpolation triggered by events.</li>
+					</ul>
+				</header>
+				
+				<p>This is the tenth installment of a tutorial series about controlling the <a href="../index.html">movement</a> of a character. It makes it possible for the environment to react to movement in various ways.</p>
+				
+				<p>This tutorial is made with Unity 2019.4.4f1. It also uses the ProBuilder package.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256">
+					<figcaption>Playing with the environment.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Acceleration Zone</h2>
+					
+					<p>An active environment is more interesting than a static one, especially if it reacts to what's happening. This behavior could react to anything and could do anything, but a simple example is something like a jump pad: whenever something lands on the pad it gets launched upward. This could be our moving sphere or any other body that happens to fall or be pushed onto the pad. Thus the behavior logically belongs to the jump pad. Other objects need not be aware of its existence, they just suddenly end up flying.</p>
+					
+					<section>
+						<h3>Zone Component</h3>
+						
+						<p>The most generic way to describe the jump pad's behavior is that it's a zone which accelerates anything that enter it. Hence we'll create an <code>AccelerationZone</code> component type, with a configurable speed that cannot be negative.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class AccelerationZone : MonoBehaviour {</ins>
+
+	<ins>[SerializeField, Min(0f)]</ins>
+	<ins>float speed = 10f;</ins>
+<ins>}</ins></pre>
+						
+						<p>The zone can be created by adding an object with a trigger collider to the scene, then attaching the zone behavior to it. You can also add objects that visualize the jump pad, but I simply made the zone visible with a semitransparent yellow material.</p>
+						
+						<figure>
+							<img src="acceleration-zone/acceleration-zone.png" width="320" height="71">
+							<figcaption>Acceleration zone component.</figcaption>
+						</figure>
+						
+						<p>When something with a <code>Rigidbody</code> enters the zone we should accelerate it. Add an <code>OnTriggerEnter</code> method for this that invokes a new <code>Accelerate</code> method with the triggering body as an argument. This will happen to all bodies that enter the zone, but you can use layers to prevent certain objects from getting detected if desired.</p>
+						
+						<pre translate="no">	<ins>void OnTriggerEnter (Collider other) {</ins>
+		<ins>Rigidbody body = other.attachedRigidbody;</ins>
+		<ins>if (body) {</ins>
+			<ins>Accelerate(body);</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+
+	<ins>void Accelerate(Rigidbody body) {}</ins></pre>
+						
+						<p><code>Accelerate</code> simply makes the Y component of the body's velocity equal to the configured speed, unless it was already greater. The other velocity components are unaffected.</p>
+						
+						<pre translate="no">	<ins>void Accelerate(Rigidbody body) {</ins>
+		<ins>Vector3 velocity = body.velocity;</ins>
+		<ins>if (velocity.y >= speed) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+
+		<ins>velocity.y = speed;</ins>
+		<ins>body.velocity = velocity;</ins>
+	<ins>}</ins></pre>
+	
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="acceleration-zone/pushing-in-zone.mp4" type="video/mp4">
+							</video>
+							<figcaption>Pushing stuff in the zone.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Preventing Snapping to Ground</h3>
+						
+						<p>This simple approach works fine when launching regular bodies, but our sphere doesn't get properly launched. It instead appears to gain a lot of forward speed when it moves into the zone. This happens because we snap it to the ground. This can be solved by decreasing the <em translate="no">Max Snap Speed</em> in this case, but that won't work for acceleration zones set to a low speed. To prevent ground snapping in general we have to instruct <code>MovingSphere</code> to not perform snapping for the moment. We can do that by adding a public <code>PreventSnapToGround</code> method to it that sets <code>stepsSinceLastJump</code> to &minus;1.</p>
+						
+						<pre translate="no">	<ins>public void PreventSnapToGround () {</ins>
+		<ins>stepsSinceLastJump = -1;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now <code>AccelerationZone.Accelerate</code> can invoke this method if the body has a <code>MovingSphere</code> component, which we can both check and retrieve by invoking <code>TryGetComponent</code> with the sphere as an output argument.</p>
+						
+						<pre translate="no">	void Accelerate(Rigidbody body) {
+		&hellip;
+		<ins>if (body.TryGetComponent(out MovingSphere sphere)) {</ins>
+			<ins>sphere.PreventSnapToGround();</ins>
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="acceleration-zone/getting-launched.mp4" type="video/mp4">
+							</video>
+							<figcaption>Getting Launched.</figcaption>
+						</figure>
+						
+						<p>Note that this approach doesn't reset the jump phase, so bouncing off jump pads without landing doesn't refresh air jumps.</p>
+					</section>
+					
+					<section>
+						<h3>Continuous Acceleration</h3>
+						
+						<p>An instantaneous speed change is fine for jump pads, but we could also use the zone to create other acceleration phenomena that are continuous, like a levitation zone. We can support this by simple adding an <code>OnTriggerStay</code> method that does the same as <code>OnTriggerEnter</code>.</p>
+						
+						<pre translate="no">	<ins>void OnTriggerStay (Collider other) {</ins>
+		<ins>Rigidbody body = other.attachedRigidbody;</ins>
+		<ins>if (body) {</ins>
+			<ins>Accelerate(body);</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>If the effect is prolonged then it'll look better if the speed change is achieved via proper acceleration, so let's add a configurable acceleration to the zone, again with a minimum of zero. If it's set to zero we'll make the change instantaneous, otherwise we apply acceleration.</p>
+						
+						<pre translate="no">	[SerializeField, Min(0f)]
+	float <ins>acceleration = 10f,</ins> speed = 10f;
+
+	&hellip;
+
+	void Accelerate(Rigidbody body) {
+		&hellip;
+
+		<ins>if (acceleration > 0f) {</ins>
+			<ins>velocity.y = Mathf.MoveTowards(</ins>
+				<ins>velocity.y, speed, acceleration * Time.deltaTime</ins>
+			<ins>);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			velocity.y = speed;
+		<ins>}</ins>
+		
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="acceleration-zone/acceleration-and-speed.png" width="320" height="91" alt="inspector"><br>
+							<video width="250" height="216" controls loop muted>
+								<source src="acceleration-zone/levitation-zone.mp4" type="video/mp4">
+							</video>
+							<figcaption>Levitation zone; air acceleration 1 for maneuvering.</figcaption>
+						</figure>
+						
+						<p> It's also possible to apply a force instead, so objects with greater mass end up accelerating slower, but a fixed acceleration makes it easier to design levels, so I used that.</p>
+					</section>
+					
+					<section>
+						<h3>Arbitrary Direction</h3>
+						
+						<p>Finally, to make it possible to accelerate in any direction, convert the body velocity to the zone's local space at the start of <code>Accelerate</code> and convert it back to world space when applying it. Do this with <code>InverseTransformDirection</code> and <code>TransformDirection</code> so the zone's scale doesn't affect it. The acceleration direction can now be controlled by rotating the zone.</p>
+						
+						<pre translate="no">	void Accelerate(Rigidbody body) {
+		Vector3 velocity = <ins>transform.InverseTransformDirection(</ins>body.velocity<ins>)</ins>;
+		&hellip;
+
+		body.velocity = <ins>transform.TransformDirection(</ins>velocity<ins>)</ins>;
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="acceleration-zone/bouncing-between-jump-zones.mp4" type="video/mp4">
+							</video>
+							<figcaption>Bouncing between jump zones.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Reacting to Presence</h2>
+					
+					<p>The acceleration zone is just one example of how to create a trigger zone with specific behavior. If you need a zone that does something else you'll have to write new code for it. But the simple behavior of detecting and reacting to the presence of something somewhere is so generic that we ideally write it only once. And a lot of behavior is so simple&mdash;like activating an object&mdash;that creating a dedicated component type for it might be excessive. And more complex behavior is often just a combination of a few simple actions. It would be convenient if a level designer could create that by simply configuring game objects and adding some components, instead of having to create specialized code all the time.</p>
+					
+					<section>
+						<h3>Detection Zone</h3>
+						
+						<p>Let's begin by creating a <code>DetectionZone</code> component that detects whether something is present in its zone and notifies whoever is interested when something enters or exits. We do that by giving it configurable <code>onEnter</code> and <code>onExit</code> fields of the type <code>UnityEvent</code>, from the <code>UnityEngine.Events</code> namespace.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+<ins>using UnityEngine.Events;</ins>
+
+<ins>public class DetectionZone : MonoBehaviour {</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>UnityEvent onEnter = default, onExit = default;</ins>
+<ins>}</ins></pre>
+						
+						<p>Simply have it invoke the <code>Invoke</code> method on the appropriate event in <code>OnTriggerEnter</code> and <code>OnTriggerExit</code>. That will trigger method invocations on everything that registered to the event.</p>
+						
+						<pre translate="no">	<ins>void OnTriggerEnter (Collider other) {</ins>
+		<ins>onEnter.Invoke();</ins>
+	<ins>}</ins>
+
+	<ins>void OnTriggerExit (Collider other) {</ins>
+		<ins>onExit.Invoke();</ins>
+	<ins>}</ins></pre>
+						
+						<p>The component's events will be exposed by the inspector as lists named <em translate="no">On Enter ()</em> and <em translate="no">On Exit ()</em>, which are initially empty. The parenthesis with nothing between them after the names indicate that these events have no parameter.</p>
+						
+						<figure>
+							<img src="reacting-to-presence/detection-zone.png" width="320" height="246">
+							<figcaption>Detection zone without events.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Material Selector</h3>
+						
+						<p>To demonstrate how this works we'll create a simple <code>MaterialSelector</code> component type that has a configurable array of materials and <code>MeshRenderer</code> reference. It has a single public <code>Select</code> method with an index parameter, which assigns the desired material to the renderer, if valid.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class MaterialSelector : MonoBehaviour {</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>Material[] materials = default;</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>MeshRenderer meshRenderer = default;</ins>
+
+	<ins>public void Select (int index) {</ins>
+		<ins>if (</ins>
+			<ins>meshRenderer && materials != null &amp;&amp;</ins>
+			<ins>index >= 0 &amp;&amp; index &lt; materials.Length</ins>
+		<ins>) {</ins>
+			<ins>meshRenderer.material = materials[index];</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Create a material selector component with a red inactive zone and a green active zone material, which will be used to change the visualization of the detection zone. Though it's not required to add it to the game object that it affects, this makes the most sense.</p>
+						
+						<figure>
+							<img src="reacting-to-presence/material-selector.png" width="320" height="151">
+							<figcaption>Material selector.</figcaption>
+						</figure>
+						
+						<p>Now add an item to the on-enter event list of the detection zone component, by pressing its <em translate="no">+</em> button. Link the game object with the material selector to the item, via its bottom-left field. After that it's possible to select the <code>MaterialSelector.Select</code> method. As this method has an integer argument its value will be displayed below the method name. It's set to zero by default, which represents the inactive state, so set it to 1. Then do the same for the on-exit event, this time leaving the argument at zero.</p>
+						
+						<figure>
+							<img src="reacting-to-presence/detection-zone-with-events.png" width="320" height="246">
+							<figcaption>Detection zone set to select materials.</figcaption>
+						</figure>
+						
+						<p>Make sure that the zone object uses the inactive red material by default. Then it starts like that but will switch to the active green material as soon as something enters the zone. And when something exits the zone it will become red again.</p>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="reacting-to-presence/interacting-with-detection-zone.mp4" type="video/mp4">
+							</video>
+							<figcaption>Interacting with a detection zone.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>First Enter and Last Exit</h3>
+						
+						<p>The detection zone works, but does exactly what it's programmed to do, which is to invoke on-enter each time something enters and on-exit each times something leaves. Thus we can get a mix of enter and exit events&mdash;like enter, enter, exit, enter, exit, exit&mdash;and can end up with a visually inactive zone while there are still things in it. It's more intuitive for the zone to remain active while there's something in it. It's also easier to design with a zone that guarantees that enter and exit events will strictly alternate. Thus it should only signal when the first thing enters and when the last thing exits. Refactor rename the events to <code>onFirstEnter</code> and <code>onLastExit</code> to make this clear, which will require hooking up the events again.</p>
+						
+						<figure>
+							<img src="reacting-to-presence/renamed-events.png" width="320" height="246">
+							<figcaption>Renamed events.</figcaption>
+						</figure>
+						
+						<p>To make this behavior possible we have to keep track of the colliders that are currently in the zone. We'll do that by giving <code>DetectionZone</code> a <code>List&lt;Collider></code> field initialized to a new list, from the <code>System.Collections.Generic</code> namespace.</p>
+						
+						<pre translate="no">using UnityEngine;
+using UnityEngine.Events;
+<ins>using System.Collections.Generic;</ins>
+
+public class DetectionZone : MonoBehaviour {
+
+	[SerializeField]
+	UnityEvent onFirstEnter = default, onLastExit = default;
+
+	<ins>List&lt;Collider> colliders = new List&lt;Collider>();</ins>
+	
+	&hellip;
+}</pre>
+						
+						<aside>
+							<h3>How does that list work?</h3>
+							<div>
+								<p>See the <a href="../../object-management/persisting-objects/index.html">Persisting Objects</a> tutorial of the Object Management series.</p>
+							</div>
+						</aside>
+						
+						<p>In <code>OnTriggerEnter</code> only invoke the enter event if the list is empty, then always add the collider to the list to keep track of it.</p>
+						
+						<pre translate="no">	void OnTriggerEnter (Collider other) {
+		<ins>if (colliders.Count == 0) {</ins>
+			onFirstEnter.Invoke();
+		<ins>}</ins>
+		<ins>colliders.Add(other);</ins>
+	}</pre>
+						
+						<p>In <code>OnTriggerExit</code> we remove the collider from the list and only if the list is empty invoke the exit event. The list's <code>Remove</code> method returns whether the removal succeeded. This should always be the case because otherwise we failed to track a collider, but we can check it anyway.</p>
+						
+						<pre translate="no">	void OnTriggerExit (Collider other) {
+		<ins>if (colliders.Remove(other) &amp;&amp; colliders.Count == 0) {</ins>
+			onLastExit.Invoke();
+		<ins>}</ins>
+	}</pre>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="reacting-to-presence/detecting-first-enter-and-last-exit.mp4" type="video/mp4">
+							</video>
+							<figcaption>Active as long as there's something in the zone.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Detecting Appearing and Disappearing Objects</h3>
+						
+						<p>Unfortunately <code>OnTriggerExit</code> isn't reliable, because it doesn't get invoked when game objects or their colliders are deactivated, disabled, or destroyed. Colliders shouldn't be disabled independently because that would result in bodies falling through geometry, so we're not going to support that. But we should be able to deal with entire game objects getting disabled or destroyed while they are inside the zone.</p>
+						
+						<p>Each physics step we have to check whether the colliders in the zone are still valid. Add a <code>FixedUpdate</code> method that loops through the collider list. If a collider evaluates to <code>false</code> it means that either it or its game object has been destroyed. If that isn't the case we have to check if its game object is deactivated, which we can find out via the <code>activeInHierarchy</code> property of its game object. If the collider is no longer valid remove it from the list and decrement the loop iterator. If the list is then empty invoke the exit event.</p>
+						
+						<pre translate="no">	<ins>void FixedUpdate () {</ins>
+		<ins>for (int i = 0; i &lt; colliders.Count; i++) {</ins>
+			<ins>Collider collider = colliders[i];</ins>
+			<ins>if (!collider || !collider.gameObject.activeInHierarchy) {</ins>
+				<ins>colliders.RemoveAt(i--);</ins>
+				<ins>if (colliders.Count == 0) {</ins>
+					<ins>onLastExit.Invoke();</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>It is likely that detection zones don't have objects in them most of the time. To avoid needlessly invoking <code>FixedUpdate</code> continuously we can disable the component when it awakens and after the last collider exits. Then we only enable it after something enters. This works because the trigger methods always get invoked, regardless whether a behavior is enabled.</p>
+						
+						<pre translate="no">	<ins>void Awake () {</ins>
+		<ins>enabled = false;</ins>
+	<ins>}</ins>
+
+	void FixedUpdate () {
+		for (int i = 0; i &lt; colliders.Count; i++) {
+			Collider collider = colliders[i];
+			if (!collider || !collider.gameObject.activeInHierarchy) {
+				colliders.RemoveAt(i--);
+				if (colliders.Count == 0) {
+					onLastExit.Invoke();
+					<ins>enabled = false;</ins>
+				}
+			}
+		}
+	}
+
+	void OnTriggerEnter (Collider other) {
+		if (colliders.Count == 0) {
+			onFirstEnter.Invoke();
+			<ins>enabled = true;</ins>
+		}
+		colliders.Add(other);
+	}
+
+	void OnTriggerExit (Collider other) {
+		if (colliders.Remove(other) && colliders.Count == 0) {
+			onLastExit.Invoke();
+			<ins>enabled = false;</ins>
+		}
+	}</pre>
+						
+						<p>Next, we should also deal with the zone game object itself getting deactivated or destroyed, as it makes sense to invoke the exit event when that happens while something is still in the zone. We can do both by adding an <code>OnDisable</code> method that clears the list and invokes the exit event if the list isn't empty.</p>
+						
+						<pre translate="no">	<ins>void OnDisable () {</ins>
+		<ins>if (colliders.Count > 0) {</ins>
+			<ins>colliders.Clear();</ins>
+			<ins>onLastExit.Invoke();</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Note that the detection zone's component shouldn't be disabled by other code, as it manages its own state. The general rule is to not disable the detection zone component nor any individual colliders that could affect the zone. Those game objects should be deactivated or destroyed in their entirety.</p>
+					</section>
+					
+					<section>
+						<h3>Hot Reloads</h3>
+						
+						<p>Because hot reloads&mdash;recompilation while in editor play mode&mdash;will invoke <code>OnDisable</code> it breaks the rule that we just declared. This will result in exit events getting invoked in response to a hot reload, after which objects already in the zone will be ignored. Fortunately we can detect a hot reload in <code>OnDisable</code>. If both the component is enabled and the game object is active then we have a hot reload and shouldn't do anything. This is also the case when the component is destroyed while the game object isn't, but we ruled that this shouldn't be done.</p>
+						
+						<p>We only need to check this while playing in the editor, so we can wrap the code in <code>#if UNITY_EDITOR</code> and <code>#endif</code>.</p>
+						
+						<pre translate="no">	void OnDisable () {
+<ins>#if UNITY_EDITOR</ins>
+		<ins>if (enabled &amp;&amp; gameObject.activeInHierarchy) {</ins>
+			<ins>return;</ins>
+		<ins>}</ins>
+<ins>#endif</ins>
+		if (colliders.Count > 0) {
+			colliders.Clear();
+			onLastExit.Invoke();
+		}
+	}</pre>
+						
+						<aside>
+							<h3>What are the relevant state combinations in <code>OnDisable</code>?</h3>
+							<div>
+								<p>If the component is disabled then it just got disabled or the game object got deactivated and we proceed. Otherwise, if the game object isn't active then the game object got either deactivated or destroyed and we proceed. Otherwise it's either a hot reload or only the component got destroyed and we ignore it.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>More Complex Behavior</h3>
+						
+						<p>This was only a simple demonstration of what can be done via events. You can create more complex behavior by adding more entries to the event lists. You don't have to create new method for this, you can use existing ones. The restriction is that it have to be <code>void</code> methods&mdash;or property setters&mdash;that match the event's parameter list, or have at most a single serializable parameter. For example, I set things up so that the levitation zone is turned off while there's something inside the detection zone, besides changing the visualization of the zone itself.</p>
+						
+						<figure>
+							<img src="reacting-to-presence/toggle-levitation-zone.png" width="320" height="290" alt="inspector"><br>
+							<video width="250" height="216" controls loop muted>
+								<source src="reacting-to-presence/toggling-levitation-zone.mp4" type="video/mp4">
+							</video>
+							<figcaption>Toggling levitation zone.</figcaption>
+						</figure>
+						
+						<p>You don't always have to respond to both events for everything. You could have something trigger only on enter or on exit. For example, activate something when a zone gets entered. Exiting then won't deactivate it and re-entry would activate it again, which does nothing.</p>
+						
+						<aside>
+							<h3>Can this event-based approach be used for entire games?</h3>
+							<div>
+								<p>Theoretically yes, and it's great for quick prototyping, but it gets cumbersome. Once you find yourself repeating a complex pattern it makes sense to create a dedicated method or behavior for it, which should be much simpler to work with and could be optimized later if necessary.</p>
+							</div>
+						</aside>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Simple Movement</h2>
+					
+					<p>One final case that we'll cover in this tutorial is moving environmental objects. Intricate movement can be done via animations, which could be triggered with a detection zone. But often a simple linear interpolation between two points would suffice, for example for doors, elevators, or floating platforms. So let's add support for that.</p>
+					
+					<section>
+						<h3>Automatic Slider</h3>
+						
+						<p>No matter what gets interpolated, it's conceptually controlled by a slider that goes from 0 to 1. How that value gets changed is a separate issue from the interpolation itself. Keeping the slider separate also makes it possible to use it for multiple interpolations. So we'll create an <code>AutomaticSlider</code> component dedicated to this value. It has a configurable duration that must be positive. As we'll use it to animate physics objects we'll have it increase its value in the <code>FixedUpdate</code> method, making sure that it doesn't overshoot. Once the value has reached 1 we're done and can disable the slider.</p>
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class AutomaticSlider : MonoBehaviour {</ins>
+
+	<ins>[SerializeField, Min(0.01f)]</ins>
+	<ins>float duration = 1f;</ins>
+
+	<ins>float value;</ins>
+
+	<ins>void FixedUpdate () {</ins>
+		<ins>value += Time.deltaTime / duration;</ins>
+		<ins>if (value >= 1f) {</ins>
+			<ins>value = 1f;</ins>
+			<ins>enabled = false;</ins>
+		<ins>}</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<p>Once again we'll use Unity events to make it possible to attach behavior to the slider. In this case we need an on-value-changed event, which we'll use to pass along the current value of the slider. So our event needs a <code>float</code> parameter, for which we can use the <code>UnityEvent&lt;float></code> type. Invoke the event at the end of <code>FixedUpdate</code>.</p>
+						
+						<pre translate="no">using UnityEngine;
+<ins>using UnityEngine.Events;</ins>
+
+public class AutomaticSlider : MonoBehaviour {
+	
+	&hellip;
+	
+	<ins>[SerializeField]</ins>
+	<ins>UnityEvent&lt;float> onValueChanged = default;</ins>
+
+	float value;
+
+	void FixedUpdate () {
+		&hellip;
+		<ins>onValueChanged.Invoke(value);</ins>
+	}
+}</pre>
+						
+						<p>However, Unity cannot serialize generic event types, so the event won't show up in the inspector. We have to create our own concrete serializable event type, which simply extends <code>UnityEvent&lt;float></code>. This type is specific to our slider, so make it a nested type by declaring it inside the class, along with the event field itself.</p>
+						
+						<pre translate="no">	<ins>[System.Serializable]</ins>
+	<ins>public class OnValueChangedEvent : UnityEvent&lt;float> { }</ins>
+
+	[SerializeField]
+	<ins>OnValueChangedEvent</ins> onValueChanged = default;</pre>
+						
+						<p>The slider will immediately start increasing when entering play mode. If you don't want that simply disable it by default. Then you can hook it up to a detection zone to enable it later.</p>
+						
+						<figure>
+							<img src="simple-movement/automatic-slider.png" width="320" height="169">
+							<figcaption>Disabled slider with on-value-changed event.</figcaption>
+						</figure>
+						
+						<p>Note that in this case the event's name is followed by <em translate="no">(Single)</em>, indicating that it has a parameter. <em translate="no">Single</em> refers to the <code>float</code> type, which is a single-precision floating-point number.</p>
+					</section>
+					
+					<section>
+						<h3>Position Interpolator</h3>
+						
+						<p>Next, create a <code>PositionInterpolator</code> component type that interpolates the position of a configurable <code>Rigidbody</code> between two configurable positions, via a public <code>Interpolate</code> method with a <code>float</code> parameter. Use <code>Vector3.LerpUnclamped</code> so the provided value doesn't get clamped, leaving that up to the invoker. We have to change the body's position via its <code>MovePosition</code> method so it's interpreted as movement, otherwise it would be teleportation.</p> 
+						
+						<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class PositionInterpolator : MonoBehaviour {</ins>
+
+	<ins>[SerializeField]</ins>
+	<ins>Rigidbody body = default;</ins>
+	
+	<ins>[SerializeField]</ins>
+	<ins>Vector3 from = default, to = default;</ins>
+	
+	<ins>public void Interpolate (float t) {</ins>
+		<ins>body.MovePosition(Vector3.LerpUnclamped(from, to, t));</ins>
+	<ins>}</ins>
+<ins>}</ins></pre>
+						
+						<figure>
+							<img src="simple-movement/position-interpolator.png" width="320" height="299">
+							<figcaption>Position interpolator connected to slider.</figcaption>
+						</figure>
+						
+						<p>I created a simple moving platform by adding both the sider and interpolator to the same platform object. The dynamic version of the interpolator's <code>Interpolate</code> method is bound to the slider's event, which is why there is no field for its value. I then connected the slider to a detection zone so the platform activates when something enter that zone. Note that the interpolation points are in world space.</p>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="simple-movement/enabling-moving-platform.mp4" type="video/mp4">
+							</video>
+							<figcaption>Enabling a moving platform.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Auto Reverse</h3>
+						
+						<p>We can make the interpolation go back and forth by adding a configurable auto-reverse toggle to <code>AutomaticSlider</code>. This requires us to keep track of whether it's reversed and doubles the code in <code>FixedUpdate</code>, having to support going in both directions. Also, when auto-reversing is active we have to bounce instead of clamp the value. In the case of extremely short durations this could cause an overshoot, so we'll still clamp after the bounce.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>bool autoReverse = false;</ins>
+
+	&hellip;
+
+	<ins>bool reversed;</ins>
+
+	void FixedUpdate () {
+		<ins>float delta = Time.deltaTime / duration;</ins>
+		<ins>if (reversed) {</ins>
+			<ins>value -= delta;</ins>
+			<ins>if (value &lt;= 0f) {</ins>
+				<ins>if (autoReverse) {</ins>
+					<ins>value = Mathf.Min€(1f, -value);</ins>
+					<ins>reversed = false;</ins>
+				<ins>}</ins>
+				<ins>else {</ins>
+					<ins>value = 0f;</ins>
+					<ins>enabled = false;</ins>
+				<ins>}</ins>
+			<ins>}</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			value += <ins>delta</ins>;
+			if (value >= 1f) {
+				<ins>if (autoReverse) {</ins>
+					<ins>value = Mathf.Max(0f, 2f - value);</ins>
+					<ins>reversed = true;</ins>
+				<ins>}</ins>
+				<ins>else {</ins>
+					value = 1f;
+					enabled = false;
+				<ins>}</ins>
+			}
+		<ins>}</ins>
+		onValueChanged.Invoke(value);
+	}</pre>
+						
+						<figure>
+							<img src="simple-movement/auto-reverse.png" width="320" height="40" alt="inspector"><br>
+							<video width="250" height="216" controls loop muted>
+								<source src="simple-movement/platform-with-auto-reverse.mp4" type="video/mp4">
+							</video>
+							<figcaption>Platform with auto reverse enabled.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Smoothstep</h3>
+						
+						<p>The motion of linear interpolation is rigid, with abrupt velocity changes when it reverses. We can make it accelerate and decelerate by passing a smoothed variant of the value to the event. We do that by applying the smoothstep function to it, which is 3v<sup>2</sup> &minus; 2v<sup>3</sup>. Make this a configurable option.</p>
+						
+						<figure>
+							<img src="simple-movement/smoothstep-graph.png" width="100" height="100">
+							<figcaption>Linear and smoothed.</figcaption>
+						</figure>
+						
+						<pre translate="no">	[SerializeField]
+	bool autoReverse = false<ins>, smoothstep = false</ins>;
+
+	&hellip;
+	
+	<ins>float SmoothedValue => 3f * value * value - 2f * value * value * value;</ins>
+	
+	void FixedUpdate () {
+		&hellip;
+		onValueChanged.Invoke(<ins>smoothstep ? SmoothedValue :</ins> value);
+	}</pre>
+												
+						<figure>
+							<img src="simple-movement/smoothstep.png" width="320" height="40" alt="inspector"><br>
+							<video width="250" height="216" controls loop muted>
+								<source src="simple-movement/platform-smoothstep.mp4" type="video/mp4">
+							</video>
+							<figcaption>Platform with smoothstep enabled.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>More Control</h3>
+						
+						<p>Pausing the animation can be done by disabling the slider component via a detection zone event, but let's also make it possible to control its direction. The simplest way to do that is by making its reversed state available via a public property. Replace the <code>reversed</code> field with an automatic <code>Reversed</code> property, adjusting the capitalization of the other code to match.</p>
+						
+						<pre translate="no">	<del>//bool reversed;</del>
+	<ins>public bool Reversed { get; set; }</ins></pre>
+						
+						<p>Let's do the same for the auto-reverse option. In this case we have to keep the serializable field, so add an explicit property.</p>
+						
+						<pre translate="no">	<ins>public bool AutoReverse {</ins>
+		<ins>get => autoReverse;</ins>
+		<ins>set => autoReverse = value;</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="simple-movement/complex-control.png" width="320" height="430" alt="inspector"><br>
+							<video width="250" height="216" controls loop muted>
+								<source src="simple-movement/complex-platform-control.mp4" type="video/mp4">
+							</video>
+							<figcaption>Complex platform control.</figcaption>
+						</figure>
+						
+						<p>Note that direction reversal is sudden, as it's still a simple interpolation. If you want smooth stopping and reversing at any point you'd need to create more complex logic that uses acceleration and velocity.</p>
+					</section>
+					
+					<section>
+						<h3>Crushing Collisions</h3>
+						
+						<p>A danger of moving scenery is that bodies can end up caught between two approaching colliders. As the gap between the colliders closes the body either gets ejected or ends up pushed into or through a collider. If the colliding surfaces are at an angle then there is a clear path of escape and the body will be pushed in that direction. If not or if there isn't enough time to escape the body will end up getting crushed, penetrating the colliders. If a body gets stuck between two simple colliders that are thick enough then it can remain inside them, popping out once there is a clear path. Otherwise it will fall through.</p>
+						
+						<figure>
+							<video width="250" height="216" controls loop muted>
+								<source src="simple-movement/getting-pushed-through-ground.mp4" type="video/mp4">
+							</video>
+							<figcaption>Getting pushed through the ground.</figcaption>
+						</figure>
+						
+						<p>If the colliding surfaces are at an angle then the body will be pushed aside and has a good chance of escape. So it is a good idea to engineer such such configurations, either by leaving enough room between surfaces or by introducing angled colliders, invisible or not. Also, hiding a box collider in the floor makes it more solid so objects won't get pushed through it. Alternatively, add a zone that triggers the destruction of the body at the appropriate time, representing it getting crushed.</p>
+						
+						<figure>
+							<img src="simple-movement/invisible-collider.png" width="230" height="150" alt="collider"><br>
+							<video width="250" height="216" controls loop muted>
+								<source src="simple-movement/getting-pushed-aside.mp4" type="video/mp4">
+							</video>
+							<figcaption>Platform with angled collider and box hidden in the floor.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Local Interpolation</h3>
+						
+						<p>Configuration in world space can be inconvenient, because it cannot be reused for the same animation at multiple locations. So let's wrap up by adding a local space option to <code>PositionInterpolator</code>. We do this by adding an optional configurable <code>Transform</code> relative to which interpolation should happen. This would usually refer to the object with the interpolator, but this need not be the case.</p>
+						
+						<pre translate="no">	<ins>[SerializeField]</ins>
+	<ins>Transform relativeTo = default;</ins>
+
+	public void Interpolate (float t) {
+		<ins>Vector3 p;</ins>
+		<ins>if (relativeTo) {</ins>
+			<ins>p = Vector3.LerpUnclamped(</ins>
+				<ins>relativeTo.TransformPoint(from), relativeTo.TransformPoint(to), t</ins>
+			<ins>);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>p = Vector3.LerpUnclamped(from, to, t);</ins>
+		<ins>}</ins>
+		body.MovePosition(<ins>p</ins>);
+	}</pre>
+						
+						<figure>
+							<img src="simple-movement/relative-interpolation.png" width="320" height="124" alt="inspector"><br>
+							<video width="250" height="216" controls loop muted>
+								<source src="simple-movement/moving-pillars.mp4" type="video/mp4">
+							</video>
+							<figcaption>Relative interpolation makes reuse possible.</figcaption>
+						</figure>
+						
+						<p>The next tutorial is <a href="../rolling/index.html">Rolling</a>.</p>
+						
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/movement-10-reactive-environment/" class="repository">repository</a>
+					<a href="Reactive-Environment.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

@@ -1,0 +1,1648 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/custom-srp/fxaa/">
+		<meta property="og:type" content="article">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/custom-srp/fxaa/tutorial-image.jpg">
+		<meta property="og:title" content="FXAA">
+		<meta property="og:description" content="A Unity Custom SRP tutorial about implementing the FXAA algorithm.">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=768">
+		<title>FXAA</title>
+		<link href="../../tutorials.css" rel="stylesheet">
+		<link rel="icon" href="../../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../../site.webmanifest.html">
+
+		
+		<script type="application/ld+json">{
+			"@context": "http://schema.org",
+			"@type": "WebPage",
+			"mainEntity": {
+				"@type": "TechArticle",
+				"@id": "https://catlikecoding.com/unity/tutorials/custom-srp/fxaa/#article",
+				"headline": "FXAA",
+				"alternativeHeadline": "Fast approXimate Anti-Aliasing",
+				"datePublished": "2021-02-28",
+				"dateModified": "2023-08-12",
+				"author": { "@type": "Person", "name": "Jasper Flick", "@id": "https://catlikecoding.com/jasper-flick/#person" },
+				"publisher": { "@type": "Organization", "name": "Catlike Coding", "@id": "https://catlikecoding.com/#organization" },
+				"description": "A Unity Custom SRP tutorial about implementing the FXAA algorithm.",
+				"image": "https://catlikecoding.com/unity/tutorials/custom-srp/fxaa/tutorial-image.jpg",
+				"dependencies": "Unity 2022.3.5f1",
+				"proficiencyLevel": "Expert"
+			},
+			"breadcrumb": {
+				"@type": "BreadcrumbList",
+				"itemListElement": [
+					{ "@type": "ListItem", "position": 1, "item": { "@id": "https://catlikecoding.com/unity/", "name": "Unity" }},
+					{ "@type": "ListItem", "position": 2, "item": { "@id": "https://catlikecoding.com/unity/tutorials/", "name": "Tutorials" }},
+					{ "@type": "ListItem", "position": 3, "item": { "@id": "https://catlikecoding.com/unity/tutorials/custom-srp/", "name": "Custom SRP" }}
+				]
+			}
+		}</script>
+		<script>
+			var customTypes = {
+				BicubicRescalingMode: 1,
+				BloomSettings: 1,
+				CameraBufferSettings: 1,
+				CameraRenderer: 1,
+				CameraSettings: 1,
+				CascadeBlendMode: 1,
+				ChannelMixerSettings: 1,
+				ColorAdjustmentsSettings: 1,
+				ColorLUTResolution: 1,
+				CustomLightEditor: 1,
+				CustomRenderPipeline: 1,
+				CustomRenderPipelineAsset: 1,
+				CustomRenderPipelineCamera: 1,
+				CustomShaderGUI: 1,
+				Directional: 1,
+				DirectionalShadowData: 1,
+				FilterMode: 1,
+				FinalBlendMode: 1,
+				FXAA: 1,
+				FXAAEdge: 1,
+				InputConfig: 1,
+				IntFloat: 1,
+				Lighting: 1,
+				LumaNeighborhood: 1,
+				MeshBall: 1,
+				Mode: 1,
+				Other: 1,
+				OtherShadowData: 1,
+				Pass: 1,
+				Quality: 1,
+				ReinterpretExtensions: 1,
+				RenderScaleMode: 1,
+				RenderingLayerMaskDrawer: 1,
+				RenderingLayerMaskField : 1,
+				RenderingLayerMaskFieldAttribute: 1,
+				PerObjectMaterialProperties: 1,
+				PostFXSettings: 1,
+				PostFXStack: 1,
+				ShadowedDirLight: 1,
+				ShadowedOtherLight: 1,
+				ShadowData: 1,
+				Shadows: 1,
+				ShadowsMidtonesHighlightsSettings: 1,
+				ShadowMask: 1,
+				ShadowMode: 1,
+				ShadowSettings: 1,
+				SplitToningSettings: 1,
+				TextureSize: 1,
+				ToneMappingSettings: 1,
+				WhiteBalanceSettings: 1
+			};
+			
+			var defaultCodeClass = "shader";
+			var hasMath = false;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../../products/utilities/frame-rate-counter/index.html"><img src="../../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<nav>
+				<ol>
+					<li><a href="../../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></li>
+					<li><a href="../../../index.html">Unity</a></li>
+					<li><a href="../../index.html">Tutorials</a></li>
+					<li><a href="../../scriptable-render-pipeline/reflections/index.html">Custom SRP</a></li>
+				</ol>
+			</nav>
+		</header>
+		
+		<main>
+			<article>
+				<header>
+					<h1>FXAA</h1>
+					<p>Fast approXimate Anti-Aliasing</p>
+					<ul>
+						<li>Calculate and store pixel luma, or fall back to green.</li>
+						<li>Find and blend high-contrast pixels.</li>
+						<li>Detect and smooth long edges.</li>
+						<li>Combine FXAA and render scale.</li>
+					</ul>
+				</header>
+				
+				<p>This is the 17th part of a tutorial series about creating a <a href="../../scriptable-render-pipeline/reflections/index.html">custom scriptable render pipeline</a>. It covers the implementation of the FXAA antialiasing algorithm.</p>
+				
+				<p>This tutorial is made with Unity 2019.4.20f1 and upgraded to 2022.3.5f1.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="512" height="256" alt="with">
+					<img src="tutorial-image-secondary.jpg" width="512" height="256" alt="without">
+					<figcaption>An image with and without FXAA, zoomed in.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>FXAA Post-FX</h2>
+					
+					<p>The limited resolution of the frame buffer introduces visual aliasing artifacts to the final image. These are often referred to as jaggies or stairsteps, which are visible along lines that are not aligned with the pixel grid. Besides that features smaller than a pixel either appear or not, which can produce temporal flickering artifacts when they are in motion.</p>
+					
+					<p>In the <a href="../render-scale/index.html">previous tutorial</a> we added the ability to apply SSAA by at most doubling the render scaled and downsampling afterwards. This smoothes our jaggies somewhat and doubles the resolution for the purpose of detecting and then smoothing tiny features. While doubling the render scale improves visual quality it also requires the GPU to process four times as many fragments, so it is very expensive and usually not feasible for realtime use. A render scale less than 2 could be used, but on its own that doesn't improve quality much.</p>
+					
+					<p>An alternative to increasing resolution is to apply a post FX to the original image that smoothes out all aliasing artifacts. Various such algorithms have been developed, which are known as acronyms that always end with AA, such as FXAA, MLAA, SMAA, and TAA. In this tutorial we'll implement FXAA, which is the simplest and fastest approach.</p>
+					
+					<p>The first post-FX antialiasing solution was morphological anti-aliasing, abbreviated to MLAA. It analyses the image to detect the edges of visual features and then selectively blurs those. FXAA is a simpler approach inspired by MLAA. It stands for fast approximate anti-aliasing. It was developed by Timothy Lottes at NVIDIA. Compared to MLAA, it trades quality for speed. While a common complaint of FXAA is that it blurs too much, that varies depending on which variant is used and how it is tuned. We'll create the latest version—FXAA 3.11—specifically the high-quality variant that also investigates long edges.</p>
+					
+					<aside>
+						<h3>What about MSAA?</h3>
+						<div>
+							<p>Like SSAA, MSAA renders to a higher resolution and later downsamples, but changes how fragments are rendered. Instead of rendering all fragments of a higher-resolution square it renders only a single fragment per triangle that covers that block, effectively copying the result to the higher-resolution pixels. This keeps the fill rate manageable. It also means that only the edges of triangles are affected, everything else remains unchanged. That's why MSAA doesn't smooth the edges of clipped surfaces and doesn't mitigate shader aliasing.</p>
+						</div>
+					</aside>
+					
+					<section>
+						<h3>Enabling FXAA</h3>
+						
+						<p>Although FXAA is a post FX it globally affects the image quality like the render scale does, so we'll adds its configuration to <code class="chsarp">CameraBufferSettings</code>. Initially we only need a toggle to enable it, but we'll add some more configuration options for it later. So we'll group all FXAA settings in a new <code class="csharp">CameraBufferSettings.FXAA</code> struct.</p>
+						
+						<pre class="csharp" translate="no"><ins>using System;</ins>
+using UnityEngine;
+
+[<ins>Serializable</ins>]
+public struct CameraBufferSettings {
+
+	&hellip;
+	
+	<ins>[Serializable]</ins>
+	<ins>public struct FXAA {</ins>
+
+		<ins>public bool enabled;</ins>
+	<ins>}</ins>
+
+	<ins>public FXAA fxaa;</ins>
+}</pre>
+						
+						<figure>
+							<img src="fxaa-post-fx/fxaa-camera-buffer-settings.png" width="320" height="82">
+							<figcaption>FXAA enabled for the RP.</figcaption>
+						</figure>
+						
+						<p>Again as we did with the render scale, we'll make it possible to control whether FXAA is used per camera, by adding a toggle to <code>CameraSettings</code> to control whether FXAA is allowed. It should be disallowed by default. This ensures that FXAA isn't applied to the scene window, material previews, or reflection probes.</p>
+						
+						<pre class="csharp" translate="no">	<ins>public bool allowFXAA = false;</ins></pre>
+						
+						<figure>
+							<img src="fxaa-post-fx/fxaa-camera-settings.png" width="320" height="60">
+							<figcaption>FXAA enabled for the camera.</figcaption>
+						</figure>
+						
+						<p>As FXAA is a post FX it is the responsibility of <code class="csharp">PostFXStack</code> to apply it. This means that FXAA will only work if post FX are in use. Also, the FXAA configuration has to be passed to the stack, so add a parameter for it to <code class="csharp">PostFXStack.Setup</code> and copy it to a field.</p>
+						
+						<pre class="csharp" translate="no">	<ins>CameraBufferSettings.FXAA fxaa;</ins>
+
+	&hellip;
+
+	public void Setup (
+		&hellip;
+		CameraBufferSettings.BicubicRescalingMode bicubicRescaling<ins>,</ins>
+		<ins>CameraBufferSettings.FXAA fxaa</ins>
+	) {
+		<ins>this.fxaa = fxaa;</ins>
+		&hellip;
+	}</pre>
+						
+						<p>Pass the FXAA configuration to it in <code class="csharp">CameraRenderer.Render</code>, after applying the camera's toggle to the global toggle.</p>
+						
+						<pre class="csharp" translate="no">		<ins>bufferSettings.fxaa.enabled &amp;= cameraSettings.allowFXAA;</ins>
+		postFXStack.Setup(
+			context, camera, bufferSize, postFXSettings, useHDR, colorLUTResolution,
+			cameraSettings.finalBlendMode, bufferSettings.bicubicRescaling<ins>,</ins>
+			<ins>bufferSettings.fxaa</ins>
+		);</pre>
+						
+						<p>Note that we can directly modify the buffer settings struct field because it contains a copy of the RP settings struct, not a reference to the original.</p>
+					</section>
+					
+					<section>
+						<h3>FXAA Pass</h3>
+						
+						<p>We need a pass to apply FXAA, so add it to the <em translate="no">PostFXStack</em> shader, along with a corresponding entry in the <code class="csharp">PostFXStack.Pass</code> enum. The pass is a copy of <em translate="no">Final Rescale</em> renamed to <em translate="no">FXAA</em> and with its fragment function set to <code>FXAAPassFragment</code>. Besides that, we'll put the FXAA shader code in a separate <em translate="no">FXAAPass</em> HLSL file and include it in the pass itself only.</p>
+						
+						<pre translate="no">		<ins>Pass {</ins>
+			<ins>Name "FXAA"</ins>
+
+			<ins>Blend [_FinalSrcBlend] [_FinalDstBlend]</ins>
+			
+			<ins>HLSLPROGRAM</ins>
+				<ins>#pragma target 3.5</ins>
+				<ins>#pragma vertex DefaultPassVertex</ins>
+				<ins>#pragma fragment FXAAPassFragment</ins>
+				<ins>#include "FXAAPass.hlsl"</ins>
+			<ins>ENDHLSL</ins>
+		<ins>}</ins></pre>
+						
+						<p>Create the new <em translate="no">FXAAPass.hlsl</em> file, initially containing only the <code>FXAAPAssFragment</code> function that returns the source pixel without modification.</p>
+						
+						<pre translate="no"><ins>#ifndef CUSTOM_FXAA_PASS_INCLUDED</ins>
+<ins>#define CUSTOM_FXAA_PASS_INCLUDED</ins>
+
+<ins>float4 FXAAPassFragment (Varyings input) : SV_TARGET {</ins>
+	<ins>return GetSource(input.screenUV);</ins>
+<ins>}</ins>
+
+<ins>#endif</ins></pre>
+						
+						<p>We have to apply FXAA after color grading, for the same reason that the final rescale must happen after color grading. As we now have multiple scenarios in which the <em translate="no">Final</em> pass is no longer the true final let's rename it to <em translate="no">Apply Color Grading</em>, as that's what it actually does. Do this both in the shader and the <code>Pass</code> enum. Rename its fragment function to <code>ApplyColorGradingPassFragment</code>.</p>
+						
+						<p>Let's also rename the <code class="shader">PostFXStack.DoColorGradingAndToneMapping</code> method to <code class="csharp">DoFinal</code>, because it's now doing a lot more than just color grading and tone mapping.</p>
+						
+						<p>When FXAA is enabled we first have to perform color grading and then apply FXAA on top of that. So we have to store the color-grading result in a temporary render texture. Add a shader property identifier for it to <code class="csharp">PostFXStack</code>.</p>
+						
+						<pre class="csharp" translate="no">		colorGradingResultId = <ins>Shader.PropertyToID("_ColorGradingResult"),</ins>
+		finalResultId = Shader.PropertyToID("_FinalResult"),</pre>
+						
+						<p>In <code class="csharp">DoFinal</code>, check whether FXAA is enabled right before we move on to the final drawing phase. If FXAA is enabled, immediately perform color grading and store the result in a new temporary LDR texture.</p>
+						
+						<pre class="csharp" translate="no">		buffer.SetGlobalVector(colorGradingLUTParametersId,
+			new Vector4(1f / lutWidth, 1f / lutHeight, lutHeight - 1f)
+		);
+
+		<ins>if (fxaa.enabled) {</ins>
+			<ins>buffer.GetTemporaryRT(</ins>
+				<ins>colorGradingResultId, bufferSize.x, bufferSize.y, 0,</ins>
+				<ins>FilterMode.Bilinear, RenderTextureFormat.Default</ins>
+			<ins>);</ins>
+			<ins>Draw(sourceId, colorGradingResultId, Pass.ApplyColorGrading);</ins>
+		<ins>}</ins>
+
+		if (bufferSize.x == camera.pixelWidth) {
+			DrawFinal(sourceId, Pass.ApplyColorGrading);
+		}</pre>
+						
+						<p>Like we did for an adjusted render scale, we have to make sure that the final blend mode for color grading is set to <code>One Zero</code>. As this can now happen in two places let's simply always reset it before we begin drawing.</p>
+						
+						<pre class="csharp" translate="no">		<ins>buffer.SetGlobalFloat(finalSrcBlendId, 1f);</ins>
+		<ins>buffer.SetGlobalFloat(finalDstBlendId, 0f);</ins>
+		if (fxaa.enabled) {
+			&hellip;
+		}
+
+		if (bufferSize.x == camera.pixelWidth) {
+			DrawFinal(sourceId, Pass.ApplyColorGrading);
+		}
+		else {
+			buffer.GetTemporaryRT(
+				finalResultId, bufferSize.x, bufferSize.y, 0,
+				FilterMode.Bilinear, RenderTextureFormat.Default
+			);
+			<del>//buffer.SetGlobalFloat(finalSrcBlendId, 1f);</del>
+			<del>//buffer.SetGlobalFloat(finalDstBlendId, 0f);</del>
+			&hellip;
+		}</pre>
+						
+						<p>Next, if the buffer isn't scaled we again have to check whether FXAA is enabled. If so the final draw is with the FXAA pass and the color grading result, after which the color grading result has to be released. Otherwise color grading is the final pass, as before.</p>
+						
+						<pre class="csharp" translate="no">		if (bufferSize.x == camera.pixelWidth) {
+			<ins>if (fxaa.enabled) {</ins>
+				<ins>DrawFinal(colorGradingResultId, Pass.FXAA€);</ins>
+				<ins>buffer.ReleaseTemporaryRT(colorGradingResultId);</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				DrawFinal(sourceId, Pass.ApplyColorGrading);
+			<ins>}</ins>
+		}</pre>
+						
+						<p>In case of an adjusted render scale we still have to first render to an intermediate final result texture. If FXAA is enabled we do this with a regular draw of the FXAA pass with the color grading result, after which we release the color grading result. Otherwise it's the regular draw that applies color grading to the original source.</p>
+						
+						<pre class="csharp" translate="no">		else {
+			buffer.GetTemporaryRT(
+				finalResultId, bufferSize.x, bufferSize.y, 0,
+				FilterMode.Bilinear, RenderTextureFormat.Default
+			);
+
+			<ins>if (fxaa.enabled) {</ins>
+				<ins>Draw(colorGradingResultId, finalResultId, Pass.FXAA€);</ins>
+				<ins>buffer.ReleaseTemporaryRT(colorGradingResultId);</ins>
+			<ins>}</ins>
+			<ins>else {</ins>
+				Draw(sourceId, finalResultId, Pass.ApplyColorGrading);
+			<ins>}</ins>
+
+			&hellip;
+		}</pre>
+						
+						<p>At this point our RP still produces the same results as before, but when FXAA is enabled the frame debugger will reveal an extra draw step with the FXAA pass.</p>
+					</section>
+					
+					<section>
+						<h3>Luma</h3>
+						
+						<p>FXAA works by selectively reducing the contrast of the image, smoothing out visually obvious jaggies and isolated pixels. Contrast is determined by comparing the perceived intensity of pixels. As the goal is to reduce artifacts that we perceive FXAA is only concerned with perceived brightness, which is gamma-adjusted luminance, known as luma. The exact color of the pixels doesn't matter, it's their luma that counts. Thus FXAA analyses a grayscale image. This means that hard transitions between different colors won't be smoothed out much when their luma is similar. Only visually obvious transitions are strongly affected.</p>
+						
+						<p>Add a <code>GetLuma</code> function to <em translate="no">FXAAPass</em> that returns a luma value for some UV coordinates. Initially have it return the linear luminance of the source. Then make the FXAA pass return that. Note that FXAA works on LDR data after color grading and tone mapping, so this represents the luma of the final image.</p>
+						
+						<pre translate="no"><ins>float GetLuma (float2 uv) {</ins>
+	<ins>return Luminance(GetSource(uv));</ins>
+<ins>}</ins>
+
+float4 FXAAPassFragment (Varyings input) : SV_TARGET {
+	return <ins>GetLuma</ins>(input.screenUV);
+}</pre>
+						
+						<figure>
+							<img src="fxaa-post-fx/color.png" width="360" height="280" alt="color">
+							<img src="fxaa-post-fx/luma-linear.png" width="360" height="280" alt="linear luma">
+							<figcaption>Original color and linear luminance.</figcaption>
+						</figure>
+						
+						<p>Because we're more perceptive to changes of dark colors that light ones we have to apply a gamma adjustment to the luminance to get an appropriate luma value. A gamma of 2 is sufficiently accurate, which we get by taking the square root of the linear luminance.</p>
+						
+						<pre translate="no">float GetLuma (float2 uv) {
+	return <ins>sqrt(</ins>Luminance(GetSource(uv))<ins>)</ins>;
+}</pre>
+						
+						<figure>
+							<img src="fxaa-post-fx/luma-gamma-2.png" width="360" height="280">
+							<figcaption>Gamma 2.0 luma.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Green for Luma</h3>
+						
+						<p>FXAA works by detecting contrast and edges, which requires multiple samples per fragment. Calculating luma for each sample would make it too expensive. Because we are visually most sensitive to green, a common alternative to calculating luma is to directly use the green color channel instead. This lowers the quality but avoids a dot product and square root operation.</p>
+						
+						<pre translate="no">float GetLuma (float2 uv) {
+	return <ins>GetSource(uv).g</ins>;
+}</pre>
+						
+						<figure>
+							<img src="fxaa-post-fx/luma-green.png" width="360" height="280">
+							<figcaption>Green as luma.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Storing Luma in the Alpha Channel</h3>
+						
+						<p>Calculating luma produces much better results that relying on just the green color channel, but we don't want to calculate it each time we sample the source. A solution is to calculate it once, when we apply color grading. We have to store the luma somewhere, for which we can use the alpha channel of the color-grading result texture. However, this is not possible if the transparency stored in the alpha channel is needed later, for example when layering cameras.</p>
+						
+						<p>As the alpha channel is typically unused we'll add another pass to <em translate="no">PostFXStack</em> that both applies color grading and calculates luma, while also keeping the original pass.</p>
+						
+						<pre translate="no">		<ins>Pass {</ins>
+			<ins>Name "Apply Color Grading With Luma"</ins>
+
+			<ins>HLSLPROGRAM</ins>
+				<ins>#pragma target 3.5</ins>
+				<ins>#pragma vertex DefaultPassVertex</ins>
+				<ins>#pragma fragment ApplyColorGradingWithLumaPassFragment</ins>
+			<ins>ENDHLSL</ins>
+		<ins>}</ins></pre>
+						
+						<p>The new fragment function is a copy of <code>ApplyColorGradingPassFragment</code> that also calculates luma and stores it in the alpha channel.</p>
+						
+						<pre translate="no">float4 <ins>ApplyColorGradingWithLumaPassFragment</ins> (Varyings input) : SV_TARGET {
+	float4 color = GetSource(input.screenUV);
+	color.rgb = ApplyColorGradingLUT(color.rgb);
+	<ins>color.a = sqrt(Luminance(color.rgb));</ins>
+	return color;
+}</pre>
+						
+						<p>We now need two version of our FXAA pass, one for when the alpha channel contains luma and one for when luma isn't available. We'll keep the current <em translate="no">FXAA</em> pass and add another <em translate="no">FXAA With Luma</em> pass for when luma is available. In this case we'll define <em translate="no">FXAA_ALPHA_CONTAINS_LUMA</em> instead of creating a separate fragment function for it. This works because we're including <em translate="no">FXAAPass</em> in the pass block itself, so we add the definition before including the file.</p>
+						
+						<pre translate="no">		<ins>Pass {</ins>
+			<ins>Name "FXAA With Luma"</ins>
+
+			<ins>Blend [_FinalSrcBlend] [_FinalDstBlend]</ins>
+			
+			<ins>HLSLPROGRAM</ins>
+				<ins>#pragma target 3.5</ins>
+				<ins>#pragma vertex DefaultPassVertex</ins>
+				<ins>#pragma fragment FXAAPassFragment</ins>
+				<ins>#define FXAA_ALPHA_CONTAINS_LUMA</ins>
+				<ins>#include "FXAAPass.hlsl"</ins>
+			<ins>ENDHLSL</ins>
+		<ins>}</ins></pre>
+						
+						<p>Now we can use conditional compilation to make <code>GetLuma</code> return the appropriate color channel: alpha when luma is stored in it and green otherwise.</p>
+						
+						<pre translate="no">float GetLuma (float2 uv) {
+	<ins>#if defined(FXAA_ALPHA_CONTAINS_LUMA)</ins>
+		<ins>return GetSource(uv).a;</ins>
+	<ins>#else</ins>
+		return GetSource(uv).g;
+	<ins>#endif</ins>
+}</pre>
+					</section>
+					
+					<section>
+						<h3>Keeping Alpha</h3>
+						
+						<p>We prefer to calculate luma, so that will be the default. We'll only switch to green if the data in the alpha channel must be kept unchanged, no matter the reason. This depends on what the rendered image is used for, so must be configurable per camera. Add a toggle option to keep alpha to <code class="csharp">CameraSettings</code> for this purpose, which is disabled by default.</p>
+						
+						<pre class="csharp" translate="no">	<ins>public bool keepAlpha = false;</ins></pre>
+						
+						<figure>
+							<img src="fxaa-post-fx/keep-alpha.png" width="320" height="40">
+							<figcaption>Toggle for keeping alpha.</figcaption>
+						</figure>
+						
+						<p>Pass this toggle along when setting up the post FX stack in <code class="csharp">CameraRenderer.Render</code>. It's related to the HDR toggle as both settings deal with the nature of texture data, so place it before the HDR toggle argument.</p>
+						
+						<pre class="csharp" translate="no">		postFXStack.Setup(
+			context, camera, bufferSize, postFXSettings, <ins>cameraSettings.keepAlpha,</ins> useHDR,
+			colorLUTResolution, cameraSettings.finalBlendMode,
+			bufferSettings.bicubicRescaling, bufferSettings.fxaa
+		);</pre>
+						
+						<p>Then keep track of the toggle in <code class="csharp">PostFXStack</code>.</p>
+						
+						<pre class="csharp" translate="no">	bool <ins>keepAlpha,</ins> useHDR;
+
+	&hellip;
+
+	public void Setup (
+		ScriptableRenderContext context, Camera camera, Vector2Int bufferSize,
+		PostFXSettings settings, <ins>bool keepAlpha,</ins> bool useHDR, int colorLUTResolution,
+		&hellip;
+	) {
+		&hellip;
+		<ins>this.keepAlpha = keepAlpha;</ins>
+		this.useHDR = useHDR;
+		&hellip;
+	}</pre>
+						
+						<p>Now <code class="shader">DoFinal</code> must use the appropriate passes when FXAA is enabled. If we have to keep alpha then we stick with the current passes, otherwise we can switch to the color grading and FXAA passes that include luma in the alpha channel.</p>
+						
+						<pre class="csharp" translate="no">		if (fxaa.enabled) {
+			&hellip;
+			Draw(
+				sourceId, colorGradingResultId,
+				<ins>keepAlpha ? Pass.ApplyColorGrading : Pass.ApplyColorGradingWithLuma</ins>
+			);
+		}
+
+		if (bufferSize.x == camera.pixelWidth) {
+			if (fxaa.enabled) {
+				DrawFinal(
+					colorGradingResultId, <ins>keepAlpha ? Pass.FXAA€ : Pass.FXAAWithLuma</ins>
+				);
+				buffer.ReleaseTemporaryRT(colorGradingResultId);
+			}
+			&hellip;
+		}
+		else {
+			&hellip;
+
+			if (fxaa.enabled) {
+				Draw(
+					colorGradingResultId, finalResultId,
+					<ins>keepAlpha ? Pass.FXAA€ : Pass.FXAAWithLuma</ins>
+				);
+				buffer.ReleaseTemporaryRT(colorGradingResultId);
+			}
+			&hellip;
+		}</pre>
+						
+						<p>You can check whether this work by toggling the camera's <em translate="no">Keep Alpha</em> setting. When alpha must be kept our RP is forced to fall back to relying on green instead of luma, which will produce a darker grayscale image. Currently the only reason to keep alpha is when multiple cameras are stacked with transparency.</p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Subpixel Blending</h2>
+					
+					<p>FXAA works by blending adjacent pixels that have a high contrast. So this is not a straightforward uniform blurring of the image. First, the local contrast&mdash;the range from lowest to highest luma&mdash;has to be calculated around the source pixel. Second—if there is enough contrast—a blend factor has to be chosen based on the contrast. Third, the local contrast gradient has to be investigated to determine a blend direction. Finally, a blend is performed between the original pixel its appropriate neighbor.</p>
+					
+					<section>
+						<h3>Luma Neighborhood</h3>
+						
+						<p>The local contrast is found by sampling the luma of the pixels in the neighborhood of the source pixel. To make this easy add two optional offset parameters to <code>GetLuma</code>, so it can be offset in units of pixels along the U and V dimensions.</p>
+						
+						<pre translate="no">float GetLuma (float2 uv<ins>, float uOffset = 0.0, float vOffset = 0.0</ins>) {
+	<ins>uv += float2(uOffset, vOffset) * GetSourceTexelSize().xy;</ins>
+	&hellip;
+}</pre>
+						
+						<p>Besides the source pixel, we also have to sample its directly adjacent neighbors, which we'll identify with compass directions. So we end up with five luma values: the middle source pixel plus north, east, south, and west.</p>
+						
+						<figure>
+							<img src="subpixel-blending/neighborhood.png" width="165" height="155">
+							<figcaption>Neighborhood samples.</figcaption>
+						</figure>
+						
+						<p>Define a <code>LumaNeighborhood</code> struct to keep track of all these together and add a <code>GetLumaNeighborhood</code> function that returns that neighborhood. Invoke it in the fragment pass, initially still only returning the middle luma value.</p>
+						
+						<pre translate="no"><ins>struct LumaNeighborhood {</ins>
+	<ins>float m, n, e, s, w€;</ins>
+<ins>};</ins>
+
+<ins>LumaNeighborhood GetLumaNeighborhood (float2 uv) {</ins>
+	<ins>LumaNeighborhood luma;</ins>
+	<ins>luma.m = GetLuma(uv);</ins>
+	<ins>luma.n = GetLuma(uv, 0.0, 1.0);</ins>
+	<ins>luma.e = GetLuma(uv, 1.0, 0.0);</ins>
+	<ins>luma.s = GetLuma(uv, 0.0, -1.0);</ins>
+	<ins>luma.w€ = GetLuma(uv, -1.0, 0.0);</ins>
+	<ins>return luma;</ins>
+<ins>}</ins>
+
+float4 FXAAPassFragment (Varyings input) : SV_TARGET {
+	<ins>LumaNeighborhood luma = GetLumaNeighborhood(input.screenUV);</ins>
+	return <ins>luma.m</ins>;
+}</pre>
+						
+						<p>To determine the luma range in this neighborhood we need to know what its highest and lowest luma values are. Calculate them and also store them in the neighborhood struct.</p>
+						
+						<pre translate="no">struct LumaNeighborhood {
+	float m, n, e, s, w€;
+	<ins>float highest, lowest;</ins>
+};
+
+LumaNeighborhood GetLumaNeighborhood (float2 uv) {
+	&hellip;
+
+	<ins>luma.highest = max(max(max(max(luma.m, luma.n), luma.e), luma.s), luma.w€);</ins>
+	<ins>luma.lowest = min(min(min(min(luma.m, luma.n), luma.e), luma.s), luma.w€);</ins>
+	return luma;
+}</pre>
+						
+						<p>You can observe these and other values by using them for the result of the fragment function, but I don't show the temporary code changes needed for that.</p>
+						
+						<figure>
+							<img src="subpixel-blending/luma-middle.png" width="360" height="280" alt="middle"><br>
+							<img src="subpixel-blending/luma-highest.png" width="360" height="280" alt="highest">
+							<img src="subpixel-blending/luma-lowest.png" width="360" height="280" alt="lowest">
+							<figcaption>Middle, highest, and lowest luma in neighborhood; zoomed in.</figcaption>
+						</figure>
+						
+						<p>Now also add the luma range to the neighborhood, which is the highest luma minus the lowest luma.</p>
+						
+						<pre translate="no">struct LumaNeighborhood {
+	float m, n, e, s, w€;
+	float highest, lowest<ins>, range</ins>;
+};
+
+LumaNeighborhood GetLumaNeighborhood (float2 uv) {
+	&hellip;
+
+	luma.highest = max(max(max(max(luma.m, luma.n), luma.e), luma.s), luma.w);
+	luma.lowest = min(min(min(min(luma.m, luma.n), luma.e), luma.s), luma.w);
+	<ins>luma.range = luma.highest - luma.lowest;</ins>
+	return luma;
+}</pre>
+						
+						<figure>
+							<img src="subpixel-blending/luma-range.png" width="360" height="280">
+							<figcaption>Luma range in neighborhood.</figcaption>
+						</figure>
+						
+						<p>Note that the luma range visually reveals edges in the image as lines. The lines are two pixels wide because there's a pixel on both sides of every edge. The higher the luma contrast of an edge, the brighter it appears.</p>
+						
+					</section>
+					
+					<section>
+						<h3>Fixed Threshold</h3>
+						
+						<p>We don't need to blend every pixel, only those whose neighborhood has a high enough contrast. The easiest way to make this distinction is by introducing a contrast threshold. If the neighborhood luma range doesn't reach this threshold then the pixel needs no blending. We'll name this the fixed threshold, because there's also a relative threshold.</p>
+						
+						<p>Add a slider to configure a fixed threshold to our <code class="csharp">CameraBufferSettings.FXAA</code> struct. The original FXAA algorithm has this threshold as well, with the following code documentation:</p>
+						
+						<pre translate="no">// Trims the algorithm from processing darks.
+//   0.0833 - upper limit (default, the start of visible unfiltered edges)
+//   0.0625 - high quality (faster)
+//   0.0312 - visible limit (slower)</pre>
+						
+						<p>Although the documentation mentions that it trims dark areas, it trims based on contrast, so regardless whether it's bright or dark. We will use the same range as indicated by the original FXAA documentation.</p>
+						
+						<pre class="csharp" translate="no">	public struct FXAA {
+
+		public bool enabled;
+
+		<ins>[Range(0.0312f, 0.0833f)]</ins>
+		<ins>public float fixedThreshold;</ins>
+	}</pre>
+						
+						<p>Let's also use the same default as the original, which we set in <code class="csharp">CustomRenderPipelineAsset</code>.</p>
+						
+						<pre class="csharp" translate="no">	CameraBufferSettings cameraBuffer = new CameraBufferSettings {
+		allowHDR = true,
+		renderScale = 1f<ins>,</ins>
+		<ins>fxaa = new CameraBufferSettings.FXAA {</ins>
+			<ins>fixedThreshold = 0.0833f</ins>
+		<ins>}</ins>
+	};</pre>
+						
+						<figure>
+							<img src="subpixel-blending/fixed-threshold-slider.png" width="320" height="60">
+							<figcaption>Fixed threshold slider.</figcaption>
+						</figure>
+						
+						<p>Next, add an <em translate="no">_FXAAConfig</em> shader property identifier to <code class="csharp">PostFXStack</code>.</p>
+						
+						<pre class="csharp" translate="no">	<ins>int fxaaConfigId = Shader.PropertyToID("_FXAAConfig");</ins></pre>
+						
+						<p>We'll send the FXAA configuration to the GPU as a vector, initially with only the fixed threshold in its first component. Do this in <code class="csharp">DoFinal</code> if FXAA is enabled.</p>
+						
+						<pre class="csharp" translate="no">		if (fxaa.enabled) {
+			<ins>buffer.SetGlobalVector(fxaaConfigId, new Vector4(fxaa.fixedThreshold, 0f));</ins>
+			buffer.GetTemporaryRT(
+				colorGradingResultId, bufferSize.x, bufferSize.y, 0,
+				FilterMode.Bilinear, RenderTextureFormat.Default
+			);
+			&hellip;
+		}</pre>
+						
+						<p>Add the <em translate="no">_FXAAConfig</em> vector to <em translate="no">FXAAPass</em>, along with a <code>CanSkipFXAA</code> function that takes a <code>LumaNeighborhood</code> and returns whether its range is less than the fixed threshold. Then return zero in <code>FXAAPassFragment</code> if we can skip FXAA.</p>
+						
+						<pre translate="no"><ins>float4 _FXAAConfig;</ins>
+
+&hellip;
+
+<ins>bool CanSkipFXAA (LumaNeighborhood luma) {</ins>
+	<ins>return luma.range &lt; _FXAAConfig.x;</ins>
+<ins>}</ins>
+
+float4 FXAAPassFragment (Varyings input) : SV_TARGET {
+	LumaNeighborhood luma = GetLumaNeighborhood(input.screenUV);
+
+	<ins>if (CanSkipFXAA(luma)) {</ins>
+		<ins>return 0.0;</ins>
+	<ins>}</ins>
+	
+	return luma.range;
+}</pre>
+						<figure>
+							<img src="subpixel-blending/fixed-threshold-min.png" width="360" height="280" alt="minimum">
+							<img src="subpixel-blending/fixed-threshold-max.png" width="360" height="280" alt="maximum">
+							<figcaption>Fixed threshold set to minimum and maximum.</figcaption>
+						</figure>
+						
+						<p>The pixels that are skipped by FXAA are now solid black. Low-contrast regions are now visually eliminated. How much remains depends on the threshold.</p>
+					</section>
+					
+					<section>
+						<h3>Relative Threshold</h3>
+						
+						<p>FXAA also has a second threshold, which is relative to the brightest luma of each neighborhood. The brighter the neighborhood, the higher the contrast must be to matter. The original FXAA code has the following documentation for its values:</p>
+						
+						<pre translate="no">// The minimum amount of local contrast required to apply algorithm.
+//   0.333 - too little (faster)
+//   0.250 - low quality
+//   0.166 - default
+//   0.125 - high quality 
+//   0.063 - overkill (slower)</pre>
+						
+						<p>Add a slider for this relative threshold to <code class="csharp">CameraBufferSettings.FXAA</code> as well.</p>
+						
+						<pre class="csharp" translate="no">		<ins>[Range(0.063f, 0.333f)]</ins>
+		<ins>public float relativeThreshold;</ins></pre>
+						
+						<p>Again with the same default as the original in <code class="csharp">CustomRenderPipelineAsset</code>.</p>
+						
+						<pre class="csharp" translate="no">		fxaa = new CameraBufferSettings.FXAA {
+			fixedThreshold = 0.0833f<ins>,</ins>
+			<ins>relativeThreshold = 0.166f</ins>
+		}</pre>
+						
+						<p>Then put it in the second component of the FXAA config vector in <code>PostFXStack.DoFinal</code>.</p>
+						
+						<pre class="csharp" translate="no">			buffer.SetGlobalVector(fxaaConfigId, new Vector4(
+				fxaa.fixedThreshold, <ins>fxaa.relativeThreshold</ins>
+			));</pre>
+						
+						<figure>
+							<img src="subpixel-blending/relative-threshold-slider.png" width="320" height="60">
+							<figcaption>Two threshold sliders.</figcaption>
+						</figure>
+						
+						<p>To apply the relative instead of the fixed threshold change <code>CanSkipFXAA</code> in <em translate="no">FXAAPass</em> so it checks whether the luma range is less than the second threshold scaled by the highest luma.</p>
+						
+						<pre translate="no">bool CanSkipFXAA (LumaNeighborhood luma) {
+	return luma.range &lt; _FXAAConfig.<ins>y * luma.highest</ins>;
+}</pre>						
+						
+						<figure>
+							<img src="subpixel-blending/relative-threshold-min.png" width="360" height="280" alt="minimum">
+							<img src="subpixel-blending/relative-threshold-max.png" width="360" height="280" alt="maximum">
+							<figcaption>Relative threshold set to minimum and maximum.</figcaption>
+						</figure>
+						
+						<p>To apply both thresholds compare with the largest one.</p>
+						
+						<pre translate="no">bool CanSkipFXAA (LumaNeighborhood luma) {
+	return luma.range &lt; <ins>max(_FXAAConfig.x,</ins> _FXAAConfig.y * luma.highest<ins>)</ins>;
+}</pre>
+						
+						<figure>
+							<img src="subpixel-blending/both-thresholds-min.png" width="360" height="280" alt="minimum">
+							<img src="subpixel-blending/both-thresholds-max.png" width="360" height="280" alt="maximum">
+							<figcaption>Both thresholds set to minimum and maximum.</figcaption>
+						</figure>
+						
+						<p>From now on I'll always use the lowest thresholds so that the most pixels are affected.</p>
+					</section>
+					
+					<section>
+						<h3>Blend Factor</h3>
+						
+						<p>The only correct way to increase the visual quality of an edge is to increase the resolution of the image. However, FXAA only has original image data to work with. The best that it can do is make a guess about the subpixel data that is missing. It does this by blending the middle pixel with one of its neighbors. At its most extreme this would be a simple average of both pixels, but the exact blend factor is the result of a filter that depends on the contrast of the pixel and the average of its neighbors. We'll visualize this in steps.</p>
+						
+						<p>Begin by creating a <code>GetSubpixelBlendFactor</code> function that returns the average of the four neighbors in the neighborhood. Use that for the result of <code>FXAAPassFragment</code>.</p>
+						
+						<pre translate="no"><ins>float GetSubpixelBlendFactor (LumaNeighborhood luma) {</ins>
+	<ins>float filter = luma.n + luma.e + luma.s + luma.w€;</ins>
+	<ins>filter *= 1.0 / 4;</ins>
+	<ins>return filter;</ins>
+<ins>}</ins>
+
+float4 FXAAPassFragment (Varyings input) : SV_TARGET {
+	&hellip;
+	
+	return <ins>GetSubpixelBlendFactor(luma)</ins>;
+}</pre>
+						
+						<figure>
+							<img src="subpixel-blending/filter-low-pass.png" width="360" height="280">
+							<figcaption>Low-pass filter.</figcaption>
+						</figure>
+						
+						<p>The result is a low-pass filter applied to the luma around those pixels that weren't skipped. The next step is to turn this into a high-pass filter, by taking the absolute difference between the neighbor average and the middle.</p>
+						
+						<pre translate="no">	<ins>filter = abs(filter - luma.m);</ins>
+	return filter;</pre>
+						
+						<figure>
+							<img src="subpixel-blending/filter-high-pass.png" width="360" height="280">
+							<figcaption>High-pass filter.</figcaption>
+						</figure>
+						
+						<p>After that we normalize the filter by dividing it by the luma range.</p>
+						
+						<pre translate="no">	<ins>filter = filter / luma.range;</ins>
+	return filter;</pre>
+						
+						<figure>
+							<img src="subpixel-blending/filter-normalized.png" width="360" height="280">
+							<figcaption>Normalized filter.</figcaption>
+						</figure>
+						
+						<p>At this point the result is too strong to use as a blend factor. FXAA modifies the filter by applying the squared <code>smoothstep</code> function to it.</p>
+						
+						<figure>
+							<img src="subpixel-blending/squared-smoothstep.png" width="160" height="160">
+							<figcaption>Linear and squared smoothstep.</figcaption>
+						</figure>
+						
+						<pre translate="no">	<ins>filter = smoothstep(0, 1, filter);</ins>
+	return filter <ins>* filter</ins>;</pre>
+						
+						<figure>
+							<img src="subpixel-blending/filter-smoothed.png" width="360" height="280">
+							<figcaption>Smoothed filter.</figcaption>
+						</figure>
+						
+						<p>The quality of the filter can be improved by also incorporating the diagonal neighbors into it, so add their luma values to the neighborhood.</p>
+						
+						<pre translate="no">struct LumaNeighborhood {
+	float m, n, e, s, w€<ins>, ne, se, sw, nw</ins>;
+	float highest, lowest, range;
+};
+
+LumaNeighborhood GetLumaNeighborhood (float2 uv) {
+	LumaNeighborhood luma;
+	luma.m = GetLuma(uv);
+	luma.n = GetLuma(uv, 0.0, 1.0);
+	luma.e = GetLuma(uv, 1.0, 0.0);
+	luma.s = GetLuma(uv, 0.0, -1.0);
+	luma.w€ = GetLuma(uv, -1.0, 0.0);
+	<ins>luma.ne = GetLuma(uv, 1.0, 1.0);</ins>
+	<ins>luma.se = GetLuma(uv, 1.0, -1.0);</ins>
+	<ins>luma.sw = GetLuma(uv, -1.0, -1.0);</ins>
+	<ins>luma.nw = GetLuma(uv, -1.0, 1.0);</ins>
+
+	&hellip;
+}</pre>
+						
+						<p>Because the diagonal neighbors are spatially farther away from the middle they should matter less that the direct neighbors. We factor this into our average by doubling the weights of the direct neighbors. This acts like a 3&times;3 tent filter, without the middle.</p>
+						
+						<figure>
+							<img src="subpixel-blending/neighbor-weights.png" width="140" height="140">
+							<figcaption>Neighbor weights.</figcaption>
+						</figure>
+						
+						<p>We now also have to saturate the normalized filter, because the highest value that we stored doesn't take the diagonal samples into account, thus after the division we could still have a value that exceeds 1.</p>
+						
+						<pre translate="no">float GetSubpixelBlendFactor (LumaNeighborhood luma) {
+	float filter = <ins>2.0 * (</ins>luma.n + luma.e + luma.s + luma.w€<ins>)</ins>;
+	<ins>filter += luma.ne + luma.nw + luma.se + luma.sw;</ins>
+	filter *= 1.0 / <ins>12.0</ins>;
+	filter = abs(filter - luma.m);
+	filter = <ins>saturate(</ins>filter / luma.range<ins>)</ins>;
+	filter = smoothstep(0, 1, filter);
+	return filter * filter;
+}</pre>
+						
+						<figure>
+							<img src="subpixel-blending/filter-expanded.png" width="360" height="280" alt="expanded filter">
+							<img src="subpixel-blending/filter-difference.png" width="360" height="280" alt="absolute difference">
+							<figcaption>Expanded filter and absolute difference between both filters.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Blend Direction</h3>
+						
+						<p>After determining the blend factor the next step is to decide which two pixels to blend. FXAA blends the middle pixel with one of its direct neighbors, so either the north, east, south, or west neighbor. Which of those four pixels is selected depends on the direction of the contrast gradient. In the simplest case, the middle pixel touches either a horizontal or a vertical edge between two contrasting regions. In case of a horizontal edge, it should be either the north or the south neighbor, depending on whether the middle is below or above the edge. Otherwise, it should be either the east or the west neighbor, depending on whether the middle is on the left or right side of the edge.</p>
+						
+						<figure>
+							<img src="subpixel-blending/blend-directions.png" width="280" height="280">
+							<figcaption>Four possible blend directions.</figcaption>
+						</figure>
+						
+						<p>Edges often aren't perfectly horizontal or vertical, but we pick the best approximation, by comparing the horizontal and vertical contrast in the neighborhood. If there is a horizontal edge then there will be strong vertical contrast, either above or below the middle. We measure this by adding north and south, subtracting the middle twice, and taking the absolute of that. The same logic applies to vertical edges, but with east and west instead. If the horizontal result is greater than the vertical then we declare it a horizontal edge. Create a function that indicates this, given a neighborhood.</p>
+						
+						<pre translate="no"><ins>bool IsHorizontalEdge (LumaNeighborhood luma) {</ins>
+	<ins>float horizontal = abs(luma.n + luma.s - 2.0 * luma.m);</ins>
+	<ins>float vertical = abs(luma.e + luma.w€ - 2.0 * luma.m);</ins>
+	<ins>return horizontal >= vertical;</ins>
+<ins>}</ins></pre>
+						
+						<p>We can improve the quality of our edge orientation detection by including the diagonal neighbors as well. For the horizontal edge, we perform the same calculation for the three pixels one step to the east and for the three pixels one step to the west, summing the results. Again, these additional values are further away from the middle, so we halve their relative importance by doubling the weight of the middle contrast. The same applies to the vertical edge contrast, but with north and south offsets.</p>
+						
+						<pre translate="no">bool IsHorizontalEdge (LumaNeighborhood luma) {
+	float horizontal =
+		<ins>2.0 *</ins> abs(luma.n + luma.s - 2.0 * luma.m) <ins>+</ins>
+		<ins>abs(luma.ne + luma.se - 2.0 * luma.e) +</ins>
+		<ins>abs(luma.nw + luma.sw - 2.0 * luma.w€)</ins>;
+	float vertical =
+		<ins>2.0 *</ins> abs(luma.e + luma.w€ - 2.0 * luma.m) <ins>+</ins>
+		<ins>abs(luma.ne + luma.nw - 2.0 * luma.n) +</ins>
+		<ins>abs(luma.se + luma.sw - 2.0 * luma.s)</ins>;
+	return horizontal >= vertical;
+}</pre>
+						
+						<p>Now introduce an <code>FXAAEdge</code> struct to contain information about the detected edge. At this point that's only whether it is horizontal. Create a <code>GetFXAAEdge</code> method that returns that information, given a neighborhood.</p>
+						
+						<pre translate="no"><ins>struct FXAAEdge {</ins>
+	<ins>bool isHorizontal;</ins>
+<ins>};</ins>
+
+<ins>FXAAEdge GetFXAAEdge (LumaNeighborhood luma) {</ins>
+	<ins>FXAAEdge edge;</ins>
+	<ins>edge.isHorizontal = IsHorizontalEdge(luma);</ins>
+	<ins>return edge;</ins>
+<ins>}</ins></pre>
+						
+						<p>Get the edge data in <code>FXAAPassFragment</code>, then use it to visualize the orientation of the edges, for example by making horizontal ones red and vertical ones white. At this point we do not care about the blend factor.</p>
+						
+						<pre translate="no">float4 FXAAPassFragment (Varyings input) : SV_TARGET {
+	LumaNeighborhood luma = GetLumaNeighborhood(input.screenUV);
+
+	if (CanSkipFXAA(luma)) {
+		return 0.0;
+	}
+
+	<ins>FXAAEdge edge = GetFXAAEdge(luma);</ins>
+	
+	return <ins>edge.isHorizontal ? float4(1.0, 0.0, 0.0, 0.0) : 1.0</ins>;
+}</pre>
+						
+						<figure>
+							<img src="subpixel-blending/edge-direction.png" width="360" height="280">
+							<figcaption>Horizontal edges are red, vertical edges are white.</figcaption>
+						</figure>
+						
+						<p>Knowing the edge orientation tells us in what dimension we have to blend. If it's horizontal then we'll blend vertically across the edge, otherwise it's vertical and we'll blend horizontally across the edge. How far it is to the next pixel in UV space depends on the pixel size, which depends on the blend direction. So let's add the size of the pixel step to <code>FXAAEdge</code> and initialize it in <code>GetFXAAEdge</code>.</p>
+						
+						<pre translate="no">struct FXAAEdge {
+	bool isHorizontal;
+	<ins>float pixelStep;</ins>
+};
+
+FXAAEdge GetFXAAEdge (LumaNeighborhood luma) {
+	FXAAEdge edge;
+	edge.isHorizontal = IsHorizontalEdge(luma);
+	<ins>if (edge.isHorizontal) {</ins>
+		<ins>edge.pixelStep = GetSourceTexelSize().y;</ins>
+	<ins>}</ins>
+	<ins>else {</ins>
+		<ins>edge.pixelStep = GetSourceTexelSize().x;</ins>
+	<ins>}</ins>
+	
+	return edge;
+}</pre>
+						
+						<p>Next, we have to determine whether we should blend in the positive or negative direction. We do this by comparing the contrast&mdash;the luma gradient&mdash;on either side of the middle in the appropriate directions. If we have a horizontal edge then north is the positive neighbor and south is the negative one. If we have a vertical edge instead then east is the positive neighbor and west is the negative one.</p>
+						
+						<p>If the positive gradient is smaller than the negative one then the middle is on the right side of the ege and we have to blend in the negative direction, which we do by negating the step.</p>
+						
+						<pre translate="no">	<ins>float lumaP, lumaN;</ins>
+	if (edge.isHorizontal) {
+		edge.pixelStep = GetSourceTexelSize().y;
+		<ins>lumaP = luma.n;</ins>
+		<ins>lumaN = luma.s;</ins>
+	}
+	else {
+		edge.pixelStep = GetSourceTexelSize().x;
+		<ins>lumaP = luma.e;</ins>
+		<ins>lumaN = luma.w€;</ins>
+	}
+	<ins>float gradientP = abs(lumaP - luma.m);</ins>
+	<ins>float gradientN = abs(lumaN - luma.m);</ins>
+
+	<ins>if (gradientP &lt; gradientN) {</ins>
+		<ins>edge.pixelStep = -edge.pixelStep;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we can visualize the blend direction, for example by making positive edges red and negative edges white.</p>
+						
+						<pre translate="no">	return edge.<ins>pixelStep > 0.0</ins> ? float4(1.0, 0.0, 0.0, 0.0) : 1.0;</pre>
+						
+						<figure>
+							<img src="subpixel-blending/edge-sign.png" width="360" height="280">
+							<figcaption>Positive edges (left and bottom sides) are red, negative edges are white.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Final Blend</h3>
+						
+						<p>At this point we can get both the blend factor and know in which direction to blend. The final result is obtained by using the blend factor to linearly interpolate between the middle pixel and its neighbor in the appropriate direction. We can do this by simply sampling the image with an offset equal to the pixel step scaled by the blend factor. Also, we have to return the original pixel if we skip it.</p>
+						
+						<pre translate="no">float4 FXAAPassFragment (Varyings input) : SV_TARGET {
+	LumaNeighborhood luma = GetLumaNeighborhood(input.screenUV);
+	
+	if (CanSkipFXAA(luma)) {
+		return <ins>GetSource(input.screenUV)</ins>;
+	}
+
+	FXAAEdge edge = GetFXAAEdge(luma);
+
+	<ins>float blendFactor = GetSubpixelBlendFactor(luma);</ins>
+	<ins>float2 blendUV = input.screenUV;</ins>
+	<ins>if (edge.isHorizontal) {</ins>
+		<ins>blendUV.y += blendFactor * edge.pixelStep;</ins>
+	<ins>}</ins>
+	<ins>else {</ins>
+		<ins>blendUV.x += blendFactor * edge.pixelStep;</ins>
+	<ins>}</ins>
+	return <ins>GetSource(blendUV)</ins>;
+}</pre>
+						
+						<figure>
+							<img src="subpixel-blending/blending-with.png" width="360" height="280" alt="with">
+							<img src="subpixel-blending/blending-without.png" width="360" height="280" alt="without">
+							<figcaption>With and without blending.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Blend Strength</h3>
+						
+						<p>FXAA doesn't only affect obvious high-contrast edges, it blend anything that has high enough contrast, including isolated pixels. While this helps mitigate fireflies it also aggressively blurs small details, which is typically the biggest complaint against FXAA.</p>
+						
+						<figure>
+							<img src="subpixel-blending/circuitry-with.png" width="360" height="280" alt="with">
+							<img src="subpixel-blending/circuitry-without.png" width="360" height="280" alt="without">
+							<figcaption>Circuitry materials with small details, with and without subpixel blending.</figcaption>
+						</figure>
+						
+						<p>FXAA can control the strength of subpixel blending by simply scaling down its blend factor. Here is the original documentation for it:</p>
+						
+						<pre translate="no">// Choose the amount of sub-pixel aliasing removal.
+// This can effect sharpness.
+//   1.00 - upper limit (softer)
+//   0.75 - default amount of filtering
+//   0.50 - lower limit (sharper, less sub-pixel aliasing removal)
+//   0.25 - almost off
+//   0.00 - completely off</pre>
+						
+						<p>We make this configurable as well, by adding a 0&ndash;1 slider for subpixel blending to <code class="csharp">CameraBufferSettings.FXAA</code>.</p>
+						
+						<pre class="csharp" translate="no">		<ins>[Range(0f, 1f)]</ins>
+		<ins>public float subpixelBlending;</ins></pre>
+						
+						<p>Give it the same 75% strength default as the original in <code class="csharp">CustomRenderPipelineAsset</code>.</p>
+						
+						<pre class="csharp" translate="no">		fxaa = new CameraBufferSettings.FXAA {
+			fixedThreshold = 0.0833f,
+			relativeThreshold = 0.166f<ins>,</ins>
+			<ins>subpixelBlending = 0.75f</ins>
+		}</pre>
+						
+						<p>Then add it to the FXAA config vector in <code class="shader">PostFXStack.DoFinal</code>.</p>
+						
+						<pre class="csharp" translate="no">			buffer.SetGlobalVector(fxaaConfigId, new Vector4(
+				fxaa.fixedThreshold, fxaa.relativeThreshold<ins>, fxaa.subpixelBlending</ins>
+			));</pre>
+						
+						<p>And apply it to the blend factor at the end of <code>GetSubpixelBlendFactor</code>.</p>
+						
+						<pre translate="no">float GetSubpixelBlendFactor (LumaNeighborhood luma) {
+	&hellip;
+	return filter * filter <ins>* _FXAAConfig.z</ins>;
+}</pre>
+						
+						<figure>
+							<img src="subpixel-blending/blending-slider.png" width="320" height="62" alt="inspector"><br>
+							<img src="subpixel-blending/blending-075.png" width="360" height="280" alt="game">
+							<figcaption>Subpixel blending reduced to 75%.</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>Blending Along Edges</h2>
+					
+					<p>Because the pixel blend factor is determined inside a 3×3 block it can only smooth out features of that scale. But edges can be longer than that. A pixel can end up somewhere on a long step of an angled edge staircase. While locally the edge is either horizontal or vertical, the true edge is often at another angle. If we knew this true edge then we could better match the blend factors of adjacent pixels, smoothing the edge across its entire length.</p>
+					
+					<figure>
+						<img src="blending-along-edges/pincushion-subpixel-blending.png" width="360" height="280" alt="with">
+						<img src="blending-along-edges/pincushion-without-blending.png" width="360" height="280" alt="without">
+						<figcaption>Pincushion geometry with and without subpixel blending at full strength.</figcaption>
+					</figure>
+					
+					<p>In contrast, at render scale 2 we get better edges because the higher resolution can smooth staircases a bit across their entire lengths. It's also possible apply FXAA on top of an increased render scale in order to get even smoother results, but currently that doesn't make much of a difference for edge quality.</p>
+					
+					<figure>
+						<img src="blending-along-edges/pincushion-render-scale-2.png" width="360" height="280">
+						<figcaption>Render scale 2 without FXAA.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Edge Luma</h3>
+						
+						<p>To figure out what kind of edge we're dealing with we have to keep track of more information. We know that the middle pixel of the 3×3 block is on one side of the edge, while at least one of the other pixels is on the opposite side. To further identify the edge we need to know its luma gradient. We already figured this out in <code>GetFXAAEdge</code>. We now need to keep track of both this gradient and the luma on the other side of the edge, so add them to the edge data.</p>
+						
+						<pre translate="no">struct FXAAEdge {
+	bool isHorizontal;
+	float pixelStep;
+	<ins>float lumaGradient, otherLuma;</ins>
+};
+
+FXAAEdge GetFXAAEdge (LumaNeighborhood luma) {
+	&hellip;
+
+	if (gradientP &lt; gradientN) {
+		edge.pixelStep = -edge.pixelStep;
+		<ins>edge.lumaGradient = gradientN;</ins>
+		<ins>edge.otherLuma = lumaN;</ins>
+	}
+	<ins>else {</ins>
+		<ins>edge.lumaGradient = gradientP;</ins>
+		<ins>edge.otherLuma = lumaP;</ins>
+	<ins>}</ins>
+	
+	return edge;
+}</pre>
+						
+						<p>Introduce a <code>GetEdgeBlendFactor</code> function that returns a separate blend factor for edges. It needs the luma neighborhood, edge data, and pixel UV coordinates to do this, so add parameters for those. We'll begin by returning the luma gradient of the edge. Adjust <code>FXAAPassFragment</code> so it visualized the new edge blend factor only.</p>
+						
+						<pre translate="no"><ins>float GetEdgeBlendFactor (LumaNeighborhood luma, FXAAEdge edge, float2 uv) {</ins>
+	<ins>return edge.lumaGradient;</ins>
+<ins>}</ins>
+
+float4 FXAAPassFragment (Varyings input) : SV_TARGET {
+	LumaNeighborhood luma = GetLumaNeighborhood(input.screenUV);
+	
+	if (CanSkipFXAA(luma)) {
+		return <ins>0.0</ins>;
+	}
+
+	FXAAEdge edge = GetFXAAEdge(luma);
+
+	float blendFactor = <ins>GetEdgeBlendFactor (luma, edge, input.screenUV)</ins>;
+	<ins>return blendFactor;</ins>
+	float2 blendUV = input.screenUV;
+	&hellip;
+}</pre>
+						
+						<figure>
+							<img src="blending-along-edges/edge-gradients.png" width="360" height="280">
+							<figcaption>Edge gradients.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Tracing the Edge</h3>
+						
+						<p>We have to figure out the relative location of the pixel along the horizontal or vertical edge segment. The only way to do this is by walking along the edge in both directions until we find the end points. This can be done by sampling pixel pairs along the edge and checking whether they still resemble the edge that we initially detected.</p>
+						
+						<figure>
+							<img src="blending-along-edges/searching.png" width="280" height="105">
+							<figcaption>Searching for the end points.</figcaption>
+						</figure>
+						
+						<p>But we don't need to sample two pixels each step. We can make do with a single sample in between them, which gives us the average of their luma. This will be enough to determine the end of an edge.</p>
+						
+						<figure>
+							<img src="blending-along-edges/search-sampling.png" width="280" height="105">
+							<figcaption>Search (yellow) and neighborhood (black) samples.</figcaption>
+						</figure>
+						
+						<p>To perform this search the first thing we have to do in <code>GetEdgeBlendFactor</code> is determine the UV coordinates for sampling on the edge. We have to offset the original UV coordinates half a pixel step toward the edge.</p>
+						
+						<pre translate="no">float GetEdgeBlendFactor (LumaNeighborhood luma, FXAAEdge edge, float2 uv) {
+	<ins>float2 edgeUV = uv;</ins>
+	<ins>if (edge.isHorizontal) {</ins>
+		<ins>edgeUV.y += 0.5 * edge.pixelStep;</ins>
+	<ins>}</ins>
+	<ins>else {</ins>
+		<ins>edgeUV.x += 0.5 * edge.pixelStep;</ins>
+	<ins>}</ins>
+
+	return edge.lumaGradient;
+}</pre>
+						
+						<p>After that the UV offset for a single step along the edge depends on its orientation. It's either horizontal or vertical.</p>
+						
+						<pre translate="no">	float2 edgeUV = uv;
+	<ins>float2 uvStep = 0.0;</ins>
+	if (edge.isHorizontal) {
+		edgeUV.y += 0.5 * edge.pixelStep;
+		<ins>uvStep.x = GetSourceTexelSize().x;</ins>
+	}
+	else {
+		edgeUV.x += 0.5 * edge.pixelStep;
+		<ins>uvStep.y = GetSourceTexelSize().y;</ins>
+	}</pre>
+						
+						<p>What we'll do is determine the contrast between the sampled luma values and the luma average on the originally detected edge. If this contrast becomes too great then we've gone off the edge. FXAA uses a quarter of the luma gradient of the edge as the threshold for this check. So we have to keep track of this threshold and the inital edge luma average.</p>
+						
+						<pre translate="no">	<ins>float edgeLuma = 0.5 * (luma.m + edge.otherLuma);</ins>
+	<ins>float gradientThreshold = 0.25 * edge.lumaGradient;</ins>
+	
+	return edge.lumaGradient;
+						</pre>
+						
+						<p>We start by going a single step in the positive direction. Determine the postive-offset UV coordinates, calculate the luma gradient between that offset and the original edge, and check whether it equals or exceeds the threshold. That tells us whether we're at the end of the edge in the positive direction. If we directly visualize this check then we'll see only those pixels that are directly next to the endpoint of an edge.</p>
+						
+						<pre translate="no">	float edgeLuma = 0.5 * (luma.m + edge.otherLuma);
+	float gradientThreshold = 0.25 * edge.lumaGradient;
+			
+	<ins>float2 uvP = edgeUV + uvStep;</ins>
+	<ins>float lumaGradientP = abs(GetLuma(uvP) - edgeLuma);</ins>
+	<ins>bool atEndP = lumaGradientP >= gradientThreshold;</ins>
+	
+	return <ins>atEndP</ins>;</pre>
+						
+						<figure>
+							<img src="blending-along-edges/positive-end-one-step.png" width="360" height="280">
+							<figcaption>One step to the end in the positive direction.</figcaption>
+						</figure>
+						
+						<p>To walk the entire edge we have follow this step with a loop that repeats the process as long as we're not yet at the end. We also have to terminate this process at some point so it cannot go on forever, say after at most 100 steps, so the loops should allow 99 more.</p>
+						
+						<pre translate="no">	float2 uvP = edgeUV + uvStep;
+	float lumaGradientP = abs(GetLuma(uvP) - edgeLuma);
+	bool atEndP = lumaGradientP >= gradientThreshold;
+
+	<ins>for (int i = 0; i &lt; 99 &amp;&amp; !atEndP; i++) {</ins>
+		<ins>uvP += uvStep;</ins>
+		<ins>lumaGradientP = abs(GetLuma(uvP) - edgeLuma);</ins>
+		<ins>atEndP = lumaGradientP >= gradientThreshold;</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="blending-along-edges/positive-end-100-steps.png" width="360" height="280">
+							<figcaption>Up to 100 steps in the positive direction.</figcaption>
+						</figure>
+						
+						<p>Once we're done searching we can find the distance to the positive end in UV space by subtracting the appropriate original UV coordinate component from the final offset component. We can then visualize the distance, scaling it up to make it easier to see.</p>
+						
+						<pre translate="no">	<ins>float distanceToEndP;</ins>
+	<ins>if (edge.isHorizontal) {</ins>
+		<ins>distanceToEndP = uvP.x - uv.x;</ins>
+	<ins>}</ins>
+	<ins>else {</ins>
+		<ins>distanceToEndP = uvP.y - uv.y;</ins>
+	<ins>}</ins>
+
+	return <ins>10.0 * distanceToEndP</ins>;</pre>
+						
+						<figure>
+							<img src="blending-along-edges/positive-end-uv-distance.png" width="360" height="280">
+							<figcaption>Distance to positive end in UV space, &times;10.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Negative Direction</h3>
+						
+						<p>We also have to do the same in the negative direction, so duplicate the relevant code and adjust it appropriately.</p>
+						
+						<pre translate="no">	float2 uvP = edgeUV + uvStep;
+	float lumaGradientP = abs(GetLuma(uvP) - edgeLuma);
+	bool atEndP = lumaGradientP >= gradientThreshold;
+
+	<ins>int i;</ins>
+	for (<ins>i</ins> = 0; i &lt; 99 &amp;&amp; !atEndP; i++) {
+		uvP += uvStep;
+		lumaGradientP = abs(GetLuma(uvP) - edgeLuma);
+		atEndP = lumaGradientP >= gradientThreshold;
+	}
+
+	<ins>float2 uvN = edgeUV - uvStep;</ins>
+	<ins>float lumaGradientN = abs(GetLuma(uvN) - edgeLuma);</ins>
+	<ins>bool atEndN = lumaGradientN >= gradientThreshold;</ins>
+
+	<ins>for (i = 0; i &lt; 99 &amp;&amp; !atEndN; i++) {</ins>
+		<ins>uvN -= uvStep;</ins>
+		<ins>lumaGradientN = abs(GetLuma(uvN) - edgeLuma);</ins>
+		<ins>atEndN = lumaGradientN >= gradientThreshold;</ins>
+	<ins>}</ins></pre>
+						
+						<p>Then determine the distance to the negative end, which works the same as for the positive end but negated.</p>
+						
+						<pre translate="no">	float distanceToEndP<ins>, distanceToEndN</ins>;
+	if (edge.isHorizontal) {
+		distanceToEndP = uvP.x - uv.x;
+		<ins>distanceToEndN = uv.x - uvN.x;</ins>
+	}
+	else {
+		distanceToEndP = uvP.y - uv.y;
+		<ins>distanceToEndN = uv.y - uvN.y;</ins>
+	}</pre>						
+						
+						<p>We can now find the distance to the nearest end of the edge and visualize it.</p>
+						
+						<pre translate="no">	<ins>float distanceToNearestEnd;</ins>
+	<ins>if (distanceToEndP &lt;= distanceToEndN) {</ins>
+		<ins>distanceToNearestEnd = distanceToEndP;</ins>
+	<ins>}</ins>
+	<ins>else {</ins>
+		<ins>distanceToNearestEnd = distanceToEndN;</ins>
+	<ins>}</ins>
+	
+	return 10.0 * <ins>distanceToNearestEnd</ins>;</pre>
+						
+						<figure>
+							<img src="blending-along-edges/distance-to-nearest-end.png" width="360" height="280">
+							<figcaption>Distance to nearest end.</figcaption>
+						</figure>
+						
+						<p>Note that the found distances appear to make sense in most cases but not always. Because FXAA is an approximation it will sometimes incorrectly guess or miss the end of an edge.</p>
+					</section>
+					
+					<section>
+						<h3>Blending on a Single Side</h3>
+						
+						<p>At this point we know the distance to the nearest end point of the edge, which we can use to determine the blend factor. But we'll only do that in the direction where the edge is slanting towards the region that contains the middle pixel. This ensures that we only blend pixels on one side of the edge.</p>
+						
+						<figure>
+							<img src="blending-along-edges/searching-sign.png" width="280" height="210">
+							<figcaption>Choosing which side to blend.</figcaption>
+						</figure>
+						
+						<p>To determine the direction we need to know the direction of the last gradient we got while searching. To make this possible we'll change our code to keep track of the luma deltas instead of the absolute gradients.</p>
+						
+						<pre translate="no">	float2 uvP = edgeUV + uvStep;
+	float <ins>lumaDeltaP</ins> = <ins>GetLuma(uvP) - edgeLuma</ins>;
+	bool atEndP = <ins>abs(lumaDeltaP)</ins> >= gradientThreshold;
+
+	int i;
+	for (i = 0; i &lt; 99 &amp;&amp; !atEndP; i++) {
+		uvP += uvStep;
+		<ins>lumaDeltaP</ins> = <ins>GetLuma(uvP) - edgeLuma</ins>;
+		atEndP = <ins>abs(lumaDeltaP)</ins> >= gradientThreshold;
+	}
+
+	float2 uvN = edgeUV - uvStep;
+	float <ins>lumaDeltaN</ins> = <ins>GetLuma(uvN) - edgeLuma</ins>;
+	bool atEndN = <ins>abs(lumaDeltaN)</ins> >= gradientThreshold;
+
+	for (i = 0; i &lt; 99 &amp;&amp; !atEndN; i++) {
+		uvN -= uvStep;
+		<ins>lumaDeltaN</ins> = <ins>GetLuma(uvN) - edgeLuma</ins>;
+		atEndN = <ins>abs(lumaDeltaN)</ins> >= gradientThreshold;
+	}</pre>
+						
+						<p>Now we can determine the sign of the final delta. We can do this by checking whether it's greater than or equal to zero.</p>
+						
+						<pre translate="no">	float distanceToNearestEnd;
+	<ins>bool deltaSign;</ins>
+	if (distanceToEndP &lt;= distanceToEndN) {
+		distanceToNearestEnd = distanceToEndP;
+		<ins>deltaSign = lumaDeltaP >= 0;</ins>
+	}
+	else {
+		distanceToNearestEnd = distanceToEndN;
+		<ins>deltaSign = lumaDeltaN >= 0;</ins>
+	}</pre>
+						
+						<p>If the final sign matches the sign of the original edge then we're moving away from the edge and should skip blending, by returning zero.</p>
+						
+						<pre translate="no">	<ins>if (deltaSign == (luma.m - edgeLuma >= 0)) {</ins>
+		<ins>return 0.0;</ins>
+	<ins>}</ins>
+	<ins>else {</ins>
+		return 10.0 * distanceToNearestEnd;
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="blending-along-edges/single-side-only.png" width="360" height="280">
+							<figcaption>Distances for single side only.</figcaption>
+						</figure>
+						
+					</section>
+					
+					<section>
+						<h3>Final Blend Factor</h3>
+						
+						<p>If we're on the correct side of the edge then we blend by a factor of 0.5 minus the relative distance to the nearest end point along the edge. This means that we blend more the closer we are to the end point and won't blend at all in the middle of the edge.</p>
+						
+						<pre translate="no">	if (deltaSign == (luma.m - edgeLuma >= 0)) {
+		return 0.0;
+	}
+	else {
+		return <ins>0.5 -</ins> distanceToNearestEnd <ins>/ (distanceToEndP + distanceToEndN)</ins>;
+	}</pre>
+						
+						<figure>
+							<img src="blending-along-edges/edge-blend-factors.png" width="360" height="280">
+							<figcaption>Edge blend factors.</figcaption>
+						</figure>
+						
+						<p>Now adjust <code>FXAAPassFragment</code> so we can see the results of edge blending.</p>
+						
+						<pre translate="no">	if (CanSkipFXAA(luma)) {
+		return <ins>GetSource(input.screenUV)</ins>;
+	}
+
+	FXAAEdge edge = GetFXAAEdge(luma);
+
+	float blendFactor = GetEdgeBlendFactor (luma, edge, input.screenUV);
+	<del>//return blendFactor;</del>
+	float2 blendUV = input.screenUV;</pre>
+						
+						<figure>
+							<img src="blending-along-edges/pincushion-edge-blending.png" width="360" height="280" alt="with">
+							<img src="blending-along-edges/pincushion-subpixel-blending.png" width="360" height="280" alt="without">
+							<figcaption>Only edge blending and only subpixel blending at full strength.</figcaption>
+						</figure>
+						
+						<p>To apply both edge and subpixel blending we use the largest blend factor of both.</p>
+						
+						<pre translate="no">	float blendFactor = <ins>max(</ins>
+		<ins>GetSubpixelBlendFactor(luma),</ins> GetEdgeBlendFactor (luma, edge, input.screenUV)
+	<ins>)</ins>;</pre>
+						
+						<figure>
+							<img src="blending-along-edges/strongest-blend.png" width="360" height="280">
+							<figcaption>Edge blending together with subpixel blending at 0.75.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Limited Edge Search</h3>
+						
+						<p>Searching for the ends of edges can take a long time if they're nearly horizontal or vertical. Up to 100 samples in either direction is too much to guarantee acceptable performance. So we have to terminate the search sooner, but this will make it impossible for FXAA to detect longer edges. To clearly illustrate this reduce the search in <code>GetEdgeBlendFactor</code> to at most four pixels in either direction, so terminate the loop after three steps.</p>
+						
+						<pre translate="no">	for (i = 0; i &lt; <ins>3</ins> &amp;&amp; !atEndP; i++) { &hellip; }
+
+	&hellip;
+	
+	for (i = 0; i &lt; <ins>3</ins> &amp;&amp; !atEndN; i++) { &hellip; }</pre>
+						
+						<figure>
+							<img src="blending-along-edges/strongest-blend.png" width="360" height="280" alt="with">
+							<img src="blending-along-edges/up-to-four-steps.png" width="360" height="280" alt="without">
+							<figcaption>Up to 100 steps and only up to four steps.</figcaption>
+						</figure>
+						
+						<p>The result is that all endpoints further than four pixels away are treated as if they were four pixels away, which reduces the quality of FXAA. If the loop terminated before finding an edge then we underestimate the distance, as the end is at least one step further away. Thus we can improve the results somewhat by adding another step to guess the real distance if we didn't find it. If we didn't find it after four steps then we guess that the real distance is five.</p>
+						
+						<pre translate="no">	for (i = 0; i &lt; 3 &amp;&amp; !atEndP; i++) { &hellip; }
+	<ins>if (!atEndP) {</ins>
+		<ins>uvP += uvStep;</ins>
+	<ins>}</ins>
+
+	&hellip;
+	
+	for (i = 0; i &lt; 3 &amp;&amp; !atEndN; i++) { &hellip; }
+	<ins>if (!atEndN) {</ins>
+		<ins>uvN -= uvStep;</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<img src="blending-along-edges/up-to-four-steps-plus-guess.png" width="360" height="280">
+							<figcaption>Up to four steps with extra guess.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Edge Quality</h3>
+						
+						<p>How far we allow the edge search to go limits the quality of the result and how long it takes. So it is a tradeoff between quality and performance, which means that there isn't a single best choice. To make our approach configurable we'll introduce define statements for the amount of extra edge steps, a list of the offsets for the extra steps, and the offset for the last edge step guess that we use when we have to stop searching. Use these to create a static constant array for the edge step sizes and then use it all in <code>GetEdgeBlendFactor</code>.</p>
+						
+						<pre translate="no"><ins>#define EXTRA_EDGE_STEPS 3</ins>
+<ins>#define EDGE_STEP_SIZES 1.0, 1.0, 1.0</ins>
+<ins>#define LAST_EDGE_STEP_GUESS 1.0</ins>
+
+<ins>static const float edgeStepSizes[EXTRA_EDGE_STEPS] = { EDGE_STEP_SIZES };</ins>
+
+float GetEdgeBlendFactor (LumaNeighborhood luma, FXAAEdge edge, float2 uv) {
+	&hellip;
+	for (i = 0; i &lt; <ins>EXTRA_EDGE_STEPS</ins> &amp;&amp; !atEndP; i++) {
+		uvP += uvStep <ins>* edgeStepSizes[i]</ins>;
+		lumaDeltaP = GetLuma(uvP) - edgeLuma;
+		atEndP = abs(lumaDeltaP) >= gradientThreshold;
+	}
+	if (!atEndP) {
+		uvP += uvStep <ins>* LAST_EDGE_STEP_GUESS</ins>;
+	}
+
+	&hellip;
+
+	for (i = 0; i &lt; <ins>EXTRA_EDGE_STEPS</ins> &amp;&amp; !atEndN; i++) {
+		uvN -= uvStep <ins>* edgeStepSizes[i]</ins>;
+		lumaDeltaN = GetLuma(uvN) - edgeLuma;
+		atEndN = abs(lumaDeltaN) >= gradientThreshold;
+	}
+	if (!atEndN) {
+		uvN -= uvStep <ins>* LAST_EDGE_STEP_GUESS</ins>;
+	}
+	
+	&hellip;
+}</pre>
+						
+						<p>We explicitly create an array for the step sizes so that we can vary them. For example, the original FXAA algorithm contains multiple quality presets that vary both the amount of steps and their sizes. Quality preset 22 is a fast low-quality preset that has three extra steps. The first extra step&mdash;after the initial offset of a single pixel&mdash;has an offset of 1.5. This extra half-pixel offset means that we end up sampling the average of a square of four pixels along the edge instead of a single pair. The two steps after that have size 2, each again sampling squares of four pixels instead of pairs. Thus it covers a distance of up to seven pixels with only four samples. And if it failed to detect the end it guesses that it is a least eight steps further away.</p>
+						
+						<pre translate="no">#define EXTRA_EDGE_STEPS 3
+#define EDGE_STEP_SIZES <ins>1.5, 2.0, 2.0</ins>
+#define LAST_EDGE_STEP_GUESS <ins>8.0</ins></pre>
+						
+						<figure>
+							<img src="blending-along-edges/quality-low.png" width="360" height="280">
+							<figcaption>Low quality.</figcaption>
+						</figure>
+						
+						<p>Using these settings we get low-quality results, but they're better able to deal with longer edges than if we fixed the extra step size at 1. The downsize is that the edges can appear to be a bit dithered. This is caused by the larger steps that produce less accurate results.</p>
+						
+						<p>Let's use the current configuration for low-quality FXAA, only using it if <code>FXAA_QUALITY_LOW</code> is defined, which it currently isn't. Otherwise we'll use settings corresponding to quality preset 26. It uses the same approach as preset 22, but with eight extra samples, all with step size 2 except the last one, which has step size 4 so it skips a step to look further ahead.</p>
+						
+						<pre translate="no"><ins>#if defined(FXAA_QUALITY_LOW)</ins>
+	#define EXTRA_EDGE_STEPS 3
+	#define EDGE_STEP_SIZES 1.5, 2.0, 2.0
+	#define LAST_EDGE_STEP_GUESS 8.0
+<ins>#else</ins>
+	<ins>#define EXTRA_EDGE_STEPS 8</ins>
+	<ins>#define EDGE_STEP_SIZES 1.5, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 4.0</ins>
+	<ins>#define LAST_EDGE_STEP_GUESS 8.0</ins>
+<ins>#endif</ins></pre>
+						
+						<figure>
+							<img src="blending-along-edges/quality-medium.png" width="360" height="280">
+							<figcaption>Medium quality.</figcaption>
+						</figure>
+						
+						<p>Let's use this configuration for medium quality&mdash;for when <code>FXAA_QUALITY_MEDIUM</code> is defined&mdash;and add a final default configuration matching preset 39. This is a high-quality configuration that has ten extra steps and only switches to square block sampling after four extra pair samples, again with a skip for the final step and a guess of 8.</p>
+						
+						<pre translate="no">#if defined(FXAA_QUALITY_LOW)
+	#define EXTRA_EDGE_STEPS 3
+	#define EDGE_STEP_SIZES 1.5, 2.0, 2.0
+	#define LAST_EDGE_STEP_GUESS 8.0
+<ins>#elif defined(FXAA_QUALITY_MEDIUM)</ins>
+	#define EXTRA_EDGE_STEPS 8
+	#define EDGE_STEP_SIZES 1.5, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 4.0
+	#define LAST_EDGE_STEP_GUESS 8.0
+<ins>#else</ins>
+	<ins>#define EXTRA_EDGE_STEPS 10</ins>
+	<ins>#define EDGE_STEP_SIZES 1.0, 1.0, 1.0, 1.0, 1.5, 2.0, 2.0, 2.0, 2.0, 4.0</ins>
+	<ins>#define LAST_EDGE_STEP_GUESS 8.0</ins>
+<ins>#endif</ins></pre>
+						
+						<figure>
+							<img src="blending-along-edges/quality-high.png" width="360" height="280">
+							<figcaption>High quality.</figcaption>
+						</figure>
+						
+						<p>To allow selection of a quality level add a multi-compile directive to both FXAA passes of the <em translate="no">PostFXStack</em> shader. We only need keywords for the low and medium quality versions, using the default of no keyword for the high quality version.</p>
+						
+						<pre translate="no">				#pragma fragment FXAAPassFragment
+				<ins>#pragma multi_compile _ FXAA_QUALITY_MEDIUM FXAA_QUALITY_LOW</ins></pre>
+						
+						<p>Add a corresponding quality configuration option to <code class="csharp">CameraBufferSettings.FXAA</code>.</p>
+						
+						<pre class="csharp" translate="no">		<ins>public enum Quality { Low, Medium, High }</ins>
+
+		<ins>public Quality quality;</ins></pre>
+						
+						<p>Then enable or disable the appropriate keywords in <code class="csharp">PostFXStack</code>. Do this in a new <code class="csharp">ConfigureFXAA</code> method and also move the code that sets the configuration vector there. Then invoke it at the appropriate moment in <code class="csharp">DoFinal</code>.</p>
+						
+						<pre class="csharp" translate="no">	<ins>const string</ins>
+		<ins>fxaaQualityLowKeyword = "FXAA_QUALITY_LOW",</ins>
+		<ins>fxaaQualityMediumKeyword = "FXAA_QUALITY_MEDIUM";</ins>
+	
+	&hellip;
+	
+	<ins>void ConfigureFXAA () {</ins>
+		<ins>if (fxaa.quality == CameraBufferSettings.FXAA.Quality.Low) {</ins>
+			<ins>buffer.EnableShaderKeyword(fxaaQualityLowKeyword);</ins>
+			<ins>buffer.DisableShaderKeyword(fxaaQualityMediumKeyword);</ins>
+		<ins>}</ins>
+		<ins>else if (fxaa.quality == CameraBufferSettings.FXAA.Quality.Medium) {</ins>
+			<ins>buffer.DisableShaderKeyword(fxaaQualityLowKeyword);</ins>
+			<ins>buffer.EnableShaderKeyword(fxaaQualityMediumKeyword);</ins>
+		<ins>}</ins>
+		<ins>else {</ins>
+			<ins>buffer.DisableShaderKeyword(fxaaQualityLowKeyword);</ins>
+			<ins>buffer.DisableShaderKeyword(fxaaQualityMediumKeyword);</ins>
+		<ins>}</ins>
+		buffer.SetGlobalVector(fxaaConfigId, new Vector4(
+			fxaa.fixedThreshold, fxaa.relativeThreshold, fxaa.subpixelBlending
+		));
+	<ins>}</ins>
+
+	void DoFinal (int sourceId) {
+		&hellip;
+		if (fxaa.enabled) {
+			<ins>ConfigureFXAA();</ins>
+			buffer.GetTemporaryRT(
+				colorGradingResultId, bufferSize.x, bufferSize.y, 0,
+				FilterMode.Bilinear, RenderTextureFormat.Default
+			);
+			Draw(
+				sourceId, colorGradingResultId,
+				keepAlpha ? Pass.ApplyColorGrading : Pass.ApplyColorGradingWithLuma
+			);
+		}
+
+		&hellip;
+	}</pre>
+						
+						<figure>
+							<img src="blending-along-edges/fxaa-quality-setting.png" width="320" height="42">
+							<figcaption>FXAA set to high quality.</figcaption>
+						</figure>
+						
+						<p>These quality presets are just examples, you can configure them as you like. It is also possible to combine FXAA with doubling of the render scale for even better results. Keep in mind that FXAA operates at the adjusted render scale, so this is quite expensive.</p>
+						
+						<figure>
+							<img src="blending-along-edges/render-scale-2-with-fxaa.png" width="360" height="280" alt="with">
+							<img src="blending-along-edges/pincushion-render-scale-2.png" width="360" height="280" alt="without">
+							<figcaption>Render scale 2 with and without high-quality FXAA.</figcaption>
+						</figure>
+						
+						<p>You don't need to go all the way. You could for example combine FXAA with render scale 4/3. That would increase the amount of pixels by 1.78 instead of by four. This was suggested by Timothy Lottes in his presentation <em translate="no">Filtering Approaches for Real-Time Anti-Aliasing</em> for SIGGRAPH2011.</p>
+						
+						<figure>
+							<img src="blending-along-edges/render-scale-4-3-with-fxaa.png" width="360" height="280" alt="with">
+							<img src="blending-along-edges/render-scale-4-3.png" width="360" height="280" alt="without">
+							<figcaption>Bilinear render scale 1.333333 with and without high-quality FXAA.</figcaption>
+						</figure>
+						
+						<p>This can be smoothed further by using bicubic rescaling.</p>
+						
+						<figure>
+							<img src="blending-along-edges/render-scale-4-3-with-fxaa-bicubic.png" width="360" height="280" alt="with">
+							<img src="blending-along-edges/render-scale-4-3-bicubic.png" width="360" height="280" alt="without">
+							<figcaption>Bicubic render scale 1.333333 with and without high-quality FXAA.</figcaption>
+						</figure>
+						
+						<p>It is also possible to use FXAA to improve the results of a lowered render scale.</p>
+						
+						<figure>
+							<img src="blending-along-edges/render-scale-05-with-fxaa.png" width="360" height="280" alt="with">
+							<img src="blending-along-edges/render-scale-05-without-fxaa.png" width="360" height="280" alt="without">
+							<figcaption>Bicubic render scale 0.5 with and without high-quality FXAA.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Unrolling Loops</h3>
+						
+						<p>Because our loops have a guaranteed maximum amount of iterations it is possible to unroll them, which means that we replace them with a sequence of conditional code blocks. We don't have to do this explicitly, we can let the shader compiler do this by placing <code>UNITY_UNROLL</code> before the loops. This adds the <code>unroll</code> attribute to them.</p>
+						
+						<pre translate="no">	int i;
+	<ins>UNITY_UNROLL</ins>
+	for (i = 0; i &lt; EXTRA_EDGE_STEPS &amp;&amp; !atEndP; i++) { &hellip; }
+	&hellip;
+
+	<ins>UNITY_UNROLL</ins>
+	for (i = 0; i &lt; EXTRA_EDGE_STEPS &amp;&amp; !atEndN; i++) { &hellip; }</pre>
+						
+						<p>This turns out to consistently improve performance a tiny bit, not expected to exceed a gain of 1 FPS. While this isn't much, it's for free.</p>
+						
+						<p>The original FXAA algorithm also combines both loops, searching in both directions in lockstep. Each iteration, only the directions that haven't finished yet advance and sample again. This might be faster in some cases, but in my case two separate loops performed slightly better than a single loop. As always, if you want the absolute best performance, test it yourself, per project, per target platform.</p>
+						
+						<p>This point marks the end of the original tutorial series. Next is the <a href="../../../custom-srp/index.html">Custom SRP project</a>.</p>
+					</section>
+					
+					<a href="../../license/index.html" class="license">license</a>
+					<a href="https://bitbucket.org/catlikecodingunitytutorials/custom-srp-17-fxaa/" class="repository">repository</a>
+					<a href="FXAA.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../../tutorials.js"></script>
+	</body>
+</html>

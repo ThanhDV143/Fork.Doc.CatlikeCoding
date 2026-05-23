@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html>
+	<head prefix="og: http://ogp.me/ns#">
+		<meta charset="utf-8">
+		<meta property="og:url" content="https://catlikecoding.com/unity/tutorials/mesh-deformation/">
+		<meta property="og:image:width" content="1024">
+		<meta property="og:image:height" content="512">
+		<meta property="og:image" content="https://catlikecoding.com/unity/tutorials/mesh-deformation/tutorial-image.jpg">
+		<meta property="og:image:width" content="750">
+		<meta property="og:image:height" content="750">
+		<meta property="og:description" content="A Unity C# scripting tutorial in which you will deform a mesh, turning it into a stress ball.">
+		<meta name="description" content="A Unity C# scripting tutorial in which you will deform a mesh, turning it into a stress ball.">
+		<meta property="og:title" content="Mesh Deformation, a Unity C# Tutorial">
+		<meta property="twitter:card" content="summary_large_image">
+		<meta property="twitter:creator" content="@catlikecoding">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Mesh Deformation, a Unity C# Tutorial</title>
+		<link href="../tutorials.css" rel="stylesheet">
+
+				<link rel="icon" href="../../../favicon.ico" sizes="48x48">
+		<link rel="icon" href="../../../favicon.svg" sizes="any">
+		<link rel="apple touch icon" href="../../../apple-touch-icon.png">
+		<link rel="manifest" href="../../../site.webmanifest.html">
+
+
+		<script>
+			var customTypes = {
+				MeshDeformer: 1,
+				MeshDeformerInput: 1
+			};
+			
+			var hasAnimations = true;
+			var hasMath = true;
+		</script>
+	</head>
+	<body>
+		<header>
+			<a href="../../products/utilities/frame-rate-counter/index.html"><img src="../../../favicon.svg" alt="Catlike Coding" width="45" height="45"></a>
+			<p><a href="../../products/utilities/frame-rate-counter/index.html">Catlike Coding</a></p>
+			<p class="category"><a href="../index.html">Unity C# Tutorials</a></p>
+		</header>
+		
+		<main>
+			<article itemscope itemtype="http://schema.org/TechArticle">
+				<header>
+					<h1 itemprop="name headline">Mesh Deformation</h1>
+					<p>Making a Stress Ball</p>
+					<ul>
+						<li>Cast rays at objects and draw a debug lines.</li>
+						<li>Convert forces to velocities for vertices.</li>
+						<li>Maintain shape with springs and dampening.</li>
+						<li>Compensate for object transformation.</li>
+					</ul>
+				</header>
+
+				<p itemprop="about description">This tutorial is an introduction to mesh deformation. We'll turn a mesh into bouncy mass and poke at it.</p>
+
+				<p itemprop="dependencies">This tutorial follows <a href="../cube-sphere/index.html">Cube Sphere</a>. It is a continuation of the same kind of mesh manipulation and we'll use the cube sphere as our test model. It is suitable for Unity 5.0.1 and up.</p>
+				
+				<figure>
+					<img src="tutorial-image.jpg" width="375" height="375" itemprop="image">
+					<figcaption>Applying some pressure.</figcaption>
+				</figure>
+				
+				<section>
+					<h2>Scene Setup</h2>
+					
+					<p>We start with a scene that has a single cube sphere object at its center. You can either make it from scratch or continue with the scene from <a href="../cube-sphere/index.html">Cube Sphere</a>, removing everything that is no longer needed.</p>
+					
+					<p>To get a smooth deformation, the sphere should contain a decent amount of vertices. I set the sphere's grid size to 20 and its radius to 1.</p>
+					
+					<figure>
+						<img alt="cube sphere" src="scene-setup/cube-sphere.png" width="300" height="300">
+						<img alt="project assets" src="scene-setup/assets.png" width="150" height="140">
+						<figcaption>Begin with a regular cube sphere.</figcaption>
+					</figure>
+					
+					<a href="scene-setup/scene-setup.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Mesh Deformer</h2>
+					
+					<p>Create a new <code>MeshDeformer</code> script to take care of the deformation. Just as the cube sphere component, it needs a mesh filter to work with.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>[RequireComponent(typeof(MeshFilter))]</ins>
+<ins>public class MeshDeformer : MonoBehaviour {</ins>
+<ins>}</ins></pre>
+					
+					<p>Add the new component to the cube sphere.</p>
+					
+					<figure>
+						<img src="mesh-deformer/component.png" width="320" height="370">
+						<figcaption>Cube sphere with mesh deformer component.</figcaption>
+					</figure>
+					
+					<p>Note that we only require a mesh filter. We don't care how it gets a mesh. Right now we're using our procedural cube sphere, but it could be any mesh.</p>
+					
+					
+					<section>
+						<h3>Preparation</h3>
+						
+						<p>To perform any deformation, we need access to mesh. Once we have the mesh, we can extract the original vertex positions. We also have to keep track of the displaced vertices during deformation.</p>
+						
+						<pre translate="no">	<ins>Mesh deformingMesh;</ins>
+	<ins>Vector3[] originalVertices, displacedVertices;</ins></pre>
+						
+						<p>Aquire the mesh and its vertices in the <code>Start</code> method and copy the original vertices to the displaced vertices.</p>
+						
+						<pre translate="no">	<ins>void Start () {</ins>
+		<ins>deformingMesh = GetComponent&lt;MeshFilter>().mesh;</ins>
+		<ins>originalVertices = deformingMesh.vertices;</ins>
+		<ins>displacedVertices = new Vector3[originalVertices.Length];</ins>
+		<ins>for (int i = 0; i &lt; originalVertices.Length; i++) {</ins>
+			<ins>displacedVertices[i] = originalVertices[i];</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>We're using <code>Start</code> so procedural meshes can be generated in <code>Awake</code>, which is always invoked first. This approach relies on other components taking care of their stuff in <code>Awake</code>, so it is no guarantee. You could also adjust the <a href="http://docs.unity3d.com/Manual/class-ScriptExecution.html">script execution order</a> to enforce who goes first and last.</p>
+					</section>
+					
+					<section>
+						<h3>Vertex Velocities</h3>
+						
+						<p>Vertices move as the mesh is deformed. So we also have to store the velocity of each vertex.</p>
+						
+						<pre translate="no">	<ins>Vector3[] vertexVelocities;</ins>
+
+	void Start () {
+		&hellip;
+		<ins>vertexVelocities = new Vector3[originalVertices.Length];</ins>
+	}</pre>
+						
+						<p>Now we have the basic ingredients to support mesh deformation.</p>
+					</section>
+					
+					<a href="mesh-deformer/mesh-deformer.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Mesh Deformer Input</h2>
+					
+					<p>We need some way to control how the mesh is deformed. We will use user input for that, so it is interactive. Whenever the user touches our object, we will apply a force at that point.</p>
+					
+					<p>The <code>MeshDeformer</code> component takes care of the actual deformation, but it doesn't care about the input method. We should create a separate component to take care of the user input. Give it a configurable input force.</p>
+					
+					<pre translate="no"><ins>using UnityEngine;</ins>
+
+<ins>public class MeshDeformerInput : MonoBehaviour {</ins>
+
+	<ins>public float force = 10f;</ins>
+<ins>}</ins></pre>
+					
+					<p>It makes most sense to attach this component to the camera, as that represents the user's point of view. We shouldn't attach it to the deforming mesh object, because there could be multiple of those in the scene.</p>
+					
+					<figure>
+						<img src="mesh-deformer-input/component.png" width="320" height="194">
+						<figcaption>Mesh deformer input attached to camera.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Detecting Input</h3>
+						
+						<p>We will handle the user's input whenever the default mouse button is held down. So whenever there is a click or a drag, as long as the user keeps pressing.</p>
+						
+						<pre translate="no">	<ins>void Update () {</ins>
+		<ins>if (Input.GetMouseButton(0)) {</ins>
+			<ins>HandleInput();</ins>
+		<ins>}</ins>
+	<ins>}</ins></pre>
+						
+						<p>Now we have to figure out where the user is pointing. We do this by casting a ray from the camera into the scene. We'll grab the main camera of the scene and use it to convert the cursor position into a ray.</p>
+						
+						<pre translate="no">	<ins>void HandleInput () {</ins>
+		<ins>Ray inputRay = Camera.main.ScreenPointToRay(Input.mousePosition);</ins>
+	<ins>}</ins></pre>
+						
+						<p>We use the physics engine to cast the ray and store information about what it hit. If the ray collided with something, we can retrieve the <code>MeshDeformer</code> component from the object that was hit.</p>
+						
+						<pre translate="no">		Ray inputRay = Camera.main.ScreenPointToRay(Input.mousePosition);
+		<ins>RaycastHit hit;</ins>
+
+		<ins>if (Physics.Raycast(inputRay, out hit)) {</ins>
+			<ins>MeshDeformer deformer = hit.collider.GetComponent&lt;MeshDeformer>();</ins>
+		<ins>}</ins></pre>
+						
+						<aside>
+							<h3>How does <code>Physics.Raycast</code> work?</h3>
+							<div>
+								<p><code>Physics.Raycast</code> is a static method for casting rays into the 3D scene. It has various variants. The simplest version has a ray parameter and returns whether it hit something.</p>
+								
+								<p>The versions that we are using has an additional parameter. It is an output parameter of type <code>RaycastHit</code>. This is a struct that contains information about what was hit and the contact point.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Applying Force</h3>
+						
+						<p>If we hit something, and that something has a <code>MeshDeformer</code> component, then we can deform that something! So go ahead and add a deforming force at the contact point.</p>
+						
+						<pre translate="no">			MeshDeformer deformer = hit.collider.GetComponent&lt;MeshDeformer>();
+			<ins>if (deformer) {</ins>
+				<ins>Vector3 point = hit.point;</ins>
+				<ins>deformer.AddDeformingForce(point, force);</ins>
+			<ins>}</ins></pre>
+						
+						<p>Of course that assumes that our <code>MeshDeformer</code> component has a <code>AddDeformingForce</code> method. So add this method. Let's not do any deforming yet, though. First, just draw a debug line from the main camera to the point, to visualize the ray.</p>
+					
+						<pre translate="no">	<ins>public void AddDeformingForce (Vector3 point, float force) {</ins>
+		<ins>Debug.DrawLine(Camera.main.transform.position, point);</ins>
+	<ins>}</ins></pre>
+						
+						<figure>
+							<video width="350" height="250" controls loop muted>
+								<source src="mesh-deformer-input/debug-rays.mp4" type="video/mp4">
+							</video>
+							<figcaption>Debugging rays in scene view.</figcaption>
+						</figure>
+						
+						<aside>
+							<h3>Where can I see the debug line?</h3>
+							<div>
+								<p>It shows up in the scene view, so you have to keep both the game view and scene view visible while in play mode.</p>
+							</div>
+						</aside>
+					</section>
+					
+					<section>
+						<h3>Force Offset</h3>
+						
+						<p>The experience we're trying to evoke is of the mesh being poked and dented by the user. This requires that the vertices near the contact point are pushed into the surface. However, the deforming force doesn't have an inherent direction. It will be applied in all directions equally. This will cause vertices on a flat surface to be pushed apart, not pushed inward.</p>
+						
+						<p>We can add a direction by pulling the force point away from the surface. A slight offset already guarantees that vertices are always pushed into the surface. The normal at the contact point can be used as the offset direction.</p>
+						
+						<figure>
+							<img src="mesh-deformer-input/force-offset.png" width="265" height="195">
+							<figcaption>Changing force direction with an offset.</figcaption>
+						</figure>
+						
+						<pre translate="no">	<ins>public float forceOffset = 0.1f;</ins>
+
+	void HandleInput () {
+		Ray inputRay = Camera.main.ScreenPointToRay(Input.mousePosition);
+		RaycastHit hit;
+
+		if (Physics.Raycast(inputRay, out hit)) {
+			MeshDeformer deformer = hit.collider.GetComponent&lt;MeshDeformer>();
+			if (deformer) {
+				Vector3 point = hit.point;
+				<ins>point += hit.normal * forceOffset;</ins>
+				deformer.AddDeformingForce(point, force);
+			}
+		}
+	}</pre>
+						
+						<figure>
+							<img alt="component" src="mesh-deformer-input/component-offset.png" width="321" height="76">
+							<img alt="debug" src="mesh-deformer-input/offset.png" width="250" height="175">
+							<figcaption>Force point slightly away from object.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="mesh-deformer-input/mesh-deformer-input.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Basic Deformation</h2>
+					
+					<p>It is time to do some real displacement. <code>MeshDeformer.AddDeformingForce</code> has to loop through all currently displaced vertices and apply the deforming force to each vertex individually.</p>
+					
+					<pre translate="no">	public void AddDeformingForce (Vector3 point, float force) {
+		<ins>for (int i = 0; i &lt; displacedVertices.Length; i++) {</ins>
+			<ins>AddForceToVertex(i, point, force);</ins>
+		<ins>}</ins>
+	}
+
+	<ins>void AddForceToVertex (int i, Vector3 point, float force) {</ins>
+	<ins>}</ins></pre>
+					
+					<section>
+						<h3>Convert Force to Velocity</h3>
+						
+						<p>The mesh is deformed because a force is applied to each of its vertices. As the vertices are pushes, they acquire a velocity. Over time, the vertices all change their position. If all vertices would experience the exact same forces, the entire object would move without changing its shape. But they don't.</p>
+						
+						<p>Think of a big explosion. If you're at ground zero, you are dead. If you're nearby, you get knocked down. If you're far away, no problem. Force diminishes with distance. Combined with differences in orientation, this attenuation is responsible for our object's deformation.</p>
+						
+						<p>So we need to know both the direction and the distance of the deforming force per vertex. Both can be derived from a vector that points from the force point to the vertex position.</p>
+						
+						<pre translate="no">	void AddForceToVertex (int i, Vector3 point, float force) {
+		<ins>Vector3 pointToVertex = displacedVertices[i] - point;</ins>
+	}</pre>
+						
+						<p>The attenuated force can now be found using the <a href="https://en.wikipedia.org/wiki/Inverse-square_law">inverse-square law</a>. Just divide the original force by the distance squared, `F_v = F / d^2`. Actually, I divide by one plus the distance squared, `F_v = F / (1 + d^2)`. This guarantees that the force is at full strength when the distance is zero. Otherwise the force would be at full strength at a distance of one and it shoots toward infinity the closer you get to the point.</p>
+						
+						<figure>
+							<img src="basic-deformation/attenuation.png" width="200" height="100">
+							<figcaption>`1/x^2` and `1/(1+x^2)`</figcaption>
+						</figure>
+						
+						<pre translate="no">		Vector3 pointToVertex = displacedVertices[i] - point;
+		<ins>float attenuatedForce = force / (1f + pointToVertex.sqrMagnitude);</ins></pre>
+						
+						<p>Now that we have our force, we can convert it into a velocity delta. Actually, the force is first converted into an acceleration via `a = F / m`. Then the change in velocity is found via `Delta v = a Delta t`. To keep things simple, we'll ignore the mass as if it were one for each vertex. So we end up with `Delta v = F Delta t`.</p>
+						
+						<pre translate="no">		Vector3 pointToVertex = displacedVertices[i] - point;
+		float attenuatedForce = force / (1f + pointToVertex.sqrMagnitude);
+		<ins>float velocity = attenuatedForce * Time.deltaTime;</ins></pre>
+						
+						<p>At this point we have a velocity delta, but not yet a direction. We find that by normalizing the vector that we started with. Then we can add the result to the vertex velocity.</p>
+						
+						<pre translate="no">		Vector3 pointToVertex = displacedVertices[i] - point;
+		float attenuatedForce = force / (1f + pointToVertex.sqrMagnitude);
+		float velocity = attenuatedForce * Time.deltaTime;
+		<ins>vertexVelocities[i] += pointToVertex.normalized * velocity;</ins></pre>
+					</section>
+					
+					<section>
+						<h3>Move Vertices</h3>
+						
+						<p>Now that the vertices have velocities, we can move them. Add an <code>Update</code> method to process each vertex. Afterwards, assign the displaces vertices to the mesh so that it actually changes. Because the shape of the mesh is no longer constant, we also have to recalculate its normals.</p>
+						
+						<pre translate="no">	<ins>void Update () {</ins>
+		<ins>for (int i = 0; i &lt; displacedVertices.Length; i++) {</ins>
+			<ins>UpdateVertex(i);</ins>
+		<ins>}</ins>
+		<ins>deformingMesh.vertices = displacedVertices;</ins>
+		<ins>deformingMesh.RecalculateNormals();</ins>
+	<ins>}</ins></pre>
+						
+						<p>Updating a vertex is a matter of adjusting its position, via `Delta p = v Delta t`.</p>
+						
+						<pre translate="no">	<ins>void UpdateVertex (int i) {</ins>
+		<ins>Vector3 velocity = vertexVelocities[i];</ins>
+		<ins>displacedVertices[i] += velocity * Time.deltaTime;</ins>
+	<ins>}</ins></pre>
+						
+						<aside>
+							<h3>Are the vertices updated all the time?</h3>
+							<div>
+								<p>Yes, each update all vertices are displaced, assigned to the mesh, and normals are recalculated. Even when no force has been applied. If the user is not deforming the mesh, then that can be considered a waste of time. So only use this when the point is to constantly deform the mesh.</p>
+							</div>
+						</aside>
+						
+						<figure>
+							<video width="400" height="350" controls loop muted>
+								<source src="basic-deformation/cumulative-velocities.mp4" type="video/mp4">
+							</video>
+							<figcaption>Cumulative velocities.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="basic-deformation/basic-deformation.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Staying in Shape</h2>
+					
+					<p>Vertices now start moving as soon as we apply some force to them. But they don't stop. They keep moving and the original shape of the object will be lost. Let's now make the object bounce back to its original shape.</p>
+					
+					<p>Real objects are solid and are compressed and stretched while being deformed. They resist this deformation. They can also return to their original shape once left undisturbed.</p>
+					
+					<p>We don't have a real volume, just a collection of vertices that describes a surface. We cannot perform a realistic physics simulation with this. But that is not a problem. All we really need is something that looks believable.</p>
+					
+					<section>
+						<h3>Springs</h3>
+						
+						<p>We are keeping track of both the original and the deformed position of each vertex. Imagine that we attach springs between the two versions of each vertex. Whenever the deformed vertex is moved away from the original, the spring will pull it back. The further away the deformed vertex is, the stronger the pull of the spring becomes.</p>
+						
+						<figure>
+							<img src="staying-in-shape/pulling-back.png" width="250" height="130">
+							<figcaption>Displaced vertices get pulled back.</figcaption>
+						</figure>
+						
+						<p>We can directly use the displacement vector as a velocity adjustment, multiplied by a configurable spring force. This is simple and looks pretty good. We do this each time the vertices are updated.</p>
+						
+						<pre translate="no">	<ins>public float springForce = 20f;</ins>
+	
+	void UpdateVertex (int i) {
+		Vector3 velocity = vertexVelocities[i];
+		<ins>Vector3 displacement = displacedVertices[i] - originalVertices[i];</ins>
+		<ins>velocity -= displacement * springForce * Time.deltaTime;</ins>
+		<ins>vertexVelocities[i] = velocity;</ins>
+		displacedVertices[i] += velocity * Time.deltaTime;
+	}</pre>
+						
+						<figure>
+							<img alt="component" src="staying-in-shape/spring-force.png" width="320" height="62"><br>
+							<video width="400" height="350" controls loop muted>
+								<source src="staying-in-shape/bouncing-back.mp4" type="video/mp4">
+							</video>
+							<figcaption>Bouncing back after deformation.</figcaption>
+						</figure>
+					</section>
+					
+					<section>
+						<h3>Damping</h3>
+						
+						<p>Our vertices now resist deformation and jumps back to their original position. But they overshoot and keep bouncing without end. This happens because the springs keep pulling while the vertex corrects itself, increasing its speed. It only slows down after it moved back too far.</p>
+						
+						<p>We can prevent this eternal oscillation by constantly slowing the vertices down. This dampening effect is a substitute for resistances, drag, inertia, and so on. It is a simple factor that decreases velocity over time, `v_d = v (1 - d Delta t)`.</p>
+						
+						<p>The higher the dampening, the less bouncy and more sluggish the object appears.</p>
+						
+						<pre translate="no">	<ins>public float damping = 5f;</ins>
+	
+	void UpdateVertex (int i) {
+		Vector3 velocity = vertexVelocities[i];
+		Vector3 displacement = displacedVertices[i] - originalVertices[i];
+		velocity -= displacement * springForce * Time.deltaTime;
+		<ins>velocity *= 1f - damping * Time.deltaTime;</ins>
+		vertexVelocities[i] = velocity;
+		displacedVertices[i] += velocity * Time.deltaTime;
+	}</pre>
+						
+						<figure>
+							<img alt="component" src="staying-in-shape/damping.png" width="320" height="80"><br>
+							<video width="400" height="350" controls loop muted>
+								<source src="staying-in-shape/returning-to-original-shape.mp4" type="video/mp4">
+							</video>
+							<figcaption>Returning to its original shape.</figcaption>
+						</figure>
+					</section>
+					
+					<a href="staying-in-shape/staying-in-shape.unitypackage.html" download rel="nofollow">unitypackage</a>
+				</section>
+				
+				<section>
+					<h2>Dealing with Transformations</h2>
+					
+					<p>Our mesh deformation is now fully functional, except when we transform the object. All our calculations are performed in local space. Go ahead and move or rotate our sphere. You will see that the deformation force will be applied incorrectly.</p>
+					
+					<p>We have to compensate for the object's transformation. We do this by converting the deforming force's position from world space to local space.</p>
+					
+					<pre translate="no">	public void AddDeformingForce (Vector3 point, float force) {
+		<ins>point = transform.InverseTransformPoint(point);</ins>
+		for (int i = 0; i &lt; displacedVertices.Length; i++) {
+			AddForceToVertex(i, point, force);
+		}
+	}</pre>
+					
+					<figure>
+						<video width="400" height="250" controls loop muted>
+							<source src="dealing-with-transformations/different-scales.mp4" type="video/mp4">
+						</video>
+						<figcaption>Correct positions, but different scales.</figcaption>
+					</figure>
+					
+					<section>
+						<h3>Adjusting Scale</h3>
+						
+						<p>The force is now applied in the correct place, but something else is still wrong. Uniformly scale the sphere up or down. You will notice that the deformation scales by the same amount. This is not correct. Small and large objects should be subject to the same physics.</p>
+						
+						<p>We have to compensate for our object's scale. First, we need to know its uniform scale. We can find it by checking one of the transform's local scale axes. Do this each update, so we can somewhat work with objects that change their scale dynamically.</p>
+						
+						<pre translate="no">	<ins>float uniformScale = 1f;</ins>
+	
+	void Update () {
+		<ins>uniformScale = transform.localScale.x;</ins>
+		&hellip;
+	}</pre>
+						
+						<aside>
+							<h3>What about nonuniform scales?</h3>
+							<div>
+								<p>You could use a 3D vector instead of a single value for the scale. Then adjust each dimension separately. But really, you don't want to deal with nonuniform scales.</p>
+							</div>
+						</aside>
+						
+						<p>Now fix <code>AddForceToVertex</code> by scaling the <code>pointToVertex</code> vector by the uniform scale. This ensures that we use the correct distance.</p>
+						
+						<pre translate="no">	void AddForceToVertex (int i, Vector3 point, float force) {
+		Vector3 pointToVertex = displacedVertices[i] - point;
+		<ins>pointToVertex *= uniformScale;</ins>
+		float attenuatedForce = force / (1f + pointToVertex.sqrMagnitude);
+		float velocity = attenuatedForce * Time.deltaTime;
+		vertexVelocities[i] += pointToVertex.normalized * velocity;
+	}</pre>
+						
+						<p>Do the same for <code>displacement</code> in <code>UpdateVertex</code>. Now our velocities are correct.</p>
+						
+						<pre translate="no">	void UpdateVertex (int i) {
+		Vector3 velocity = vertexVelocities[i];
+		Vector3 displacement = displacedVertices[i] - originalVertices[i];
+		<ins>displacement *= uniformScale;</ins>
+		velocity -= displacement * springForce * Time.deltaTime;
+		velocity *= 1f - damping * Time.deltaTime;
+		vertexVelocities[i] = velocity;
+		displacedVertices[i] += velocity * Time.deltaTime;
+	}</pre>
+						
+						<p>However, our velocities are now correct for an object that wasn't scaled. As our object is in fact scaled, we have to adjust the vertex movement as well. This time we have to divide instead of multiply.</p>
+						
+						<pre translate="no">		displacedVertices[i] += velocity * <ins>(</ins>Time.deltaTime <ins>/ uniformScale)</ins>;</pre>
+						
+						<figure>
+							<video width="400" height="250" controls loop muted>
+								<source src="dealing-with-transformations/same-physics.mp4" type="video/mp4">
+							</video>
+							<figcaption>Different scales, same physics.</figcaption>
+						</figure>
+						
+						<p>And there you have it. A deforming mesh that works at any position, rotation, and uniform scale. Keep in mind that this is a simple and relatively cheap visual effect. It is not a soft-body physics simulation. The colliders of the object do not change, so the physics engine is unaware of the perceived shape of the object.</p>
+					</section>
+					
+					<a href="dealing-with-transformations/dealing-with-transformations.unitypackage.html" download rel="nofollow">unitypackage</a>
+					<a href="Mesh-Deformation.pdf" download rel="nofollow">PDF</a>
+				</section>
+				
+			</article>
+		</main>
+
+		<footer>
+			<p>Enjoying the <a href="../index.html">tutorials</a>? Are they useful? Want more?</p>
+			<p><b><a href="https://www.patreon.com/catlikecoding">Please support me on Patreon!</a></b></p>
+			<p><a href="https://www.patreon.com/catlikecoding"><img src="../become-a-patron.png" alt="Become my patron!" width="217" height="51"></a></p>
+			<p><b><a href="../donating.html">Or make a direct donation</a>!</b></p>
+			<p>made by <a href="../../../jasper-flick/index.html" rel="author">Jasper Flick</a></p>
+		</footer>
+		
+		<script src="../tutorials.js"></script>
+	</body>
+</html>
